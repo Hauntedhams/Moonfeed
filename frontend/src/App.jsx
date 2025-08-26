@@ -11,6 +11,8 @@ import DarkModeToggle from './components/DarkModeToggle'
 import CoinSearchModal from './components/CoinSearchModal'
 
 function App() {
+  console.log('%cMoonfeed redeploy test: build timestamp ' + new Date().toISOString(), 'background: #4caf50; color: white; padding:4px;');
+
   const [activeTab, setActiveTab] = useState('home');
   const [favorites, setFavorites] = useState(() => {
     try {
