@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: moonfeed-backend
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DEXSCREENER_BASE_URL
+        value: https://api.dexscreener.com
+      - key: PUMPFUN_RECENT_URL
+        value: https://pump.fun/recent
+      - key: PUMPFUN_GRADUATED_URL
+        value: https://pump.fun/graduated
+      - key: SOLANA_RPC
+        value: https://api.mainnet-beta.solana.com
