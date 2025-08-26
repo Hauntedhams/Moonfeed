@@ -48,3 +48,8 @@ logs
 
 # Development scripts
 test_*.js
+
+# Deployment logs and temporary files
+deploy-logs/
+.vercel
+.render
