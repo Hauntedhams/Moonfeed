@@ -81,7 +81,7 @@ const JupiterEmbedModal = ({ selectedCoin, onClose, visible }) => {
               swapMode: 'ExactIn', // User enters input amount
               initialAmount: '', // Start with no amount
               referralAccount: '42DqmQMZrVeZkP2Btj2cS96Ej81jVxFqwUZWazVvhUPt', // Your referral account
-              referralFee: 70, // 0.7% fee in basis points
+              referralFee: 50, // 0.5% fee in basis points (updated from 70)
             },
             
             // Styling to match your app
@@ -110,9 +110,9 @@ const JupiterEmbedModal = ({ selectedCoin, onClose, visible }) => {
           });
 
           // Verify Jupiter initialized correctly
-          console.log('✅ Jupiter Plugin initialized successfully with 0.7% referral fee');
+          console.log('✅ Jupiter Plugin initialized successfully with 0.5% referral fee');
           console.log(`🎯 Target coin "${selectedCoin.name || selectedCoin.symbol}" should be preselected:`, outputMint ? 'YES' : 'NO');
-          console.log('💰 Referral fee: 0.7% (70 bps) to 42DqmQMZrVeZkP2Btj2cS96Ej81jVxFqwUZWazVvhUPt');
+          console.log('💰 Referral fee: 0.5% (50 bps) to 42DqmQMZrVeZkP2Btj2cS96Ej81jVxFqwUZWazVvhUPt');
           console.log('🚀 Jupiter Plugin interface ready for trading!');
           console.log('📋 Using official Jupiter Plugin v1 with referral support');
           
