@@ -3,9 +3,22 @@ import './TokenScroller.css';
 import CoinCard from './CoinCard';
 import AboutModal from './AboutModal';
 
-const API_BASE = `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'}/api/coins`;
+// Improved API base resolution: use env var if provided, else if not on localhost use production backend, else localhost
+function resolveApiBase() {
+  const explicit = import.meta.env.VITE_API_BASE_URL;
+  if (explicit && explicit.trim().length > 0) return explicit.replace(/\/$/, '');
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (host !== 'localhost' && host !== '127.0.0.1') {
+      // Fallback production backend URL (update if your Render URL differs)
+      return 'https://moonfeed-backend.onrender.com';
+    }
+  }
+  return 'http://localhost:3001';
+}
+const API_BASE = `${resolveApiBase()}/api/coins`;
 
-console.log('🔧 API_BASE configuration:', API_BASE);
+console.log('🔧 API_BASE configuration (resolved):', API_BASE);
 
 // Memoize the component to prevent unnecessary re-renders
 const TokenScroller = React.memo(function TokenScroller({ favorites = [], onlyFavorites = false, onFavoritesChange, filters = {}, onTradeClick, onVisibleCoinsChange, onCurrentCoinChange }) {

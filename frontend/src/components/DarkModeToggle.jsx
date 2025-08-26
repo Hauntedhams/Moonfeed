@@ -2,35 +2,35 @@ import React, { useState, useEffect } from 'react';
 import './DarkModeToggle.css';
 
 function DarkModeToggle() {
-  // Dark mode state
+  // Dark mode state - default true (dark first)
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('darkMode');
-    return saved ? JSON.parse(saved) : false;
+    if (saved !== null) return JSON.parse(saved);
+    return true; // default to dark
   });
+
+  const applyClasses = (isDark) => {
+    if (isDark) {
+      document.body.classList.remove('light-mode');
+      document.body.classList.add('dark-mode');
+    } else {
+      document.body.classList.remove('dark-mode');
+      document.body.classList.add('light-mode');
+    }
+  };
 
   // Toggle dark mode and persist
   const handleToggleDarkMode = () => {
     setDarkMode(prev => {
       const newMode = !prev;
       localStorage.setItem('darkMode', JSON.stringify(newMode));
-      // Update document body class
-      if (newMode) {
-        document.body.classList.add('dark-mode');
-      } else {
-        document.body.classList.remove('dark-mode');
-      }
+      applyClasses(newMode);
       return newMode;
     });
   };
 
   // Ensure body class matches state on mount
-  useEffect(() => {
-    if (darkMode) {
-      document.body.classList.add('dark-mode');
-    } else {
-      document.body.classList.remove('dark-mode');
-    }
-  }, [darkMode]);
+  useEffect(() => { applyClasses(darkMode); }, [darkMode]);
 
   return (
     <div className="dark-mode-toggle-container">
