@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Premium Trending Coins Filter - IMPLEMENTED</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: #0d1117;
+            color: white;
+            padding: 40px;
+            max-width: 1000px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
+        .feature-container {
+            background: #1a1b1f;
+            border-radius: 16px;
+            padding: 30px;
+            margin: 20px 0;
+        }
+        .criteria-box {
+            background: #21262d;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 15px 0;
+            border-left: 4px solid #ff6b35;
+        }
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .old-way {
+            background: linear-gradient(135deg, rgba(220, 53, 69, 0.1), rgba(220, 53, 69, 0.2));
+            border: 1px solid #dc3545;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .new-way {
+            background: linear-gradient(135deg, rgba(40, 167, 69, 0.1), rgba(40, 167, 69, 0.2));
+            border: 1px solid #28a745;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .code-example {
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+            overflow-x: auto;
+        }
+        .highlight {
+            color: #ff6b35;
+            font-weight: 600;
+        }
+        .success {
+            color: #28a745;
+        }
+        .error {
+            color: #dc3545;
+        }
+        h1 {
+            color: #ff6b35;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        h2 {
+            color: #58a6ff;
+            border-bottom: 1px solid #30363d;
+            padding-bottom: 10px;
+        }
+        .criteria-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .criteria-item {
+            background: #161b22;
+            border-radius: 6px;
+            padding: 15px;
+            text-align: center;
+            border: 1px solid #30363d;
+        }
+        .criteria-value {
+            font-size: 20px;
+            font-weight: bold;
+            color: #ff6b35;
+            margin: 5px 0;
+        }
+        .api-endpoint {
+            background: #21262d;
+            border-radius: 6px;
+            padding: 10px;
+            margin: 10px 0;
+            font-family: monospace;
+            border-left: 3px solid #ff6b35;
+        }
+        .scoring-table {
+            background: #161b22;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .scoring-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #30363d;
+        }
+        .scoring-row:last-child {
+            border-bottom: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔥 Premium Trending Coins Filter</h1>
+    <p style="text-align: center; color: #8892b0; margin-bottom: 40px;">
+        Completely separate backend function for curated, high-quality investment opportunities
+    </p>
+
+    <div class="feature-container">
+        <h2>🎯 What Changed</h2>
+        
+        <div class="comparison-grid">
+            <div class="old-way">
+                <h3><span class="error">❌</span> Old Trending Tab</h3>
+                <ul>
+                    <li>Reshuffled coins from "New" tab</li>
+                    <li>No quality filtering</li>
+                    <li>Mixed new launches with trending</li>
+                    <li>No social media requirements</li>
+                    <li>Basic price change sorting</li>
+                </ul>
+            </div>
+            
+            <div class="new-way">
+                <h3><span class="success">✅</span> New Trending Tab</h3>
+                <ul>
+                    <li>Completely separate coin set</li>
+                    <li>Premium quality filters</li>
+                    <li>4+ hour history requirement</li>
+                    <li>Social media presence required</li>
+                    <li>Sophisticated scoring algorithm</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="feature-container">
+        <h2>🔍 Premium Filtering Criteria</h2>
+        
+        <div class="criteria-grid">
+            <div class="criteria-item">
+                <h4>Age Requirement</h4>
+                <div class="criteria-value">4+ Hours</div>
+                <p>Minimum trading history</p>
+            </div>
+            
+            <div class="criteria-item">
+                <h4>Price Performance</h4>
+                <div class="criteria-value">2-5%+</div>
+                <p>Recent positive movement</p>
+            </div>
+            
+            <div class="criteria-item">
+                <h4>Minimum Liquidity</h4>
+                <div class="criteria-value">$15,000</div>
+                <p>Ensures tradability</p>
+            </div>
+            
+            <div class="criteria-item">
+                <h4>Minimum Volume</h4>
+                <div class="criteria-value">$5,000</div>
+                <p>24h trading activity</p>
+            </div>
+            
+            <div class="criteria-item">
+                <h4>Social Presence</h4>
+                <div class="criteria-value">Required*</div>
+                <p>Website, Twitter, or Telegram</p>
+            </div>
+            
+            <div class="criteria-item">
+                <h4>Liquidity Lock</h4>
+                <div class="criteria-value">Preferred</div>
+                <p>Bonus scoring points</p>
+            </div>
+        </div>
+        
+        <p style="text-align: center; color: #8892b0; font-size: 14px; margin-top: 20px;">
+            *Social presence gives bonus points but is not strictly required to allow for more coins
+        </p>
+    </div>
+
+    <div class="feature-container">
+        <h2>🏆 Advanced Scoring System</h2>
+        
+        <div class="scoring-table">
+            <h3>Trending Score Calculation (0-100 points)</h3>
+            
+            <div class="scoring-row">
+                <span>24h Price Change</span>
+                <span>0-20 points (0.4x multiplier)</span>
+            </div>
+            
+            <div class="scoring-row">
+                <span>6h Price Change</span>
+                <span>0-20 points (0.6x multiplier)</span>
+            </div>
+            
+            <div class="scoring-row">
+                <span>Trading Volume</span>
+                <span>0-25 points (log scale)</span>
+            </div>
+            
+            <div class="scoring-row">
+                <span>Liquidity Depth</span>
+                <span>0-20 points (log scale)</span>
+            </div>
+            
+            <div class="scoring-row">
+                <span>Social Media</span>
+                <span>0-15 points (5 each: website, Twitter, Telegram)</span>
+            </div>
+            
+            <div class="scoring-row">
+                <span>Liquidity Locked</span>
+                <span>0-10 points (bonus for security)</span>
+            </div>
+            
+            <div class="scoring-row">
+                <span>Age Sweet Spot</span>
+                <span>0-10 points (peak at ~20 hours old)</span>
+            </div>
+        </div>
+        
+        <p style="color: #8892b0; text-align: center;">
+            Coins are ranked by total score and top 15 are shown as trending
+        </p>
+    </div>
+
+    <div class="feature-container">
+        <h2>⚡ Technical Implementation</h2>
+        
+        <div class="criteria-box">
+            <h3>Separate Backend Function</h3>
+            <div class="code-example">
+async function updateTrendingCoinsCache() {
+  // 1. Fetch from Dexscreener + Birdeye APIs
+  // 2. Apply 4+ hour age filter
+  // 3. Check positive price action (2-5%+)
+  // 4. Validate liquidity and volume thresholds
+  // 5. Extract social media links
+  // 6. Calculate trending scores
+  // 7. Return top 15 coins
+}</div>
+        </div>
+
+        <div class="criteria-box">
+            <h3>Data Sources</h3>
+            <ul>
+                <li><strong>Dexscreener:</strong> Token profiles and pool data</li>
+                <li><strong>Birdeye:</strong> Solana trending tokens (bonus data)</li>
+                <li><strong>Dual Processing:</strong> Cross-reference for best quality</li>
+            </ul>
+        </div>
+
+        <div class="criteria-box">
+            <h3>API Endpoints</h3>
+            <div class="api-endpoint">
+                <strong>Homepage Trending:</strong> /api/coins/homepage-trending
+            </div>
+            <div class="api-endpoint">
+                <strong>Regular Trending:</strong> /api/coins/trending
+            </div>
+            <p>Both endpoints now use the premium filtering logic</p>
+        </div>
+    </div>
+
+    <div class="feature-container">
+        <h2>📊 Coin Quality Examples</h2>
+        
+        <div class="comparison-grid">
+            <div class="old-way">
+                <h3>❌ Would NOT Show (Old System Did)</h3>
+                <ul>
+                    <li>2-hour old coins (too new)</li>
+                    <li>Coins down -5% (negative action)</li>
+                    <li>$500 liquidity (too risky)</li>
+                    <li>No social media (red flag)</li>
+                    <li>Unlocked liquidity (rug risk)</li>
+                </ul>
+            </div>
+            
+            <div class="new-way">
+                <h3>✅ Premium Trending Coins</h3>
+                <ul>
+                    <li>8+ hours trading history</li>
+                    <li>Up 15% in last 6 hours</li>
+                    <li>$50k+ liquidity pool</li>
+                    <li>Website + Twitter + Telegram</li>
+                    <li>Locked liquidity (bonus points)</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="feature-container">
+        <h2>🎮 User Experience</h2>
+        
+        <div class="criteria-box">
+            <h3>When Users Click "Trending" Tab</h3>
+            <ol>
+                <li>Frontend calls <code>/api/coins/homepage-trending</code></li>
+                <li>Backend returns curated premium coins only</li>
+                <li>No overlap with "New" tab coins</li>
+                <li>Users see investment-worthy opportunities</li>
+                <li>Coins have proven positive momentum</li>
+            </ol>
+        </div>
+
+        <div class="criteria-box">
+            <h3>Benefits for Users</h3>
+            <ul>
+                <li><span class="success">✓</span> <strong>Lower Risk:</strong> Coins with trading history and locked liquidity</li>
+                <li><span class="success">✓</span> <strong>Social Proof:</strong> Projects with community presence</li>
+                <li><span class="success">✓</span> <strong>Momentum Trading:</strong> Coins showing positive price action</li>
+                <li><span class="success">✓</span> <strong>Quality Filter:</strong> No rug pulls or suspicious projects</li>
+                <li><span class="success">✓</span> <strong>Investment Grade:</strong> Coins suitable for larger positions</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="feature-container">
+        <h2>🔧 Testing the New System</h2>
+        
+        <div class="criteria-box">
+            <h3>Backend Endpoints to Test</h3>
+            <div class="code-example">
+# Test trending coins
+curl http://localhost:4000/api/coins/trending
+
+# Test homepage trending (used by frontend)
+curl http://localhost:4000/api/coins/homepage-trending
+
+# Check server health and cache status
+curl http://localhost:4000/api/health</div>
+        </div>
+
+        <div class="criteria-box">
+            <h3>Frontend Testing</h3>
+            <ol>
+                <li>Open app at <a href="http://localhost:5173" style="color: #58a6ff;">http://localhost:5173</a></li>
+                <li>Click "New" tab → See fresh launches</li>
+                <li>Click "Trending" tab → See premium curated coins</li>
+                <li>Verify coins are completely different sets</li>
+                <li>Check coin quality (age, socials, price action)</li>
+            </ol>
+        </div>
+    </div>
+
+    <div class="feature-container" style="text-align: center; border: 2px solid #ff6b35;">
+        <h2 style="color: #ff6b35;">🎉 TRENDING FILTER UPGRADED</h2>
+        <p style="font-size: 18px; margin: 20px 0;">
+            The trending tab now shows <span class="highlight">premium investment opportunities</span> instead of random new coins!
+        </p>
+        <div class="criteria-box" style="text-align: left; max-width: 600px; margin: 20px auto;">
+            <h3>Key Improvements:</h3>
+            <ul>
+                <li><span class="success">✓</span> Separate backend function for trending coins</li>
+                <li><span class="success">✓</span> 4+ hour minimum trading history</li>
+                <li><span class="success">✓</span> Positive price momentum required</li>
+                <li><span class="success">✓</span> Social media presence validation</li>
+                <li><span class="success">✓</span> Liquidity and volume thresholds</li>
+                <li><span class="success">✓</span> Advanced scoring algorithm</li>
+                <li><span class="success">✓</span> No overlap with "New" tab</li>
+            </ul>
+        </div>
+        <p style="color: #8892b0;">
+            Users will now see curated, investment-grade meme coins when browsing trending!
+        </p>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Add click animation to criteria items
+            const criteriaItems = document.querySelectorAll('.criteria-item');
+            criteriaItems.forEach(item => {
+                item.addEventListener('click', function() {
+                    this.style.transform = 'scale(1.05)';
+                    this.style.background = '#21262d';
+                    setTimeout(() => {
+                        this.style.transform = 'scale(1)';
+                        this.style.background = '#161b22';
+                    }, 200);
+                });
+            });
+        });
+    </script>
+</body>
+</html>

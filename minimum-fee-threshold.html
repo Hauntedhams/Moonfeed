@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minimum Fee Threshold Calculator</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: #0d1117;
+            color: white;
+            padding: 40px;
+            max-width: 800px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
+        .calculator-container {
+            background: #1a1b1f;
+            border-radius: 16px;
+            padding: 30px;
+            margin: 20px 0;
+        }
+        .calculation-box {
+            background: #21262d;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 15px 0;
+            border-left: 4px solid #00d4aa;
+        }
+        .result-box {
+            background: linear-gradient(135deg, rgba(0, 212, 170, 0.1), rgba(0, 212, 170, 0.2));
+            border: 2px solid #00d4aa;
+            border-radius: 12px;
+            padding: 25px;
+            text-align: center;
+            margin: 20px 0;
+        }
+        .threshold-display {
+            font-size: 32px;
+            font-weight: bold;
+            color: #00d4aa;
+            margin: 15px 0;
+        }
+        .formula-box {
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+        }
+        .example-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .example-card {
+            background: #161b22;
+            border-radius: 8px;
+            padding: 20px;
+            border: 1px solid #30363d;
+        }
+        .fee-yes {
+            border-left: 4px solid #28a745;
+        }
+        .fee-no {
+            border-left: 4px solid #dc3545;
+        }
+        h1 {
+            color: #00d4aa;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        h2 {
+            color: #58a6ff;
+            border-bottom: 1px solid #30363d;
+            padding-bottom: 10px;
+        }
+        .highlight {
+            color: #00d4aa;
+            font-weight: 600;
+        }
+        .success {
+            color: #28a745;
+        }
+        .error {
+            color: #dc3545;
+        }
+        .warning {
+            color: #ffc107;
+        }
+        .interactive-calc {
+            background: #161b22;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .input-group {
+            margin: 15px 0;
+        }
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #8892b0;
+        }
+        .input-group input {
+            width: 100%;
+            padding: 10px;
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            color: white;
+            font-size: 16px;
+        }
+        .calc-result {
+            background: #21262d;
+            border-radius: 6px;
+            padding: 15px;
+            margin: 15px 0;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧮 Minimum Fee Threshold Calculator</h1>
+    <p style="text-align: center; color: #8892b0; margin-bottom: 40px;">
+        Calculate the minimum USD trade amount that triggers the 0.5% platform fee
+    </p>
+
+    <div class="calculator-container">
+        <h2>📊 Threshold Calculation</h2>
+        
+        <div class="calculation-box">
+            <h3>Given Parameters</h3>
+            <ul>
+                <li><strong>Fee Rate:</strong> 0.5% (0.005)</li>
+                <li><strong>Minimum Fee:</strong> 0.0001 SOL</li>
+                <li><strong>Current SOL Price:</strong> ~$210 USD</li>
+            </ul>
+        </div>
+
+        <div class="calculation-box">
+            <h3>Mathematical Calculation</h3>
+            <div class="formula-box">
+// To find minimum trade value:
+// Fee = Trade Value × Fee Rate
+// 0.0001 SOL = Trade Value × 0.005
+// Trade Value = 0.0001 SOL ÷ 0.005
+// Trade Value = 0.02 SOL
+
+// Convert to USD:
+// 0.02 SOL × $210/SOL = $4.20 USD</div>
+        </div>
+
+        <div class="result-box">
+            <h3>Minimum Trade Amount</h3>
+            <div class="threshold-display">$4.20 USD</div>
+            <p>Any trade worth <span class="highlight">$4.20 or more</span> will trigger the 0.5% platform fee</p>
+            <p style="color: #8892b0; font-size: 14px;">
+                (Equivalent to 0.02 SOL at current prices)
+            </p>
+        </div>
+    </div>
+
+    <div class="calculator-container">
+        <h2>📈 Interactive Calculator</h2>
+        
+        <div class="interactive-calc">
+            <div class="input-group">
+                <label for="solPrice">SOL Price (USD)</label>
+                <input type="number" id="solPrice" value="210" step="0.01" onchange="calculateThreshold()">
+            </div>
+            
+            <div class="input-group">
+                <label for="minFee">Minimum Fee (SOL)</label>
+                <input type="number" id="minFee" value="0.0001" step="0.0001" onchange="calculateThreshold()">
+            </div>
+            
+            <div class="input-group">
+                <label for="feeRate">Fee Rate (%)</label>
+                <input type="number" id="feeRate" value="0.5" step="0.1" onchange="calculateThreshold()">
+            </div>
+            
+            <div class="calc-result">
+                <h4>Minimum Trade Amount</h4>
+                <div id="result" class="threshold-display">$4.20</div>
+                <div id="solEquivalent" style="color: #8892b0;">0.02 SOL</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="calculator-container">
+        <h2>💡 Trade Examples</h2>
+        
+        <div class="example-grid">
+            <div class="example-card fee-no">
+                <h3><span class="error">❌</span> No Fee Charged</h3>
+                <p><strong>Trade:</strong> $3.00 worth of tokens</p>
+                <p><strong>Fee Amount:</strong> 0.000071 SOL</p>
+                <p><strong>Status:</strong> Below 0.0001 SOL threshold</p>
+                <p><strong>Result:</strong> No fee collected</p>
+            </div>
+            
+            <div class="example-card fee-yes">
+                <h3><span class="success">✅</span> Fee Charged</h3>
+                <p><strong>Trade:</strong> $5.00 worth of tokens</p>
+                <p><strong>Fee Amount:</strong> 0.000119 SOL</p>
+                <p><strong>Status:</strong> Above 0.0001 SOL threshold</p>
+                <p><strong>Result:</strong> Fee collected</p>
+            </div>
+            
+            <div class="example-card fee-no">
+                <h3><span class="error">❌</span> No Fee Charged</h3>
+                <p><strong>Trade:</strong> 0.01 SOL ($2.10)</p>
+                <p><strong>Fee Amount:</strong> 0.00005 SOL</p>
+                <p><strong>Status:</strong> Below threshold</p>
+                <p><strong>Result:</strong> No fee collected</p>
+            </div>
+            
+            <div class="example-card fee-yes">
+                <h3><span class="success">✅</span> Fee Charged</h3>
+                <p><strong>Trade:</strong> 0.025 SOL ($5.25)</p>
+                <p><strong>Fee Amount:</strong> 0.000125 SOL</p>
+                <p><strong>Status:</strong> Above threshold</p>
+                <p><strong>Result:</strong> Fee collected</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="calculator-container">
+        <h2>🎯 Key Insights</h2>
+        
+        <div class="calculation-box">
+            <h3>Dust Protection</h3>
+            <p>The 0.0001 SOL minimum prevents tiny "dust" fees that would cost more in gas than the fee value itself.</p>
+            <div class="formula-box">
+// Gas cost for SOL transfer: ~0.000005 SOL
+// Minimum fee threshold: 0.0001 SOL
+// Ratio: 20:1 (fee is 20x the gas cost)</div>
+        </div>
+
+        <div class="calculation-box">
+            <h3>Market Price Impact</h3>
+            <p>The USD threshold changes with SOL price movements:</p>
+            <ul>
+                <li><strong>SOL at $100:</strong> Minimum trade = $2.00</li>
+                <li><strong>SOL at $200:</strong> Minimum trade = $4.00</li>
+                <li><strong>SOL at $300:</strong> Minimum trade = $6.00</li>
+                <li><strong>SOL at $500:</strong> Minimum trade = $10.00</li>
+            </ul>
+        </div>
+
+        <div class="calculation-box">
+            <h3>User Experience</h3>
+            <ul>
+                <li><span class="success">✅</span> Small trades avoid fee collection overhead</li>
+                <li><span class="success">✅</span> Users aren't charged pennies in fees</li>
+                <li><span class="success">✅</span> Gas efficiency for meaningful transactions</li>
+                <li><span class="warning">⚠</span> Threshold adjusts automatically with SOL price</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="calculator-container" style="text-align: center; border: 2px solid #00d4aa;">
+        <h2 style="color: #00d4aa;">📝 Summary</h2>
+        <p style="font-size: 18px; margin: 20px 0;">
+            Minimum trade amount to trigger fee: <span class="highlight">$4.20 USD</span>
+        </p>
+        <p style="color: #8892b0;">
+            This threshold ensures only meaningful trades incur fees while protecting users from dust charges.
+        </p>
+        <div class="formula-box" style="max-width: 400px; margin: 20px auto;">
+Trade Value ≥ $4.20 → Fee Applied ✅
+Trade Value < $4.20 → No Fee ❌</div>
+    </div>
+
+    <script>
+        function calculateThreshold() {
+            const solPrice = parseFloat(document.getElementById('solPrice').value);
+            const minFee = parseFloat(document.getElementById('minFee').value);
+            const feeRate = parseFloat(document.getElementById('feeRate').value) / 100;
+            
+            // Calculate minimum trade value in SOL
+            const minTradeSOL = minFee / feeRate;
+            
+            // Convert to USD
+            const minTradeUSD = minTradeSOL * solPrice;
+            
+            // Update display
+            document.getElementById('result').textContent = `$${minTradeUSD.toFixed(2)}`;
+            document.getElementById('solEquivalent').textContent = `${minTradeSOL.toFixed(4)} SOL`;
+        }
+
+        // Initialize calculation on page load
+        calculateThreshold();
+    </script>
+</body>
+</html>

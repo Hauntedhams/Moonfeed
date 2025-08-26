@@ -1,10 +1,10 @@
-# MoonFeed - Meme Coin Discovery App
+# Meme Coin Discovery App
 
 A fullstack app for discovering trending meme coins with a TikTok-style vertical scroll interface.
 
 ## Tech Stack
-- **Frontend:** Vite + React (`/frontend`) - Deployed on Vercel
-- **Backend:** Express.js (`/backend`) - Deployed on Render
+- **Frontend:** Vite + React (`/frontend`)
+- **Backend:** Express.js (`/backend`)
 
 ## Features
 - Infinite vertical scroll feed of meme coins
@@ -12,18 +12,6 @@ A fullstack app for discovering trending meme coins with a TikTok-style vertical
 - Coin stats, chart, socials, and buy/sell (Jupiter API)
 - 0.5% transaction fee (non-custodial)
 - Modular, dark-themed UI
-
-## Deployment
-
-### Frontend (Vercel)
-- Configured with `frontend/vercel.json`
-- Auto-deploys from main branch
-- Environment variables set in Vercel dashboard
-
-### Backend (Render)
-- Configured with `render.yaml` in root
-- Auto-deploys from main branch
-- Environment variables configured in render.yaml
 
 ## Getting Started
 

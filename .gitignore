@@ -1,55 +1,37 @@
-# Dependencies
+# Root ignores
+.DS_Store
 node_modules/
+.env
+.env.local
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
 
-# Runtime data
-pids
-*.pid
-*.seed
-*.pid.lock
+# Frontend build artifacts
+frontend/dist/
+frontend/.vite/
 
-# Environment variables
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+# Backend build artifacts (if any TS build or cache)
+backend/dist/
+backend/build/
 
-# Build outputs
-dist/
-build/
-
-# IDE files
+# Cache
 .vscode/
-.idea/
+.eslintcache
+.cache/
 
-# OS generated files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
+# Deployment triggers
+*/.deployment-trigger
+
+# Misc
 Thumbs.db
+.idea/
+*.swp
 
-# Logs
-logs
-*.log
+# Prevent committing local test/demo HTML pages if desired uncomment:
+# *.html
 
-# Test files and demos (keeping development/test HTML files out of production)
-*.html
-!frontend/index.html
-
-# Markdown files (documentation)
-*.md
-!README.md
-
-# Development scripts
-test_*.js
-
-# Deployment logs and temporary files
-deploy-logs/
-.vercel
-.render
+# Keep markdown docs
+!*.md

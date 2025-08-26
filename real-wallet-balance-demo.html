@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real Wallet Balance Integration Demo</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            background: linear-gradient(45deg, #fff, #f0f0f0);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .demo-section {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            padding: 25px;
+            margin: 20px 0;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .demo-section h2 {
+            color: #fff;
+            margin-top: 0;
+            font-size: 1.5em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin: 20px 0;
+        }
+        .before-after {
+            background: rgba(255, 255, 255, 0.08);
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .before-after h3 {
+            margin: 0 0 15px 0;
+            color: #fff;
+            font-size: 1.2em;
+            text-align: center;
+        }
+        .mock-trade-box {
+            background: #252730;
+            border-radius: 16px;
+            padding: 20px;
+            margin: 10px 0;
+            border: 1px solid #2a2d35;
+            color: white;
+        }
+        .trade-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 12px;
+        }
+        .trade-label {
+            color: #8892b0;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .percentage-section {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 4px;
+        }
+        .percentage-buttons {
+            display: flex;
+            gap: 8px;
+        }
+        .percentage-btn {
+            background: transparent;
+            border: none;
+            color: #8892b0;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            padding: 0;
+            transition: color 0.2s ease;
+        }
+        .percentage-btn:hover:not(.disabled) {
+            color: #fff;
+        }
+        .percentage-btn.disabled {
+            color: #4a5568;
+            cursor: not-allowed;
+        }
+        .balance-text {
+            font-size: 11px;
+            color: #6b7280;
+            font-weight: 400;
+            text-align: right;
+            white-space: nowrap;
+        }
+        .balance-text.real {
+            color: #22c55e;
+        }
+        .balance-text.simulated {
+            color: #ef4444;
+        }
+        .trade-input {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 12px;
+            border-radius: 8px;
+        }
+        .token-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .amount-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: white;
+            font-size: 16px;
+            text-align: right;
+            outline: none;
+        }
+        .feature-card {
+            background: rgba(255, 255, 255, 0.08);
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            margin: 15px 0;
+        }
+        .feature-card h3 {
+            margin: 0 0 15px 0;
+            color: #fff;
+            font-size: 1.2em;
+        }
+        .feature-card p {
+            margin: 0;
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 0.95em;
+        }
+        .highlight {
+            background: rgba(255, 215, 0, 0.2);
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: #ffd700;
+            font-weight: 600;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            font-weight: 600;
+            text-transform: uppercase;
+            background: rgba(34, 197, 94, 0.2);
+            color: #22c55e;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+        .emoji {
+            font-size: 1.2em;
+            margin-right: 5px;
+        }
+        ul {
+            color: rgba(255, 255, 255, 0.9);
+        }
+        ul li {
+            margin: 8px 0;
+        }
+        .code-block {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 0.9em;
+            color: #e1e1e1;
+            overflow-x: auto;
+        }
+        .arrow {
+            text-align: center;
+            font-size: 2em;
+            color: #22c55e;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>💰 Real Wallet Balance Integration</h1>
+        
+        <div class="demo-section">
+            <h2>
+                <span class="emoji">🚀</span>
+                Enhancement Complete
+                <span class="status-badge">Live</span>
+            </h2>
+            <p>Successfully integrated real wallet balance fetching for both SOL and SPL tokens. The 50% and Max percentage buttons now use actual connected wallet balances instead of simulated values.</p>
+        </div>
+
+        <div class="demo-section">
+            <h2>
+                <span class="emoji">🔄</span>
+                Before vs After Comparison
+            </h2>
+            <div class="comparison-grid">
+                <div class="before-after">
+                    <h3>❌ Before: Simulated Values</h3>
+                    <div class="mock-trade-box">
+                        <div class="trade-header">
+                            <div class="trade-label">Selling</div>
+                            <div class="percentage-section">
+                                <div class="percentage-buttons">
+                                    <button class="percentage-btn">50%</button>
+                                    <button class="percentage-btn">Max</button>
+                                </div>
+                                <div class="balance-text simulated">Available: 1.5000 SOL (simulated)</div>
+                            </div>
+                        </div>
+                        <div class="trade-input">
+                            <div class="token-info">
+                                <span>◎ SOL</span>
+                            </div>
+                            <input class="amount-input" value="0.7500" readonly>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="before-after">
+                    <h3>✅ After: Real Wallet Balance</h3>
+                    <div class="mock-trade-box">
+                        <div class="trade-header">
+                            <div class="trade-label">Selling</div>
+                            <div class="percentage-section">
+                                <div class="percentage-buttons">
+                                    <button class="percentage-btn">50%</button>
+                                    <button class="percentage-btn">Max</button>
+                                </div>
+                                <div class="balance-text real">Available: 2.4356 SOL (after fees)</div>
+                            </div>
+                        </div>
+                        <div class="trade-input">
+                            <div class="token-info">
+                                <span>◎ SOL</span>
+                            </div>
+                            <input class="amount-input" value="2.4356" readonly>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h2>
+                <span class="emoji">🔧</span>
+                Technical Implementation
+            </h2>
+            
+            <div class="feature-card">
+                <h3>Real SOL Balance Fetching</h3>
+                <div class="code-block">
+const fetchBalance = async () => {
+  try {
+    if (wallet.connected && wallet.publicKey && connection) {
+      // Fetch actual SOL balance from Solana network
+      const lamports = await connection.getBalance(wallet.publicKey);
+      const solBalance = lamports / 1e9; // Convert lamports to SOL
+      setBalance(solBalance);
+      console.log('Fetched actual SOL balance:', solBalance);
+    } else {
+      setBalance(0);
+    }
+  } catch (error) {
+    console.error('Error fetching balance:', error);
+    setBalance(0);
+  }
+};
+                </div>
+            </div>
+            
+            <div class="feature-card">
+                <h3>SPL Token Balance Fetching</h3>
+                <div class="code-block">
+const fetchTokenBalance = async (mintAddress) => {
+  try {
+    if (!wallet.connected || !wallet.publicKey || !connection || !mintAddress) {
+      return 0;
+    }
+
+    const { TOKEN_PROGRAM_ID } = await import('@solana/spl-token');
+    const { PublicKey } = await import('@solana/web3.js');
+    
+    const mintPubkey = new PublicKey(mintAddress);
+    
+    // Get all token accounts for this wallet
+    const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
+      wallet.publicKey,
+      { programId: TOKEN_PROGRAM_ID }
+    );
+
+    // Find the account for this specific token
+    const tokenAccount = tokenAccounts.value.find(
+      account => account.account.data.parsed.info.mint === mintAddress
+    );
+
+    if (tokenAccount) {
+      const amount = tokenAccount.account.data.parsed.info.tokenAmount.uiAmount;
+      return amount || 0;
+    }
+
+    return 0;
+  } catch (error) {
+    console.error('Error fetching token balance:', error);
+    return 0;
+  }
+};
+                </div>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h2>
+                <span class="emoji">⚡</span>
+                Enhanced Percentage Calculations
+            </h2>
+            
+            <div class="feature-card">
+                <h3>Smart Max Amount Calculation</h3>
+                <div class="code-block">
+const getMaxAmount = () => {
+  if (fromToken === 'SOL') {
+    // For SOL, subtract fee and gas estimate from actual balance
+    const feeAmount = calculateFeeAmount();
+    const gasEstimate = 0.01; // Conservative gas estimate
+    return Math.max(0, balance - feeAmount - gasEstimate);
+  } else {
+    // For tokens, use the fetched token balance
+    return tokenBalance || 0;
+  }
+};
+
+const getBuyMaxAmount = () => {
+  if (fromToken === 'SOL') {
+    const maxSpend = getMaxAmount();
+    // Convert to destination token amount based on current quote
+    if (quote && quote.outAmount && quote.inAmount) {
+      const rate = parseFloat(quote.outAmount) / parseFloat(quote.inAmount);
+      return maxSpend * rate;
+    }
+    // Fallback: estimate based on token price if available
+    if (tokenPrice > 0 && solPrice > 0) {
+      const usdValue = maxSpend * solPrice;
+      return usdValue / tokenPrice;
+    }
+    return 0;
+  } else {
+    // Token to SOL or token to token
+    const maxTokens = tokenBalance || 0;
+    if (quote && quote.outAmount && quote.inAmount) {
+      const rate = parseFloat(quote.outAmount) / parseFloat(quote.inAmount);
+      return maxTokens * rate;
+    }
+    return maxTokens;
+  }
+};
+                </div>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h2>
+                <span class="emoji">🎯</span>
+                User Experience Improvements
+            </h2>
+            
+            <div class="comparison-grid">
+                <div class="feature-card">
+                    <h3>💡 Smart Button States</h3>
+                    <p>Percentage buttons are now disabled when wallet is not connected or when balance is zero, providing clear feedback to users.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <h3>📊 Real-time Balance Display</h3>
+                    <p>Users can see their exact available balance, including fee deductions, directly below the percentage buttons.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <h3>🔒 Fee-Aware Calculations</h3>
+                    <p>Max amounts automatically account for platform fees (0.5%) and gas estimates (0.01 SOL) to prevent failed transactions.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <h3>🪙 Multi-Token Support</h3>
+                    <p>Supports both SOL and any SPL token with automatic balance fetching and accurate percentage calculations.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h2>
+                <span class="emoji">🛡️</span>
+                Error Handling & Edge Cases
+            </h2>
+            <ul>
+                <li><strong>Network Errors:</strong> Graceful fallback to zero balance if balance fetching fails</li>
+                <li><strong>Missing Token Accounts:</strong> Returns zero balance for tokens not owned by the wallet</li>
+                <li><strong>Insufficient Balance:</strong> Max button calculates available amount after fees to prevent failures</li>
+                <li><strong>Connection Loss:</strong> Buttons disabled and balance reset when wallet disconnects</li>
+                <li><strong>Invalid Mint Addresses:</strong> Safe handling of malformed or non-existent token addresses</li>
+            </ul>
+        </div>
+
+        <div class="demo-section">
+            <h2>
+                <span class="emoji">📦</span>
+                Dependencies Added
+            </h2>
+            <div class="feature-card">
+                <h3>@solana/spl-token</h3>
+                <p>Added to support SPL token balance fetching and account parsing. This enables the app to work with any token on the Solana network.</p>
+                <div class="code-block">
+npm install @solana/spl-token
+                </div>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h2>
+                <span class="emoji">🎉</span>
+                Complete Integration Summary
+            </h2>
+            <div class="feature-card">
+                <h3>✅ What's Now Working</h3>
+                <ul>
+                    <li>✅ Real SOL balance fetching from connected wallet</li>
+                    <li>✅ SPL token balance fetching for any token</li>
+                    <li>✅ Accurate 50% and Max percentage calculations</li>
+                    <li>✅ Fee-aware max amount calculations</li>
+                    <li>✅ Real-time balance display with status indicators</li>
+                    <li>✅ Smart button states (disabled when appropriate)</li>
+                    <li>✅ Proper error handling and edge case management</li>
+                    <li>✅ Build verification and production readiness</li>
+                </ul>
+            </div>
+            
+            <div class="feature-card">
+                <h3>🚀 Impact</h3>
+                <p>Users now have complete transparency and accuracy when using percentage buttons. They can see their exact available balance, make informed trading decisions, and trust that the calculated amounts are based on their real wallet state rather than simulated values.</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

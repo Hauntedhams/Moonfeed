@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Percentage Buttons Layout Enhancement Demo</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            background: linear-gradient(45deg, #fff, #f0f0f0);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .demo-section {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            padding: 25px;
+            margin: 20px 0;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .demo-section h2 {
+            color: #fff;
+            margin-top: 0;
+            font-size: 1.5em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin: 20px 0;
+        }
+        .before-after {
+            background: rgba(255, 255, 255, 0.08);
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .before-after h3 {
+            margin: 0 0 15px 0;
+            color: #fff;
+            font-size: 1.2em;
+            text-align: center;
+        }
+        .mock-trade-box {
+            background: #252730;
+            border-radius: 16px;
+            padding: 20px;
+            margin: 10px 0;
+            border: 1px solid #2a2d35;
+            color: white;
+        }
+        .trade-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .trade-label {
+            color: #8892b0;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .percentage-buttons {
+            display: flex;
+            gap: 8px;
+        }
+        .percentage-btn {
+            background: transparent;
+            border: none;
+            color: #8892b0;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            padding: 0;
+            transition: color 0.2s ease;
+        }
+        .percentage-btn:hover {
+            color: #fff;
+        }
+        .trade-input {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 12px;
+            border-radius: 8px;
+        }
+        .token-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .amount-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: white;
+            font-size: 16px;
+            text-align: right;
+            outline: none;
+        }
+        .old-layout .percentage-buttons {
+            margin-top: 8px;
+            justify-content: flex-end;
+        }
+        .feature-card {
+            background: rgba(255, 255, 255, 0.08);
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            margin: 15px 0;
+        }
+        .feature-card h3 {
+            margin: 0 0 15px 0;
+            color: #fff;
+            font-size: 1.2em;
+        }
+        .feature-card p {
+            margin: 0;
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 0.95em;
+        }
+        .highlight {
+            background: rgba(255, 215, 0, 0.2);
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: #ffd700;
+            font-weight: 600;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            font-weight: 600;
+            text-transform: uppercase;
+            background: rgba(34, 197, 94, 0.2);
+            color: #22c55e;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+        .emoji {
+            font-size: 1.2em;
+            margin-right: 5px;
+        }
+        ul {
+            color: rgba(255, 255, 255, 0.9);
+        }
+        ul li {
+            margin: 8px 0;
+        }
+        .arrow {
+            text-align: center;
+            font-size: 2em;
+            color: #22c55e;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📍 Percentage Buttons Layout Enhancement</h1>
+        
+        <div class="demo-section">
+            <h2>
+                <span class="emoji">✨</span>
+                Layout Improvement Overview
+                <span class="status-badge">Complete</span>
+            </h2>
+            <p>Relocated the 50% and Max percentage buttons to the top right corner of each trade section, opposite the "Selling"/"Buying" labels. The buttons now use the same typography and styling as the section labels for visual consistency.</p>
+        </div>
+
+        <div class="demo-section">
+            <h2>
+                <span class="emoji">🔄</span>
+                Before vs After Comparison
+            </h2>
+            <div class="comparison-grid">
+                <div class="before-after">
+                    <h3>❌ Before: Buttons Below Input</h3>
+                    <div class="mock-trade-box old-layout">
+                        <div class="trade-label">Selling</div>
+                        <div class="trade-input">
+                            <div class="token-info">
+                                <span>◎ SOL</span>
+                            </div>
+                            <input class="amount-input" value="1.2345" readonly>
+                        </div>
+                        <div class="percentage-buttons">
+                            <button class="percentage-btn">50%</button>
+                            <button class="percentage-btn">Max</button>
+                        </div>
+                        <div style="font-size: 12px; color: #8892b0; text-align: right; margin-top: 4px;">~$245.60</div>
+                    </div>
+                </div>
+                
+                <div class="before-after">
+                    <h3>✅ After: Buttons in Header</h3>
+                    <div class="mock-trade-box">
+                        <div class="trade-header">
+                            <div class="trade-label">Selling</div>
+                            <div class="percentage-buttons">
+                                <button class="percentage-btn">50%</button>
+                                <button class="percentage-btn">Max</button>
+                            </div>
+                        </div>
+                        <div class="trade-input">
+                            <div class="token-info">
+                                <span>◎ SOL</span>
+                            </div>
+                            <input class="amount-input" value="1.2345" readonly>
+                        </div>
+                        <div style="font-size: 12px; color: #8892b0; text-align: right; margin-top: 4px;">~$245.60</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="arrow">⬇️</div>
+            
+            <div class="feature-card">
+                <h3>🎯 Key Improvements</h3>
+                <ul>
+                    <li><strong>Better Visual Hierarchy:</strong> Buttons are now prominently placed in the header section</li>
+                    <li><strong>Space Efficiency:</strong> Freed up space below the input for cleaner USD display</li>
+                    <li><strong>Consistent Typography:</strong> Same font size, weight, and color as section labels</li>
+                    <li><strong>Balanced Layout:</strong> Creates symmetrical left-right balance in each trade section</li>
+                    <li><strong>Improved Scannability:</strong> Users can quickly spot both section purpose and quick actions</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h2>
+                <span class="emoji">🎨</span>
+                Design System Integration
+            </h2>
+            <div class="feature-card">
+                <h3>Typography Consistency</h3>
+                <p>The percentage buttons now match the trade labels exactly:</p>
+                <ul>
+                    <li><span class="highlight">Font Size:</span> 14px (same as "Selling"/"Buying")</li>
+                    <li><span class="highlight">Font Weight:</span> 500 (medium weight for readability)</li>
+                    <li><span class="highlight">Color:</span> #8892b0 (muted blue-gray)</li>
+                    <li><span class="highlight">Hover State:</span> Transitions to white (#fff) on hover</li>
+                </ul>
+            </div>
+            
+            <div class="feature-card">
+                <h3>Layout Structure</h3>
+                <p>New header component creates balanced visual weight:</p>
+                <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; font-family: monospace; margin-top: 10px;">
+&lt;div className="jupiter-trade-header"&gt;<br>
+&nbsp;&nbsp;&lt;div className="jupiter-trade-label"&gt;Selling&lt;/div&gt;<br>
+&nbsp;&nbsp;&lt;div className="jupiter-percentage-buttons"&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&lt;button&gt;50%&lt;/button&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&lt;button&gt;Max&lt;/button&gt;<br>
+&nbsp;&nbsp;&lt;/div&gt;<br>
+&lt;/div&gt;
+                </div>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h2>
+                <span class="emoji">📱</span>
+                User Experience Benefits
+            </h2>
+            <div class="comparison-grid">
+                <div class="feature-card">
+                    <h3>🔍 Improved Discoverability</h3>
+                    <p>Buttons are now in the natural reading flow - users see "Selling" and immediately notice the quick action buttons beside it.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <h3>⚡ Faster Access</h3>
+                    <p>No need to look down below the input - percentage buttons are right where users expect quick actions to be.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <h3>🎯 Cleaner Interface</h3>
+                    <p>Removes clutter from the input area, making the amount and USD value more prominent and readable.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <h3>🔄 Consistent Pattern</h3>
+                    <p>Both buy and sell sections follow the same header layout pattern, creating predictable user experience.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h2>
+                <span class="emoji">🛠️</span>
+                Technical Implementation
+            </h2>
+            <div class="feature-card">
+                <h3>CSS Changes</h3>
+                <div style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; font-family: monospace; font-size: 0.9em; margin-top: 10px;">
+/* New header layout */<br>
+.jupiter-trade-header {<br>
+&nbsp;&nbsp;display: flex;<br>
+&nbsp;&nbsp;justify-content: space-between;<br>
+&nbsp;&nbsp;align-items: center;<br>
+&nbsp;&nbsp;margin-bottom: 12px;<br>
+}<br><br>
+/* Updated label styling */<br>
+.jupiter-trade-label {<br>
+&nbsp;&nbsp;color: #8892b0;<br>
+&nbsp;&nbsp;font-size: 14px;<br>
+&nbsp;&nbsp;font-weight: 500;<br>
+}<br><br>
+/* Matching button styling */<br>
+.jupiter-percentage-btn {<br>
+&nbsp;&nbsp;background: transparent;<br>
+&nbsp;&nbsp;border: none;<br>
+&nbsp;&nbsp;color: #8892b0;<br>
+&nbsp;&nbsp;font-size: 14px;<br>
+&nbsp;&nbsp;font-weight: 500;<br>
+&nbsp;&nbsp;cursor: pointer;<br>
+&nbsp;&nbsp;transition: color 0.2s ease;<br>
+}<br><br>
+.jupiter-percentage-btn:hover {<br>
+&nbsp;&nbsp;color: #fff;<br>
+}
+                </div>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h2>
+                <span class="emoji">🎉</span>
+                Enhancement Complete
+            </h2>
+            <div class="feature-card">
+                <h3>✅ All Requirements Met</h3>
+                <ul>
+                    <li>✅ Percentage buttons moved to top right of each trade section</li>
+                    <li>✅ Positioned opposite the "Selling"/"Buying" labels</li>
+                    <li>✅ Same font size, weight, and styling as section labels</li>
+                    <li>✅ Placed above the live price/USD display</li>
+                    <li>✅ Maintains all existing functionality</li>
+                    <li>✅ Build verification successful</li>
+                </ul>
+            </div>
+            
+            <div class="feature-card">
+                <h3>🚀 Ready for Production</h3>
+                <p>The percentage buttons layout enhancement is now complete and provides a cleaner, more intuitive interface for quick amount selection. The buttons maintain their smart calculation logic while offering improved visual hierarchy and user experience.</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
