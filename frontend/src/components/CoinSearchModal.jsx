@@ -80,6 +80,10 @@ function CoinSearchModal({ visible, onClose, onCoinFound }) {
         </div>
         
         <div className="search-modal-body">
+          <div className="search-coming-soon-banner" role="note" aria-label="Search enhancements coming soon">
+            <span className="coming-dot" />
+            <span className="coming-text">Enhanced search (name / symbol / filters) coming soon</span>
+          </div>
           <div className="search-input-container">
             <input
               type="text"

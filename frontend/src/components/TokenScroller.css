@@ -709,3 +709,59 @@ body.dark-mode .coin-card span[style*="background:#"]:not(.coin-banner) {
   0% { opacity: 0.3; }
   100% { opacity: 0.8; }
 }
+
+/* Ensure stat tooltips overlay everything */
+.stat-info-icon + div[class$='-tooltip'] {
+  pointer-events: none;
+}
+
+/* Dedicated layer for tooltips (if we switch to portal) */
+.tooltip-portal-container {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* Global Stat Tooltip */
+.global-stat-tooltip {
+  position: fixed;
+  background: rgba(0,0,0,0.95);
+  color: #fff;
+  padding: 16px 18px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  width: 300px;
+  max-width: 92vw;
+  z-index: 99999;
+  border: 1px solid rgba(255,255,255,0.12);
+  box-shadow: 0 8px 28px rgba(0,0,0,0.4), 0 2px 6px rgba(0,0,0,0.3);
+  backdrop-filter: blur(10px);
+  animation: tooltipFadeIn 0.18s ease;
+  pointer-events: auto;
+}
+
+.global-stat-tooltip .global-stat-tooltip-arrow {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0; height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+}
+
+.global-stat-tooltip.placement-bottom .global-stat-tooltip-arrow {
+  top: -8px;
+  border-bottom: 8px solid rgba(0,0,0,0.95);
+}
+
+.global-stat-tooltip.placement-top .global-stat-tooltip-arrow {
+  bottom: -8px;
+  border-top: 8px solid rgba(0,0,0,0.95);
+}
+
+@keyframes tooltipFadeIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(4px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}

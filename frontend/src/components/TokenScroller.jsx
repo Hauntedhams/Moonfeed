@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import './TokenScroller.css';
 import CoinCard from './CoinCard';
 import AboutModal from './AboutModal';
@@ -19,6 +20,56 @@ function resolveApiBase() {
 const API_BASE = `${resolveApiBase()}/api/coins`;
 
 console.log('🔧 API_BASE configuration (resolved):', API_BASE);
+
+// Reusable global tooltip icon (portal-based so it overlays all UI)
+const InfoIcon = ({ content }) => {
+  const [tooltip, setTooltip] = useState(null);
+  const show = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    // Default placement below the icon
+    let x = rect.left + rect.width / 2;
+    let y = rect.bottom + 10; // space below icon
+    let placement = 'bottom';
+    const viewportW = window.innerWidth;
+    const viewportH = window.innerHeight;
+    const ESTIMATED_WIDTH = 300; // rough width for centering adjustments
+    const ESTIMATED_HEIGHT = 160; // rough height for overflow calculations
+
+    // Keep within horizontal bounds
+    if (x - ESTIMATED_WIDTH / 2 < 8) {
+      x = Math.min(x + (8 - (x - ESTIMATED_WIDTH / 2)), viewportW - 8 - ESTIMATED_WIDTH / 2);
+    }
+    if (x + ESTIMATED_WIDTH / 2 > viewportW - 8) {
+      x = Math.max(viewportW - 8 - ESTIMATED_WIDTH / 2, ESTIMATED_WIDTH / 2 + 8);
+    }
+
+    // If not enough space below, flip above
+    if (y + ESTIMATED_HEIGHT > viewportH - 8) {
+      y = rect.top - 10; // place above
+      placement = 'top';
+    }
+
+    setTooltip({ x, y, content, placement });
+  };
+  const hide = () => setTooltip(null);
+  return (
+    <>
+      <span className="stat-info-icon" onMouseEnter={show} onMouseLeave={hide}>i</span>
+      {tooltip && createPortal(
+        <div
+          className={`global-stat-tooltip placement-${tooltip.placement}`}
+          style={{ top: tooltip.y, left: tooltip.x, transform: 'translateX(-50%)', position: 'fixed' }}
+          onMouseEnter={() => setTooltip(tooltip)}
+          onMouseLeave={hide}
+        >
+          {tooltip.content}
+          <div className="global-stat-tooltip-arrow" />
+        </div>,
+        document.body
+      )}
+    </>
+  );
+};
 
 // Memoize the component to prevent unnecessary re-renders
 const TokenScroller = React.memo(function TokenScroller({ favorites = [], onlyFavorites = false, onFavoritesChange, filters = {}, onTradeClick, onVisibleCoinsChange, onCurrentCoinChange }) {
@@ -1160,7 +1211,7 @@ const TokenScroller = React.memo(function TokenScroller({ favorites = [], onlyFa
                       }}
                     >
                       <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M20.222 0c1.406 0 2.54 1.137 2.607 2.475V24l-2.677-2.273-1.47-1.338-1.604-1.398.67 2.205H3.71c-1.402 0-2.54-1.065-2.54-2.476V2.48C1.17 1.142 2.31.003 3.715.003h16.5L20.222 0zm-6.118 5.683h-.03l-.202.2c2.073.6 3.076 1.537 3.076 1.537-1.336-.668-2.54-1.002-3.744-1.137-.87-.135-1.74-.064-2.475 0h-.2c-.47 0-1.47.2-2.81.735-.467.203-.735.336-.735.336s1.002-1.002 3.21-1.537l-.135-.135s-1.672-.064-3.477 1.27c0 0-1.805 3.144-1.805 7.02 0 0 1 1.74 3.743 1.806 0 0 .4-.533.805-1.002-1.54-.4-2.172-1.27-2.172-1.27s.135.064.335.2h.06c.03 0 .044.015.06.03v.006c.016.016.03.03.06.03.33.136.66.27.93.4.466.202 1.065.403 1.8.536.93.135 1.996.2 3.21 0 .6-.135 1.2-.267 1.8-.535.39-.2.87-.4 1.397-.737 0 0-.6.936-2.205 1.27.33.466.795 1 .795 1 2.744-.06 3.81-1.8 3.87-1.726 0-3.87-1.815-7.02-1.815-7.02-1.635-1.214-3.165-1.26-3.435-1.26l.056-.02zm.168 4.413c.703 0 1.27.6 1.27 1.335 0 .74-.57 1.34-1.27 1.34-.7 0-1.27-.6-1.27-1.34.002-.74.573-1.338 1.27-1.335zm-4.543 0c.7 0 1.266.6 1.266 1.335 0 .74-.57 1.34-1.27 1.34-.7 0-1.27-.6-1.27-1.34 0-.74.57-1.335 1.27-1.335z"/>
+                        <path d="M20.222 0c1.406 0 2.54 1.137 2.607 2.475V24l-2.677-2.273-1.47-1.338-1.604-1.398.67 2.205H3.71c-1.402 0-2.54-1.065-2.54-2.476V2.48C1.17 1.142 2.31.003 3.715.003h16.5L20.222 0zm-6.118 5.683h-.03l-.202.2c2.073.6 3.076 1.537 3.076 1.537-1.336-.668-2.54-1.002-3.744-1.137-.87-.135-1.74-.064-2.475 0h-.2c-.47 0-1.47.2-2.81.735-.467.203-.735.336-.735.336s1.002-1.002 3.21-1.537l-.135-.135s-1.672-.064-3.477 1.27c0 0-1.805 3.144-1.805 7.02 0 0 1 1.74 3.743 1.806 0 0 .4-.533.805-1.002-1.54-.4-2.172-1.27-2.172-1.27s.135.064.335.2h.06c.03 0 .044.015.06.03v.006c.016.016.03.03.06.03.33.136.66.27.93.4.466.202 1.065.403 1.8.536.93.135 1.996.2 3.21 0 .6-.135 1.2-.267 1.8-.535.39-.2.87-.4 1.397-.737 0 0-.6.936-2.205 1.27.33.466.795 1 .795 1 2.744-.06 3.81-1.8 3.87-1.726 0-3.87-1.815-7.02-1.815-7.02-1.635-1.214-3.165-1.26-3.435-1.26l.056-.02zm.168 4.413c.703 0 1.27.6 1.27 1.335 0 .74-.57 1.34-1.27 1.34-.7 0-1.27-.6-1.27-1.34.002-.74.573-1.335 1.27-1.335zm-4.543 0c.7 0 1.266.6 1.266 1.335 0 .74-.57 1.34-1.27 1.34-.7 0-1.27-.6-1.27-1.34 0-.74.57-1.335 1.27-1.335z"/>
                       </svg>
                     </a>
                   );
@@ -1171,80 +1222,28 @@ const TokenScroller = React.memo(function TokenScroller({ favorites = [], onlyFa
             </div>
           </div>
           {/* Market Stats - modern card styling */}
-          <div className="coin-stats-row">
+          <div className="coin-stats-row" style={{position:'relative', zIndex: 500}}>
             <div className={`coin-stat-window liquidity-stat ${coin.liquidityLocked === true ? 'locked' : ''}`}>
               <div className="coin-stat-label">
                 Liquidity
-                <div 
-                  style={{ 
-                    position: 'relative',
-                    display: 'inline-block'
-                  }}
-                  onMouseEnter={(e) => {
-                    const tooltip = e.currentTarget.querySelector('.liquidity-tooltip');
-                    if (tooltip) tooltip.style.opacity = '1';
-                  }}
-                  onMouseLeave={(e) => {
-                    const tooltip = e.currentTarget.querySelector('.liquidity-tooltip');
-                    if (tooltip) tooltip.style.opacity = '0';
-                  }}
-                >
-                  <span className="stat-info-icon">i</span>
-                  <div 
-                    className="liquidity-tooltip"
-                    style={{
-                      position: 'absolute',
-                      top: '20px',
-                      left: '50%',
-                      transform: 'translateX(-50%)',
-                      background: 'rgba(0, 0, 0, 0.95)',
-                      color: '#fff',
-                      padding: '16px',
-                      borderRadius: '10px',
-                      fontSize: '13px',
-                      lineHeight: '1.5',
-                      width: '280px',
-                      zIndex: 1000,
-                      opacity: '0',
-                      transition: 'opacity 0.2s',
-                      pointerEvents: 'none',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
-                    }}
-                  >
-                    <div style={{ fontWeight: 600, marginBottom: '8px', color: '#fff', fontSize: '14px' }}>
-                      Liquidity - Available funds for trading: {
-                        (() => {
-                          const liquidity = typeof coin.liquidity === 'number' ? coin.liquidity : Number(coin.liquidity) || 0;
-                          if (liquidity >= 1000000) {
-                            return `$${(liquidity / 1000000).toFixed(1)}M`;
-                          } else if (liquidity >= 1000) {
-                            return `$${(liquidity / 1000).toFixed(1)}K`;
-                          } else {
-                            return `$${liquidity.toLocaleString()}`;
-                          }
-                        })()
-                      }
+                <InfoIcon content={(
+                  <div style={{ width: 280 }}>
+                    <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
+                      Liquidity - Available funds for trading: {(() => {
+                        const liquidity = typeof coin.liquidity === 'number' ? coin.liquidity : Number(coin.liquidity) || 0;
+                        if (liquidity >= 1000000) return `$${(liquidity / 1000000).toFixed(1)}M`;
+                        if (liquidity >= 1000) return `$${(liquidity / 1000).toFixed(1)}K`;
+                        return `$${liquidity.toLocaleString()}`;
+                      })()}
                     </div>
-                    <div style={{ marginBottom: '10px', fontSize: '13px' }}>
+                    <div style={{ marginBottom: 10, fontSize: 13 }}>
                       Liquidity represents how easily you can buy or sell tokens. Higher liquidity means less price impact when trading.
                     </div>
-                    <div style={{ fontSize: '12px', color: '#ccc' }}>
+                    <div style={{ fontSize: 12, color: '#ccc' }}>
                       💡 Look for coins with high liquidity ($100K+) and locked liquidity pools for safer trading.
                     </div>
-                    <div style={{
-                      position: 'absolute',
-                      bottom: '100%',
-                      left: '50%',
-                      transform: 'translateX(-50%)',
-                      width: 0,
-                      height: 0,
-                      borderLeft: '8px solid transparent',
-                      borderRight: '8px solid transparent',
-                      borderBottom: '8px solid rgba(0, 0, 0, 0.95)'
-                    }}></div>
                   </div>
-                </div>
+                )} />
               </div>
               <div className="coin-stat-value" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span>
@@ -1302,78 +1301,25 @@ const TokenScroller = React.memo(function TokenScroller({ favorites = [], onlyFa
             <div className="coin-stat-window market-cap-stat">
               <div className="coin-stat-label">
                 Market Cap
-                <div 
-                  style={{ 
-                    position: 'relative',
-                    display: 'inline-block'
-                  }}
-                  onMouseEnter={(e) => {
-                    const tooltip = e.currentTarget.querySelector('.marketcap-tooltip');
-                    if (tooltip) tooltip.style.opacity = '1';
-                  }}
-                  onMouseLeave={(e) => {
-                    const tooltip = e.currentTarget.querySelector('.marketcap-tooltip');
-                    if (tooltip) tooltip.style.opacity = '0';
-                  }}
-                >
-                  <span className="stat-info-icon">i</span>
-                  <div 
-                    className="marketcap-tooltip"
-                    style={{
-                      position: 'absolute',
-                      top: '20px',
-                      left: '50%',
-                      transform: 'translateX(-50%)',
-                      background: 'rgba(0, 0, 0, 0.95)',
-                      color: '#fff',
-                      padding: '16px',
-                      borderRadius: '10px',
-                      fontSize: '13px',
-                      lineHeight: '1.5',
-                      width: '280px',
-                      zIndex: 1000,
-                      opacity: '0',
-                      transition: 'opacity 0.2s',
-                      pointerEvents: 'none',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
-                    }}
-                  >
-                    <div style={{ fontWeight: 600, marginBottom: '8px', color: '#fff', fontSize: '14px' }}>
-                      Market Cap - Total value of all {coin.symbol || 'tokens'} in circulation: {
-                        (() => {
-                          const marketCap = typeof coin.marketCap === 'number' ? coin.marketCap : Number(coin.marketCap) || 0;
-                          if (marketCap >= 1000000000) {
-                            return `$${(marketCap / 1000000000).toFixed(1)}B`;
-                          } else if (marketCap >= 1000000) {
-                            return `$${(marketCap / 1000000).toFixed(1)}M`;
-                          } else if (marketCap >= 1000) {
-                            return `$${(marketCap / 1000).toFixed(1)}K`;
-                          } else {
-                            return `$${marketCap.toLocaleString()}`;
-                          }
-                        })()
-                      }
+                <InfoIcon content={(
+                  <div style={{ width: 280 }}>
+                    <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
+                      Market Cap - Total value of all {coin.symbol || 'tokens'} in circulation: {(() => {
+                        const marketCap = typeof coin.marketCap === 'number' ? coin.marketCap : Number(coin.marketCap) || 0;
+                        if (marketCap >= 1_000_000_000) return `$${(marketCap / 1_000_000_000).toFixed(1)}B`;
+                        if (marketCap >= 1_000_000) return `$${(marketCap / 1_000_000).toFixed(1)}M`;
+                        if (marketCap >= 1_000) return `$${(marketCap / 1_000).toFixed(1)}K`;
+                        return `$${marketCap.toLocaleString()}`;
+                      })()}
                     </div>
-                    <div style={{ marginBottom: '10px', fontSize: '13px' }}>
+                    <div style={{ marginBottom: 10, fontSize: 13 }}>
                       Market cap = price per token × total supply. It shows the coin's overall size and popularity in the market.
                     </div>
-                    <div style={{ fontSize: '12px', color: '#ccc' }}>
+                    <div style={{ fontSize: 12, color: '#ccc' }}>
                       💡 Look for coins with growing market caps and strong community backing for better stability.
                     </div>
-                    <div style={{
-                      position: 'absolute',
-                      bottom: '100%',
-                      left: '50%',
-                      transform: 'translateX(-50%)',
-                      width: 0,
-                      height: 0,
-                      borderLeft: '8px solid transparent',
-                      borderRight: '8px solid transparent',
-                      borderBottom: '8px solid rgba(0, 0, 0, 0.95)'
-                    }}></div>
                   </div>
-                </div>
+                )} />
               </div>
               <div className="coin-stat-value">{
                 typeof coin.marketCap === 'number' && !isNaN(coin.marketCap)
@@ -1386,76 +1332,24 @@ const TokenScroller = React.memo(function TokenScroller({ favorites = [], onlyFa
             <div className="coin-stat-window volume-stat">
               <div className="coin-stat-label">
                 Volume
-                <div 
-                  style={{ 
-                    position: 'relative',
-                    display: 'inline-block'
-                  }}
-                  onMouseEnter={(e) => {
-                    const tooltip = e.currentTarget.querySelector('.volume-tooltip');
-                    if (tooltip) tooltip.style.opacity = '1';
-                  }}
-                  onMouseLeave={(e) => {
-                    const tooltip = e.currentTarget.querySelector('.volume-tooltip');
-                    if (tooltip) tooltip.style.opacity = '0';
-                  }}
-                >
-                  <span className="stat-info-icon">i</span>
-                  <div 
-                    className="volume-tooltip"
-                    style={{
-                      position: 'absolute',
-                      top: '20px',
-                      left: '50%',
-                      transform: 'translateX(-50%)',
-                      background: 'rgba(0, 0, 0, 0.95)',
-                      color: '#fff',
-                      padding: '16px',
-                      borderRadius: '10px',
-                      fontSize: '13px',
-                      lineHeight: '1.5',
-                      width: '280px',
-                      zIndex: 1000,
-                      opacity: '0',
-                      transition: 'opacity 0.2s',
-                      pointerEvents: 'none',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
-                    }}
-                  >
-                    <div style={{ fontWeight: 600, marginBottom: '8px', color: '#fff', fontSize: '14px' }}>
-                      Volume - Total trading activity in 24h: {
-                        (() => {
-                          const volume = typeof coin.volume === 'number' ? coin.volume : Number(coin.volume) || 0;
-                          if (volume >= 1000000) {
-                            return `$${(volume / 1000000).toFixed(1)}M`;
-                          } else if (volume >= 1000) {
-                            return `$${(volume / 1000).toFixed(1)}K`;
-                          } else {
-                            return `$${volume.toLocaleString()}`;
-                          }
-                        })()
-                      }
+                <InfoIcon content={(
+                  <div style={{ width: 280 }}>
+                    <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
+                      Volume - Total trading activity in 24h: {(() => {
+                        const volume = typeof coin.volume === 'number' ? coin.volume : Number(coin.volume) || 0;
+                        if (volume >= 1_000_000) return `$${(volume / 1_000_000).toFixed(1)}M`;
+                        if (volume >= 1_000) return `$${(volume / 1_000).toFixed(1)}K`;
+                        return `$${volume.toLocaleString()}`;
+                      })()}
                     </div>
-                    <div style={{ marginBottom: '10px', fontSize: '13px' }}>
+                    <div style={{ marginBottom: 10, fontSize: 13 }}>
                       Volume shows how much money was traded in the last 24 hours. Higher volume indicates more interest and activity.
                     </div>
-                    <div style={{ fontSize: '12px', color: '#ccc' }}>
+                    <div style={{ fontSize: 12, color: '#ccc' }}>
                       💡 Look for coins with consistent high volume ($50K+) and increasing volume trends for momentum.
                     </div>
-                    <div style={{
-                      position: 'absolute',
-                      bottom: '100%',
-                      left: '50%',
-                      transform: 'translateX(-50%)',
-                      width: 0,
-                      height: 0,
-                      borderLeft: '8px solid transparent',
-                      borderRight: '8px solid transparent',
-                      borderBottom: '8px solid rgba(0, 0, 0, 0.95)'
-                    }}></div>
                   </div>
-                </div>
+                )} />
               </div>
               <div className="coin-stat-value">{
                 typeof coin.volume === 'number' && !isNaN(coin.volume)
@@ -1468,81 +1362,29 @@ const TokenScroller = React.memo(function TokenScroller({ favorites = [], onlyFa
             <div className="coin-stat-window price-stat">
               <div className="coin-stat-label">
                 Price
-                <div 
-                  style={{ 
-                    position: 'relative',
-                    display: 'inline-block'
-                  }}
-                  onMouseEnter={(e) => {
-                    const tooltip = e.currentTarget.querySelector('.price-tooltip');
-                    if (tooltip) tooltip.style.opacity = '1';
-                  }}
-                  onMouseLeave={(e) => {
-                    const tooltip = e.currentTarget.querySelector('.price-tooltip');
-                    if (tooltip) tooltip.style.opacity = '0';
-                  }}
-                >
-                  <span className="stat-info-icon">i</span>
-                  <div 
-                    className="price-tooltip"
-                    style={{
-                      position: 'absolute',
-                      top: '20px',
-                      left: '50%',
-                      transform: 'translateX(-50%)',
-                      background: 'rgba(0, 0, 0, 0.95)',
-                      color: '#fff',
-                      padding: '16px',
-                      borderRadius: '10px',
-                      fontSize: '13px',
-                      lineHeight: '1.5',
-                      width: '280px',
-                      zIndex: 1000,
-                      opacity: '0',
-                      transition: 'opacity 0.2s',
-                      pointerEvents: 'none',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
-                    }}
-                  >
-                    <div style={{ fontWeight: 600, marginBottom: '8px', color: '#fff', fontSize: '14px' }}>
-                      Token Price - With $10 USD you could buy {' '}
-                      {(() => {
+                <InfoIcon content={(
+                  <div style={{ width: 280 }}>
+                    <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
+                      Token Price - With $10 USD you could buy {(() => {
                         const price = typeof coin.priceUsd === 'number' ? coin.priceUsd : Number(coin.priceUsd) || 0;
                         if (price > 0) {
                           const tokensForTenDollars = 10 / price;
-                          if (tokensForTenDollars >= 1000000) {
-                            return `${(tokensForTenDollars / 1000000).toFixed(1)}M`;
-                          } else if (tokensForTenDollars >= 1000) {
-                            return `${(tokensForTenDollars / 1000).toFixed(1)}K`;
-                          } else if (tokensForTenDollars >= 1) {
-                            return tokensForTenDollars.toFixed(0);
-                          } else {
-                            return tokensForTenDollars.toFixed(2);
-                          }
+                          if (tokensForTenDollars >= 1_000_000) return `${(tokensForTenDollars / 1_000_000).toFixed(1)}M`;
+                          if (tokensForTenDollars >= 1_000) return `${(tokensForTenDollars / 1_000).toFixed(1)}K`;
+                          if (tokensForTenDollars >= 1) return tokensForTenDollars.toFixed(0);
+                          return tokensForTenDollars.toFixed(2);
                         }
                         return '0';
                       })()} {coin.symbol || 'tokens'}
                     </div>
-                    <div style={{ marginBottom: '10px', fontSize: '13px' }}>
+                    <div style={{ marginBottom: 10, fontSize: 13 }}>
                       This shows the current value of one token in USD. Lower prices mean you get more tokens per dollar.
                     </div>
-                    <div style={{ fontSize: '12px', color: '#ccc' }}>
+                    <div style={{ fontSize: 12, color: '#ccc' }}>
                       💡 Look for coins with steady upward price trends and growing trading volume.
                     </div>
-                    <div style={{
-                      position: 'absolute',
-                      bottom: '100%',
-                      left: '50%',
-                      transform: 'translateX(-50%)',
-                      width: 0,
-                      height: 0,
-                      borderLeft: '8px solid transparent',
-                      borderRight: '8px solid transparent',
-                      borderBottom: '8px solid rgba(0, 0, 0, 0.95)'
-                    }}></div>
                   </div>
-                </div>
+                )} />
               </div>
               <div className="coin-stat-value">
                 {typeof coin.priceUsd === 'number' && !isNaN(coin.priceUsd)
@@ -1555,81 +1397,32 @@ const TokenScroller = React.memo(function TokenScroller({ favorites = [], onlyFa
             <div className="coin-stat-window price-change-stat">
               <div className="coin-stat-label">
                 24h Change
-                <div 
-                  style={{ 
-                    position: 'relative',
-                    display: 'inline-block'
-                  }}
-                  onMouseEnter={(e) => {
-                    const tooltip = e.currentTarget.querySelector('.price-change-tooltip');
-                    if (tooltip) tooltip.style.opacity = '1';
-                  }}
-                  onMouseLeave={(e) => {
-                    const tooltip = e.currentTarget.querySelector('.price-change-tooltip');
-                    if (tooltip) tooltip.style.opacity = '0';
-                  }}
-                >
-                  <span className="stat-info-icon">i</span>
-                  <div 
-                    className="price-change-tooltip"
-                    style={{
-                      position: 'absolute',
-                      top: '20px',
-                      left: '50%',
-                      transform: 'translateX(-50%)',
-                      background: 'rgba(0, 0, 0, 0.95)',
-                      color: '#fff',
-                      padding: '16px',
-                      borderRadius: '10px',
-                      fontSize: '13px',
-                      lineHeight: '1.5',
-                      width: '280px',
-                      zIndex: 1000,
-                      opacity: '0',
-                      transition: 'opacity 0.2s',
-                      pointerEvents: 'none',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
-                    }}
-                  >
-                    <div style={{ fontWeight: 600, marginBottom: '8px', color: '#fff', fontSize: '14px' }}>
-                      Price Change - 24 hour performance: {
-                        (() => {
-                          // Get the most accurate price change data available
-                          const priceChange = typeof coin.priceChange24h === 'number' && !isNaN(coin.priceChange24h) 
-                            ? coin.priceChange24h 
-                            : (typeof coin.priceChange === 'number' && !isNaN(coin.priceChange) 
-                                ? coin.priceChange 
-                                : (typeof coin.change24h === 'number' && !isNaN(coin.change24h) 
-                                    ? coin.change24h 
-                                    : (typeof coin.percent_change_24h === 'number' && !isNaN(coin.percent_change_24h)
-                                        ? coin.percent_change_24h
-                                        : null)));
-                          
-                          if (priceChange === null) return 'No data available';
-                          return `${priceChange > 0 ? '+' : ''}${priceChange.toFixed(2)}%`;
-                        })()
-                      }
+                <InfoIcon content={(
+                  <div style={{ width: 280 }}>
+                    <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
+                      Price Change - 24 hour performance: {(() => {
+                        // Get the most accurate price change data available
+                        const priceChange = typeof coin.priceChange24h === 'number' && !isNaN(coin.priceChange24h)
+                          ? coin.priceChange24h
+                          : (typeof coin.priceChange === 'number' && !isNaN(coin.priceChange)
+                              ? coin.priceChange
+                              : (typeof coin.change24h === 'number' && !isNaN(coin.change24h)
+                                  ? coin.change24h
+                                  : (typeof coin.percent_change_24h === 'number' && !isNaN(coin.percent_change_24h)
+                                      ? coin.percent_change_24h
+                                      : null)));
+                        if (priceChange === null) return 'No data available';
+                        return `${priceChange > 0 ? '+' : ''}${priceChange.toFixed(2)}%`;
+                      })()}
                     </div>
-                    <div style={{ marginBottom: '10px', fontSize: '13px' }}>
+                    <div style={{ marginBottom: 10, fontSize: 13 }}>
                       Shows how much the token price has changed in the last 24 hours. Green indicates gains, red indicates losses.
                     </div>
-                    <div style={{ fontSize: '12px', color: '#ccc' }}>
+                    <div style={{ fontSize: 12, color: '#ccc' }}>
                       💡 Look for consistent positive trends rather than single-day spikes for sustainable growth.
                     </div>
-                    <div style={{
-                      position: 'absolute',
-                      bottom: '100%',
-                      left: '50%',
-                      transform: 'translateX(-50%)',
-                      width: 0,
-                      height: 0,
-                      borderLeft: '8px solid transparent',
-                      borderRight: '8px solid transparent',
-                      borderBottom: '8px solid rgba(0, 0, 0, 0.95)'
-                    }}></div>
                   </div>
-                </div>
+                )} />
               </div>
               <div 
                 className="coin-stat-value"
@@ -2011,7 +1804,8 @@ const TokenScroller = React.memo(function TokenScroller({ favorites = [], onlyFa
                 </div>
 
                 <iframe
-                  src={`https://dexscreener.com/${coin.chainId}/${coin.tokenAddress}?embed=1&theme=dark&trades=0&info=0`}
+                  // Added interval=1m to request 1 minute chart default (DexScreener param)
+                  src={`https://dexscreener.com/${coin.chainId}/${coin.tokenAddress}?embed=1&theme=dark&trades=0&info=0&interval=1m`}
                   className="w-full h-full border-0"
                   style={{
                     background: 'transparent',

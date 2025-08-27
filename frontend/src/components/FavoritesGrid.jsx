@@ -104,7 +104,7 @@ function FavoritesGrid({ favorites = [], onCoinClick, onFavoritesChange }) {
                   Tracked by DEXSCREENER
                 </div>
                 <iframe
-                  src={`https://dexscreener.com/${coin.chainId}/${coin.tokenAddress}?embed=1&theme=dark&trades=0&info=0`}
+                  src={`https://dexscreener.com/${coin.chainId}/${coin.tokenAddress}?embed=1&theme=dark&trades=0&info=0&interval=1m`}
                   className="mini-chart"
                   style={{
                     width: 'calc(100% + 10px)',
