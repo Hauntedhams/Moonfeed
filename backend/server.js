@@ -23,7 +23,8 @@ app.use(cors({
     'http://localhost:5174', 
     'http://localhost:3000',
     'https://moonfeed.app',
-    'https://www.moonfeed.app'
+    'https://www.moonfeed.app',
+    'https://api.moonfeed.app'
   ],
   credentials: true
 }));
@@ -255,6 +256,20 @@ function startRugcheckAutoProcessor() {
 }
 
 // Routes
+
+// Root route for basic connectivity test
+app.get('/', (req, res) => {
+  res.json({
+    message: 'Moonfeed Backend API',
+    status: 'running',
+    timestamp: new Date().toISOString(),
+    endpoints: {
+      health: '/health',
+      trending: '/api/coins/trending',
+      fast: '/api/coins/fast'
+    }
+  });
+});
 
 // Health check
 app.get('/health', (req, res) => {
@@ -1975,6 +1990,7 @@ app.post('/api/rugcheck/verify-all-progressive', async (req, res) => {
     const progressPercentage = Math.round((processedSoFar / totalCoins) * 100);
     const verifiedCount = rugcheckResults.filter(r => r.rugcheckAvailable).length;
     const lockedCount = rugcheckResults.filter(r => r.liquidityLocked).length;
+    
     
     // Calculate next batch info
     const nextIndex = processedSoFar;
