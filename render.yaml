@@ -3,16 +3,10 @@ services:
     name: moonfeed-backend
     env: node
     plan: free
-    buildCommand: cd backend && npm install
-    startCommand: cd backend && node server.js
+    buildCommand: npm install --prefix backend
+    startCommand: node backend/server.js
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 10000
-      - key: SOLANA_TRACKER_API_KEY
-        value: ""
-      - key: HELIUS_API_KEY  
-        value: ""
-      - key: SOLANA_RPC
-        value: "https://api.mainnet-beta.solana.com"
