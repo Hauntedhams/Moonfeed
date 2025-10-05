@@ -138,8 +138,8 @@ const ModernTokenScroller = ({
         return;
       }
       
-      // Determine endpoint based on filters - USE FAST ENDPOINT FOR INITIAL LOAD
-      let endpoint = `${API_BASE}/fast`; // Start with fast endpoint for immediate UI
+      // Determine endpoint based on filters - USE TRENDING ENDPOINT FOR COMPATIBILITY
+      let endpoint = `${API_BASE}/trending`; // Use trending endpoint that works on backend
       let requestOptions = { 
         method: 'GET',
         headers: {
@@ -147,7 +147,7 @@ const ModernTokenScroller = ({
         }
       };
       
-      console.log('⚡ FAST LOADING: Using fast endpoint for immediate UI load');
+      console.log('🔥 TRENDING LOADING: Using trending endpoint for coin data');
       console.log('🔍 Fetch request details:', {
         filterType: filters.type,
         hasAdvancedFilters: !!advancedFilters,
@@ -196,29 +196,18 @@ const ModernTokenScroller = ({
       
       const data = await response.json();
       console.log('📊 Response data preview:', {
-        success: data.success,
-        count: data.coins?.length,
-        source: data.source,
+        coinsCount: data.coins?.length,
         firstCoin: data.coins?.[0]?.symbol
       });
       
-      if (!data.success || !data.coins) {
-        throw new Error('Invalid response format');
+      if (!data.coins || !Array.isArray(data.coins)) {
+        throw new Error('Invalid response format - no coins array');
       }
       
-      console.log(`✅ FAST LOAD: Successfully loaded ${data.coins.length} coins from ${data.source}`);
+      console.log(`✅ TRENDING LOAD: Successfully loaded ${data.coins.length} trending coins`);
       
-      // Apply client-side sorting if needed for fast endpoint
+      // Use trending coins directly (they're already sorted by trending score)
       let sortedCoins = [...data.coins];
-      if (data.source === 'fast-raw') {
-        if (filters.type === 'volume') {
-          sortedCoins.sort((a, b) => (b.volume_24h_usd || 0) - (a.volume_24h_usd || 0));
-          console.log('📊 Client-side sorted by volume');
-        } else if (filters.type === 'latest') {
-          sortedCoins.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-          console.log('📊 Client-side sorted by creation date');
-        }
-      }
       
       setCoins(sortedCoins);
       

@@ -12,8 +12,8 @@ const getApiBaseUrl = () => {
     return 'http://localhost:3001';
   }
   
-  // For production, use the deployed backend
-  return 'https://moonfeed-backend.onrender.com';
+  // For production, use the working backend
+  return 'https://api.moonfeed.app';
 };
 
 export const API_CONFIG = {
