@@ -1213,3 +1213,423 @@
   border: none;
   min-height: auto;
 }
+
+/* =============================================================================
+   LIVE FEATURES - WebSocket Real-time Updates
+   ============================================================================= */
+
+/* Live indicator - shows when receiving real-time data */
+.live-indicator {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(0, 255, 136, 0.15);
+  border: 1px solid rgba(0, 255, 136, 0.4);
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #00ff88;
+  z-index: 100;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 2px 8px rgba(0, 255, 136, 0.2);
+  transition: all 0.3s ease;
+}
+
+.live-indicator:hover {
+  background: rgba(0, 255, 136, 0.25);
+  border-color: rgba(0, 255, 136, 0.6);
+  transform: scale(1.05);
+}
+
+.live-dot {
+  width: 6px;
+  height: 6px;
+  background: #00ff88;
+  border-radius: 50%;
+  animation: livePulse 2s infinite ease-in-out;
+  box-shadow: 0 0 4px rgba(0, 255, 136, 0.5);
+}
+
+@keyframes livePulse {
+  0%, 100% { 
+    opacity: 1; 
+    transform: scale(1);
+  }
+  50% { 
+    opacity: 0.3; 
+    transform: scale(0.8);
+  }
+}
+
+/* Connection status variations */
+.live-indicator.connecting {
+  color: #ffa500;
+  background: rgba(255, 165, 0, 0.15);
+  border-color: rgba(255, 165, 0, 0.4);
+}
+
+.live-indicator.connecting .live-dot {
+  background: #ffa500;
+  animation: connectingPulse 1s infinite linear;
+}
+
+@keyframes connectingPulse {
+  0% { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(180deg) scale(1.2); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+
+.live-indicator.disconnected {
+  color: #ff4444;
+  background: rgba(255, 68, 68, 0.15);
+  border-color: rgba(255, 68, 68, 0.4);
+}
+
+.live-indicator.disconnected .live-dot {
+  background: #ff4444;
+  animation: none;
+  opacity: 0.5;
+}
+
+/* =============================================================================
+   PRICE FLASH ANIMATIONS - Visual feedback for price changes
+   ============================================================================= */
+
+/* Price flash animations for live updates */
+.price-flash-up,
+.coin-card.price-up,
+.price.price-up {
+  animation: flashGreen 0.6s ease-out;
+}
+
+.price-flash-down,
+.coin-card.price-down,
+.price.price-down {
+  animation: flashRed 0.6s ease-out;
+}
+
+@keyframes flashGreen {
+  0% { 
+    color: inherit; 
+    background-color: transparent;
+  }
+  20% { 
+    color: #00ff88; 
+    background-color: rgba(0, 255, 136, 0.1);
+    box-shadow: 0 0 10px rgba(0, 255, 136, 0.3);
+  }
+  100% { 
+    color: inherit; 
+    background-color: transparent;
+  }
+}
+
+@keyframes flashRed {
+  0% { 
+    color: inherit; 
+    background-color: transparent;
+  }
+  20% { 
+    color: #ff4444; 
+    background-color: rgba(255, 68, 68, 0.1);
+    box-shadow: 0 0 10px rgba(255, 68, 68, 0.3);
+  }
+  100% { 
+    color: inherit; 
+    background-color: transparent;
+  }
+}
+
+/* Enhanced price display with live updates */
+.price-display {
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.price-display.live {
+  border-left: 3px solid #00ff88;
+  padding-left: 12px;
+  background: rgba(0, 255, 136, 0.05);
+}
+
+/* Price change indicators with enhanced styling */
+.price-change-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.price-change-indicator.positive {
+  color: #00ff88;
+  background: rgba(0, 255, 136, 0.1);
+  border: 1px solid rgba(0, 255, 136, 0.2);
+}
+
+.price-change-indicator.negative {
+  color: #ff4444;
+  background: rgba(255, 68, 68, 0.1);
+  border: 1px solid rgba(255, 68, 68, 0.2);
+}
+
+.price-change-indicator.neutral {
+  color: #888;
+  background: rgba(136, 136, 136, 0.1);
+  border: 1px solid rgba(136, 136, 136, 0.2);
+}
+
+/* =============================================================================
+   MINI CHART STYLES - Live chart data visualization
+   ============================================================================= */
+
+.mini-chart {
+  width: 100%;
+  max-width: 220px;
+  height: 60px;
+  margin: 12px auto;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 8px;
+  padding: 8px;
+  position: relative;
+  overflow: hidden;
+}
+
+.mini-chart-svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.mini-chart-svg polyline {
+  filter: drop-shadow(0 0 2px rgba(0, 212, 255, 0.3));
+  transition: stroke 0.3s ease;
+}
+
+.mini-chart-svg polyline.positive {
+  stroke: #00ff88;
+}
+
+.mini-chart-svg polyline.negative {
+  stroke: #ff4444;
+}
+
+.mini-chart-svg polyline.neutral {
+  stroke: #00d4ff;
+}
+
+/* Chart hover effects */
+.mini-chart:hover .mini-chart-svg polyline {
+  stroke-width: 3;
+  filter: drop-shadow(0 0 4px rgba(0, 212, 255, 0.5));
+}
+
+/* Chart loading state */
+.mini-chart.loading {
+  background: linear-gradient(90deg, 
+    rgba(255, 255, 255, 0.02) 0%, 
+    rgba(255, 255, 255, 0.05) 50%, 
+    rgba(255, 255, 255, 0.02) 100%);
+  background-size: 200% 100%;
+  animation: chartLoading 2s infinite;
+}
+
+@keyframes chartLoading {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* =============================================================================
+   MARKET STATS GRID - Enhanced live data display
+   ============================================================================= */
+
+.market-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 12px;
+  margin: 8px 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.market-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  transition: all 0.3s ease;
+}
+
+.market-stat:hover {
+  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  padding: 8px 4px;
+}
+
+.market-stat .label {
+  font-size: 10px;
+  opacity: 0.6;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+
+.market-stat .value {
+  font-size: 14px;
+  font-weight: 700;
+  color: #ffffff;
+  transition: color 0.3s ease;
+}
+
+.market-stat .value.live {
+  color: #00ff88;
+}
+
+.market-stat .value.updating {
+  animation: valueUpdate 0.5s ease;
+}
+
+@keyframes valueUpdate {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); color: #00d4ff; }
+  100% { transform: scale(1); }
+}
+
+/* =============================================================================
+   CONNECTION STATUS OVERLAY - Global connection feedback
+   ============================================================================= */
+
+.connection-status-overlay {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  transition: all 0.3s ease;
+  pointer-events: none;
+}
+
+.connection-status-overlay.connected {
+  background: rgba(0, 255, 136, 0.9);
+  color: #000;
+  animation: slideDown 0.5s ease;
+}
+
+.connection-status-overlay.connecting {
+  background: rgba(255, 165, 0, 0.9);
+  color: #000;
+  animation: slideDown 0.5s ease;
+}
+
+.connection-status-overlay.disconnected {
+  background: rgba(255, 68, 68, 0.9);
+  color: #fff;
+  animation: slideDown 0.5s ease;
+}
+
+.connection-status-overlay.reconnecting {
+  background: rgba(255, 165, 0, 0.9);
+  color: #000;
+  animation: pulse 1s infinite;
+}
+
+@keyframes slideDown {
+  from { 
+    transform: translateX(-50%) translateY(-20px); 
+    opacity: 0; 
+  }
+  to { 
+    transform: translateX(-50%) translateY(0); 
+    opacity: 1; 
+  }
+}
+
+/* =============================================================================
+   RESPONSIVE LIVE FEATURES - Mobile optimizations
+   ============================================================================= */
+
+@media (max-width: 768px) {
+  .live-indicator {
+    top: 8px;
+    right: 8px;
+    padding: 4px 8px;
+    font-size: 9px;
+  }
+  
+  .live-dot {
+    width: 4px;
+    height: 4px;
+  }
+  
+  .mini-chart {
+    height: 40px;
+    margin: 8px auto;
+  }
+  
+  .market-stats {
+    gap: 8px;
+    padding: 12px;
+  }
+  
+  .market-stat .value {
+    font-size: 12px;
+  }
+  
+  .connection-status-overlay {
+    top: 10px;
+    font-size: 11px;
+    padding: 6px 12px;
+  }
+}
+
+/* =============================================================================
+   LIVE FEATURE UTILITIES - Helper classes
+   ============================================================================= */
+
+.live-data-available {
+  position: relative;
+}
+
+.live-data-available::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 6px;
+  height: 6px;
+  background: #00ff88;
+  border-radius: 50%;
+  animation: livePulse 2s infinite;
+}
+
+.stale-data {
+  opacity: 0.7;
+  filter: grayscale(20%);
+}
+
+.data-updating {
+  animation: dataRefresh 1s ease infinite;
+}
+
+@keyframes dataRefresh {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.8; }
+}

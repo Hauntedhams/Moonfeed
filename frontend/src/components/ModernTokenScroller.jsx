@@ -27,12 +27,61 @@ const ModernTokenScroller = ({
   const [enrichedCoins, setEnrichedCoins] = useState(new Map()); // Cache for enriched coin data
   const [expandedCoin, setExpandedCoin] = useState(null); // Track which coin is expanded
   
+  // Virtual scrolling state for mobile optimization
+  const [visibleRange, setVisibleRange] = useState({ start: 0, end: 4 }); // Show 5 cards on mobile
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  
   const scrollerRef = useRef(null);
   const dexManagerRef = useRef(null);
   const isScrollLocked = useRef(false);
   
   // API base configuration
   const API_BASE = API_CONFIG.COINS_API;
+
+  // Calculate visible range for virtual scrolling on mobile
+  const calculateVisibleRange = useCallback((index, totalCoins) => {
+    if (!isMobile) return { start: 0, end: totalCoins - 1 }; // Desktop shows all coins
+    
+    const visibleCount = 5; // Show 5 cards on mobile
+    const buffer = Math.floor(visibleCount / 2); // 2 cards before and after current
+    
+    let start = Math.max(0, index - buffer);
+    let end = Math.min(totalCoins - 1, start + visibleCount - 1);
+    
+    // Adjust start if we're near the end
+    if (end - start + 1 < visibleCount) {
+      start = Math.max(0, end - visibleCount + 1);
+    }
+    
+    return { start, end };
+  }, [isMobile]);
+
+  // Virtual scrolling performance stats
+  const getVirtualScrollStats = useCallback(() => {
+    if (!isMobile) return { rendered: coins.length, total: coins.length, percentage: 100 };
+    const rendered = visibleRange.end - visibleRange.start + 1;
+    const percentage = Math.round((rendered / coins.length) * 100);
+    return { rendered, total: coins.length, percentage };
+  }, [isMobile, visibleRange, coins.length]);
+
+  // Update mobile detection on window resize
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      
+      // Reset visible range when switching between mobile/desktop
+      if (!mobile && coins.length > 0) {
+        setVisibleRange({ start: 0, end: coins.length - 1 });
+      } else if (mobile && coins.length > 0) {
+        const newRange = calculateVisibleRange(currentIndex, coins.length);
+        setVisibleRange(newRange);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [currentIndex, coins.length, calculateVisibleRange]);
 
   // Enrich coins with DexScreener data
   const enrichCoins = useCallback(async (mintAddresses) => {
@@ -100,11 +149,14 @@ const ModernTokenScroller = ({
       
       if (needsEnrichment.length > 0) {
         // Throttle enrichment to prevent frequent API calls during scrolling
-        const timer = setTimeout(() => {
-          enrichCoins(needsEnrichment);
-        }, 300);
-        
-        return () => clearTimeout(timer);
+        // Disable enrichment on mobile for better performance
+        if (window.innerWidth >= 768) {
+          const timer = setTimeout(() => {
+            enrichCoins(needsEnrichment);
+          }, 300);
+          
+          return () => clearTimeout(timer);
+        }
       }
     }
   }, [currentIndex, coins]);
@@ -129,6 +181,10 @@ const ModernTokenScroller = ({
     
     setLoading(true);
     setError(null);
+    
+    // Mobile detection for reduced limits
+    const limit = window.innerWidth < 768 ? 20 : 200;
+    console.log(`📱 Device detection: ${window.innerWidth < 768 ? 'Mobile' : 'Desktop'}, using limit: ${limit}`);
     
     try {
       if (onlyFavorites) {
@@ -170,7 +226,7 @@ const ModernTokenScroller = ({
       } else {
         // For all other cases, use the fast endpoint with query parameters
         const queryParams = new URLSearchParams();
-        queryParams.append('limit', '50');
+        queryParams.append('limit', limit.toString());
         
         if (filters.type === 'volume') {
           // Fast endpoint will return raw data, we'll sort client-side if needed
@@ -212,9 +268,14 @@ const ModernTokenScroller = ({
       setCoins(sortedCoins);
       
       // Start background enrichment immediately after fast load
+      // Disable background enrichment on mobile for better performance
       if (data.source === 'fast-raw' && filters.type !== 'custom') {
-        console.log('🎨 Starting background enrichment after fast load...');
-        startBackgroundEnrichment();
+        if (window.innerWidth >= 768) {
+          console.log('🎨 Starting background enrichment after fast load...');
+          startBackgroundEnrichment();
+        } else {
+          console.log('📱 Skipping background enrichment on mobile for better performance');
+        }
       }
       
     } catch (err) {
@@ -355,14 +416,29 @@ const ModernTokenScroller = ({
   
   // Initial enrichment when coins are loaded
   useEffect(() => {
-    if (coins.length > 0 && currentIndex === 0) {
+    if (coins.length > 0 && currentIndex === 0 && window.innerWidth >= 768) {
       const mintAddresses = getCoinsToEnrich(0);
       if (mintAddresses.length > 0) {
         enrichCoins(mintAddresses);
       }
+    }  }, [coins.length, enrichCoins, getCoinsToEnrich]);
+
+  // Update visible range for virtual scrolling when current index changes
+  useEffect(() => {
+    if (isMobile && coins.length > 0) {
+      const newRange = calculateVisibleRange(currentIndex, coins.length);
+      console.log(`📱 Virtual scrolling update: Index ${currentIndex}, Range ${newRange.start}-${newRange.end}, Total: ${coins.length}`);
+      setVisibleRange(newRange);
+      const stats = getVirtualScrollStats();
+      console.log(`📱 Virtual scrolling stats: ${stats.rendered}/${stats.total} = ${stats.percentage}% rendered`);
+    } else if (!isMobile && coins.length > 0) {
+      console.log(`💻 Desktop mode: Rendering all ${coins.length} coins (100% rendered)`);
+      setVisibleRange({ start: 0, end: coins.length - 1 });
+    } else {
+      console.log(`⏸️ No virtual scrolling: isMobile=${isMobile}, coins=${coins.length}`);
     }
-  }, [coins.length, enrichCoins, getCoinsToEnrich]);
-  
+  }, [currentIndex, coins.length, isMobile, calculateVisibleRange, getVirtualScrollStats]);
+
   // Handle expand state changes for coins
   const handleCoinExpandChange = useCallback((isExpanded, coinAddress) => {
     if (isExpanded) {
@@ -393,7 +469,8 @@ const ModernTokenScroller = ({
       
       // Trigger enrichment for the currently viewed coin if not already enriched
       // Use setTimeout to prevent blocking the scroll
-      if (currentCoin && !enrichedCoins.has(currentCoin.mintAddress)) {
+      // Disable enrichment on mobile for better performance
+      if (currentCoin && !enrichedCoins.has(currentCoin.mintAddress) && window.innerWidth >= 768) {
         setTimeout(() => {
           enrichCoins([currentCoin.mintAddress]);
         }, 100);
@@ -520,11 +597,14 @@ const ModernTokenScroller = ({
       const currentCoin = coins[currentIndex];
       
       // If current coin isn't enriched, enrich it immediately
-      if (currentCoin && !enrichedCoins.has(currentCoin.mintAddress)) {
+      if (currentCoin && !enrichedCoins.has(currentCoin.mintAddress) && window.innerWidth >= 768) {
         enrichCoins([currentCoin.mintAddress]);
       }
     }
   }, [currentIndex, coins, enrichedCoins, enrichCoins]);
+  
+  // Debug logging
+  console.log(`📊 ModernTokenScroller render: coins=${coins.length}, loading=${loading}, error=${error}, isMobile=${isMobile}, visibleRange=${JSON.stringify(visibleRange)}`);
   
   if (loading && coins.length === 0) {
     return (
@@ -579,7 +659,7 @@ const ModernTokenScroller = ({
       {/* DexScreener Manager */}
       <DexScreenerManager
         ref={dexManagerRef}
-        visibleCoins={coins}
+        visibleCoins={isMobile && coins.length > 0 ? coins.slice(visibleRange.start, visibleRange.end + 1) : coins}
         currentCoinIndex={currentIndex}
         preloadCount={3}
         cleanupThreshold={2}
@@ -590,7 +670,34 @@ const ModernTokenScroller = ({
         ref={scrollerRef}
         className={`modern-scroller-container ${expandedCoin ? 'scroll-locked' : ''}`}
       >
-        {coins.map((coin, index) => renderCoinWithChart(coin, index))}
+        {/* Render coins - temporarily simplified for debugging */}
+        {coins.length > 0 ? (
+          isMobile ? (
+            // Virtual scrolling for mobile
+            (() => {
+              const start = Math.max(0, visibleRange.start);
+              const end = Math.min(coins.length - 1, visibleRange.end);
+              console.log(`📱 Mobile rendering: ${start}-${end} from ${coins.length} coins`);
+              
+              if (start > end || start >= coins.length) {
+                console.log(`❌ Invalid range: start=${start}, end=${end}, length=${coins.length}`);
+                return <div>Invalid range detected</div>;
+              }
+              
+              return coins.slice(start, end + 1).map((coin, relativeIndex) => {
+                const absoluteIndex = start + relativeIndex;
+                return renderCoinWithChart(coin, absoluteIndex);
+              });
+            })()
+          ) : (
+            // Desktop - render all coins
+            coins.map((coin, index) => renderCoinWithChart(coin, index))
+          )
+        ) : (
+          <div style={{ color: 'white', padding: '20px', textAlign: 'center' }}>
+            {loading ? 'Loading coins...' : 'No coins available'}
+          </div>
+        )}
       </div>
       
 

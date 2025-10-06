@@ -4,6 +4,7 @@ import DexScreenerChart from './DexScreenerChart';
 import CleanPriceChart from './CleanPriceChart';
 import LiquidityLockIndicator from './LiquidityLockIndicator';
 import TopTradersList from './TopTradersList';
+import { useLiveData } from '../hooks/useLiveData';
 
 const CoinCard = memo(({ 
   coin, 
@@ -20,12 +21,42 @@ const CoinCard = memo(({
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [currentChartPage, setCurrentChartPage] = useState(0);
   const [hoveredMetric, setHoveredMetric] = useState(null);
-  const [realTimePrice, setRealTimePrice] = useState(null);
-  const [priceLoading, setPriceLoading] = useState(false);
-  const [priceError, setPriceError] = useState(null);
+  const [priceFlash, setPriceFlash] = useState('');
   const chartsContainerRef = useRef(null);
-  const lastFetchRef = useRef(0);
-  const priceIntervalRef = useRef(null);
+  const prevPriceRef = useRef(null);
+
+  // Get live data from WebSocket
+  const { getCoin, getChart, connected, connectionStatus } = useLiveData();
+  const liveData = getCoin(coin.mintAddress || coin.address);
+  const chartData = getChart(coin.mintAddress || coin.address);
+
+  // Handle price flash animation
+  useEffect(() => {
+    const currentPrice = liveData?.price || coin.price_usd || coin.priceUsd || coin.price || 0;
+    const prevPrice = prevPriceRef.current;
+    
+    let timer = null;
+    
+    if (prevPrice !== null && currentPrice !== prevPrice && currentPrice > 0) {
+      if (currentPrice > prevPrice) {
+        setPriceFlash('price-up');
+      } else if (currentPrice < prevPrice) {
+        setPriceFlash('price-down');
+      }
+      
+      // Clear flash after animation
+      timer = setTimeout(() => setPriceFlash(''), 600);
+    }
+    
+    prevPriceRef.current = currentPrice;
+    
+    // Always return cleanup function
+    return () => {
+      if (timer) {
+        clearTimeout(timer);
+      }
+    };
+  }, [liveData?.price, coin.price_usd, coin.priceUsd, coin.price]);
 
   // Helpers
   const formatCompact = (num) => {
@@ -58,71 +89,6 @@ const CoinCard = memo(({
     const n = Number(num);
     if (!isFinite(n)) return '0';
     return n.toLocaleString('en-US', { maximumFractionDigits: 2 });
-  };
-
-  // Jupiter API price fetching
-  const fetchJupiterPrice = async (tokenAddress, isInitialFetch = true) => {
-    if (!tokenAddress) {
-      console.log('❌ No token address available for Jupiter price fetch');
-      return null;
-    }
-
-    // Throttle API calls - don't fetch more than once every 2 seconds
-    const now = Date.now();
-    if (now - lastFetchRef.current < 2000) {
-      console.log('⏰ Throttling Jupiter API call');
-      return null;
-    }
-    lastFetchRef.current = now;
-
-    try {
-      // Only show loading on initial fetch, not on updates
-      if (isInitialFetch) {
-        setPriceLoading(true);
-      }
-      setPriceError(null);
-      
-      console.log(`🚀 Fetching Jupiter price for ${coin.symbol} (${tokenAddress})`);
-      
-      const response = await fetch(
-        `https://lite-api.jup.ag/price/v3?ids=${tokenAddress}`
-      );
-      
-      if (!response.ok) {
-        throw new Error(`Jupiter API error: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      console.log('Jupiter price response:', JSON.stringify(data, null, 2));
-      
-      if (data && data[tokenAddress]) {
-        const priceData = data[tokenAddress];
-        const newPrice = priceData.usdPrice || priceData.price; // Try both field names
-        
-        // Only update if price actually changed (avoid unnecessary re-renders)
-        setRealTimePrice(prevPrice => {
-          if (prevPrice !== newPrice) {
-            console.log(`💰 ${coin.symbol} price updated: $${prevPrice} → $${newPrice}`);
-            return newPrice;
-          }
-          return prevPrice;
-        });
-        
-        return newPrice;
-      } else {
-        console.log('❌ No price data found in Jupiter response');
-        setPriceError('Price not available');
-        return null;
-      }
-    } catch (error) {
-      console.error('Jupiter API error:', error);
-      setPriceError(error.message);
-      return null;
-    } finally {
-      if (isInitialFetch) {
-        setPriceLoading(false);
-      }
-    }
   };
 
   // Helper function to get tooltip content for metrics
@@ -249,39 +215,20 @@ const CoinCard = memo(({
     return () => container.removeEventListener('scroll', handleChartScroll);
   }, []);
 
-  // Fetch Jupiter price when coin becomes visible and set up polling
+  // Component cleanup on unmount
   useEffect(() => {
-    const tokenAddress = coin.mintAddress || coin.mint || coin.address || coin.contract_address || coin.contractAddress || coin.tokenAddress;
-    
-    if (isVisible && tokenAddress) {
-      // Initial fetch
-      if (!realTimePrice && !priceLoading) {
-        console.log(`👀 Coin ${coin.symbol} is now visible, fetching Jupiter price...`);
-        fetchJupiterPrice(tokenAddress, true);
+    return () => {
+      // Clear any remaining refs
+      if (prevPriceRef.current !== null) {
+        prevPriceRef.current = null;
       }
       
-      // Set up polling interval (every 2.5 seconds for real-time updates)
-      if (!priceIntervalRef.current) {
-        priceIntervalRef.current = setInterval(() => {
-          fetchJupiterPrice(tokenAddress, false); // Don't show loading for updates
-        }, 2500); // Poll every 2.5 seconds
-      }
-    } else {
-      // Clear interval when not visible
-      if (priceIntervalRef.current) {
-        clearInterval(priceIntervalRef.current);
-        priceIntervalRef.current = null;
-      }
-    }
-    
-    // Cleanup on unmount
-    return () => {
-      if (priceIntervalRef.current) {
-        clearInterval(priceIntervalRef.current);
-        priceIntervalRef.current = null;
-      }
+      // Reset any state to prevent memory leaks
+      setPriceFlash('');
+      setShowBannerModal(false);
+      setShowProfileModal(false);
     };
-  }, [isVisible, coin.symbol, realTimePrice, priceLoading]);
+  }, []);
 
   // Banner modal handlers
   const handleBannerClick = (e) => {
@@ -367,22 +314,23 @@ const CoinCard = memo(({
     }
   };
 
-  const price = realTimePrice ?? coin.price_usd ?? coin.priceUsd ?? coin.price ?? 0;
-  const changePct = coin.change_24h ?? coin.priceChange24h ?? coin.change24h ?? 0;
-  const marketCap = coin.market_cap_usd ?? coin.market_cap ?? coin.marketCap ?? 0;
-  const volume24h = coin.volume_24h_usd ?? coin.volume_24h ?? coin.volume24h ?? 0;
-  const liquidity = coin.liquidity_usd ?? coin.liquidity ?? coin.liquidityUsd ?? 0;
-  const holders = coin.holders ?? 0;
+  // Use live data when available, fallback to coin data
+  const price = liveData?.price ?? coin.price_usd ?? coin.priceUsd ?? coin.price ?? 0;
+  const changePct = liveData?.change24h ?? coin.change_24h ?? coin.priceChange24h ?? coin.change24h ?? 0;
+  const marketCap = liveData?.marketCap ?? coin.market_cap_usd ?? coin.market_cap ?? coin.marketCap ?? 0;
+  const volume24h = liveData?.volume24h ?? coin.volume_24h_usd ?? coin.volume_24h ?? coin.volume24h ?? 0;
+  const liquidity = liveData?.liquidity ?? coin.liquidity_usd ?? coin.liquidity ?? coin.liquidityUsd ?? 0;
+  const holders = liveData?.holders ?? coin.holders ?? 0;
   
-  // Enhanced metrics from DexScreener
-  const fdv = coin.fdv ?? coin.fullyDilutedValuation ?? 0;
-  const volume1h = coin.volume1h ?? coin.dexscreener?.volumes?.volume1h ?? 0;
-  const volume6h = coin.volume6h ?? coin.dexscreener?.volumes?.volume6h ?? 0;
-  const buys24h = coin.buys24h ?? coin.dexscreener?.transactions?.buys24h ?? 0;
-  const sells24h = coin.sells24h ?? coin.dexscreener?.transactions?.sells24h ?? 0;
-  const totalTxns24h = coin.totalTransactions ?? (buys24h + sells24h) ?? 0;
-  const ageHours = coin.ageHours ?? coin.dexscreener?.poolInfo?.ageHours ?? 0;
-  const boosts = coin.boosts ?? coin.dexscreener?.boosts ?? 0;
+  // Enhanced metrics from DexScreener with live data fallback
+  const fdv = liveData?.fdv ?? coin.fdv ?? coin.fullyDilutedValuation ?? 0;
+  const volume1h = liveData?.volume1h ?? coin.volume1h ?? coin.dexscreener?.volumes?.volume1h ?? 0;
+  const volume6h = liveData?.volume6h ?? coin.volume6h ?? coin.dexscreener?.volumes?.volume6h ?? 0;
+  const buys24h = liveData?.buys24h ?? coin.buys24h ?? coin.dexscreener?.transactions?.buys24h ?? 0;
+  const sells24h = liveData?.sells24h ?? coin.sells24h ?? coin.dexscreener?.transactions?.sells24h ?? 0;
+  const totalTxns24h = liveData?.totalTransactions ?? coin.totalTransactions ?? (buys24h + sells24h) ?? 0;
+  const ageHours = liveData?.ageHours ?? coin.ageHours ?? coin.dexscreener?.poolInfo?.ageHours ?? 0;
+  const boosts = liveData?.boosts ?? coin.boosts ?? coin.dexscreener?.boosts ?? 0;
 
   // Debug log for social links
   if (coin.socialLinks || coin.twitter || coin.telegram || coin.website) {
@@ -397,6 +345,13 @@ const CoinCard = memo(({
 
   return (
     <div className="coin-card">
+      {/* Connection status overlay */}
+      {!connected && (
+        <div className="connection-status-overlay" title="Disconnected from live data">
+          <div className="connection-status-badge">⚠️ Offline</div>
+        </div>
+      )}
+      
       {/* Enhanced Banner with DexScreener support */}
       <div className="coin-banner" onClick={handleBannerClick} style={{ cursor: coin.banner || coin.bannerImage || coin.header || coin.bannerUrl ? 'pointer' : 'default' }}>
         {coin.banner || coin.bannerImage || coin.header || coin.bannerUrl ? (
@@ -478,27 +433,13 @@ const CoinCard = memo(({
               </div>
               
               <div className="price-section">
-                <div className="coin-price">
-                  {priceLoading ? (
-                    <span style={{ opacity: 0.6 }}>Loading...</span>
-                  ) : (
-                    <>
-                      {formatPrice(price)}
-                      {priceError && (
-                        <span 
-                          style={{ 
-                            fontSize: '0.7rem', 
-                            color: '#ef4444', 
-                            marginLeft: '4px',
-                            verticalAlign: 'super'
-                          }}
-                          title={`Price fetch error: ${priceError}`}
-                        >
-                          ⚠️
-                        </span>
-                      )}
-                    </>
-                  )}
+                <div className={`coin-price ${priceFlash}`}>
+                  {/* Live indicator */}
+                  <div className={`live-indicator ${connected ? 'connected' : 'disconnected'}`} 
+                       title={connected ? 'Connected to live data' : 'Disconnected from live data'}>
+                    <div className="live-dot"></div>
+                  </div>
+                  {formatPrice(price)}
                 </div>
                 <div className={`price-change ${Number(changePct) >= 0 ? 'positive' : 'negative'}`}>
                   {formatPercent(changePct)}
@@ -688,7 +629,13 @@ const CoinCard = memo(({
               {/* Clean Chart Page */}
               <div className="chart-page">
                 <div className="clean-chart-wrapper">
-                  <CleanPriceChart coin={coin} width="100%" height={200} />
+                  <CleanPriceChart 
+                    coin={coin} 
+                    chartData={chartData} 
+                    liveData={liveData}
+                    width="100%" 
+                    height={200} 
+                  />
                 </div>
               </div>
               

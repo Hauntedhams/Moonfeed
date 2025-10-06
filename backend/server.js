@@ -2,7 +2,10 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
+const http = require('http');
 const CoinStorage = require('./coin-storage');
+const priceEngine = require('./services/priceEngine');
+const WebSocketServer = require('./services/websocketServer');
 const dexscreenerService = require('./dexscreenerService');
 const dexpaprikaService = require('./dexpaprikaService');
 const heliusService = require('./heliusService');
@@ -55,6 +58,10 @@ function initializeWithLatestBatch() {
   const latestBatch = coinStorage.getLatestBatch();
   if (latestBatch.length > 0) {
     currentCoins = latestBatch;
+    
+    // Make coins available to price engine
+    global.coinsCache = currentCoins;
+    
     console.log(`🚀 Initialized with latest batch: ${latestBatch.length} coins`);
     
     // Start auto-processor for the loaded batch
@@ -96,6 +103,9 @@ function initializeWithLatestBatch() {
         socials: {}
       }
     ];
+    
+    // Make coins available to price engine
+    global.coinsCache = currentCoins;
   }
 }
 
@@ -284,115 +294,101 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Get current coins with Jupiter enhancement
+// Get current coins with priceEngine integration (optimized)
 app.get('/api/coins/trending', async (req, res) => {
   try {
-    console.log('🔥 /api/coins/trending endpoint called (Jupiter-enhanced)');
+    console.log('🔥 /api/coins/trending endpoint called (priceEngine-optimized)');
     
     const limit = parseInt(req.query.limit) || 50;
-    const useJupiterPrimary = req.query.jupiter !== 'false'; // Default to true
-    const fallbackToStored = req.query.fallback !== 'false'; // Default to true
+    const sortBy = req.query.sortBy || 'trending';
     
     let coins = [];
-    let dataSource = 'unknown';
+    let dataSource = 'priceEngine';
     
-    if (useJupiterPrimary) {
-      try {
-        console.log('🪐 Fetching trending tokens from Jupiter API...');
-        
-        // Get high-quality tokens from Jupiter
-        const jupiterCoins = await jupiterDataService.getTopTokensByCategory(
-          'toporganicscore', 
-          '24h', 
-          Math.min(limit * 2, 100) // Get more to filter better ones
-        );
-        
-        if (jupiterCoins && jupiterCoins.length > 0) {
-          // Filter for meme/trading tokens (exclude major stablecoins/wrapped tokens)
-          const filteredCoins = jupiterCoins.filter(coin => {
-            // Skip major stablecoins and wrapped tokens for meme feed
-            const skipSymbols = ['SOL', 'USDC', 'USDT', 'WBTC', 'ETH'];
-            return !skipSymbols.includes(coin.symbol) && 
-                   coin.market_cap_usd < 100000000 && // Under $100M market cap
-                   coin.holder_count > 100; // At least 100 holders
-          });
-          
-          coins = filteredCoins.slice(0, limit);
-          dataSource = 'jupiter-primary';
-          console.log(`✅ Got ${coins.length} filtered Jupiter coins`);
-        }
-      } catch (jupiterError) {
-        console.warn('⚠️ Jupiter API failed, falling back to stored coins:', jupiterError.message);
-      }
-    }
-    
-    // Fallback to current stored coins enhanced with Jupiter data
-    if (coins.length === 0 && fallbackToStored && currentCoins.length > 0) {
-      console.log('📦 Using stored coins enhanced with Jupiter data...');
+    // Get live data from priceEngine
+    if (global.priceEngine) {
+      console.log('⚡ Getting live data from priceEngine...');
       
       try {
-        // Take current coins and enhance with Jupiter
-        const coinsToEnhance = rugcheckService.sortCoinsByPriority(currentCoins)
-          .slice(0, Math.min(limit, 20)); // Limit Jupiter API calls
+        // Get enriched data with live prices from priceEngine
+        const liveData = global.priceEngine.getPricesData();
         
-        const enhancedCoins = await jupiterDataService.batchEnrichCoins(coinsToEnhance, 3);
-        
-        // Sort enhanced coins by Jupiter metrics if available
-        coins = enhancedCoins.sort((a, b) => {
-          // Prioritize Jupiter-enhanced coins
-          if (a.jupiterEnriched && !b.jupiterEnriched) return -1;
-          if (!a.jupiterEnriched && b.jupiterEnriched) return 1;
-          
-          // Sort by organic score if available
-          if (a.organic_score && b.organic_score) {
-            return b.organic_score - a.organic_score;
-          }
-          
-          // Fallback to priority score or market cap
-          if (a.priorityScore?.score && b.priorityScore?.score) {
-            return b.priorityScore.score - a.priorityScore.score;
-          }
-          
-          return (b.market_cap_usd || 0) - (a.market_cap_usd || 0);
-        });
-        
-        dataSource = 'hybrid-jupiter-enhanced';
-        console.log(`✅ Enhanced ${coins.length} stored coins with Jupiter data`);
-        
-      } catch (enhanceError) {
-        console.warn('⚠️ Jupiter enhancement failed, using raw stored coins:', enhanceError.message);
-        
-        // Final fallback: use raw stored coins
-        coins = rugcheckService.sortCoinsByPriority(currentCoins)
-          .slice(0, limit);
-        dataSource = 'stored-fallback';
+        if (liveData && liveData.length > 0) {
+          console.log(`📊 PriceEngine has ${liveData.length} coins with live data`);
+          coins = liveData;
+          dataSource = 'priceEngine-live';
+        } else {
+          console.log('📦 PriceEngine empty, using global cache...');
+          // Fallback to global cache if priceEngine is empty
+          coins = global.coinsCache || [];
+          dataSource = 'global-cache';
+        }
+      } catch (priceEngineError) {
+        console.warn('⚠️ PriceEngine error, falling back to global cache:', priceEngineError.message);
+        coins = global.coinsCache || [];
+        dataSource = 'cache-fallback';
+      }
+    } else {
+      console.log('📦 PriceEngine not available, using global cache...');
+      coins = global.coinsCache || [];
+      dataSource = 'cache-only';
+    }
+    
+    // Sort coins based on requested criteria
+    if (coins.length > 0) {
+      switch (sortBy) {
+        case 'volume':
+          coins.sort((a, b) => (b.volume24h || b.volume_24h || 0) - (a.volume24h || a.volume_24h || 0));
+          break;
+        case 'latest':
+          coins.sort((a, b) => (b.created_at || b.createdAt || 0) - (a.created_at || a.createdAt || 0));
+          break;
+        case 'trending':
+        default:
+          // Use priority scoring with live data preference
+          coins.sort((a, b) => {
+            // Prioritize coins with live price data
+            if (a.currentPrice && !b.currentPrice) return -1;
+            if (!a.currentPrice && b.currentPrice) return 1;
+            
+            // Sort by market cap or priority score
+            const aMarketCap = a.marketCap || a.market_cap_usd || a.market_cap || 0;
+            const bMarketCap = b.marketCap || b.market_cap_usd || b.market_cap || 0;
+            
+            if (aMarketCap && bMarketCap) return bMarketCap - aMarketCap;
+            
+            // Fallback to priority score if available
+            const aPriority = a.priorityScore?.score || 0;
+            const bPriority = b.priorityScore?.score || 0;
+            return bPriority - aPriority;
+          });
+          break;
       }
     }
     
-    // Last resort: empty result
-    if (coins.length === 0) {
-      console.warn('⚠️ No coins available from any source');
-      coins = [];
-      dataSource = 'none';
-    }
+    // Apply pagination
+    const paginatedCoins = coins.slice(0, limit);
     
-    const enhancedCount = coins.filter(coin => coin.jupiterEnriched).length;
-    const jupiterPrimaryCount = coins.filter(coin => coin.source === 'jupiter').length;
+    // Calculate statistics
+    const liveDataCount = paginatedCoins.filter(coin => coin.currentPrice).length;
+    const livePriceRate = paginatedCoins.length > 0 ? ((liveDataCount / paginatedCoins.length) * 100).toFixed(1) : '0';
     
-    console.log(`📊 Trending result: ${coins.length} coins, ${enhancedCount} Jupiter-enhanced, ${jupiterPrimaryCount} Jupiter-primary`);
+    console.log(`📊 Trending result: ${paginatedCoins.length} coins, ${liveDataCount} with live prices (${livePriceRate}%)`);
     
     res.json({
       success: true,
-      coins: coins,
-      count: coins.length,
-      total: currentCoins.length,
-      jupiter_enhanced: enhancedCount,
-      jupiter_primary: jupiterPrimaryCount,
-      enhancement_rate: coins.length > 0 ? `${((enhancedCount / coins.length) * 100).toFixed(1)}%` : '0%',
+      coins: paginatedCoins,
+      count: paginatedCoins.length,
+      total: coins.length,
+      live_data_count: liveDataCount,
+      live_price_rate: `${livePriceRate}%`,
       data_source: dataSource,
+      sort_by: sortBy,
       timestamp: new Date().toISOString(),
       // Legacy compatibility
-      source: dataSource
+      source: dataSource,
+      jupiter_enhanced: liveDataCount, // For compatibility
+      enhancement_rate: `${livePriceRate}%` // For compatibility
     });
     
   } catch (error) {
@@ -533,39 +529,64 @@ app.get('/api/coins/solana-latest', (req, res) => {
 // Fast coins endpoint - serves raw data immediately (no enrichment)
 app.get('/api/coins/fast', (req, res) => {
   try {
+    console.log('⚡ /api/coins/fast endpoint called (priceEngine-optimized)');
+    
     const limit = parseInt(req.query.limit) || 50;
     
-    console.log(`⚡ Fast endpoint: Serving ${Math.min(limit, currentCoins.length)} coins (raw data, no enrichment)`);
+    let sourceCoins = [];
+    let dataSource = 'unknown';
     
-    if (currentCoins.length === 0) {
+    // Try to get fast data from priceEngine first
+    if (global.priceEngine) {
+      try {
+        const liveData = global.priceEngine.getPricesData();
+        if (liveData && liveData.length > 0) {
+          sourceCoins = liveData;
+          dataSource = 'priceEngine-fast';
+          console.log(`⚡ Using ${liveData.length} coins from priceEngine for fast response`);
+        } else {
+          sourceCoins = currentCoins;
+          dataSource = 'cache-fast';
+        }
+      } catch (error) {
+        console.warn('⚠️ PriceEngine error in fast endpoint, using cache:', error.message);
+        sourceCoins = currentCoins;
+        dataSource = 'cache-fallback';
+      }
+    } else {
+      sourceCoins = currentCoins;
+      dataSource = 'cache-only';
+    }
+    
+    if (!sourceCoins || sourceCoins.length === 0) {
       return res.json({
         success: true,
         coins: [],
         count: 0,
         total: 0,
-        message: 'No coins currently loaded',
+        message: 'No coins available in cache',
         timestamp: new Date().toISOString(),
-        source: 'fast-raw'
+        source: dataSource
       });
     }
     
-    // Serve coins as-is from Solana Tracker (no enrichment)
-    const fastCoins = currentCoins.slice(0, limit).map(coin => ({
+    // Serve coins with live data when available
+    const fastCoins = sourceCoins.slice(0, limit).map(coin => ({
       // Essential data for immediate UI display
-      mintAddress: coin.mintAddress,
-      address: coin.mintAddress,
+      mintAddress: coin.mintAddress || coin.address,
+      address: coin.mintAddress || coin.address,
       symbol: coin.symbol,
       name: coin.name,
       image: coin.image || coin.profileImage || coin.logo,
       
-      // Market data from Solana Tracker
-      price_usd: coin.price_usd || coin.priceUsd || coin.price || 0,
-      market_cap_usd: coin.market_cap_usd || coin.marketCap || 0,
-      liquidity_usd: coin.liquidity_usd || coin.liquidity?.usd || 0,
-      volume_24h_usd: coin.volume_24h_usd || coin.volume24h || coin.volume || 0,
+      // Market data - prioritize live data from priceEngine
+      price_usd: coin.currentPrice || coin.price_usd || coin.priceUsd || coin.price || 0,
+      market_cap_usd: coin.marketCap || coin.market_cap_usd || coin.marketCap || 0,
+      liquidity_usd: coin.liquidity || coin.liquidity_usd || coin.liquidity?.usd || 0,
+      volume_24h_usd: coin.volume24h || coin.volume_24h_usd || coin.volume24h || coin.volume || 0,
       
-      // Price changes
-      priceChange24h: coin.priceChange24h || 0,
+      // Price changes - use live data when available
+      priceChange24h: coin.priceChangePercent || coin.priceChange24h || 0,
       priceChange1h: coin.priceChange1h || 0,
       priceChange5m: coin.priceChange5m || 0,
       
@@ -587,23 +608,29 @@ app.get('/api/coins/fast', (req, res) => {
       isPumpFun: coin.isPumpFun || false,
       
       // Source tracking
-      source: 'solana-tracker-raw',
-      enriched: false, // Mark as not enriched
+      source: dataSource,
+      enriched: !!coin.currentPrice, // Mark as enriched if it has live price data
+      hasLiveData: !!coin.currentPrice,
       lastUpdated: coin.lastUpdated || new Date().toISOString()
     }));
+    
+    const liveDataCount = fastCoins.filter(coin => coin.hasLiveData).length;
     
     res.json({
       success: true,
       coins: fastCoins,
       count: fastCoins.length,
-      total: currentCoins.length,
-      message: 'Raw coin data served for fast UI loading',
+      total: sourceCoins.length,
+      live_data_count: liveDataCount,
+      live_data_rate: fastCoins.length > 0 ? `${((liveDataCount / fastCoins.length) * 100).toFixed(1)}%` : '0%',
+      message: 'Optimized coin data with live prices when available',
+      data_source: dataSource,
       enrichment: {
-        status: 'pending',
+        status: liveDataCount > 0 ? 'partial' : 'pending',
         note: 'Use /api/coins/enrich endpoint to get enriched data with banners and security analysis'
       },
       timestamp: new Date().toISOString(),
-      source: 'fast-raw'
+      source: dataSource
     });
     
   } catch (error) {
@@ -2707,15 +2734,48 @@ app.get('/api/coin/:address', async (req, res) => {
   }
 });
 
-// Start server
-app.listen(PORT, () => {
+// Create HTTP server for WebSocket support
+const server = http.createServer(app);
+
+// Initialize WebSocket server
+const wsServer = new WebSocketServer(server);
+
+// Start server with WebSocket support
+server.listen(PORT, () => {
   initializeWithLatestBatch();
   
+  // Start price engine after initialization
+  setTimeout(() => {
+    priceEngine.start();
+  }, 2000); // Give initialization time to complete
+  
   console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🌐 WebSocket server ready for connections`);
   console.log(`🔄 Health check: http://localhost:${PORT}/health`);
   console.log(`📊 Trending coins: http://localhost:${PORT}/api/coins/trending`);
   console.log(`🔍 Rugcheck progress: http://localhost:${PORT}/api/rugcheck/progress`);
   console.log(`🤖 Rugcheck auto-status: http://localhost:${PORT}/api/rugcheck/auto-status`);
   console.log(`🔄 Batch refresh: POST http://localhost:${PORT}/api/refresh`);
   console.log(`🔍 Progressive Rugcheck: POST http://localhost:${PORT}/api/rugcheck/verify-all-progressive`);
+});
+
+// Graceful shutdown handlers
+process.on('SIGTERM', () => {
+  console.log('🛑 Received SIGTERM signal, shutting down gracefully...');
+  priceEngine.stop();
+  wsServer.shutdown();
+  server.close(() => {
+    console.log('✅ Server shut down complete');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('🛑 Received SIGINT signal, shutting down gracefully...');
+  priceEngine.stop();
+  wsServer.shutdown();
+  server.close(() => {
+    console.log('✅ Server shut down complete');
+    process.exit(0);
+  });
 });

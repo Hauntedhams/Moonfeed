@@ -438,3 +438,19 @@
 .banner-filter-container .filters-button {
   pointer-events: auto; /* Re-enable clicks on the button itself */
 }
+
+/* Virtual scrolling spacers for mobile optimization */
+.virtual-spacer-top,
+.virtual-spacer-bottom {
+  width: 100%;
+  background: transparent;
+  pointer-events: none;
+}
+
+@media (max-width: 767px) {
+  .virtual-spacer-top,
+  .virtual-spacer-bottom {
+    /* Ensure spacers don't interfere with scrolling on mobile */
+    touch-action: pan-y;
+  }
+}
