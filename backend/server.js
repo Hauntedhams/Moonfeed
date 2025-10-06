@@ -281,18 +281,27 @@ app.get('/', (req, res) => {
   });
 });
 
-// Health check
-app.get('/health', (req, res) => {
-  const stats = coinStorage.getStats();
+// Health check endpoints (both /health and /api/health for compatibility)
+// These endpoints respond immediately, even during startup
+const healthCheck = (req, res) => {
+  const stats = coinStorage ? coinStorage.getStats() : { totalCoins: 0, lastUpdate: null };
+  const priceEngineStatus = priceEngine ? priceEngine.getStatus() : { isRunning: false, clientCount: 0 };
+  
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
     service: 'moonfeed-batch-backend',
-    currentCoins: currentCoins.length,
+    uptime: process.uptime(),
+    currentCoins: currentCoins ? currentCoins.length : 0,
     storage: stats,
-    hasApiKey: !!SOLANA_TRACKER_API_KEY
+    hasApiKey: !!SOLANA_TRACKER_API_KEY,
+    priceEngine: priceEngineStatus,
+    initialization: currentCoins.length > 0 ? 'complete' : 'pending'
   });
-});
+};
+
+app.get('/health', healthCheck);
+app.get('/api/health', healthCheck);
 
 // Get current coins with priceEngine integration (optimized)
 app.get('/api/coins/trending', async (req, res) => {
@@ -2742,13 +2751,6 @@ const wsServer = new WebSocketServer(server);
 
 // Start server with WebSocket support
 server.listen(PORT, () => {
-  initializeWithLatestBatch();
-  
-  // Start price engine after initialization
-  setTimeout(() => {
-    priceEngine.start();
-  }, 2000); // Give initialization time to complete
-  
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`🌐 WebSocket server ready for connections`);
   console.log(`🔄 Health check: http://localhost:${PORT}/health`);
@@ -2757,6 +2759,17 @@ server.listen(PORT, () => {
   console.log(`🤖 Rugcheck auto-status: http://localhost:${PORT}/api/rugcheck/auto-status`);
   console.log(`🔄 Batch refresh: POST http://localhost:${PORT}/api/refresh`);
   console.log(`🔍 Progressive Rugcheck: POST http://localhost:${PORT}/api/rugcheck/verify-all-progressive`);
+
+  // Initialize in background after server is ready
+  setTimeout(() => {
+    console.log('🔄 Starting background initialization...');
+    initializeWithLatestBatch();
+    
+    // Start price engine after initialization
+    setTimeout(() => {
+      priceEngine.start();
+    }, 2000);
+  }, 1000); // Give server time to be healthy first
 });
 
 // Graceful shutdown handlers
