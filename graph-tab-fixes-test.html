@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Graph Tab Issues - Fixed</title>
+    <style>
+        body {
+            margin: 20px;
+            font-family: Arial, sans-serif;
+        }
+        .issue-fix {
+            background: #f0f9ff;
+            border: 1px solid #0ea5e9;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .issue-fix h3 {
+            color: #0ea5e9;
+            margin-top: 0;
+        }
+        .test-steps {
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔧 Graph Tab Issues - Fixed</h1>
+
+    <div class="issue-fix">
+        <h3>✅ Fixed: Timeframe Buttons Becoming Unclickable</h3>
+        <p><strong>Issue:</strong> Timeframe buttons (1M, 15M, 1H, 4H, 24H) would become disabled and unclickable after a few seconds.</p>
+        <p><strong>Root Cause:</strong> The buttons were disabled when <code>loading={true}</code>, and the component was re-fetching data repeatedly.</p>
+        <p><strong>Fix:</strong> Removed <code>disabled={loading}</code> and added fetch prevention logic to stop multiple simultaneous requests.</p>
+    </div>
+
+    <div class="issue-fix">
+        <h3>✅ Fixed: White Square Overlay</h3>
+        <p><strong>Issue:</strong> A white square covering ~25% of the top-right area kept appearing every few seconds.</p>
+        <p><strong>Root Cause:</strong> The loading overlay was positioned absolutely and overlapping with the chart canvas.</p>
+        <p><strong>Fix:</strong> Changed loading state to conditional rendering instead of overlay, eliminating the white square.</p>
+    </div>
+
+    <div class="test-steps">
+        <h3>🧪 Test Steps to Verify Fixes:</h3>
+        <ol>
+            <li><strong>Open the app:</strong> <a href="http://localhost:5173" target="_blank">http://localhost:5173</a></li>
+            <li><strong>Navigate to any coin's third tab</strong> (the "Graph" tab)</li>
+            <li><strong>Check timeframe buttons:</strong> All 5 buttons (1M, 15M, 1H, 4H, 24H) should remain clickable at all times</li>
+            <li><strong>Click different timeframes:</strong> Should switch immediately without becoming disabled</li>
+            <li><strong>Monitor for white squares:</strong> No white overlay should appear over the chart area</li>
+            <li><strong>Check console logs:</strong> Should see "CHART DIAGNOSTIC" messages showing proper fetch behavior</li>
+        </ol>
+    </div>
+
+    <div class="issue-fix">
+        <h3>🔍 Technical Changes Made:</h3>
+        <ul>
+            <li><strong>fetchingRef.current:</strong> Added flag to prevent multiple simultaneous API calls</li>
+            <li><strong>useEffect dependencies:</strong> Changed from <code>[coin, selectedTimeframe]</code> to specific token address to reduce re-renders</li>
+            <li><strong>Loading UI:</strong> Changed from overlay to conditional rendering</li>
+            <li><strong>Button state:</strong> Removed <code>disabled={loading}</code> to keep buttons always clickable</li>
+            <li><strong>CSS positioning:</strong> Fixed loading state to use normal flow instead of absolute positioning</li>
+        </ul>
+    </div>
+
+    <div class="test-steps">
+        <h3>📊 Expected Performance:</h3>
+        <ul>
+            <li>✅ Timeframe buttons always remain clickable</li>
+            <li>✅ No white squares or overlays appearing</li>
+            <li>✅ Smooth chart loading without visual glitches</li>
+            <li>✅ Proper loading indicator (centered spinner) when fetching data</li>
+            <li>✅ Console logs showing controlled fetch behavior</li>
+        </ul>
+    </div>
+
+    <script>
+        console.log('Graph Tab Issues Fixed - Test this page by navigating to the app and checking the Graph tab');
+        
+        // Auto-refresh link to app
+        setTimeout(() => {
+            const link = document.querySelector('a[href*="localhost:5173"]');
+            if (link) {
+                link.style.background = '#22c55e';
+                link.style.color = 'white';
+                link.style.padding = '8px 16px';
+                link.style.borderRadius = '6px';
+                link.style.textDecoration = 'none';
+                link.style.fontWeight = '600';
+            }
+        }, 1000);
+    </script>
+</body>
+</html>

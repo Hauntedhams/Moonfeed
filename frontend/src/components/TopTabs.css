@@ -8,7 +8,7 @@
   backdrop-filter: none; /* Remove blur effect */
   -webkit-backdrop-filter: none;
   border-bottom: none; /* Remove border */
-  padding: 20px 0 8px 0; /* More padding for better overlap */
+  padding: 16px 0 8px 0; /* Reduced padding to minimize overlap */
   box-shadow: none; /* Remove shadow */
 }
 
@@ -214,6 +214,6 @@
 /* Add safe area for devices with notches */
 @supports (top: env(safe-area-inset-top)) {
   .top-tabs-container {
-    padding-top: calc(env(safe-area-inset-top) + 20px); /* Maintain overlay positioning */
+    padding-top: calc(env(safe-area-inset-top) + 12px); /* Reduced overlay positioning */
   }
 }

@@ -27,6 +27,12 @@ class WebSocketServer {
       // Add to price engine
       priceEngine.addClient(ws);
 
+      // Add to Jupiter Live Price Service if available
+      if (global.jupiterLivePriceService) {
+        global.jupiterLivePriceService.addSubscriber(ws);
+        console.log(`🪐 Added client ${clientId} to Jupiter Live Price Service`);
+      }
+
       // Send initial data immediately
       try {
         ws.send(JSON.stringify({
@@ -61,6 +67,9 @@ class WebSocketServer {
       ws.on('close', (code, reason) => {
         console.log(`🔌 Client disconnected: ${clientId} (${code}: ${reason || 'No reason'})`);
         priceEngine.removeClient(ws);
+        if (global.jupiterLivePriceService) {
+          global.jupiterLivePriceService.removeSubscriber(ws);
+        }
         this.clients.delete(clientId);
       });
 
@@ -68,6 +77,9 @@ class WebSocketServer {
       ws.on('error', (error) => {
         console.error(`❌ WebSocket error for client ${clientId}:`, error.message);
         priceEngine.removeClient(ws);
+        if (global.jupiterLivePriceService) {
+          global.jupiterLivePriceService.removeSubscriber(ws);
+        }
         this.clients.delete(clientId);
       });
 
@@ -196,6 +208,20 @@ class WebSocketServer {
     });
 
     this.broadcast(message, 'price-update');
+  }
+
+  broadcastJupiterPrices(priceUpdates) {
+    if (this.clients.size === 0 || !priceUpdates || priceUpdates.length === 0) return;
+
+    const message = JSON.stringify({
+      type: 'jupiter-prices-update',
+      data: priceUpdates,
+      timestamp: Date.now(),
+      source: 'jupiter-live'
+    });
+
+    console.log(`📡 Broadcasting Jupiter price updates for ${priceUpdates.length} coins to ${this.clients.size} clients`);
+    this.broadcast(message, 'jupiter-prices');
   }
 
   broadcastMarketUpdate(updateData) {

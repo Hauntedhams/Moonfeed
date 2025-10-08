@@ -4,7 +4,7 @@ import './CoinListModal.css';
 
 const API_BASE = API_CONFIG.COINS_API;
 
-function CoinListModal({ visible, onClose, filterType, onCoinSelect }) {
+function CoinListModal({ visible, onClose, filterType, onCoinSelect, currentCoinIndex, totalCoins }) {
   const [coins, setCoins] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -78,7 +78,14 @@ function CoinListModal({ visible, onClose, filterType, onCoinSelect }) {
       <div className="coin-list-modal-content" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="coin-list-modal-header">
-          <h2>{getFilterTitle()}</h2>
+          <div className="modal-header-content">
+            <h2>{getFilterTitle()}</h2>
+            {currentCoinIndex !== undefined && totalCoins !== undefined && (
+              <div className="coin-counter-modal">
+                {currentCoinIndex + 1} / {totalCoins}
+              </div>
+            )}
+          </div>
           <button className="coin-list-modal-close" onClick={onClose}>
             ✕
           </button>

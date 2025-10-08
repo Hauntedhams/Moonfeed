@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chart Component Test</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #f0f0f0;
+            font-family: Arial, sans-serif;
+        }
+        .test-container {
+            width: 400px;
+            height: 400px;
+            background: white;
+            border-radius: 12px;
+            margin: 20px auto;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        #chart-test {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+    <h1>Chart Component Test</h1>
+    <div class="test-container">
+        <div id="chart-test">
+            <p>Testing if the chart component loads with white background...</p>
+            <p>Check frontend at: <a href="http://localhost:5173" target="_blank">http://localhost:5173</a></p>
+            <p>Backend API: <a href="http://localhost:3001/api/chart/So11111111111111111111111111111111111111112?timeframe=1h" target="_blank">Test SOL Chart Data</a></p>
+        </div>
+    </div>
+    
+    <script>
+        // Simple test to verify the API is accessible
+        fetch('http://localhost:3001/api/chart/So11111111111111111111111111111111111111112?timeframe=1h')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    console.log('✅ Backend API working, chart data points:', data.data.dataPoints.length);
+                    document.getElementById('chart-test').innerHTML += 
+                        `<p style="color: green;">✅ Backend API working (${data.data.dataPoints.length} data points)</p>`;
+                } else {
+                    console.log('❌ Backend API error:', data.error);
+                    document.getElementById('chart-test').innerHTML += 
+                        `<p style="color: red;">❌ Backend API error: ${data.error}</p>`;
+                }
+            })
+            .catch(error => {
+                console.log('❌ Connection error:', error);
+                document.getElementById('chart-test').innerHTML += 
+                    `<p style="color: red;">❌ Connection error: ${error.message}</p>`;
+            });
+    </script>
+</body>
+</html>

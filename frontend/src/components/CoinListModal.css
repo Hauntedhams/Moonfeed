@@ -37,12 +37,31 @@
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
 }
 
+.modal-header-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
 .coin-list-modal-header h2 {
   margin: 0;
   color: #fff;
   font-size: 20px;
   font-weight: 700;
   letter-spacing: 0.5px;
+}
+
+.coin-counter-modal {
+  background: rgba(0, 212, 255, 0.2);
+  border: 1px solid rgba(0, 212, 255, 0.3);
+  color: #00d4ff;
+  padding: 6px 12px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 2px 8px rgba(0, 212, 255, 0.2);
+  animation: glow 2s ease-in-out infinite alternate;
 }
 
 .coin-list-modal-close {
@@ -220,6 +239,15 @@
   }
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes glow {
+  from {
+    box-shadow: 0 2px 8px rgba(0, 212, 255, 0.2);
+  }
+  to {
+    box-shadow: 0 2px 12px rgba(0, 212, 255, 0.4);
   }
 }
 

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chart Tab Performance Test</title>
+    <style>
+        body {
+            margin: 20px;
+            font-family: Arial, sans-serif;
+        }
+        .test-results {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .test-button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .timing {
+            font-family: monospace;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <h1>Chart Tab Performance Diagnostic</h1>
+    
+    <div class="test-results">
+        <h3>Backend API Performance</h3>
+        <button class="test-button" onclick="testAPI()">Test Backend API Speed</button>
+        <div id="api-results" class="timing"></div>
+    </div>
+    
+    <div class="test-results">
+        <h3>Frontend Chart Performance</h3>
+        <p>Open the browser console and navigate to the Graph tab to see detailed timing logs.</p>
+        <a href="http://localhost:5173" target="_blank" class="test-button" style="text-decoration: none; display: inline-block;">Open Frontend App</a>
+    </div>
+    
+    <div class="test-results">
+        <h3>Performance Checklist</h3>
+        <ul>
+            <li>✅ Backend API response time (should be &lt; 500ms)</li>
+            <li>🔍 Chart component mount time</li>
+            <li>🔍 Data fetch duration</li>
+            <li>🔍 Canvas rendering time</li>
+            <li>🔍 Tab navigation smoothness</li>
+        </ul>
+    </div>
+
+    <script>
+        async function testAPI() {
+            const resultsDiv = document.getElementById('api-results');
+            resultsDiv.innerHTML = 'Testing...';
+            
+            const testTokens = [
+                'So11111111111111111111111111111111111111112', // SOL
+                'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', // USDC
+            ];
+            
+            const timeframes = ['1h', '4h', '24h'];
+            const results = [];
+            
+            for (const token of testTokens) {
+                for (const timeframe of timeframes) {
+                    const startTime = performance.now();
+                    
+                    try {
+                        const response = await fetch(`http://localhost:3001/api/chart/${token}?timeframe=${timeframe}`);
+                        const data = await response.json();
+                        const endTime = performance.now();
+                        const duration = Math.round(endTime - startTime);
+                        
+                        results.push({
+                            token: token.slice(0, 8) + '...',
+                            timeframe,
+                            duration,
+                            success: data.success,
+                            dataPoints: data.data?.dataPoints?.length || 0
+                        });
+                    } catch (error) {
+                        const endTime = performance.now();
+                        const duration = Math.round(endTime - startTime);
+                        
+                        results.push({
+                            token: token.slice(0, 8) + '...',
+                            timeframe,
+                            duration,
+                            success: false,
+                            error: error.message
+                        });
+                    }
+                }
+            }
+            
+            let html = '<h4>API Response Times:</h4>';
+            results.forEach(result => {
+                const status = result.success ? '✅' : '❌';
+                html += `<div>${status} ${result.token} (${result.timeframe}): ${result.duration}ms`;
+                if (result.success) {
+                    html += ` - ${result.dataPoints} points`;
+                } else {
+                    html += ` - Error: ${result.error}`;
+                }
+                html += '</div>';
+            });
+            
+            const avgTime = results.filter(r => r.success).reduce((sum, r) => sum + r.duration, 0) / results.filter(r => r.success).length;
+            html += `<div><strong>Average API response time: ${Math.round(avgTime)}ms</strong></div>`;
+            
+            resultsDiv.innerHTML = html;
+        }
+        
+        // Test API on page load
+        window.addEventListener('load', () => {
+            setTimeout(testAPI, 1000);
+        });
+    </script>
+</body>
+</html>

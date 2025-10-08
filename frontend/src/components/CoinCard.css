@@ -5,13 +5,16 @@
 .coin-card {
   position: relative;
   width: 100%;
-  height: 100vh;
+  /* Use dynamic viewport height that adapts to mobile browsers */
+  height: 100dvh; /* dvh = dynamic viewport height */
   background: linear-gradient(135deg, #0b1220 0%, #0e1426 50%, #0b1220 100%);
   overflow: hidden;
   display: flex;
   flex-direction: column;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   color: white;
+  /* Ensure interactions work */
+  pointer-events: auto;
 }
 
 /* =============================================================================
@@ -19,14 +22,18 @@
    ============================================================================= */
 
 .coin-banner {
-  position: relative;
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
-  aspect-ratio: 2 / 1;
+  /* Moderate height that fills top area without being too large */
+  height: clamp(200px, 35vh, 280px);
   background: linear-gradient(45deg, #667eea 0%, #764ba2 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  z-index: 1;
 }
 
 .coin-banner::before {
@@ -38,11 +45,14 @@
 }
 
 .coin-banner img {
-  width: 100%;
+  width: 120%; /* Make image wider than container */
   height: 100%;
   object-fit: cover;
+  object-position: center;
   position: absolute;
-  inset: 0;
+  left: -10%; /* Center the wider image */
+  top: 0;
+  background: linear-gradient(45deg, #667eea 0%, #764ba2 100%); /* Fallback background */
 }
 
 .banner-placeholder {
@@ -62,6 +72,8 @@
   padding: 20px;
   z-index: 10;
   color: white;
+  /* Add top padding to account for TopTabs overlay */
+  padding-top: 60px;
 }
 
 .banner-coin-info {
@@ -191,15 +203,18 @@
   transition: transform 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94), 
               height 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
   transform: translateY(0%);
-  height: 70vh;
-  z-index: 25;
+  /* Adjust height to work with the new banner size */
+  height: calc(100dvh - clamp(200px, 35vh, 280px));
+  z-index: 50; /* Increased z-index to ensure it's above other elements */
   overflow: hidden;
   box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
+  /* Ensure pointer events work */
+  pointer-events: auto;
 }
 
 .coin-info-layer.expanded {
   transform: translateY(0%);
-  height: calc(100vh - 80px); /* Fill viewport minus bottom nav bar */
+  height: calc(100dvh - 80px); /* Fill viewport minus bottom nav bar */
 }
 
 .info-layer-header {
@@ -207,10 +222,12 @@
   background: rgba(255, 255, 255, 0.98);
   position: sticky;
   top: 0;
-  z-index: 20;
+  z-index: 60; /* Increased z-index to ensure header stays on top */
   display: flex;
   flex-direction: column;
   gap: 12px;
+  /* Ensure pointer events work */
+  pointer-events: auto;
 }
 
 .header-top-row {
@@ -235,6 +252,20 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  /* Ensure clickability */
+  pointer-events: auto;
+  z-index: 70; /* High z-index to ensure it's clickable */
+  /* Better touch target */
+  min-width: 44px;
+  min-height: 44px;
+  /* Prevent text selection */
+  user-select: none;
+  -webkit-user-select: none;
+  /* Ensure it's always on top */
+  isolation: isolate;
+  /* Prevent touch gestures from causing scroll */
+  touch-action: none;
+  -webkit-touch-callout: none;
 }
 
 .expand-handle::before {
@@ -247,9 +278,20 @@
   transition: all 0.2s ease;
 }
 
+.expand-handle:hover {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 50%;
+  transform: scale(1.1);
+}
+
 .expand-handle:hover::before {
   border-bottom-color: rgba(0, 0, 0, 0.8);
   border-right-color: rgba(0, 0, 0, 0.8);
+}
+
+.expand-handle:active {
+  transform: scale(0.95);
+  background: rgba(0, 0, 0, 0.15);
 }
 
 .trade-button {
@@ -573,42 +615,83 @@
   color: #ef4444;
 }
 
-.social-icons {
+/* Live price indicators */
+.live-indicators {
   display: flex;
-  gap: 10px;
   align-items: center;
+  gap: 4px;
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  z-index: 10;
 }
 
-.social-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  background: rgba(0, 0, 0, 0.08);
+.live-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  color: #000000;
-  text-decoration: none;
-  border: 1px solid rgba(0, 0, 0, 0.15);
-  font-size: 20px;
-  font-weight: 600;
 }
 
-.social-icon:hover {
-  background: rgba(0, 0, 0, 0.15);
-  color: #000000;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-  border-color: rgba(0, 0, 0, 0.25);
+.live-indicator.connected .live-dot {
+  background: #22c55e;
+  animation: pulse-green 2s ease-in-out infinite;
 }
 
-.info-layer-content {
-  padding: 0 20px 20px;
-  height: calc(100% - 120px);
-  overflow-y: auto;
-  transition: opacity 0.3s ease-in-out;
+.live-indicator.disconnected .live-dot {
+  background: #ef4444;
+  animation: pulse-red 2s ease-in-out infinite;
+}
+
+.live-dot {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+}
+
+.jupiter-live-indicator {
+  font-size: 10px;
+  animation: rotate 3s linear infinite;
+  filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.8));
+}
+
+@keyframes pulse-green {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.3); opacity: 0.7; }
+}
+
+@keyframes pulse-red {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.3); opacity: 0.7; }
+}
+
+@keyframes rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Price flash animations for live updates */
+.coin-price.price-up {
+  animation: flash-green 0.6s ease-out;
+}
+
+.coin-price.price-down {
+  animation: flash-red 0.6s ease-out;
+}
+
+@keyframes flash-green {
+  0% { background-color: transparent; }
+  50% { background-color: rgba(34, 197, 94, 0.3); border-radius: 8px; }
+  100% { background-color: transparent; }
+}
+
+@keyframes flash-red {
+  0% { background-color: transparent; }
+  50% { background-color: rgba(239, 68, 68, 0.3); border-radius: 8px; }
+  100% { background-color: transparent; }
 }
 
 /* =============================================================================
@@ -628,28 +711,23 @@
   flex-wrap: wrap;
 }
 
+.info-layer-content {
+  padding: 0 20px 20px;
+  overflow-y: auto;
+  height: calc(100% - 80px);
+  opacity: 1; /* Changed from 0.7 to 1 - no graying out */
+  transition: opacity 0.3s ease;
+  /* Ensure pointer events work */
+  pointer-events: auto;
+  /* Establish proper stacking context */
+  position: relative;
+  z-index: 55;
+}
+
 .coin-info-layer.expanded .info-layer-content {
   overflow-y: auto;
   height: calc(100% - 80px); /* Allow scrolling through all content */
   opacity: 1;
-}
-
-.info-layer-content::-webkit-scrollbar {
-  width: 5px;
-}
-
-.info-layer-content::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.04);
-  border-radius: 2px;
-}
-
-.info-layer-content::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.18);
-  border-radius: 2px;
-}
-
-.info-layer-content::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.28);
 }
 
 /* =============================================================================
@@ -715,7 +793,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0 20px;
+  padding: 0; /* Remove padding since parent already has padding */
   margin-bottom: 56px;
 }
 
@@ -802,7 +880,8 @@
 }
 
 .clean-chart-wrapper,
-.advanced-chart-wrapper {
+.advanced-chart-wrapper,
+.price-history-wrapper {
   display: flex;
   justify-content: center;
   align-items: center;
@@ -819,11 +898,17 @@
   overflow: hidden; /* Prevent DexScreener iframe from bleeding */
 }
 
+.price-history-wrapper {
+  width: 100%;
+  height: 300px;
+  overflow: hidden;
+  background: white;
+}
+
 .advanced-chart-wrapper .chart-container,
 .advanced-chart-wrapper .chart-placeholder {
   width: 100%;
   min-height: 200px;
-  border-radius: 12px;
   overflow: hidden;
   position: relative; /* Contain the iframe */
 }
@@ -863,6 +948,100 @@
   font-style: italic;
 }
 
+/* =============================================================================
+   TOKEN INFORMATION GRID SECTION
+   ============================================================================= */
+
+.token-info-grid-section {
+  margin-bottom: 24px;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.info-card {
+  background: linear-gradient(135deg, rgba(79, 195, 247, 0.05) 0%, rgba(103, 126, 234, 0.05) 100%);
+  border: 1px solid rgba(79, 195, 247, 0.2);
+  border-radius: 12px;
+  padding: 16px;
+  transition: all 0.3s ease;
+}
+
+.info-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(79, 195, 247, 0.15);
+  border-color: rgba(79, 195, 247, 0.4);
+}
+
+.info-card-header {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #667eea;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(79, 195, 247, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.info-card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.info-label {
+  color: rgba(0, 0, 0, 0.7);
+  font-weight: 500;
+}
+
+.info-value {
+  color: rgba(0, 0, 0, 0.9);
+  font-weight: 600;
+  text-align: right;
+}
+
+.info-value.positive {
+  color: #22c55e;
+}
+
+.info-value.negative {
+  color: #ef4444;
+}
+
+/* Mobile optimization for info grid */
+@media (max-width: 640px) {
+  .info-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  
+  .info-card {
+    padding: 14px;
+  }
+  
+  .info-card-header {
+    font-size: 0.9rem;
+  }
+  
+  .info-row {
+    font-size: 0.85rem;
+  }
+}
+
 /* Responsive adjustments */
 @media (max-width: 480px) {
   .chart-page {
@@ -875,761 +1054,103 @@
   }
 }
 
-.chart-section {
-  margin-bottom: 32px;
-  margin-top: 16px;
-  margin-left: -20px;
-  margin-right: -20px;
+/* Mobile-specific optimizations for banner area */
+@media (max-width: 768px) {
+  .coin-banner {
+    /* Slightly smaller on mobile */
+    height: clamp(180px, 32vh, 250px);
+  }
+  
+  .coin-info-layer {
+    height: calc(100dvh - clamp(180px, 32vh, 250px));
+  }
 }
-
-.top-traders-section,
-.transactions-section,
-.token-details-section,
-.price-changes-section,
-.activity-section,
-.volume-analysis-section {
-  margin-bottom: 22px;
-}
-
-.section-title {
-  font-size: 1.0rem;
-  font-weight: 700;
-  color: #000000;
-  margin-bottom: 12px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.chart-container {
-  background: transparent;
-  border-radius: 0;
-  padding: 0;
-  margin: 0;
-  border: none;
-  min-height: 280px;
-  height: 320px;
-  width: 100%;
-  display: flex;
-  align-items: stretch;
-  justify-content: stretch;
-  position: relative;
-  overflow: visible;
-}
-
-.section-content {
-  background: rgba(0, 0, 0, 0.04);
-  border-radius: 14px;
-  padding: 14px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  min-height: 120px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.chart-placeholder {
-  color: rgba(0, 0, 0, 0.7);
-  font-size: 0.95rem;
-  text-align: center;
-  background: rgba(0, 0, 0, 0.04);
-  border-radius: 14px;
-  padding: 60px 20px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  margin: 0 20px;
-  width: calc(100% - 40px);
-}
-
-.content-placeholder {
-  color: rgba(0, 0, 0, 0.7);
-  font-size: 0.95rem;
-  text-align: center;
-}
-
-/* =============================================================================
-   BANNER MODAL - Full screen popup for banner images
-   ============================================================================= */
-
-.banner-modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.8);
-  backdrop-filter: blur(8px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  padding: 20px;
-}
-
-.banner-modal-content {
-  position: relative;
-  max-width: 90vw;
-  max-height: 90vh;
-  background: #0c111a;
-  border-radius: 16px;
-  overflow: hidden;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
-}
-
-.banner-modal-image {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  display: block;
-  max-width: 80vw;
-  max-height: 70vh;
-}
-
-.banner-modal-close {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  width: 40px;
-  height: 40px;
-  background: rgba(0, 0, 0, 0.7);
-  border: none;
-  border-radius: 50%;
-  color: white;
-  font-size: 24px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1001;
-  transition: background-color 0.2s ease;
-}
-
-.banner-modal-close:hover {
-  background: rgba(0, 0, 0, 0.9);
-}
-
-/* =============================================================================
-   PROFILE MODAL - Full screen popup for profile images
-   ============================================================================= */
-
-.profile-modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.8);
-  backdrop-filter: blur(8px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  padding: 20px;
-}
-
-.profile-modal-content {
-  position: relative;
-  background: #0c111a;
-  border-radius: 16px;
-  overflow: hidden;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
-  max-width: 400px;
-  width: 100%;
-  text-align: center;
-  padding: 20px;
-}
-
-.profile-modal-image {
-  width: 200px;
-  height: 200px;
-  object-fit: cover;
-  border-radius: 50%;
-  margin: 0 auto 16px auto;
-  display: block;
-  border: 4px solid rgba(255, 255, 255, 0.2);
-}
-
-.profile-modal-close {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  width: 40px;
-  height: 40px;
-  background: rgba(0, 0, 0, 0.7);
-  border: none;
-  border-radius: 50%;
-  color: white;
-  font-size: 24px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1001;
-  transition: background-color 0.2s ease;
-}
-
-.profile-modal-close:hover {
-  background: rgba(0, 0, 0, 0.9);
-}
-
-.profile-modal-info {
-  padding: 0 20px 20px;
-}
-
-.profile-modal-name {
-  font-size: 1.8rem;
-  font-weight: 800;
-  color: #ffffff;
-  margin-bottom: 8px;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-}
-
-.profile-modal-symbol {
-  font-size: 1.1rem;
-  color: rgba(255, 255, 255, 0.8);
-  font-weight: 600;
-  margin: 0;
-}
-
-/* =============================================================================
-   END PROFILE MODAL STYLES
-   ============================================================================= */
-
-/* =============================================================================
-   CHART LOADING ANIMATION
-   ============================================================================= */
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-/* =============================================================================
-   END BANNER MODAL STYLES
-   ============================================================================= */
-
-/* =============================================================================
-   RESPONSIVE DESIGN
-   ============================================================================= */
 
 @media (max-width: 480px) {
-  .coin-profile {
-    padding: 16px;
+  .coin-banner {
+    /* Compact on very small screens */
+    height: clamp(160px, 28vh, 220px);
   }
   
-  .coin-name {
-    font-size: 1.6rem;
+  .coin-info-layer {
+    height: calc(100dvh - clamp(160px, 28vh, 220px));
+  }
+}
+
+/* For very tall screens, prevent banner from being too large */
+@media (min-height: 900px) {
+  .coin-banner {
+    height: clamp(220px, 30vh, 300px);
   }
   
-  .coin-price {
-    font-size: 1.7rem;
-  }
-  
-  .metrics-grid {
-    gap: 6px;
-  }
-  
-  .metric {
-    flex: 0 0 95px;
-    min-width: 95px;
-    padding: 6px 12px;
-  }
-  
-  .metric-label {
-    font-size: 0.6rem;
-    margin-bottom: 1px;
-  }
-  
-  .metric-value {
-    font-size: 0.8rem;
-  }
-  
-  .info-layer-header {
-    padding: 12px 16px 8px;
-  }
-  
-  .info-layer-content {
-    padding: 0 16px 16px;
+  .coin-info-layer {
+    height: calc(100dvh - clamp(220px, 30vh, 300px));
   }
 }
 
 /* =============================================================================
-   LIQUIDITY LOCK INDICATOR INTEGRATION
+   MOBILE RESPONSIVE BANNER IMPROVEMENTS
    ============================================================================= */
 
-/* Header metric with stacked lock indicator (only for liquidity) */
-.header-metric-label-with-icon {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  min-height: 32px;
-  justify-content: flex-end; /* Align to bottom to match other labels */
-}
-
-.header-metric-label-with-icon .liquidity-lock-indicator {
-  margin-bottom: 2px;
-}
-
-.header-metric-label-with-icon .header-metric-label {
-  margin: 0;
-  font-size: 0.7rem;
-  text-align: center;
-}
-
-/* Align all regular metric labels to the same baseline */
-.header-metric .header-metric-label {
-  margin-bottom: 4px; /* Add bottom margin to align with the liquidity label */
-  min-height: 16px; /* Ensure consistent height */
-  display: flex;
-  align-items: flex-end; /* Align text to bottom of the container */
-}
-
-/* Ensure consistent spacing and alignment for all metrics */
-.header-metric {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  min-width: 80px;
-  text-align: center;
-}
-
-/* Make sure the liquidity metric has the same total height */
-.header-metric:has(.header-metric-label-with-icon) {
-  min-width: 80px;
-}
-
-/* Hover effect for the lock indicator */
-.header-metric:hover .liquidity-lock-indicator {
-  transform: scale(1.1);
-  transition: transform 0.2s ease;
-}
-
-/* Top Traders Section - Enable horizontal scrolling */
-.top-traders-section .section-content {
-  padding: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  background: transparent;
-  border: none;
-  min-height: auto;
-}
-
-/* =============================================================================
-   LIVE FEATURES - WebSocket Real-time Updates
-   ============================================================================= */
-
-/* Live indicator - shows when receiving real-time data */
-.live-indicator {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  background: rgba(0, 255, 136, 0.15);
-  border: 1px solid rgba(0, 255, 136, 0.4);
-  border-radius: 20px;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  color: #00ff88;
-  z-index: 100;
-  backdrop-filter: blur(10px);
-  box-shadow: 0 2px 8px rgba(0, 255, 136, 0.2);
-  transition: all 0.3s ease;
-}
-
-.live-indicator:hover {
-  background: rgba(0, 255, 136, 0.25);
-  border-color: rgba(0, 255, 136, 0.6);
-  transform: scale(1.05);
-}
-
-.live-dot {
-  width: 6px;
-  height: 6px;
-  background: #00ff88;
-  border-radius: 50%;
-  animation: livePulse 2s infinite ease-in-out;
-  box-shadow: 0 0 4px rgba(0, 255, 136, 0.5);
-}
-
-@keyframes livePulse {
-  0%, 100% { 
-    opacity: 1; 
-    transform: scale(1);
+/* Small mobile devices */
+@media (max-width: 390px) {
+  .coin-banner {
+    /* Ensure banner fills more space on smaller screens */
+    height: clamp(250px, 60vh, 400px);
   }
-  50% { 
-    opacity: 0.3; 
-    transform: scale(0.8);
+  
+  .coin-info-layer {
+    height: calc(100dvh - clamp(250px, 60vh, 400px));
   }
 }
 
-/* Connection status variations */
-.live-indicator.connecting {
-  color: #ffa500;
-  background: rgba(255, 165, 0, 0.15);
-  border-color: rgba(255, 165, 0, 0.4);
-}
-
-.live-indicator.connecting .live-dot {
-  background: #ffa500;
-  animation: connectingPulse 1s infinite linear;
-}
-
-@keyframes connectingPulse {
-  0% { transform: rotate(0deg) scale(1); }
-  50% { transform: rotate(180deg) scale(1.2); }
-  100% { transform: rotate(360deg) scale(1); }
-}
-
-.live-indicator.disconnected {
-  color: #ff4444;
-  background: rgba(255, 68, 68, 0.15);
-  border-color: rgba(255, 68, 68, 0.4);
-}
-
-.live-indicator.disconnected .live-dot {
-  background: #ff4444;
-  animation: none;
-  opacity: 0.5;
-}
-
-/* =============================================================================
-   PRICE FLASH ANIMATIONS - Visual feedback for price changes
-   ============================================================================= */
-
-/* Price flash animations for live updates */
-.price-flash-up,
-.coin-card.price-up,
-.price.price-up {
-  animation: flashGreen 0.6s ease-out;
-}
-
-.price-flash-down,
-.coin-card.price-down,
-.price.price-down {
-  animation: flashRed 0.6s ease-out;
-}
-
-@keyframes flashGreen {
-  0% { 
-    color: inherit; 
-    background-color: transparent;
+/* Large mobile devices and tablets */
+@media (min-width: 391px) and (max-width: 768px) {
+  .coin-banner {
+    /* Optimize for larger mobile screens */
+    height: clamp(300px, 50vh, 450px);
   }
-  20% { 
-    color: #00ff88; 
-    background-color: rgba(0, 255, 136, 0.1);
-    box-shadow: 0 0 10px rgba(0, 255, 136, 0.3);
-  }
-  100% { 
-    color: inherit; 
-    background-color: transparent;
+  
+  .coin-info-layer {
+    height: calc(100dvh - clamp(300px, 50vh, 450px));
   }
 }
 
-@keyframes flashRed {
-  0% { 
-    color: inherit; 
-    background-color: transparent;
+/* Very tall screens */
+@media (min-height: 900px) {
+  .coin-banner {
+    /* Prevent banner from becoming too tall on very tall screens */
+    height: clamp(220px, 30vh, 300px);
   }
-  20% { 
-    color: #ff4444; 
-    background-color: rgba(255, 68, 68, 0.1);
-    box-shadow: 0 0 10px rgba(255, 68, 68, 0.3);
-  }
-  100% { 
-    color: inherit; 
-    background-color: transparent;
+  
+  .coin-info-layer {
+    height: calc(100dvh - clamp(220px, 30vh, 300px));
   }
 }
 
-/* Enhanced price display with live updates */
-.price-display {
-  position: relative;
-  transition: all 0.3s ease;
-}
-
-.price-display.live {
-  border-left: 3px solid #00ff88;
-  padding-left: 12px;
-  background: rgba(0, 255, 136, 0.05);
-}
-
-/* Price change indicators with enhanced styling */
-.price-change-indicator {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 6px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 600;
-  transition: all 0.3s ease;
-}
-
-.price-change-indicator.positive {
-  color: #00ff88;
-  background: rgba(0, 255, 136, 0.1);
-  border: 1px solid rgba(0, 255, 136, 0.2);
-}
-
-.price-change-indicator.negative {
-  color: #ff4444;
-  background: rgba(255, 68, 68, 0.1);
-  border: 1px solid rgba(255, 68, 68, 0.2);
-}
-
-.price-change-indicator.neutral {
-  color: #888;
-  background: rgba(136, 136, 136, 0.1);
-  border: 1px solid rgba(136, 136, 136, 0.2);
-}
-
-/* =============================================================================
-   MINI CHART STYLES - Live chart data visualization
-   ============================================================================= */
-
-.mini-chart {
-  width: 100%;
-  max-width: 220px;
-  height: 60px;
-  margin: 12px auto;
-  background: rgba(255, 255, 255, 0.02);
-  border-radius: 8px;
-  padding: 8px;
-  position: relative;
-  overflow: hidden;
-}
-
-.mini-chart-svg {
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-}
-
-.mini-chart-svg polyline {
-  filter: drop-shadow(0 0 2px rgba(0, 212, 255, 0.3));
-  transition: stroke 0.3s ease;
-}
-
-.mini-chart-svg polyline.positive {
-  stroke: #00ff88;
-}
-
-.mini-chart-svg polyline.negative {
-  stroke: #ff4444;
-}
-
-.mini-chart-svg polyline.neutral {
-  stroke: #00d4ff;
-}
-
-/* Chart hover effects */
-.mini-chart:hover .mini-chart-svg polyline {
-  stroke-width: 3;
-  filter: drop-shadow(0 0 4px rgba(0, 212, 255, 0.5));
-}
-
-/* Chart loading state */
-.mini-chart.loading {
-  background: linear-gradient(90deg, 
-    rgba(255, 255, 255, 0.02) 0%, 
-    rgba(255, 255, 255, 0.05) 50%, 
-    rgba(255, 255, 255, 0.02) 100%);
-  background-size: 200% 100%;
-  animation: chartLoading 2s infinite;
-}
-
-@keyframes chartLoading {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
-
-/* =============================================================================
-   MARKET STATS GRID - Enhanced live data display
-   ============================================================================= */
-
-.market-stats {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-  padding: 16px;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 12px;
-  margin: 8px 0;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.market-stat {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  transition: all 0.3s ease;
-}
-
-.market-stat:hover {
-  transform: translateY(-2px);
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 8px;
-  padding: 8px 4px;
-}
-
-.market-stat .label {
-  font-size: 10px;
-  opacity: 0.6;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 4px;
-  font-weight: 500;
-}
-
-.market-stat .value {
-  font-size: 14px;
-  font-weight: 700;
-  color: #ffffff;
-  transition: color 0.3s ease;
-}
-
-.market-stat .value.live {
-  color: #00ff88;
-}
-
-.market-stat .value.updating {
-  animation: valueUpdate 0.5s ease;
-}
-
-@keyframes valueUpdate {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.1); color: #00d4ff; }
-  100% { transform: scale(1); }
-}
-
-/* =============================================================================
-   CONNECTION STATUS OVERLAY - Global connection feedback
-   ============================================================================= */
-
-.connection-status-overlay {
-  position: fixed;
-  top: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 9999;
-  padding: 8px 16px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 600;
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  transition: all 0.3s ease;
-  pointer-events: none;
-}
-
-.connection-status-overlay.connected {
-  background: rgba(0, 255, 136, 0.9);
-  color: #000;
-  animation: slideDown 0.5s ease;
-}
-
-.connection-status-overlay.connecting {
-  background: rgba(255, 165, 0, 0.9);
-  color: #000;
-  animation: slideDown 0.5s ease;
-}
-
-.connection-status-overlay.disconnected {
-  background: rgba(255, 68, 68, 0.9);
-  color: #fff;
-  animation: slideDown 0.5s ease;
-}
-
-.connection-status-overlay.reconnecting {
-  background: rgba(255, 165, 0, 0.9);
-  color: #000;
-  animation: pulse 1s infinite;
-}
-
-@keyframes slideDown {
-  from { 
-    transform: translateX(-50%) translateY(-20px); 
-    opacity: 0; 
+/* Landscape orientation */
+@media (orientation: landscape) and (max-height: 500px) {
+  .coin-banner {
+    /* Reduce banner height in landscape mode */
+    height: clamp(120px, 25vh, 180px);
   }
-  to { 
-    transform: translateX(-50%) translateY(0); 
-    opacity: 1; 
+  
+  .coin-info-layer {
+    height: calc(100dvh - clamp(120px, 25vh, 180px));
   }
 }
 
-/* =============================================================================
-   RESPONSIVE LIVE FEATURES - Mobile optimizations
-   ============================================================================= */
-
+/* Responsive image scaling for different screen sizes */
 @media (max-width: 768px) {
-  .live-indicator {
-    top: 8px;
-    right: 8px;
-    padding: 4px 8px;
-    font-size: 9px;
-  }
-  
-  .live-dot {
-    width: 4px;
-    height: 4px;
-  }
-  
-  .mini-chart {
-    height: 40px;
-    margin: 8px auto;
-  }
-  
-  .market-stats {
-    gap: 8px;
-    padding: 12px;
-  }
-  
-  .market-stat .value {
-    font-size: 12px;
-  }
-  
-  .connection-status-overlay {
-    top: 10px;
-    font-size: 11px;
-    padding: 6px 12px;
+  .coin-banner img {
+    width: 130%; /* Even wider on mobile for better content visibility */
+    left: -15%;
   }
 }
 
-/* =============================================================================
-   LIVE FEATURE UTILITIES - Helper classes
-   ============================================================================= */
-
-.live-data-available {
-  position: relative;
-}
-
-.live-data-available::after {
-  content: '';
-  position: absolute;
-  top: -2px;
-  right: -2px;
-  width: 6px;
-  height: 6px;
-  background: #00ff88;
-  border-radius: 50%;
-  animation: livePulse 2s infinite;
-}
-
-.stale-data {
-  opacity: 0.7;
-  filter: grayscale(20%);
-}
-
-.data-updating {
-  animation: dataRefresh 1s ease infinite;
-}
-
-@keyframes dataRefresh {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.8; }
+@media (max-width: 480px) {
+  .coin-banner img {
+    width: 140%; /* Maximum width on very small screens */
+    left: -20%;
+  }
 }

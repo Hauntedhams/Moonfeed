@@ -33,7 +33,10 @@ export function useLiveData() {
         try {
           const message = JSON.parse(event.data);
           
-          console.log('📨 WebSocket message received:', message.type);
+          // Only log essential messages to reduce console spam
+          if (message.type === 'welcome' || message.type === 'initial' || Math.random() < 0.1) {
+            console.log('📨 WebSocket message received:', message.type);
+          }
           
           switch (message.type) {
             case 'welcome':
@@ -124,6 +127,38 @@ export function useLiveData() {
               setConnectionStatus('server-shutdown');
               break;
               
+            case 'jupiter-prices-update':
+              // Jupiter live price updates - high frequency - reduce logging
+              if (Math.random() < 0.01) { // Only log 1% of Jupiter updates
+                console.log(`🪐 Jupiter price update: ${message.data?.length || 0} coins`);
+              }
+              setCoins(prev => {
+                const updated = new Map(prev);
+                if (message.data) {
+                  message.data.forEach(priceUpdate => {
+                    const address = priceUpdate.address;
+                    if (address) {
+                      const existing = updated.get(address) || {};
+                      // Update with live Jupiter price data
+                      updated.set(address, { 
+                        ...existing, 
+                        price_usd: priceUpdate.price,
+                        price: priceUpdate.price,
+                        priceUsd: priceUpdate.price,
+                        previousPrice: priceUpdate.previousPrice,
+                        priceChangeInstant: priceUpdate.priceChangeInstant,
+                        lastPriceUpdate: priceUpdate.timestamp,
+                        livePrice: true, // Mark as having live price
+                        jupiterLive: true, // Mark as Jupiter live data
+                        source: 'jupiter-live'
+                      });
+                    }
+                  });
+                }
+                return updated;
+              });
+              break;
+              
             default:
               console.log('❓ Unknown message type:', message.type);
           }
@@ -133,12 +168,18 @@ export function useLiveData() {
       };
 
       wsRef.current.onerror = (error) => {
-        console.error('❌ WebSocket error:', error);
+        // Reduce error logging frequency to prevent spam
+        if (Math.random() < 0.1) {
+          console.error('❌ WebSocket error:', error);
+        }
         setConnectionStatus('error');
       };
 
       wsRef.current.onclose = (event) => {
-        console.log(`🔴 WebSocket disconnected (${event.code}: ${event.reason || 'No reason'})`);
+        // Reduce disconnection logging
+        if (reconnectAttempts.current === 0 || Math.random() < 0.2) {
+          console.log(`🔴 WebSocket disconnected (${event.code}: ${event.reason || 'No reason'})`);
+        }
         setConnected(false);
         setConnectionStatus('disconnected');
         wsRef.current = null;
@@ -146,7 +187,10 @@ export function useLiveData() {
         // Attempt to reconnect with exponential backoff
         if (reconnectAttempts.current < maxReconnectAttempts) {
           const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
-          console.log(`🔄 Reconnecting in ${delay}ms (attempt ${reconnectAttempts.current + 1}/${maxReconnectAttempts})`);
+          // Only log every 3rd reconnection attempt to reduce spam
+          if (reconnectAttempts.current % 3 === 0) {
+            console.log(`🔄 Reconnecting in ${delay}ms (attempt ${reconnectAttempts.current + 1}/${maxReconnectAttempts})`);
+          }
           setConnectionStatus('reconnecting');
           
           reconnectTimeoutRef.current = setTimeout(() => {

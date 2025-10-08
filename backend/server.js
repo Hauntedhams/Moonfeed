@@ -6,6 +6,7 @@ const http = require('http');
 const CoinStorage = require('./coin-storage');
 const priceEngine = require('./services/priceEngine');
 const WebSocketServer = require('./services/websocketServer');
+const JupiterLivePriceService = require('./jupiterLivePriceService');
 const dexscreenerService = require('./dexscreenerService');
 const dexpaprikaService = require('./dexpaprikaService');
 const heliusService = require('./heliusService');
@@ -24,6 +25,7 @@ app.use(cors({
   origin: [
     'http://localhost:5173', 
     'http://localhost:5174', 
+    'http://localhost:5175',  // Added for current frontend port
     'http://localhost:3000',
     'https://moonfeed.app',
     'https://www.moonfeed.app',
@@ -47,6 +49,12 @@ const rugcheckAutoProcessor = new RugcheckAutoProcessor();
 // Initialize Jupiter Token Service
 const jupiterTokenService = new JupiterTokenService();
 
+// Initialize Jupiter Live Price Service
+const jupiterLivePriceService = new JupiterLivePriceService();
+
+// Make Jupiter Live Price Service globally available for WebSocket integration
+global.jupiterLivePriceService = jupiterLivePriceService;
+
 // Initialize Jupiter Data Service for market data
 const jupiterDataService = new JupiterDataService();
 
@@ -61,6 +69,11 @@ function initializeWithLatestBatch() {
     
     // Make coins available to price engine
     global.coinsCache = currentCoins;
+    
+    // Update Jupiter Live Price Service with new coin list
+    if (jupiterLivePriceService && jupiterLivePriceService.isRunning) {
+      jupiterLivePriceService.updateCoinList(currentCoins);
+    }
     
     console.log(`🚀 Initialized with latest batch: ${latestBatch.length} coins`);
     
@@ -303,6 +316,31 @@ const healthCheck = (req, res) => {
 app.get('/health', healthCheck);
 app.get('/api/health', healthCheck);
 
+// Chart API for PriceHistoryChart component
+app.get('/api/chart/:tokenAddress', async (req, res) => {
+  try {
+    const { tokenAddress } = req.params;
+    const { timeframe = '1D' } = req.query;
+    
+    console.log(`📊 Chart API called for token: ${tokenAddress}, timeframe: ${timeframe}`);
+    
+    const priceHistoryService = require('./priceHistoryService');
+    const chartData = await priceHistoryService.getChartData(tokenAddress, timeframe);
+    
+    res.json({
+      success: true,
+      data: chartData
+    });
+    
+  } catch (error) {
+    console.error('❌ Chart API error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // Get current coins with priceEngine integration (optimized)
 app.get('/api/coins/trending', async (req, res) => {
   try {
@@ -341,6 +379,41 @@ app.get('/api/coins/trending', async (req, res) => {
       console.log('📦 PriceEngine not available, using global cache...');
       coins = global.coinsCache || [];
       dataSource = 'cache-only';
+    }
+    
+    // Merge Jupiter Live Prices into coin data
+    if (coins.length > 0 && jupiterLivePriceService && jupiterLivePriceService.isRunning) {
+      console.log('🪐 Merging Jupiter live prices into coin data...');
+      let jupiterPriceUpdates = 0;
+      
+      coins = coins.map(coin => {
+        const address = coin.mintAddress || coin.address || coin.tokenAddress;
+        if (address) {
+          const livePrice = jupiterLivePriceService.getPrice(address);
+          if (livePrice && livePrice.price > 0) {
+            // Update coin with live Jupiter price
+            const updatedCoin = {
+              ...coin,
+              price: livePrice.price,
+              currentPrice: livePrice.price,
+              priceSource: 'jupiter-live',
+              priceTimestamp: livePrice.timestamp,
+              priceChange: livePrice.priceChangeInstant || 0,
+              lastJupiterUpdate: livePrice.timestamp
+            };
+            jupiterPriceUpdates++;
+            return updatedCoin;
+          }
+        }
+        return coin;
+      });
+      
+      console.log(`🪐 Updated ${jupiterPriceUpdates} coins with Jupiter live prices`);
+      if (jupiterPriceUpdates > 0) {
+        dataSource += '-jupiter-enhanced';
+      }
+    } else {
+      console.log('⚠️ Jupiter Live Price Service not available for price merging');
     }
     
     // Sort coins based on requested criteria
@@ -577,6 +650,39 @@ app.get('/api/coins/fast', (req, res) => {
         timestamp: new Date().toISOString(),
         source: dataSource
       });
+    }
+    
+    // Merge Jupiter Live Prices into fast coin data
+    if (sourceCoins.length > 0 && jupiterLivePriceService && jupiterLivePriceService.isRunning) {
+      console.log('🪐 Merging Jupiter live prices into fast endpoint...');
+      let jupiterPriceUpdates = 0;
+      
+      sourceCoins = sourceCoins.map(coin => {
+        const address = coin.mintAddress || coin.address || coin.tokenAddress;
+        if (address) {
+          const livePrice = jupiterLivePriceService.getPrice(address);
+          if (livePrice && livePrice.price > 0) {
+            // Update coin with live Jupiter price
+            const updatedCoin = {
+              ...coin,
+              price: livePrice.price,
+              currentPrice: livePrice.price,
+              priceSource: 'jupiter-live',
+              priceTimestamp: livePrice.timestamp,
+              priceChange: livePrice.priceChangeInstant || 0,
+              lastJupiterUpdate: livePrice.timestamp
+            };
+            jupiterPriceUpdates++;
+            return updatedCoin;
+          }
+        }
+        return coin;
+      });
+      
+      console.log(`🪐 Updated ${jupiterPriceUpdates} coins with Jupiter live prices in fast endpoint`);
+      if (jupiterPriceUpdates > 0) {
+        dataSource += '-jupiter-enhanced';
+      }
     }
     
     // Serve coins with live data when available
@@ -1955,6 +2061,8 @@ app.post('/api/rugcheck/verify-all-progressive', async (req, res) => {
       });
     }
 
+
+
     const totalCoins = currentCoins.length;
     const remainingCoins = totalCoins - startIndex;
     const coinsToProcess = Math.min(batchSize, remainingCoins);
@@ -1969,6 +2077,7 @@ app.post('/api/rugcheck/verify-all-progressive', async (req, res) => {
           percentage: 100,
           completed: true
         }
+     
       });
     }
 
@@ -2530,214 +2639,111 @@ app.post('/api/coins/universal-enrich', async (req, res) => {
   }
 });
 
-// Get top traders for a specific token
-app.get('/api/top-traders/:token', async (req, res) => {
-  const { token } = req.params;
-  
-  if (!token) {
-    return res.status(400).json({
-      success: false,
-      error: 'Token address is required'
-    });
-  }
+// Jupiter Live Price Service endpoints
 
+// Get Jupiter live price service status
+app.get('/api/jupiter/live-price/status', (req, res) => {
   try {
-    console.log(`🔍 Fetching top traders for token: ${token}`);
-    
-    if (!SOLANA_TRACKER_API_KEY) {
-      console.warn('⚠️ SOLANA_TRACKER_API_KEY not configured, returning mock data');
-      
-      // Return mock data when API key is not available
-      const mockTraders = [
-        {
-          wallet: "7xKXm3GfJ8gM2...HjLp",
-          held: 0,
-          sold: 25000000,
-          holding: 15000000,
-          realized: 187.3,
-          unrealized: 0,
-          total: 187.3,
-          total_invested: 1200.50
-        },
-        {
-          wallet: "9bVqR2nL4jL8...3kM9",
-          held: 0,
-          sold: 18000000,
-          holding: 12000000,
-          realized: 134.7,
-          unrealized: 0,
-          total: 134.7,
-          total_invested: 890.25
-        },
-        {
-          wallet: "3nRtP5kM9kP4...7vX2",
-          held: 0,
-          sold: 12000000,
-          holding: 8000000,
-          realized: 89.2,
-          unrealized: 0,
-          total: 89.2,
-          total_invested: 650.75
-        }
-      ];
-      
-      return res.json({
-        success: true,
-        data: mockTraders,
-        count: mockTraders.length,
-        source: 'mock',
-        timestamp: new Date().toISOString()
-      });
-    }
-
-    // Make request to Solana Tracker API
-    const response = await makeSolanaTrackerRequest(`/top-traders/${token}`);
-    
-    if (!response || !Array.isArray(response)) {
-      throw new Error('Invalid response format from Solana Tracker API');
-    }
-
-    console.log(`✅ Successfully fetched ${response.length} top traders for ${token}`);
+    const stats = jupiterLivePriceService.getStats();
     
     res.json({
       success: true,
-      data: response,
-      count: response.length,
-      source: 'solana-tracker',
+      status: stats,
       timestamp: new Date().toISOString()
     });
-
-  } catch (error) {
-    console.error(`❌ Error fetching top traders for ${token}:`, error.message);
     
+  } catch (error) {
+    console.error('Error getting Jupiter live price status:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to fetch top traders',
-      details: error.message,
-      token: token
+      error: 'Failed to get Jupiter live price status',
+      details: error.message
     });
   }
 });
 
-// Individual coin lookup endpoint - fetch coin by address with full enrichment
-app.get('/api/coin/:address', async (req, res) => {
+// Manually trigger Jupiter live price update
+app.post('/api/jupiter/live-price/refresh', async (req, res) => {
   try {
-    const { address } = req.params;
-    
-    if (!address || address.length < 20) {
+    if (!jupiterLivePriceService.isRunning) {
       return res.status(400).json({
         success: false,
-        error: 'Valid token address is required'
+        error: 'Jupiter Live Price Service is not running'
       });
     }
-
-    console.log(`🔍 Looking up individual coin: ${address}`);
-
-    // First check if coin exists in curated list
-    const curatedCoin = currentCoins.find(coin => 
-      coin.mintAddress?.toLowerCase() === address.toLowerCase() || 
-      coin.tokenAddress?.toLowerCase() === address.toLowerCase() ||
-      coin.id?.toLowerCase() === address.toLowerCase()
-    );
-
-    if (curatedCoin) {
-      console.log(`✅ Found in curated list: ${curatedCoin.symbol}`);
-      return res.json({
-        success: true,
-        coin: curatedCoin,
-        source: 'curated'
-      });
-    }
-
-    // If not in curated list, try to fetch from external APIs
-    console.log(`🔍 Not in curated list, fetching from external APIs...`);
     
-    try {
-      // Create a basic coin object with the address
-      const basicCoin = {
-        mintAddress: address,
-        tokenAddress: address,
-        id: address,
-        symbol: 'UNKNOWN',
-        name: 'Unknown Token',
-        description: 'Token found via address lookup'
-      };
-
-      // Try to enrich with DexScreener first
-      let enrichedCoin = await dexscreenerService.enrichCoin(basicCoin);
-      
-      if (!enrichedCoin.enriched) {
-        // If DexScreener fails, try other sources
-        console.log('🔄 DexScreener enrichment failed, trying other sources...');
-        
-        // Try to get basic token info from Helius or other services
-        try {
-          const heliusData = await heliusService.getTokenMetadata(address);
-          if (heliusData) {
-            enrichedCoin = {
-              ...basicCoin,
-              ...heliusData,
-              source: 'helius'
-            };
-          }
-        } catch (heliusError) {
-          console.log('⚠️ Helius lookup failed:', heliusError.message);
-        }
-      }
-
-      // Apply rugcheck verification
-      try {
-        const rugcheckData = await rugcheckService.checkToken(address);
-        if (rugcheckData) {
-          enrichedCoin = {
-            ...enrichedCoin,
-            liquidityLocked: rugcheckData.liquidityLocked,
-            lockPercentage: rugcheckData.lockPercentage,
-            burnPercentage: rugcheckData.burnPercentage,
-            rugcheckScore: rugcheckData.score,
-            riskLevel: rugcheckData.riskLevel,
-            rugcheckVerified: true
-          };
-        }
-      } catch (rugcheckError) {
-        console.log('⚠️ Rugcheck verification failed:', rugcheckError.message);
-      }
-
-      // Ensure we have a banner
-      if (!enrichedCoin.banner) {
-        enrichedCoin.banner = dexscreenerService.generatePlaceholderBanner({ 
-          symbol: enrichedCoin.symbol || 'UNKNOWN' 
-        });
-      }
-
-      // If we got some data, return it
-      if (enrichedCoin.name !== 'Unknown Token' || enrichedCoin.symbol !== 'UNKNOWN') {
-        console.log(`✅ Successfully enriched external token: ${enrichedCoin.symbol}`);
-        return res.json({
-          success: true,
-          coin: enrichedCoin,
-          source: 'external-enriched'
-        });
-      }
-
-      // If no enrichment worked, return error
-      throw new Error('Unable to find token data from any source');
-
-    } catch (enrichmentError) {
-      console.error('❌ Failed to enrich external token:', enrichmentError.message);
-      return res.status(404).json({
-        success: false,
-        error: 'Token not found or unable to fetch data',
-        details: enrichmentError.message,
-        address: address
-      });
-    }
-
+    console.log('🔄 Manual Jupiter price refresh triggered');
+    await jupiterLivePriceService.fetchAllPrices();
+    
+    const stats = jupiterLivePriceService.getStats();
+    
+    res.json({
+      success: true,
+      message: 'Jupiter live prices refreshed successfully',
+      stats: stats,
+      timestamp: new Date().toISOString()
+    });
+    
   } catch (error) {
-    console.error('❌ Error in individual coin lookup:', error.message);
+    console.error('Error refreshing Jupiter live prices:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to lookup coin',
+      error: 'Failed to refresh Jupiter live prices',
+      details: error.message
+    });
+  }
+});
+
+// Start Jupiter live price service
+app.post('/api/jupiter/live-price/start', (req, res) => {
+  try {
+    if (jupiterLivePriceService.isRunning) {
+      return res.status(400).json({
+        success: false,
+        error: 'Jupiter Live Price Service is already running'
+      });
+    }
+    
+    jupiterLivePriceService.start(currentCoins);
+    
+    // Set up event listener for WebSocket broadcasting
+    jupiterLivePriceService.on('prices-updated', (priceUpdates) => {
+      wsServer.broadcastJupiterPrices(priceUpdates);
+    });
+    
+    res.json({
+      success: true,
+      message: 'Jupiter Live Price Service started successfully',
+      stats: jupiterLivePriceService.getStats(),
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('Error starting Jupiter live price service:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to start Jupiter live price service',
+      details: error.message
+    });
+  }
+});
+
+// Stop Jupiter live price service
+app.post('/api/jupiter/live-price/stop', (req, res) => {
+  try {
+    jupiterLivePriceService.stop();
+    
+    res.json({
+      success: true,
+      message: 'Jupiter Live Price Service stopped successfully',
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('Error stopping Jupiter live price service:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to stop Jupiter live price service',
       details: error.message
     });
   }
@@ -2768,6 +2774,21 @@ server.listen(PORT, () => {
     // Start price engine after initialization
     setTimeout(() => {
       priceEngine.start();
+      
+      // Start Jupiter Live Price Service with current coins
+      setTimeout(() => {
+        console.log('🪐 Starting Jupiter Live Price Service...');
+        if (currentCoins && currentCoins.length > 0) {
+          jupiterLivePriceService.start(currentCoins);
+          
+          // Update WebSocket server to handle Jupiter price updates
+          jupiterLivePriceService.on('prices-updated', (priceUpdates) => {
+            wsServer.broadcastJupiterPrices(priceUpdates);
+          });
+        } else {
+          console.log('⚠️ No coins available for Jupiter Live Price Service');
+        }
+      }, 1000);
     }, 2000);
   }, 1000); // Give server time to be healthy first
 });
@@ -2776,6 +2797,7 @@ server.listen(PORT, () => {
 process.on('SIGTERM', () => {
   console.log('🛑 Received SIGTERM signal, shutting down gracefully...');
   priceEngine.stop();
+  jupiterLivePriceService.stop();
   wsServer.shutdown();
   server.close(() => {
     console.log('✅ Server shut down complete');
@@ -2786,6 +2808,7 @@ process.on('SIGTERM', () => {
 process.on('SIGINT', () => {
   console.log('🛑 Received SIGINT signal, shutting down gracefully...');
   priceEngine.stop();
+  jupiterLivePriceService.stop();
   wsServer.shutdown();
   server.close(() => {
     console.log('✅ Server shut down complete');

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chart API Test</title>
+</head>
+<body>
+    <h1>Chart API Test</h1>
+    <div id="output"></div>
+    
+    <script>
+        async function testChartAPI() {
+            try {
+                console.log('Testing chart API...');
+                
+                const tokenAddress = '26VfKb7jjtdEdvfovoBijScoZmJbWWasFZkgfUD5w7cy'; // Mog Coin
+                const url = `http://localhost:3001/api/chart/${tokenAddress}?timeframe=1D`;
+                
+                console.log('Fetching from:', url);
+                
+                const response = await fetch(url);
+                console.log('Response status:', response.status);
+                console.log('Response headers:', [...response.headers.entries()]);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                console.log('Response data:', data);
+                
+                document.getElementById('output').innerHTML = `
+                    <h2>✅ Success!</h2>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+                
+            } catch (error) {
+                console.error('❌ Error:', error);
+                document.getElementById('output').innerHTML = `
+                    <h2>❌ Error!</h2>
+                    <p>${error.message}</p>
+                    <p>Check browser console for details.</p>
+                `;
+            }
+        }
+        
+        // Test immediately when page loads
+        testChartAPI();
+    </script>
+</body>
+</html>

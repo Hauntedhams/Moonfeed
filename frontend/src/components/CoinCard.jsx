@@ -1,7 +1,7 @@
 import React, { memo, useState, useRef, useEffect } from 'react';
 import './CoinCard.css';
 import DexScreenerChart from './DexScreenerChart';
-import CleanPriceChart from './CleanPriceChart';
+import PriceHistoryChart from './PriceHistoryChart';
 import LiquidityLockIndicator from './LiquidityLockIndicator';
 import TopTradersList from './TopTradersList';
 import { useLiveData } from '../hooks/useLiveData';
@@ -173,10 +173,22 @@ const CoinCard = memo(({
   };
 
   // Expand toggle
-  const handleExpandToggle = () => {
+  const handleExpandToggle = (e) => {
+    e?.preventDefault();
+    e?.stopPropagation();
+    
+    // Additional prevention of any bubbling
+    if (e?.nativeEvent) {
+      e.nativeEvent.stopImmediatePropagation();
+    }
+    
+    console.log('🔄 Expand toggle clicked, current state:', isExpanded);
     const next = !isExpanded;
     setIsExpanded(next);
+    
+    // Call parent's expand change handler which should lock scrolling
     onExpandChange?.(next);
+    console.log('🔄 Expand toggle new state:', next);
   };
 
   // Chart navigation functions
@@ -192,11 +204,24 @@ const CoinCard = memo(({
   };
 
   const navigateToChartPage = (pageIndex) => {
-    if (!chartsContainerRef.current) return;
+    const navigationStartTime = Date.now();
+    console.log('🔍 [NAVIGATION DIAGNOSTIC] Navigating to chart page:', pageIndex);
+    
+    if (!chartsContainerRef.current) {
+      console.log('❌ [NAVIGATION DIAGNOSTIC] No chart container ref');
+      return;
+    }
     
     const container = chartsContainerRef.current;
     const containerWidth = container.clientWidth;
     const targetScrollLeft = pageIndex * containerWidth;
+    
+    console.log('🔍 [NAVIGATION DIAGNOSTIC] Container info:', {
+      containerWidth,
+      currentScrollLeft: container.scrollLeft,
+      targetScrollLeft,
+      pageIndex
+    });
     
     container.scrollTo({
       left: targetScrollLeft,
@@ -204,6 +229,9 @@ const CoinCard = memo(({
     });
     
     setCurrentChartPage(pageIndex);
+    
+    const navigationDuration = Date.now() - navigationStartTime;
+    console.log('🔍 [NAVIGATION DIAGNOSTIC] Navigation completed in', navigationDuration, 'ms');
   };
 
   // Add scroll listener for chart navigation
@@ -332,8 +360,8 @@ const CoinCard = memo(({
   const ageHours = liveData?.ageHours ?? coin.ageHours ?? coin.dexscreener?.poolInfo?.ageHours ?? 0;
   const boosts = liveData?.boosts ?? coin.boosts ?? coin.dexscreener?.boosts ?? 0;
 
-  // Debug log for social links
-  if (coin.socialLinks || coin.twitter || coin.telegram || coin.website) {
+  // Debug log for social links - reduce frequency to prevent console spam
+  if ((coin.socialLinks || coin.twitter || coin.telegram || coin.website) && Math.random() < 0.05) {
     console.log(`🔗 Social data available for ${coin.symbol}:`, {
       socialLinks: coin.socialLinks,
       twitter: coin.twitter,
@@ -359,11 +387,17 @@ const CoinCard = memo(({
             src={coin.banner || coin.bannerImage || coin.header || coin.bannerUrl}
             alt={coin.name || 'Token banner'}
             onError={(e) => { 
-              console.log(`Banner image failed to load for ${coin.symbol}:`, e.currentTarget.src);
+              // Reduce image error logging to prevent spam
+              if (Math.random() < 0.1) {
+                console.log(`Banner image failed to load for ${coin.symbol}:`, e.currentTarget.src);
+              }
               e.currentTarget.style.display = 'none'; 
             }}
             onLoad={() => {
-              console.log(`✅ Banner loaded successfully for ${coin.symbol}`);
+              // Reduce successful load logging
+              if (Math.random() < 0.05) {
+                console.log(`✅ Banner loaded successfully for ${coin.symbol}`);
+              }
             }}
           />
         ) : (
@@ -434,10 +468,18 @@ const CoinCard = memo(({
               
               <div className="price-section">
                 <div className={`coin-price ${priceFlash}`}>
-                  {/* Live indicator */}
-                  <div className={`live-indicator ${connected ? 'connected' : 'disconnected'}`} 
-                       title={connected ? 'Connected to live data' : 'Disconnected from live data'}>
-                    <div className="live-dot"></div>
+                  {/* Live indicators */}
+                  <div className="live-indicators">
+                    <div className={`live-indicator ${connected ? 'connected' : 'disconnected'}`} 
+                         title={connected ? 'Connected to live data' : 'Disconnected from live data'}>
+                      <div className="live-dot"></div>
+                    </div>
+                    {liveData?.jupiterLive && (
+                      <div className="jupiter-live-indicator" 
+                           title="Live Jupiter pricing active">
+                        🪐
+                      </div>
+                    )}
                   </div>
                   {formatPrice(price)}
                 </div>
@@ -448,7 +490,29 @@ const CoinCard = memo(({
             </div>
 
             <div className="header-right">
-              <div className="expand-handle" onClick={handleExpandToggle} />
+              <div 
+                className="expand-handle" 
+                onClick={handleExpandToggle}
+                onMouseDown={(e) => e.stopPropagation()}
+                onTouchStart={(e) => e.stopPropagation()}
+                onTouchEnd={(e) => e.stopPropagation()}
+                onTouchMove={(e) => e.stopPropagation()}
+                style={{ 
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  WebkitUserSelect: 'none',
+                  touchAction: 'none'
+                }}
+                aria-label="Expand coin details"
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleExpandToggle(e);
+                  }
+                }}
+              />
             </div>
           </div>
 
@@ -615,48 +679,72 @@ const CoinCard = memo(({
                   className={`chart-label ${currentChartPage === 0 ? 'active' : ''}`} 
                   onClick={() => navigateToChartPage(0)}
                 >
-                  Clean View
+                  Clean
                 </span>
                 <span 
                   className={`chart-label ${currentChartPage === 1 ? 'active' : ''}`} 
                   onClick={() => navigateToChartPage(1)}
                 >
-                  Advanced View
+                  Advanced
                 </span>
               </div>
             </div>
             <div className="charts-horizontal-container" ref={chartsContainerRef}>
-              {/* Clean Chart Page */}
+              {/* Graph Page */}
               <div className="chart-page">
-                <div className="clean-chart-wrapper">
-                  <CleanPriceChart 
-                    coin={coin} 
-                    chartData={chartData} 
-                    liveData={liveData}
-                    width="100%" 
-                    height={200} 
-                  />
+                <div className="price-history-wrapper">
+                  {currentChartPage === 0 ? (
+                    <PriceHistoryChart 
+                      coin={coin} 
+                      width="100%" 
+                      height={200} 
+                    />
+                  ) : (
+                    <div className="chart-placeholder" style={{ 
+                      background: 'white', 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'center',
+                      color: '#666',
+                      fontSize: '14px'
+                    }}>
+                      Chart will load when tab is selected
+                    </div>
+                  )}
                 </div>
               </div>
               
-              {/* Advanced Chart Page */}
+              {/* Advanced View Page */}
               <div className="chart-page">
                 <div className="advanced-chart-wrapper">
-                  {coin.pairAddress || coin.tokenAddress ? (
-                    <DexScreenerChart 
-                      coin={{
-                        ...coin,
-                        chainId: coin.chainId || 'solana',
-                        pairAddress: coin.pairAddress || coin.tokenAddress || coin.mintAddress,
-                        tokenAddress: coin.tokenAddress || coin.mintAddress || coin.pairAddress,
-                        symbol: coin.symbol || coin.baseToken?.symbol
-                      }} 
-                      isPreview={false}
-                    />
-                  ) : chartComponent ? (
-                    chartComponent
+                  {currentChartPage === 1 ? (
+                    coin.pairAddress || coin.tokenAddress ? (
+                      <DexScreenerChart 
+                        coin={{
+                          ...coin,
+                          chainId: coin.chainId || 'solana',
+                          pairAddress: coin.pairAddress || coin.tokenAddress || coin.mintAddress,
+                          tokenAddress: coin.tokenAddress || coin.mintAddress || coin.pairAddress,
+                          symbol: coin.symbol || coin.baseToken?.symbol
+                        }} 
+                        isPreview={false}
+                      />
+                    ) : chartComponent ? (
+                      chartComponent
+                    ) : (
+                      <div className="chart-placeholder">Chart data unavailable</div>
+                    )
                   ) : (
-                    <div className="chart-placeholder">Chart data unavailable</div>
+                    <div className="chart-placeholder" style={{ 
+                      background: 'white', 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'center',
+                      color: '#666',
+                      fontSize: '14px'
+                    }}>
+                      Advanced chart will load when tab is selected
+                    </div>
                   )}
                 </div>
               </div>
@@ -676,15 +764,153 @@ const CoinCard = memo(({
             
             {/* Swipe Hint */}
             <div className="swipe-hint">
-              <span>← Swipe for {currentChartPage === 0 ? 'Advanced' : 'Clean'} Chart →</span>
+              <span>← Swipe for {
+                currentChartPage === 0 ? 'Advanced' : 'Clean'
+              } →</span>
             </div>
           </div>
 
-          {/* Top Traders */}
-          <div className="top-traders-section">
-            <h3 className="section-title">Top Traders</h3>
+          {/* Token Information - Comprehensive Solana Tracker Data */}
+          <div className="token-info-grid-section">
+            <h3 className="section-title">Token Information</h3>
             <div className="section-content">
-              <TopTradersList coinAddress={coin.mintAddress} />
+              <div className="info-grid">
+                {/* Row 1: Trading Activity */}
+                {(coin.buys_24h > 0 || coin.sells_24h > 0 || coin.transactions_24h > 0) && (
+                  <div className="info-card">
+                    <div className="info-card-header">📊 Trading Activity (24h)</div>
+                    <div className="info-card-content">
+                      {coin.buys_24h > 0 && (
+                        <div className="info-row">
+                          <span className="info-label">Buys:</span>
+                          <span className="info-value positive">{coin.buys_24h.toLocaleString()}</span>
+                        </div>
+                      )}
+                      {coin.sells_24h > 0 && (
+                        <div className="info-row">
+                          <span className="info-label">Sells:</span>
+                          <span className="info-value negative">{coin.sells_24h.toLocaleString()}</span>
+                        </div>
+                      )}
+                      {coin.transactions_24h > 0 && (
+                        <div className="info-row">
+                          <span className="info-label">Total Transactions:</span>
+                          <span className="info-value">{coin.transactions_24h.toLocaleString()}</span>
+                        </div>
+                      )}
+                      {coin.buys_24h > 0 && coin.sells_24h > 0 && (
+                        <div className="info-row">
+                          <span className="info-label">Buy/Sell Ratio:</span>
+                          <span className={`info-value ${coin.buys_24h > coin.sells_24h ? 'positive' : 'negative'}`}>
+                            {(coin.buys_24h / coin.sells_24h).toFixed(2)}x
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Row 2: Market Metrics */}
+                <div className="info-card">
+                  <div className="info-card-header">💰 Market Metrics</div>
+                  <div className="info-card-content">
+                    {coin.market_cap_usd > 0 && (
+                      <div className="info-row">
+                        <span className="info-label">Market Cap:</span>
+                        <span className="info-value">${formatCompact(coin.market_cap_usd)}</span>
+                      </div>
+                    )}
+                    {coin.volume_24h_usd > 0 && (
+                      <div className="info-row">
+                        <span className="info-label">24h Volume:</span>
+                        <span className="info-value">${formatCompact(coin.volume_24h_usd)}</span>
+                      </div>
+                    )}
+                    {coin.liquidity_usd > 0 && (
+                      <div className="info-row">
+                        <span className="info-label">Liquidity:</span>
+                        <span className="info-value">${formatCompact(coin.liquidity_usd)}</span>
+                      </div>
+                    )}
+                    {coin.volume_24h_usd > 0 && coin.liquidity_usd > 0 && (
+                      <div className="info-row">
+                        <span className="info-label">Volume/Liquidity:</span>
+                        <span className="info-value">{(coin.volume_24h_usd / coin.liquidity_usd).toFixed(2)}x</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Row 3: Token Age & Creation */}
+                {(coin.age || coin.ageHours || coin.created_timestamp) && (
+                  <div className="info-card">
+                    <div className="info-card-header">🕐 Token Age</div>
+                    <div className="info-card-content">
+                      {(coin.age || coin.ageHours) && (
+                        <div className="info-row">
+                          <span className="info-label">Age:</span>
+                          <span className="info-value">
+                            {(() => {
+                              const hours = coin.age || coin.ageHours || 0;
+                              if (hours < 24) return `${hours}h`;
+                              const days = Math.floor(hours / 24);
+                              const remainingHours = hours % 24;
+                              return `${days}d ${remainingHours}h`;
+                            })()}
+                          </span>
+                        </div>
+                      )}
+                      {coin.created_timestamp && (
+                        <div className="info-row">
+                          <span className="info-label">Created:</span>
+                          <span className="info-value">
+                            {new Date(coin.created_timestamp).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Row 4: Additional Metrics */}
+                {(coin.holders || coin.holderCount || coin.priorityScore) && (
+                  <div className="info-card">
+                    <div className="info-card-header">📈 Additional Metrics</div>
+                    <div className="info-card-content">
+                      {(coin.holders || coin.holderCount) && (
+                        <div className="info-row">
+                          <span className="info-label">Holders:</span>
+                          <span className="info-value">{formatCompact(coin.holders || coin.holderCount)}</span>
+                        </div>
+                      )}
+                      {coin.market || coin.dexId && (
+                        <div className="info-row">
+                          <span className="info-label">Exchange:</span>
+                          <span className="info-value">{coin.market || coin.dexId || 'Unknown'}</span>
+                        </div>
+                      )}
+                      {coin.priorityScore?.score && (
+                        <div className="info-row">
+                          <span className="info-label">Priority Score:</span>
+                          <span className="info-value">{coin.priorityScore.score.toFixed(1)}</span>
+                        </div>
+                      )}
+                      {coin.source && (
+                        <div className="info-row">
+                          <span className="info-label">Data Source:</span>
+                          <span className="info-value" style={{fontSize: '0.8rem'}}>{coin.source}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 

@@ -14,6 +14,7 @@ const ModernTokenScroller = ({
   filters = {}, 
   onTradeClick,
   onCurrentCoinChange, // Add this callback to notify parent about current coin
+  onTotalCoinsChange, // Add this callback to notify parent about total coins
   advancedFilters = null, // Add advanced filters prop
   // New props for filter handling
   onAdvancedFilter = null,
@@ -81,7 +82,7 @@ const ModernTokenScroller = ({
 
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [currentIndex, coins.length, calculateVisibleRange]);
+  }, []); // Remove dependencies to prevent infinite loop
 
   // Enrich coins with DexScreener data
   const enrichCoins = useCallback(async (mintAddresses) => {
@@ -190,6 +191,7 @@ const ModernTokenScroller = ({
       if (onlyFavorites) {
         // Use favorites from props
         setCoins(favorites);
+        onTotalCoinsChange?.(favorites.length); // Notify parent of total coins
         setLoading(false);
         return;
       }
@@ -266,6 +268,7 @@ const ModernTokenScroller = ({
       let sortedCoins = [...data.coins];
       
       setCoins(sortedCoins);
+      onTotalCoinsChange?.(sortedCoins.length); // Notify parent of total coins
       
       // Start background enrichment immediately after fast load
       // Disable background enrichment on mobile for better performance
@@ -400,7 +403,7 @@ const ModernTokenScroller = ({
       onlyFavorites 
     });
     fetchCoins();
-  }, [fetchCoins]);
+  }, [filters.type, onlyFavorites, JSON.stringify(advancedFilters)]); // Use specific dependencies instead of fetchCoins
 
   // Force enrich all coins after initial load - DISABLED to prevent white flash
   // useEffect(() => {
@@ -421,32 +424,60 @@ const ModernTokenScroller = ({
       if (mintAddresses.length > 0) {
         enrichCoins(mintAddresses);
       }
-    }  }, [coins.length, enrichCoins, getCoinsToEnrich]);
+    }
+  }, [coins.length]); // Remove enrichCoins and getCoinsToEnrich dependencies to prevent infinite loop
 
   // Update visible range for virtual scrolling when current index changes
   useEffect(() => {
     if (isMobile && coins.length > 0) {
       const newRange = calculateVisibleRange(currentIndex, coins.length);
-      console.log(`📱 Virtual scrolling update: Index ${currentIndex}, Range ${newRange.start}-${newRange.end}, Total: ${coins.length}`);
+      // Only log significant changes to reduce console spam
+      if (Math.abs(newRange.start - visibleRange.start) > 2) {
+        console.log(`📱 Virtual scrolling update: Index ${currentIndex}, Range ${newRange.start}-${newRange.end}, Total: ${coins.length}`);
+      }
       setVisibleRange(newRange);
-      const stats = getVirtualScrollStats();
-      console.log(`📱 Virtual scrolling stats: ${stats.rendered}/${stats.total} = ${stats.percentage}% rendered`);
     } else if (!isMobile && coins.length > 0) {
-      console.log(`💻 Desktop mode: Rendering all ${coins.length} coins (100% rendered)`);
+      // Only log once on initial desktop load
+      if (visibleRange.start !== 0 || visibleRange.end !== coins.length - 1) {
+        console.log(`💻 Desktop mode: Rendering all ${coins.length} coins (100% rendered)`);
+      }
       setVisibleRange({ start: 0, end: coins.length - 1 });
-    } else {
-      console.log(`⏸️ No virtual scrolling: isMobile=${isMobile}, coins=${coins.length}`);
     }
-  }, [currentIndex, coins.length, isMobile, calculateVisibleRange, getVirtualScrollStats]);
+  }, [currentIndex, coins.length, isMobile]);
 
   // Handle expand state changes for coins
   const handleCoinExpandChange = useCallback((isExpanded, coinAddress) => {
+    const container = scrollerRef.current;
+    
     if (isExpanded) {
+      // Lock scrolling when coin expands
       setExpandedCoin(coinAddress);
       isScrollLocked.current = true;
+      
+      // Save current scroll position to prevent jumping
+      if (container) {
+        const scrollTop = container.scrollTop;
+        // Immediately restore scroll position to prevent drift
+        requestAnimationFrame(() => {
+          if (container) {
+            container.scrollTop = scrollTop;
+          }
+        });
+      }
     } else {
+      // Unlock scrolling when coin collapses
       setExpandedCoin(null);
       isScrollLocked.current = false;
+      
+      // Restore scroll position after collapse animation
+      if (container) {
+        const scrollTop = container.scrollTop;
+        requestAnimationFrame(() => {
+          if (container) {
+            container.scrollTop = scrollTop;
+          }
+        });
+      }
     }
   }, []);
 
@@ -589,7 +620,7 @@ const ModernTokenScroller = ({
       // Notify parent component
       onCurrentCoinChange?.(enrichedCoin, currentIndex);
     }
-  }, [currentIndex, coins, enrichedCoins, getEnrichedCoin, onCurrentCoinChange]);
+  }, [currentIndex, coins.length]); // Remove getEnrichedCoin and enrichedCoins dependencies
   
   // Enrich current coin when currentIndex changes
   useEffect(() => {
@@ -601,10 +632,13 @@ const ModernTokenScroller = ({
         enrichCoins([currentCoin.mintAddress]);
       }
     }
-  }, [currentIndex, coins, enrichedCoins, enrichCoins]);
+  }, [currentIndex, coins.length]); // Remove enrichedCoins and enrichCoins dependencies
   
-  // Debug logging
-  console.log(`📊 ModernTokenScroller render: coins=${coins.length}, loading=${loading}, error=${error}, isMobile=${isMobile}, visibleRange=${JSON.stringify(visibleRange)}`);
+  // Debug logging - reduce frequency to prevent console spam
+  const shouldLog = Math.random() < 0.1; // Only log 10% of renders
+  if (shouldLog) {
+    console.log(`📊 ModernTokenScroller render: coins=${coins.length}, loading=${loading}, error=${error}, isMobile=${isMobile}, visibleRange=${JSON.stringify(visibleRange)}`);
+  }
   
   if (loading && coins.length === 0) {
     return (
@@ -677,7 +711,10 @@ const ModernTokenScroller = ({
             (() => {
               const start = Math.max(0, visibleRange.start);
               const end = Math.min(coins.length - 1, visibleRange.end);
-              console.log(`📱 Mobile rendering: ${start}-${end} from ${coins.length} coins`);
+              // Reduce mobile rendering logs
+              if (Math.random() < 0.1) {
+                console.log(`📱 Mobile rendering: ${start}-${end} from ${coins.length} coins`);
+              }
               
               if (start > end || start >= coins.length) {
                 console.log(`❌ Invalid range: start=${start}, end=${end}, length=${coins.length}`);
@@ -702,20 +739,7 @@ const ModernTokenScroller = ({
       
 
       
-      {/* Scroll indicator */}
-      <div className="scroll-indicator">
-        <div className="indicator-track">
-          <div 
-            className="indicator-thumb"
-            style={{
-              transform: `translateY(${(currentIndex / Math.max(1, coins.length - 1)) * 100}%)`
-            }}
-          />
-        </div>
-        <div className="coin-counter">
-          {currentIndex + 1} / {coins.length}
-        </div>
-      </div>
+      {/* Scroll indicator removed - was blocking expand button interactions */}
     </div>
   );
 };

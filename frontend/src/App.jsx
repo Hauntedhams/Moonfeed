@@ -33,6 +33,8 @@ function App() {
   const [coinToTrade, setCoinToTrade] = useState(null); // Coin selected for trading
   const [coinListModalOpen, setCoinListModalOpen] = useState(false); // Coin list modal
   const [coinListModalFilter, setCoinListModalFilter] = useState(null); // Filter type for coin list modal
+  const [currentCoinIndex, setCurrentCoinIndex] = useState(0); // Current coin index in scroller
+  const [totalCoinsInList, setTotalCoinsInList] = useState(0); // Total coins in current list
 
   // Listen for favorites changes from TokenScroller
   const handleFavoritesChange = (newFavs) => {
@@ -80,6 +82,11 @@ function App() {
     setVisibleCoins(coins);
   };
 
+  // Handle total coins update from TokenScroller
+  const handleTotalCoinsChange = (total) => {
+    setTotalCoinsInList(total);
+  };
+
   // Handle current coin change from TokenScroller (for auto-tracking the coin in view)
   const handleCurrentCoinChange = (coin, index) => {
     console.log('🎯 APP: Current coin changed:', {
@@ -91,6 +98,7 @@ function App() {
     });
     
     setCurrentViewedCoin(coin);
+    setCurrentCoinIndex(index); // Track the current coin index
   };
 
   // Ensure the current viewed coin is set when viewing a specific coin detail
@@ -253,6 +261,7 @@ function App() {
           onTradeClick={handleTradeClick}
           onVisibleCoinsChange={handleVisibleCoinsChange}
           onCurrentCoinChange={handleCurrentCoinChange}
+          onTotalCoinsChange={handleTotalCoinsChange}
           advancedFilters={advancedFilters}
           onAdvancedFilter={handleAdvancedFilter}
           isAdvancedFilterActive={isAdvancedFilterActive}
@@ -284,6 +293,8 @@ function App() {
         onClose={() => setCoinListModalOpen(false)}
         filterType={coinListModalFilter}
         onCoinSelect={handleCoinFromList}
+        currentCoinIndex={currentCoinIndex}
+        totalCoins={totalCoinsInList}
       />
       
       {/* Jupiter Trade Modal */}

@@ -11,12 +11,12 @@
 #root {
   width: 100%;
   max-width: 430px; /* Phone width */
-  height: 100vh;
+  height: 100dvh; /* Use dynamic viewport height */
   margin: 0 auto; /* Center on larger screens */
   padding: 0;
   display: block; /* Changed from flex to block */
   background: linear-gradient(135deg, #0b1220 0%, #0e1426 50%, #0b1220 100%);
-  min-height: 100vh;
+  min-height: 100dvh; /* Use dynamic viewport height */
   box-sizing: border-box;
   position: relative;
 }
@@ -80,5 +80,45 @@
 @media (prefers-reduced-motion: no-preference) {
   a:nth-of-type(2) .logo {
     animation: logo-spin infinite 20s linear;
+  }
+}
+
+/* Fallback for browsers that don't support dvh */
+@supports not (height: 100dvh) {
+  #root {
+    height: 100vh;
+    min-height: 100vh;
+  }
+  
+  .coin-card {
+    height: 100vh;
+  }
+  
+  .modern-token-scroller {
+    height: 100vh;
+  }
+  
+  .modern-scroller-container {
+    height: 100vh;
+  }
+  
+  .modern-coin-slide {
+    height: 100vh;
+  }
+  
+  .modern-scroller-loading {
+    height: 100vh;
+  }
+  
+  .modern-scroller-error {
+    height: 100vh;
+  }
+  
+  .coin-info-layer {
+    height: calc(100vh - clamp(260px, 40vh, 360px));
+  }
+  
+  .coin-info-layer.expanded {
+    height: calc(100vh - 80px);
   }
 }
