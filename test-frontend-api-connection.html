@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Frontend API Connection Test</title>
+  <style>
+    body {
+      font-family: monospace;
+      max-width: 1200px;
+      margin: 20px auto;
+      padding: 20px;
+      background: #0a0a0a;
+      color: #00ff88;
+    }
+    .test-section {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 20px 0;
+    }
+    .test-section h2 {
+      color: #00d4ff;
+      margin-top: 0;
+    }
+    .success { color: #00ff88; }
+    .error { color: #ff4444; }
+    .warning { color: #ffaa00; }
+    .info { color: #00d4ff; }
+    pre {
+      background: #0a0a0a;
+      padding: 15px;
+      border-radius: 4px;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+    button {
+      background: #00d4ff;
+      color: #0a0a0a;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: bold;
+      margin: 5px;
+    }
+    button:hover {
+      background: #00ff88;
+    }
+  </style>
+</head>
+<body>
+  <h1>🔍 Frontend API Connection Diagnostic</h1>
+  <p class="info">This tests the exact API calls the frontend makes to the backend.</p>
+
+  <div class="test-section">
+    <h2>1. Environment Detection</h2>
+    <div id="env-info">Detecting...</div>
+  </div>
+
+  <div class="test-section">
+    <h2>2. API Base URL</h2>
+    <div id="api-url">Calculating...</div>
+  </div>
+
+  <div class="test-section">
+    <h2>3. CORS Preflight Test</h2>
+    <button onclick="testCORS()">Test CORS</button>
+    <div id="cors-result"></div>
+  </div>
+
+  <div class="test-section">
+    <h2>4. Health Check</h2>
+    <button onclick="testHealth()">Test Health Endpoint</button>
+    <div id="health-result"></div>
+  </div>
+
+  <div class="test-section">
+    <h2>5. Trending Coins API</h2>
+    <button onclick="testTrending()">Test Trending Endpoint</button>
+    <div id="trending-result"></div>
+  </div>
+
+  <div class="test-section">
+    <h2>6. New Coins API</h2>
+    <button onclick="testNew()">Test New Endpoint</button>
+    <div id="new-result"></div>
+  </div>
+
+  <div class="test-section">
+    <h2>7. Network Diagnostics</h2>
+    <button onclick="runFullDiagnostic()">Run Full Diagnostic</button>
+    <div id="diagnostic-result"></div>
+  </div>
+
+  <script>
+    // Mimic frontend's API detection logic
+    const getApiBaseUrl = () => {
+      // Check if running locally
+      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        return 'http://localhost:3001';
+      }
+      // Production
+      return 'https://api.moonfeed.app';
+    };
+
+    const API_BASE_URL = getApiBaseUrl();
+    const API_COINS = `${API_BASE_URL}/api/coins`;
+
+    // Update environment info
+    document.getElementById('env-info').innerHTML = `
+      <pre class="info">
+Hostname: ${window.location.hostname}
+Protocol: ${window.location.protocol}
+Port: ${window.location.port || 'default'}
+Environment: ${window.location.hostname === 'localhost' ? 'DEVELOPMENT' : 'PRODUCTION'}
+      </pre>
+    `;
+
+    document.getElementById('api-url').innerHTML = `
+      <pre class="info">
+API Base URL: ${API_BASE_URL}
+API Coins URL: ${API_COINS}
+Trending: ${API_COINS}/trending
+New: ${API_COINS}/new
+      </pre>
+    `;
+
+    async function testCORS() {
+      const result = document.getElementById('cors-result');
+      result.innerHTML = '<p class="info">Testing CORS...</p>';
+      
+      try {
+        const response = await fetch(`${API_BASE_URL}/health`, {
+          method: 'OPTIONS',
+          headers: {
+            'Origin': window.location.origin,
+            'Access-Control-Request-Method': 'GET',
+            'Access-Control-Request-Headers': 'Content-Type'
+          }
+        });
+        
+        result.innerHTML = `
+          <pre class="success">
+✅ CORS Preflight Successful
+Status: ${response.status}
+Allow Origin: ${response.headers.get('access-control-allow-origin') || 'Not set'}
+Allow Methods: ${response.headers.get('access-control-allow-methods') || 'Not set'}
+          </pre>
+        `;
+      } catch (error) {
+        result.innerHTML = `<pre class="error">❌ CORS Error: ${error.message}</pre>`;
+      }
+    }
+
+    async function testHealth() {
+      const result = document.getElementById('health-result');
+      result.innerHTML = '<p class="info">Testing health endpoint...</p>';
+      
+      try {
+        const startTime = Date.now();
+        const response = await fetch(`${API_BASE_URL}/health`);
+        const endTime = Date.now();
+        const data = await response.json();
+        
+        result.innerHTML = `
+          <pre class="success">
+✅ Health Check Successful
+Status: ${response.status}
+Response Time: ${endTime - startTime}ms
+Data: ${JSON.stringify(data, null, 2)}
+          </pre>
+        `;
+      } catch (error) {
+        result.innerHTML = `<pre class="error">❌ Health Check Failed: ${error.message}</pre>`;
+      }
+    }
+
+    async function testTrending() {
+      const result = document.getElementById('trending-result');
+      result.innerHTML = '<p class="info">Testing trending endpoint...</p>';
+      
+      try {
+        const startTime = Date.now();
+        const response = await fetch(`${API_COINS}/trending?limit=5`);
+        const endTime = Date.now();
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        result.innerHTML = `
+          <pre class="success">
+✅ Trending API Successful
+Status: ${response.status}
+Response Time: ${endTime - startTime}ms
+Coins Returned: ${data.count || 0}
+Total Available: ${data.total || 0}
+
+Sample Coin:
+${data.coins && data.coins[0] ? JSON.stringify({
+  symbol: data.coins[0].symbol,
+  name: data.coins[0].name,
+  price: data.coins[0].price_usd,
+  marketCap: data.coins[0].market_cap_usd,
+  liquidity: data.coins[0].liquidity_usd
+}, null, 2) : 'No coins'}
+          </pre>
+        `;
+      } catch (error) {
+        result.innerHTML = `<pre class="error">❌ Trending API Failed: ${error.message}</pre>`;
+      }
+    }
+
+    async function testNew() {
+      const result = document.getElementById('new-result');
+      result.innerHTML = '<p class="info">Testing new endpoint...</p>';
+      
+      try {
+        const startTime = Date.now();
+        const response = await fetch(`${API_COINS}/new?limit=5`);
+        const endTime = Date.now();
+        
+        if (!response.ok) {
+          if (response.status === 503) {
+            const data = await response.json();
+            result.innerHTML = `
+              <pre class="warning">
+⏳ New Feed Not Ready Yet
+Status: ${response.status}
+Message: ${data.message || 'Loading...'}
+This is normal for the first 30 seconds after backend startup.
+              </pre>
+            `;
+            return;
+          }
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        result.innerHTML = `
+          <pre class="success">
+✅ New Coins API Successful
+Status: ${response.status}
+Response Time: ${endTime - startTime}ms
+Coins Returned: ${data.count || 0}
+Total Available: ${data.total || 0}
+
+Sample Coin:
+${data.coins && data.coins[0] ? JSON.stringify({
+  symbol: data.coins[0].symbol,
+  name: data.coins[0].name,
+  price: data.coins[0].price_usd,
+  age: data.coins[0].ageHours + 'h',
+  volume5m: data.coins[0].volume_5m
+}, null, 2) : 'No coins'}
+          </pre>
+        `;
+      } catch (error) {
+        result.innerHTML = `<pre class="error">❌ New Coins API Failed: ${error.message}</pre>`;
+      }
+    }
+
+    async function runFullDiagnostic() {
+      const result = document.getElementById('diagnostic-result');
+      result.innerHTML = '<p class="info">Running full diagnostic...</p>';
+      
+      const diagnosticResults = [];
+      
+      // Test 1: DNS Resolution
+      diagnosticResults.push(`
+<h3>DNS Resolution</h3>
+Backend Domain: api.moonfeed.app
+Current Origin: ${window.location.origin}
+      `);
+      
+      // Test 2: All endpoints
+      const endpoints = [
+        { name: 'Health', url: `${API_BASE_URL}/health` },
+        { name: 'API Health', url: `${API_BASE_URL}/api/health` },
+        { name: 'Status', url: `${API_BASE_URL}/api/status` },
+        { name: 'Trending', url: `${API_COINS}/trending?limit=1` },
+        { name: 'New', url: `${API_COINS}/new?limit=1` }
+      ];
+      
+      for (const endpoint of endpoints) {
+        try {
+          const startTime = Date.now();
+          const response = await fetch(endpoint.url);
+          const endTime = Date.now();
+          const statusClass = response.ok ? 'success' : 'warning';
+          diagnosticResults.push(`
+<div class="${statusClass}">
+  ✓ ${endpoint.name}: ${response.status} (${endTime - startTime}ms)
+</div>
+          `);
+        } catch (error) {
+          diagnosticResults.push(`
+<div class="error">
+  ✗ ${endpoint.name}: ${error.message}
+</div>
+          `);
+        }
+      }
+      
+      result.innerHTML = `<pre>${diagnosticResults.join('\n')}</pre>`;
+    }
+  </script>
+</body>
+</html>
