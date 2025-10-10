@@ -11,7 +11,10 @@ import ProfileView from './components/ProfileView'
 import JupiterTradeModal from './components/JupiterTradeModal'
 
 function App() {
-  console.log('%cMoonfeed redeploy test: build timestamp ' + new Date().toISOString(), 'background: #4caf50; color: white; padding:4px;');
+  // Build timestamp to force cache invalidation - Updated for mobile optimization
+  console.log('%cMoonfeed Mobile Optimization Build: ' + '2025-10-10-v2-mobile-fix', 'background: #ff4444; color: white; padding:4px; font-weight: bold;');
+  console.log('%c🚀 Optimizations: Ultra-light mobile (10 coins), disabled enrichment, removed /fast endpoint', 'color: #00ff88;');
+
 
   const [activeTab, setActiveTab] = useState('home');
   const [favorites, setFavorites] = useState(() => {

@@ -183,9 +183,10 @@ const ModernTokenScroller = ({
     setLoading(true);
     setError(null);
     
-    // Mobile detection for reduced limits
-    const limit = window.innerWidth < 768 ? 20 : 200;
-    console.log(`📱 Device detection: ${window.innerWidth < 768 ? 'Mobile' : 'Desktop'}, using limit: ${limit}`);
+    // Mobile detection for ULTRA-LIGHT limits to prevent crashes
+    const isMobile = window.innerWidth < 768;
+    const limit = isMobile ? 10 : 100; // Reduced from 20/200 to prevent memory issues
+    console.log(`📱 Device detection: ${isMobile ? 'Mobile (LIGHT MODE)' : 'Desktop'}, using limit: ${limit}`);
     
     try {
       if (onlyFavorites) {
@@ -277,16 +278,9 @@ const ModernTokenScroller = ({
       setCoins(sortedCoins);
       onTotalCoinsChange?.(sortedCoins.length); // Notify parent of total coins
       
-      // Start background enrichment immediately after fast load
-      // Disable background enrichment on mobile for better performance
-      if (data.source === 'fast-raw' && filters.type !== 'custom') {
-        if (window.innerWidth >= 768) {
-          console.log('🎨 Starting background enrichment after fast load...');
-          startBackgroundEnrichment();
-        } else {
-          console.log('📱 Skipping background enrichment on mobile for better performance');
-        }
-      }
+      // DISABLE background enrichment on mobile completely to prevent crashes
+      // Desktop users get enrichment, mobile users get lightweight experience
+      console.log('📱 Mobile optimization: Background enrichment DISABLED for performance');
       
     } catch (err) {
       console.error('❌ Error fetching coins:', err);

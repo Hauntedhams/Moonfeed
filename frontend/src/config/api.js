@@ -21,13 +21,10 @@ export const API_CONFIG = {
   COINS_API: `${getApiBaseUrl()}/api/coins`,
   ENDPOINTS: {
     TRENDING: '/trending',
-    FAST: '/fast',
+    NEW: '/new',
     FILTERED: '/filtered',
     ENRICH: '/enrich',
-    BACKGROUND_ENRICH: '/background-enrich',
-    FORCE_ENRICH: '/force-enrich',
-    CURATED: '/curated',
-    JUPITER_TRENDING: '/jupiter-trending'
+    CURATED: '/curated'
   }
 };
 
