@@ -439,12 +439,45 @@ app.post('/api/admin/refresh-trending', async (req, res) => {
   }
 });
 
-// Health check endpoint
+// Health check endpoints (both /health and /api/health for Render compatibility)
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
-    coinsCached: currentCoins.length
+    service: 'moonfeed-batch-backend',
+    uptime: process.uptime(),
+    currentCoins: currentCoins.length,
+    storage: batchStorage.getStorageInfo(),
+    hasApiKey: !!process.env.DEXSCREENER_API_KEY,
+    priceEngine: {
+      isRunning: priceEngine.isRunning,
+      clientCount: priceEngine.activeClients.size,
+      coinsCount: priceEngine.coins.size,
+      chartsCount: priceEngine.charts.size,
+      lastUpdate: Date.now()
+    },
+    initialization: 'complete'
+  });
+});
+
+// Render specifically checks /api/health
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    service: 'moonfeed-batch-backend',
+    uptime: process.uptime(),
+    currentCoins: currentCoins.length,
+    storage: batchStorage.getStorageInfo(),
+    hasApiKey: !!process.env.DEXSCREENER_API_KEY,
+    priceEngine: {
+      isRunning: priceEngine.isRunning,
+      clientCount: priceEngine.activeClients.size,
+      coinsCount: priceEngine.coins.size,
+      chartsCount: priceEngine.charts.size,
+      lastUpdate: Date.now()
+    },
+    initialization: 'complete'
   });
 });
 
@@ -570,17 +603,22 @@ const server = http.createServer(app);
 // Initialize WebSocket server
 const wsServer = new WebSocketServer(server);
 
-// Initialize with latest batch on startup
-initializeWithLatestBatch();
-
-// Start server
+// Start server FIRST (critical for Render health checks)
 server.listen(PORT, () => {
   console.log(`🚀 MoonFeed Backend Server running on port ${PORT}`);
   console.log(`📊 Health check: http://localhost:${PORT}/health`);
+  console.log(`📊 Health check (Render): http://localhost:${PORT}/api/health`);
   console.log(`🔥 Trending coins: http://localhost:${PORT}/api/coins/trending`);
   console.log(`🆕 New coins: http://localhost:${PORT}/api/coins/new`);
   console.log(`🌐 WebSocket server ready for connections`);
-  console.log(`💾 Cached coins: ${currentCoins.length}`);
+  
+  // Initialize with latest batch AFTER server is listening
+  // This ensures health checks can respond immediately
+  console.log('⏳ Initializing coin data in background...');
+  setImmediate(() => {
+    initializeWithLatestBatch();
+    console.log(`💾 Initialization complete: ${currentCoins.length} coins cached`);
+  });
 });
 
 module.exports = app;
