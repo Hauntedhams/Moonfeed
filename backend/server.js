@@ -611,14 +611,16 @@ server.listen(PORT, () => {
   console.log(`🔥 Trending coins: http://localhost:${PORT}/api/coins/trending`);
   console.log(`🆕 New coins: http://localhost:${PORT}/api/coins/new`);
   console.log(`🌐 WebSocket server ready for connections`);
+  console.log(`💾 Server initialization complete - ready for health checks`);
   
-  // Initialize with latest batch AFTER server is listening
-  // This ensures health checks can respond immediately
-  console.log('⏳ Initializing coin data in background...');
-  setImmediate(() => {
+  // Defer ALL initialization by 3 seconds to ensure health checks respond first
+  // This gives Render time to verify the server is up before any heavy operations
+  console.log('⏳ Will initialize coin data in 3 seconds...');
+  setTimeout(() => {
+    console.log('🔄 Starting background initialization...');
     initializeWithLatestBatch();
-    console.log(`💾 Initialization complete: ${currentCoins.length} coins cached`);
-  });
+    console.log(`✅ Background initialization complete: ${currentCoins.length} coins cached`);
+  }, 3000);
 });
 
 module.exports = app;
