@@ -261,6 +261,7 @@ function extractEnrichmentData(pair, tokenAddress) {
     chainId: pair.chainId || 'solana', // Extract chain ID from pair data
     
     // Basic trading metrics
+    currentPrice: parseFloat(pair.priceUsd || '0'), // Add current price for chart generation
     volume24h: parseFloat(pair.volume?.h24 || '0'),
     liquidity: parseFloat(pair.liquidity?.usd || '0'),
     priceChange24h: parseFloat(pair.priceChange?.h24 || '0'),
@@ -394,6 +395,26 @@ async function enrichCoin(coin) {
     enrichedCoin.dexscreenerUrl = enrichmentData.dexscreenerUrl;
     enrichedCoin.chartUrl = enrichmentData.dexscreenerUrl;
     enrichedCoin.pairAddress = enrichmentData.pairAddress;
+    
+    // Generate Clean Chart Data if price changes are available
+    if (enrichmentData.priceChanges && enrichmentData.currentPrice) {
+      const cleanChartData = generateCleanChartData(enrichmentData.currentPrice, enrichmentData.priceChanges);
+      
+      if (cleanChartData) {
+        enrichedCoin.cleanChartData = {
+          dataPoints: cleanChartData,
+          anchors: [
+            { hoursAgo: 24, change: enrichmentData.priceChanges.change24h },
+            { hoursAgo: 6, change: enrichmentData.priceChanges.change6h },
+            { hoursAgo: 1, change: enrichmentData.priceChanges.change1h },
+            { hoursAgo: 0, change: 0 }
+          ],
+          timeframe: '24h',
+          generated: new Date().toISOString()
+        };
+        console.log(`📊 Generated cleanChartData for ${coin.symbol} with ${cleanChartData.length} points`);
+      }
+    }
     
     // Mark as enriched
     enrichedCoin.enriched = true;
@@ -621,9 +642,31 @@ async function applyEnrichmentData(coin, enrichmentData, options = {}) {
     }
   };
   
+  // GENERATE CLEAN CHART DATA from price changes
+  if (enrichmentData.priceChanges && (enrichedCoin.price_usd || enrichedCoin.priceUsd || enrichedCoin.price)) {
+    const currentPrice = enrichedCoin.price_usd || enrichedCoin.priceUsd || enrichedCoin.price;
+    const cleanChartData = generateCleanChartData(currentPrice, enrichmentData.priceChanges);
+    
+    if (cleanChartData) {
+      enrichedCoin.cleanChartData = {
+        dataPoints: cleanChartData,
+        anchors: [
+          { hoursAgo: 24, change: enrichmentData.priceChanges.change24h },
+          { hoursAgo: 6, change: enrichmentData.priceChanges.change6h },
+          { hoursAgo: 1, change: enrichmentData.priceChanges.change1h },
+          { hoursAgo: 0, change: 0 }
+        ],
+        timeframe: '24h',
+        generated: new Date().toISOString()
+      };
+      console.log(`📊 Generated cleanChartData for ${coin.symbol} with ${cleanChartData.length} points`);
+    }
+  }
+  
   // Mark as enriched
   enrichedCoin.enriched = true;
   enrichedCoin.enrichmentSource = 'dexscreener';
+  enrichedCoin.dexscreenerProcessedAt = new Date().toISOString();
   
   console.log(`✅ Enriched ${coin.symbol} with enhanced DexScreener data`);
   return enrichedCoin;
@@ -682,6 +725,88 @@ function generatePlaceholderBanner(coin) {
   const symbol = encodeURIComponent(coin.symbol || 'TOKEN');
   
   return `https://api.dicebear.com/7.x/shapes/svg?seed=${symbol}&backgroundColor=${colorPair}&scale=120`;
+}
+
+/**
+ * Generate clean chart data from DexScreener price changes
+ * Creates 25 hourly data points over 24 hours based on price change percentages
+ * 
+ * @param {number} currentPrice - Current price of the token
+ * @param {Object} priceChanges - Price changes object with m5, h1, h6, h24
+ * @returns {Array} Array of {time, price} objects for charting
+ */
+function generateCleanChartData(currentPrice, priceChanges) {
+  if (!currentPrice || typeof currentPrice !== 'number' || currentPrice <= 0) {
+    console.log('❌ Invalid currentPrice for chart generation:', currentPrice);
+    return null;
+  }
+
+  // Extract price change percentages
+  const change5m = priceChanges?.change5m || 0;
+  const change1h = priceChanges?.change1h || 0;
+  const change6h = priceChanges?.change6h || 0;
+  const change24h = priceChanges?.change24h || 0;
+
+  // Calculate prices at each time point by working BACKWARDS from current price
+  const price5mAgo = currentPrice / (1 + (change5m / 100));
+  const price1hAgo = currentPrice / (1 + (change1h / 100));
+  const price6hAgo = currentPrice / (1 + (change6h / 100));
+  const price24hAgo = currentPrice / (1 + (change24h / 100));
+
+  // Create simple 5-point chart showing the key anchor times
+  // This will be visually cleaner and show price movements more clearly
+  const now = Date.now();
+  const chartData = [];
+  
+  // Point 1: 24h ago (leftmost)
+  chartData.push({
+    timestamp: now - 24 * 60 * 60 * 1000,
+    time: new Date(now - 24 * 60 * 60 * 1000).toISOString(),
+    price: price24hAgo,
+    label: '24h'
+  });
+  
+  // Point 2: 6h ago
+  chartData.push({
+    timestamp: now - 6 * 60 * 60 * 1000,
+    time: new Date(now - 6 * 60 * 60 * 1000).toISOString(),
+    price: price6hAgo,
+    label: '6h'
+  });
+  
+  // Point 3: 1h ago
+  chartData.push({
+    timestamp: now - 1 * 60 * 60 * 1000,
+    time: new Date(now - 1 * 60 * 60 * 1000).toISOString(),
+    price: price1hAgo,
+    label: '1h'
+  });
+  
+  // Point 4: 5m ago
+  chartData.push({
+    timestamp: now - 5 * 60 * 1000,
+    time: new Date(now - 5 * 60 * 1000).toISOString(),
+    price: price5mAgo,
+    label: '5m'
+  });
+  
+  // Point 5: Now (rightmost)
+  chartData.push({
+    timestamp: now,
+    time: new Date(now).toISOString(),
+    price: currentPrice,
+    label: 'now'
+  });
+
+  console.log(`📊 Generated clean chart with ${chartData.length} points:`);
+  console.log(`   LEFT (24h ago): $${price24hAgo.toFixed(8)}`);
+  console.log(`   6h ago: $${price6hAgo.toFixed(8)}`);
+  console.log(`   1h ago: $${price1hAgo.toFixed(8)}`);
+  console.log(`   5m ago: $${price5mAgo.toFixed(8)}`);
+  console.log(`   RIGHT (now): $${currentPrice.toFixed(8)}`);
+  console.log(`   Overall trend: ${((currentPrice - price24hAgo) / price24hAgo * 100).toFixed(2)}%`);
+  
+  return chartData;
 }
 
 // Get cache statistics

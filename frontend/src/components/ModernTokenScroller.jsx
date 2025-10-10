@@ -225,8 +225,15 @@ const ModernTokenScroller = ({
         };
         console.log('🔍 Using custom filtered endpoint (comprehensive but slower):', endpoint);
         console.log('🔍 Request body:', JSON.stringify(advancedFilters, null, 2));
+      } else if (filters.type === 'new') {
+        // Use the new endpoint for "new" tab
+        endpoint = `${API_BASE}/new`;
+        const queryParams = new URLSearchParams();
+        queryParams.append('limit', limit.toString());
+        endpoint += `?${queryParams.toString()}`;
+        console.log('🆕 Using NEW endpoint for emerging coins:', endpoint);
       } else {
-        // For all other cases, use the fast endpoint with query parameters
+        // For all other cases, use the trending endpoint with query parameters
         const queryParams = new URLSearchParams();
         queryParams.append('limit', limit.toString());
         
@@ -238,7 +245,7 @@ const ModernTokenScroller = ({
         }
         
         endpoint += `?${queryParams.toString()}`;
-        console.log('⚡ Using fast endpoint for immediate load:', endpoint);
+        console.log('⚡ Using trending endpoint for immediate load:', endpoint);
       }
       
       console.log('🌐 Making request to:', endpoint, 'with options:', requestOptions);

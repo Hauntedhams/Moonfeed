@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clean Chart Visual Test</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    h1 {
+      margin-top: 0;
+    }
+    .chart-box {
+      margin: 20px 0;
+      padding: 15px;
+      background: #fafafa;
+      border-radius: 8px;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    .info {
+      margin: 10px 0;
+      padding: 10px;
+      background: #e3f2fd;
+      border-left: 4px solid #2196f3;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    .data-points {
+      margin: 15px 0;
+      padding: 10px;
+      background: #f5f5f5;
+      border-radius: 4px;
+      font-size: 12px;
+      font-family: monospace;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .success { color: #22c55e; }
+    .error { color: #ef4444; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📊 Clean Chart Visual Test</h1>
+    
+    <div class="info">
+      <strong>Testing:</strong> Backend-generated chart data visualization with correct X-Y axis mapping
+      <br><strong>Expected:</strong> Left = 24h ago (oldest), Right = Now (newest), with visible price spikes
+    </div>
+
+    <div id="status">Loading data...</div>
+
+    <div class="chart-box">
+      <h3>Clean Price Chart</h3>
+      <canvas id="chartCanvas" width="700" height="200"></canvas>
+    </div>
+
+    <div class="data-points" id="dataDisplay"></div>
+  </div>
+
+  <script>
+    async function testChart() {
+      const statusEl = document.getElementById('status');
+      const dataDisplayEl = document.getElementById('dataDisplay');
+      
+      try {
+        statusEl.innerHTML = '⏳ Fetching coin data from API...';
+        
+        // Fetch first coin from NEW feed (should be enriched)
+        const response = await fetch('http://localhost:3001/api/coins/new?limit=1');
+        const data = await response.json();
+        
+        if (!data.coins || data.coins.length === 0) {
+          throw new Error('No coins returned from API');
+        }
+        
+        const coin = data.coins[0];
+        
+        statusEl.innerHTML = `✅ Loaded coin: <strong>${coin.symbol}</strong> (${coin.name})`;
+        
+        // Check for chart data
+        if (!coin.cleanChartData || !coin.cleanChartData.dataPoints) {
+          statusEl.innerHTML = `<span class="error">❌ No cleanChartData found for ${coin.symbol}</span>`;
+          dataDisplayEl.innerHTML = `<strong>Coin data:</strong><br>${JSON.stringify(coin, null, 2)}`;
+          return;
+        }
+        
+        const chartData = coin.cleanChartData;
+        statusEl.innerHTML += `<br>✅ Found chart data with ${chartData.dataPoints.length} points`;
+        
+        // Display data info
+        const prices = chartData.dataPoints.map(p => p.price);
+        const minPrice = Math.min(...prices);
+        const maxPrice = Math.max(...prices);
+        const firstPrice = prices[0];
+        const lastPrice = prices[prices.length - 1];
+        const change = ((lastPrice - firstPrice) / firstPrice * 100).toFixed(2);
+        
+        dataDisplayEl.innerHTML = `
+<strong>Chart Data Summary:</strong>
+Data Points: ${chartData.dataPoints.length}
+Timeframe: ${chartData.timeframe}
+Price Range: $${minPrice.toFixed(8)} - $${maxPrice.toFixed(8)}
+
+<strong>Trend Analysis:</strong>
+First (24h ago): $${firstPrice.toFixed(8)}
+Last (now):      $${lastPrice.toFixed(8)}
+Change:          ${change > 0 ? '+' : ''}${change}%
+Direction:       ${change > 0 ? '📈 UP' : '📉 DOWN'}
+
+<strong>Anchor Points:</strong>
+${chartData.anchors?.map(a => `  ${a.hoursAgo}h ago: ${a.change}% change`).join('\n') || 'N/A'}
+
+<strong>Sample Points (first 3, last 3):</strong>
+${chartData.dataPoints.slice(0, 3).map((p, i) => `  [${i}] $${p.price.toFixed(8)}`).join('\n')}
+  ...
+${chartData.dataPoints.slice(-3).map((p, i) => `  [${chartData.dataPoints.length - 3 + i}] $${p.price.toFixed(8)}`).join('\n')}
+        `;
+        
+        // Draw the chart
+        drawSimpleChart(chartData.dataPoints);
+        
+      } catch (error) {
+        statusEl.innerHTML = `<span class="error">❌ Error: ${error.message}</span>`;
+        console.error('Test error:', error);
+      }
+    }
+    
+    function drawSimpleChart(dataPoints) {
+      const canvas = document.getElementById('chartCanvas');
+      const ctx = canvas.getContext('2d');
+      
+      const width = canvas.width;
+      const height = canvas.height;
+      const padding = { top: 10, right: 10, bottom: 10, left: 10 };
+      
+      // Clear canvas
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, width, height);
+      
+      // Get price range
+      const prices = dataPoints.map(d => d.price);
+      const minPrice = Math.min(...prices) * 0.98;
+      const maxPrice = Math.max(...prices) * 1.02;
+      const priceRange = maxPrice - minPrice;
+      
+      const chartWidth = width - padding.left - padding.right;
+      const chartHeight = height - padding.top - padding.bottom;
+      
+      // Map data points to coordinates
+      const points = dataPoints.map((point, index) => {
+        const x = padding.left + (index / (dataPoints.length - 1)) * chartWidth;
+        const y = padding.top + (1 - (point.price - minPrice) / priceRange) * chartHeight;
+        return { x, y, price: point.price };
+      });
+      
+      // Determine line color based on trend
+      const isPositive = prices[prices.length - 1] > prices[0];
+      const lineColor = isPositive ? '#22c55e' : '#ef4444';
+      
+      // Draw line
+      ctx.beginPath();
+      ctx.moveTo(points[0].x, points[0].y);
+      
+      for (let i = 1; i < points.length; i++) {
+        ctx.lineTo(points[i].x, points[i].y);
+      }
+      
+      ctx.strokeStyle = lineColor;
+      ctx.lineWidth = 2.5;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.stroke();
+      
+      // Draw dots at anchor points (every 6 hours approx)
+      const anchorIndices = [0, 6, 12, 18, 23, 24];
+      ctx.fillStyle = lineColor;
+      
+      anchorIndices.forEach(index => {
+        if (index < points.length) {
+          const point = points[index];
+          ctx.beginPath();
+          ctx.arc(point.x, point.y, 4, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      });
+      
+      // Add labels
+      ctx.fillStyle = '#666';
+      ctx.font = '11px monospace';
+      ctx.fillText('24h ago', padding.left, height - 2);
+      ctx.fillText('now', width - padding.right - 25, height - 2);
+      
+      console.log('✅ Chart drawn successfully');
+      console.log('Points:', points.slice(0, 3), '...', points.slice(-3));
+    }
+    
+    // Run test on load
+    testChart();
+  </script>
+</body>
+</html>

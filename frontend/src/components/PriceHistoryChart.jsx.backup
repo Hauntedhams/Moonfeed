@@ -12,7 +12,11 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
   
   // Diagnostic timing
   const mountTimeRef = useRef(Date.now());
+  const lastFetchTimeRef = useRef(null);
   const drawTimeRef = useRef(null);
+
+  // Remove timeframe selector - always show 24H blended view
+  // const timeframes = ['1M', '15M', '1H', '4H', '24H'];
 
   // Helper functions for tooltip
   const formatPrice = (price) => {
@@ -60,60 +64,40 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
     setHoveredPoint(null);
   };
 
-  // Diagnostic logging
   useEffect(() => {
-    console.log('🔍 [CHART DIAGNOSTIC] Component mounted at:', new Date().toISOString());
-    console.log('🔍 [CHART DIAGNOSTIC] Coin data:', {
+    console.log('� [24H CHART] Component mounted, generating blended 24-hour chart');
+    console.log('� [24H CHART] Coin data:', {
       symbol: coin?.symbol,
-      tokenAddress: coin?.tokenAddress,
-      mintAddress: coin?.mintAddress,
-      pairAddress: coin?.pairAddress,
-      hasRequiredAddress: !!(coin?.tokenAddress || coin?.mintAddress || coin?.pairAddress)
+      hasPriceChanges: !!(coin?.priceChanges || coin?.priceChange),
+      currentPrice: coin?.price_usd || coin?.priceUsd
     });
     
     return () => {
       const totalTime = Date.now() - mountTimeRef.current;
-      console.log('🔍 [CHART DIAGNOSTIC] Component unmounted after', totalTime, 'ms');
+      console.log('� [24H CHART] Component unmounted after', totalTime, 'ms');
     };
   }, []);
 
+  // Map frontend timeframes to backend timeframes
+  const getBackendTimeframe = (frontendTimeframe) => {
+    const mapping = {
+      '1M': '1m',
+      '15M': '15m', 
+      '1H': '1h',
+      '4H': '4h',
+      '24H': '24h'
+    };
+    return mapping[frontendTimeframe] || '1h';
+  };
+
   useEffect(() => {
-    console.log('🔍 [CHART DIAGNOSTIC] Dependency changed - coin data');
-    console.log('🔍 [CHART DIAGNOSTIC] Generating 24-hour blended chart from DexScreener price changes');
+    console.log('� [24H CHART] Dependency changed - regenerating chart');
     
     if (coin) {
-      // Check if we have pre-generated chart data from backend enrichment
-      if (coin.cleanChartData && coin.cleanChartData.dataPoints) {
-        console.log('✅ [CHART] Using pre-generated chart data from backend enrichment');
-        const chartData = coin.cleanChartData;
-        
-        // Calculate min/max for display
-        const prices = chartData.dataPoints.map(d => d.price);
-        const minPrice = Math.min(...prices);
-        const maxPrice = Math.max(...prices);
-        
-        setChartData({
-          tokenInfo: {
-            address: coin.mintAddress || coin.tokenAddress,
-            minPrice,
-            maxPrice,
-            priceChange24h: coin.priceChanges?.change24h || coin.priceChange?.h24 || 0
-          },
-          dataPoints: chartData.dataPoints,
-          metadata: {
-            timeframe: '24H',
-            dataPoints: chartData.dataPoints.length,
-            source: 'Backend pre-generated (DexScreener)'
-          }
-        });
-        setLoading(false);
-      } else {
-        // Fallback: Generate chart from DexScreener price change anchors client-side
-        console.log('⚠️  [CHART] No pre-generated data, generating client-side');
-        generateBlended24HourChart();
-      }
+      // Generate blended 24-hour chart from all available DexScreener price changes
+      generateBlended24HourChart();
     } else {
-      console.log('❌ [CHART DIAGNOSTIC] No coin data available');
+      console.log('❌ [24H CHART] No coin data available');
       setError('No coin data available');
       setLoading(false);
     }
@@ -135,10 +119,10 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
     }
   }, [chartData]);
 
-  // Generate blended 24-hour chart using multiple DexScreener price change anchors
-  const generateBlended24HourChart = () => {
+  // Generate chart from DexScreener price change data (no API call)
+  const generateChartFromPriceChanges = () => {
     const generateStartTime = Date.now();
-    console.log('📊 [BLENDED CHART] Starting 24-hour blended chart generation');
+    console.log('� [CHART GENERATION] Starting chart generation from DexScreener data');
     
     setLoading(true);
     setError(null);
@@ -150,26 +134,17 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
         throw new Error('No valid price data');
       }
       
-      // Get all available price changes from DexScreener
-      const priceChanges = coin?.priceChanges || coin?.priceChange || {};
-      const change5m = priceChanges.change5m || priceChanges.m5 || coin?.change_5m || null;
-      const change1h = priceChanges.change1h || priceChanges.h1 || coin?.change_1h || null;
-      const change6h = priceChanges.change6h || priceChanges.h6 || coin?.change_6h || null;
-      const change24h = priceChanges.change24h || priceChanges.h24 || coin?.change_24h || coin?.change24h || 0;
+      // Get price change for selected timeframe from DexScreener data
+      const priceChange = getPriceChangeForTimeframe(selectedTimeframe);
       
-      console.log('📊 [BLENDED CHART] Price change anchors:', {
+      console.log('� [CHART GENERATION] Using price data:', {
         currentPrice,
-        change5m,
-        change1h,
-        change6h,
-        change24h
+        priceChange,
+        timeframe: selectedTimeframe
       });
       
-      // Generate anchor points for 24-hour period
-      const anchors = createPriceAnchors(currentPrice, { change5m, change1h, change6h, change24h });
-      
-      // Interpolate 24 hourly points between anchors
-      const dataPoints = interpolateHourlyPoints(anchors);
+      // Generate smooth price history based on price change
+      const dataPoints = generateSmoothPriceData(currentPrice, priceChange, selectedTimeframe);
       
       // Calculate min/max for chart display
       const prices = dataPoints.map(d => d.price);
@@ -181,165 +156,132 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
           address: coin.mintAddress || coin.tokenAddress,
           minPrice,
           maxPrice,
-          priceChange24h: change24h
+          priceChange
         },
         dataPoints,
         metadata: {
-          timeframe: '24H',
+          timeframe: selectedTimeframe,
           dataPoints: dataPoints.length,
-          source: 'DexScreener blended anchors'
+          source: 'DexScreener price changes'
         }
       });
       
       const totalDuration = Date.now() - generateStartTime;
-      console.log(`✅ [BLENDED CHART] Generated ${dataPoints.length} points in ${totalDuration}ms`);
+      console.log(`✅ [CHART GENERATION] Generated ${dataPoints.length} points in ${totalDuration}ms`);
       
     } catch (error) {
-      console.error('❌ [BLENDED CHART] Generation failed:', error);
+      console.error('❌ [CHART GENERATION] Generation failed:', error);
       setError('Unable to generate chart');
     } finally {
       setLoading(false);
     }
   };
   
-  // Create price anchor points from DexScreener price changes
-  const createPriceAnchors = (currentPrice, changes) => {
-    const anchors = [];
-    const now = Date.now();
+  // Get price change percentage for timeframe from DexScreener data
+  const getPriceChangeForTimeframe = (timeframe) => {
+    const priceChanges = coin?.priceChanges || coin?.priceChange || {};
     
-    // Always add current price as most recent anchor
-    anchors.push({
-      hoursAgo: 0,
-      timestamp: now,
-      price: currentPrice
-    });
-    
-    // Add 5-minute anchor if available (0.083 hours ago)
-    if (changes.change5m !== null) {
-      const price5mAgo = currentPrice / (1 + changes.change5m / 100);
-      anchors.push({
-        hoursAgo: 0.083,
-        timestamp: now - 5 * 60 * 1000,
-        price: price5mAgo
-      });
+    switch(timeframe) {
+      case '1M':
+        return priceChanges.change5m || priceChanges.m5 || coin?.change_5m || 0;
+      case '15M':
+        return priceChanges.change15m || priceChanges.m15 || coin?.change_15m || (priceChanges.change1h || priceChanges.h1 || 0) * 0.25;
+      case '1H':
+        return priceChanges.change1h || priceChanges.h1 || coin?.change_1h || 0;
+      case '4H':
+        return priceChanges.change4h || priceChanges.h4 || coin?.change_4h || (priceChanges.change6h || priceChanges.h6 || 0) * 0.67;
+      case '24H':
+        return priceChanges.change24h || priceChanges.h24 || coin?.change_24h || coin?.change24h || 0;
+      default:
+        return priceChanges.change1h || priceChanges.h1 || coin?.change_1h || 0;
     }
-    
-    // Add 1-hour anchor if available
-    if (changes.change1h !== null) {
-      const price1hAgo = currentPrice / (1 + changes.change1h / 100);
-      anchors.push({
-        hoursAgo: 1,
-        timestamp: now - 1 * 60 * 60 * 1000,
-        price: price1hAgo
-      });
-    }
-    
-    // Add 6-hour anchor if available
-    if (changes.change6h !== null) {
-      const price6hAgo = currentPrice / (1 + changes.change6h / 100);
-      anchors.push({
-        hoursAgo: 6,
-        timestamp: now - 6 * 60 * 60 * 1000,
-        price: price6hAgo
-      });
-    }
-    
-    // Always add 24-hour anchor (required)
-    const price24hAgo = currentPrice / (1 + changes.change24h / 100);
-    anchors.push({
-      hoursAgo: 24,
-      timestamp: now - 24 * 60 * 60 * 1000,
-      price: price24hAgo
-    });
-    
-    // Sort by time (oldest first)
-    anchors.sort((a, b) => b.hoursAgo - a.hoursAgo);
-    
-    console.log('📊 [BLENDED CHART] Created anchors:', anchors.map(a => ({
-      hoursAgo: a.hoursAgo,
-      price: a.price
-    })));
-    
-    return anchors;
   };
   
-  // Interpolate 24 hourly data points between anchors with smooth curves
-  const interpolateHourlyPoints = (anchors) => {
-    const dataPoints = [];
-    const now = Date.now();
+  // Generate smooth price data from current price and price change percentage
+  const generateSmoothPriceData = (currentPrice, priceChangePercent, timeframe) => {
+    const numPoints = 60; // 60 data points for smooth chart
+    const data = [];
     
-    // Create deterministic seed from coin data for consistent randomness
+    // Create deterministic seed from coin data for consistent charts
     const coinId = (coin?.mintAddress || coin?.tokenAddress || coin?.symbol || 'unknown');
     const coinSeed = coinId.split('').reduce((acc, char, i) => acc + char.charCodeAt(0) * (i + 1), 0);
-    let seed = coinSeed % 233280;
+    const timeframeSeed = timeframe.split('').reduce((acc, char, i) => acc + char.charCodeAt(0) * (i + 1), 0);
+    const baseSeed = (coinSeed * 1000 + timeframeSeed) % 233280;
+    
+    // Seeded random for consistent results
+    let seed = baseSeed;
     const seededRandom = () => {
       seed = (seed * 9301 + 49297) % 233280;
       return seed / 233280;
     };
     
-    // Generate 24 hourly points (25 points for 0-24 hours)
-    for (let hour = 24; hour >= 0; hour--) {
-      const targetHoursAgo = hour;
-      const timestamp = now - hour * 60 * 60 * 1000;
+    // Calculate start price from price change
+    const changeDecimal = priceChangePercent / 100;
+    const startPrice = currentPrice / (1 + changeDecimal);
+    
+    // Volatility based on price change magnitude
+    const volatility = Math.max(0.005, Math.abs(changeDecimal) * 0.25);
+    
+    // Generate price points with smooth trend
+    const priceMovements = [];
+    let currentPricePoint = startPrice;
+    
+    for (let i = 0; i < numPoints; i++) {
+      const progress = i / (numPoints - 1);
       
-      // Find surrounding anchors
-      let lowerAnchor = null;
-      let upperAnchor = null;
+      // Trend towards final price (80% trend, 20% noise)
+      const trendWeight = 0.8;
+      const targetPrice = startPrice + (currentPrice - startPrice) * progress;
       
-      for (let i = 0; i < anchors.length - 1; i++) {
-        if (anchors[i].hoursAgo >= targetHoursAgo && anchors[i + 1].hoursAgo <= targetHoursAgo) {
-          lowerAnchor = anchors[i];
-          upperAnchor = anchors[i + 1];
-          break;
-        }
-      }
+      // Add wave patterns for realistic movement
+      const waveFrequency = 2 + (seededRandom() * 2);
+      const wave1 = Math.sin(progress * Math.PI * waveFrequency) * volatility * startPrice * 0.2;
+      const wave2 = Math.sin(progress * Math.PI * waveFrequency * 1.5) * volatility * startPrice * 0.1;
       
-      // If no surrounding anchors found, use closest anchor
-      if (!lowerAnchor || !upperAnchor) {
-        const closestAnchor = anchors.reduce((closest, anchor) => {
-          return Math.abs(anchor.hoursAgo - targetHoursAgo) < Math.abs(closest.hoursAgo - targetHoursAgo) 
-            ? anchor : closest;
-        });
-        dataPoints.push({
-          timestamp,
-          price: closestAnchor.price,
-          time: new Date(timestamp).toLocaleTimeString()
-        });
-        continue;
-      }
+      // Random walk component
+      const randomWalk = (seededRandom() - 0.5) * volatility * startPrice * 0.15;
       
-      // Interpolate between anchors
-      const timeFraction = (lowerAnchor.hoursAgo - targetHoursAgo) / (lowerAnchor.hoursAgo - upperAnchor.hoursAgo);
-      const basePrice = lowerAnchor.price + (upperAnchor.price - lowerAnchor.price) * timeFraction;
+      // Momentum (price continuation)
+      const momentum = i > 0 ? (priceMovements[i-1] - (i > 1 ? priceMovements[i-2] : startPrice)) * 0.2 : 0;
       
-      // Add realistic volatility (smaller for meme coins to avoid extreme spikes)
-      const priceRange = Math.abs(upperAnchor.price - lowerAnchor.price);
-      const volatility = priceRange * 0.08; // 8% of local range for realism
-      const noise = (seededRandom() - 0.5) * volatility;
-      
-      // Apply smoothing - use sine wave for natural oscillation
-      const wavePhase = (hour / 24) * Math.PI * 2;
-      const wave = Math.sin(wavePhase + coinSeed) * volatility * 0.3;
-      
-      let price = basePrice + noise + wave;
+      // Combine all factors
+      let newPrice = targetPrice * trendWeight + 
+                     currentPricePoint * (1 - trendWeight) + 
+                     wave1 + wave2 + randomWalk + momentum;
       
       // Ensure price stays within reasonable bounds
-      price = Math.max(0.000001, price);
-      price = Math.max(lowerAnchor.price * 0.85, Math.min(upperAnchor.price * 1.15, price));
+      newPrice = Math.max(0.000001, newPrice);
+      newPrice = Math.max(startPrice * 0.7, Math.min(startPrice * 1.5, newPrice));
       
-      dataPoints.push({
+      priceMovements.push(newPrice);
+      currentPricePoint = newPrice;
+      
+      // Calculate timestamp based on timeframe
+      const intervalMs = getIntervalForTimeframe(timeframe);
+      const timestamp = Date.now() - (numPoints - i) * intervalMs;
+      
+      data.push({
         timestamp,
-        price,
+        price: newPrice,
         time: new Date(timestamp).toLocaleTimeString()
       });
     }
     
-    // Reverse to get chronological order (oldest to newest)
-    dataPoints.reverse();
-    
-    return dataPoints;
+    return data;
   };
   
+  // Get interval in milliseconds for each timeframe
+  const getIntervalForTimeframe = (timeframe) => {
+    const intervals = {
+      '1M': 1 * 60 * 1000,        // 1 minute
+      '15M': 15 * 60 * 1000,      // 15 minutes
+      '1H': 60 * 60 * 1000,       // 1 hour
+      '4H': 4 * 60 * 60 * 1000,   // 4 hours
+      '24H': 24 * 60 * 60 * 1000  // 24 hours
+    };
+    return intervals[timeframe] || 60 * 60 * 1000;
+  };
+
   const drawChart = (dataPoints) => {
     const drawStartTime = Date.now();
     console.log('🔍 [CHART DIAGNOSTIC] Starting chart draw with', dataPoints.length, 'points');
@@ -458,9 +400,18 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
 
   return (
     <div className="price-history-chart">
-      {/* 24-Hour Chart Header */}
-      <div className="chart-header">
-        <span className="chart-timeframe">24-Hour Price Chart</span>
+      {/* Timeframe Selector */}
+      <div className="timeframe-selector">
+        {timeframes.map((timeframe) => (
+          <button
+            key={timeframe}
+            className={`timeframe-btn ${selectedTimeframe === timeframe ? 'active' : ''}`}
+            onClick={() => setSelectedTimeframe(timeframe)}
+            disabled={false}
+          >
+            {timeframe}
+          </button>
+        ))}
       </div>
 
       {/* Chart Container */}
@@ -490,7 +441,7 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
               >
                 <div className="tooltip-price">{formatPrice(hoveredPoint.price)}</div>
                 <div className="tooltip-time">{formatTime(hoveredPoint.time)}</div>
-                <div className="tooltip-disclaimer">Estimated from DexScreener</div>
+                <div className="tooltip-disclaimer">Estimated Price Data</div>
               </div>
             )}
           </>
@@ -500,7 +451,7 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
       {/* Data Source Disclaimer */}
       <div className="chart-disclaimer">
         <span className="disclaimer-text">
-          📊 Blended 24h estimate from DexScreener price changes • Use "Advanced View" for live data
+          📊 Historical price estimates • Use "Advanced View" for real-time data
         </span>
       </div>
     </div>

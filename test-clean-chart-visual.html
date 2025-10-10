@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clean Chart Visual Test</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #0a0a0a;
+      color: #fff;
+    }
+    .chart-container {
+      background: #1a1a1a;
+      border-radius: 12px;
+      padding: 20px;
+      margin: 20px 0;
+    }
+    canvas {
+      max-height: 400px;
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin: 20px 0;
+    }
+    .stat {
+      background: #2a2a2a;
+      padding: 15px;
+      border-radius: 8px;
+    }
+    .stat-label {
+      color: #888;
+      font-size: 12px;
+      margin-bottom: 5px;
+    }
+    .stat-value {
+      font-size: 18px;
+      font-weight: bold;
+    }
+    .positive { color: #4ade80; }
+    .negative { color: #f87171; }
+    h1 { color: #fff; }
+    h2 { color: #aaa; margin-top: 30px; }
+  </style>
+</head>
+<body>
+  <h1>🧪 Clean Chart Visual Test</h1>
+  <p>Testing backend-generated chart data for first NEW feed coin</p>
+  
+  <div id="loading">Loading data...</div>
+  <div id="content" style="display: none;">
+    <div class="stats" id="stats"></div>
+    <div class="chart-container">
+      <h2>Clean Chart (24h)</h2>
+      <canvas id="cleanChart"></canvas>
+    </div>
+  </div>
+
+  <script>
+    async function loadData() {
+      try {
+        const response = await fetch('http://localhost:3001/api/coins/new?limit=1');
+        const data = await response.json();
+        const coin = data.coins[0];
+        
+        if (!coin) {
+          document.getElementById('loading').textContent = 'No coins found';
+          return;
+        }
+        
+        // Hide loading, show content
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('content').style.display = 'block';
+        
+        // Display stats
+        const stats = document.getElementById('stats');
+        const priceChanges = coin.dexscreener?.priceChanges || {};
+        
+        stats.innerHTML = `
+          <div class="stat">
+            <div class="stat-label">Token</div>
+            <div class="stat-value">${coin.symbol}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Current Price</div>
+            <div class="stat-value">$${coin.price_usd?.toFixed(8) || 'N/A'}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">5m Change</div>
+            <div class="stat-value ${priceChanges.change5m > 0 ? 'positive' : 'negative'}">
+              ${priceChanges.change5m > 0 ? '+' : ''}${priceChanges.change5m}%
+            </div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">1h Change</div>
+            <div class="stat-value ${priceChanges.change1h > 0 ? 'positive' : 'negative'}">
+              ${priceChanges.change1h > 0 ? '+' : ''}${priceChanges.change1h}%
+            </div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">6h Change</div>
+            <div class="stat-value ${priceChanges.change6h > 0 ? 'positive' : 'negative'}">
+              ${priceChanges.change6h > 0 ? '+' : ''}${priceChanges.change6h}%
+            </div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">24h Change</div>
+            <div class="stat-value ${priceChanges.change24h > 0 ? 'positive' : 'negative'}">
+              ${priceChanges.change24h > 0 ? '+' : ''}${priceChanges.change24h}%
+            </div>
+          </div>
+        `;
+        
+        // Render chart
+        if (coin.cleanChartData && coin.cleanChartData.dataPoints) {
+          renderChart(coin);
+        } else {
+          document.querySelector('.chart-container').innerHTML = '<p>No chart data available</p>';
+        }
+        
+      } catch (error) {
+        document.getElementById('loading').textContent = 'Error: ' + error.message;
+      }
+    }
+    
+    function renderChart(coin) {
+      const chartData = coin.cleanChartData.dataPoints;
+      const labels = chartData.map((point, i) => {
+        const date = new Date(point.time);
+        const hours = 24 - i; // Hours ago
+        return hours === 0 ? 'Now' : `${hours}h ago`;
+      });
+      
+      const prices = chartData.map(point => point.price);
+      const priceChange24h = coin.dexscreener?.priceChanges?.change24h || 0;
+      
+      const ctx = document.getElementById('cleanChart').getContext('2d');
+      new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Price',
+            data: prices,
+            borderColor: priceChange24h >= 0 ? '#4ade80' : '#f87171',
+            backgroundColor: priceChange24h >= 0 ? 'rgba(74, 222, 128, 0.1)' : 'rgba(248, 113, 113, 0.1)',
+            borderWidth: 2,
+            fill: true,
+            tension: 0.4,
+            pointRadius: 0,
+            pointHoverRadius: 5,
+            pointHoverBackgroundColor: '#fff'
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          plugins: {
+            legend: {
+              display: false
+            },
+            tooltip: {
+              mode: 'index',
+              intersect: false,
+              callbacks: {
+                label: function(context) {
+                  return '$' + context.parsed.y.toFixed(8);
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: {
+                color: '#333'
+              },
+              ticks: {
+                color: '#888',
+                maxTicksLimit: 7
+              }
+            },
+            y: {
+              grid: {
+                color: '#333'
+              },
+              ticks: {
+                color: '#888',
+                callback: function(value) {
+                  return '$' + value.toFixed(8);
+                }
+              }
+            }
+          },
+          interaction: {
+            mode: 'nearest',
+            axis: 'x',
+            intersect: false
+          }
+        }
+      });
+      
+      // Add price info
+      const firstPrice = prices[0];
+      const lastPrice = prices[prices.length - 1];
+      const change = ((lastPrice - firstPrice) / firstPrice) * 100;
+      
+      const info = document.createElement('div');
+      info.style.cssText = 'margin-top: 15px; padding: 15px; background: #2a2a2a; border-radius: 8px;';
+      info.innerHTML = `
+        <p><strong>Chart Analysis:</strong></p>
+        <p>📍 Start (24h ago): $${firstPrice.toFixed(8)}</p>
+        <p>📍 End (now): $${lastPrice.toFixed(8)}</p>
+        <p>📈 Overall Change: <span class="${change >= 0 ? 'positive' : 'negative'}">${change >= 0 ? '+' : ''}${change.toFixed(2)}%</span></p>
+        <p>✅ Direction: ${change >= 0 ? 'UP' : 'DOWN'} (left to right)</p>
+      `;
+      document.querySelector('.chart-container').appendChild(info);
+    }
+    
+    // Load data on page load
+    loadData();
+  </script>
+</body>
+</html>

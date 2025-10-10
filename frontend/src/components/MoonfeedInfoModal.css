@@ -134,6 +134,61 @@
   background-clip: text;
 }
 
+/* Header Social Icons */
+.header-social-links {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 12px;
+}
+
+.header-social-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  text-decoration: none;
+  color: rgba(255, 255, 255, 0.8);
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.header-social-icon svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+  transition: all 0.2s ease;
+}
+
+.header-social-icon:hover {
+  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.header-social-icon.discord:hover {
+  background: rgba(88, 101, 242, 0.2);
+  border-color: rgba(88, 101, 242, 0.4);
+  color: #5865f2;
+}
+
+.header-social-icon.twitter:hover {
+  background: rgba(29, 155, 240, 0.2);
+  border-color: rgba(29, 155, 240, 0.4);
+  color: #1d9bf0;
+}
+
+.header-social-icon.tiktok:hover {
+  background: rgba(255, 0, 80, 0.2);
+  border-color: rgba(255, 0, 80, 0.4);
+  color: #ff0050;
+}
+
 .close-button {
   background: none;
   border: none;
@@ -372,6 +427,18 @@
     padding: 10px;
   }
   
+  /* Make header social icons slightly smaller on tablet */
+  .header-social-icon {
+    width: 28px;
+    height: 28px;
+    font-size: 14px;
+  }
+  
+  .header-social-links {
+    gap: 6px;
+    margin-left: 8px;
+  }
+  
   .moonfeed-info-button {
     top: 15px;
     left: 15px;
@@ -399,6 +466,24 @@
     border-radius: 0;
     margin: 0;
     max-height: 100vh;
+  }
+  
+  /* Stack header elements on very small screens if needed */
+  .moonfeed-logo-header {
+    flex-wrap: wrap;
+  }
+  
+  .header-social-links {
+    margin-left: 0;
+    margin-top: 8px;
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .header-social-icon {
+    width: 36px;
+    height: 36px;
+    font-size: 16px;
   }
   
   .feature-list {
