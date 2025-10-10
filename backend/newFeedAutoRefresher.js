@@ -30,8 +30,11 @@ class NewFeedAutoRefresher {
     console.log('🚀 Starting New Feed Auto-Refresher...');
     console.log(`⏰ Will refresh NEW coins every 30 minutes`);
     
-    // Fetch immediately on startup
-    this.refreshNewCoins();
+    // Defer first refresh by 10 seconds to allow server to fully start
+    // This prevents blocking server initialization and health checks
+    setTimeout(() => {
+      this.refreshNewCoins();
+    }, 10000);
     
     // Calculate next refresh time
     this.stats.nextRefreshAt = new Date(Date.now() + this.refreshInterval).toISOString();

@@ -44,8 +44,10 @@ class DexscreenerAutoEnricher {
     this.feedType = feedType;
     console.log(`🚀 Starting DexScreener auto-enricher for ${feedType.toUpperCase()} feed...`);
     
-    // Process first 10 coins immediately with priority
-    this.processPriorityCoins();
+    // Defer first enrichment by 5 seconds to allow server to fully start
+    setTimeout(() => {
+      this.processPriorityCoins();
+    }, 5000);
     
     this.intervalId = setInterval(() => {
       this.processNext();
@@ -64,8 +66,10 @@ class DexscreenerAutoEnricher {
     this.newCoinsRef = newCoinsRef;
     console.log('🚀 Starting DexScreener auto-enricher for NEW feed...');
     
-    // Process first 10 coins immediately with priority
-    this.processPriorityCoinsNewFeed();
+    // Defer first enrichment by 5 seconds to allow server to fully start
+    setTimeout(() => {
+      this.processPriorityCoinsNewFeed();
+    }, 5000);
     
     this.newFeedIntervalId = setInterval(() => {
       this.processNextNewFeed();
