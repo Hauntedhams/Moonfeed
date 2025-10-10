@@ -11,3 +11,7 @@ services:
       - key: PORT
         value: 10000
     healthCheckPath: /api/health
+    autoDeploy: true
+    # Health check configuration
+    initialDelaySeconds: 10
+    # Give server time to start before first health check
