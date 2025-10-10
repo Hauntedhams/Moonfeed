@@ -440,45 +440,49 @@ app.post('/api/admin/refresh-trending', async (req, res) => {
 });
 
 // Health check endpoints (both /health and /api/health for Render compatibility)
+// CRITICAL: These must respond immediately without any dependencies or slow operations
 app.get('/health', (req, res) => {
-  res.json({
+  res.status(200).json({
     status: 'ok',
-    timestamp: new Date().toISOString(),
-    service: 'moonfeed-batch-backend',
-    uptime: process.uptime(),
-    currentCoins: currentCoins.length,
-    storage: batchStorage.getStorageInfo(),
-    hasApiKey: !!process.env.DEXSCREENER_API_KEY,
-    priceEngine: {
-      isRunning: priceEngine.isRunning,
-      clientCount: priceEngine.activeClients.size,
-      coinsCount: priceEngine.coins.size,
-      chartsCount: priceEngine.charts.size,
-      lastUpdate: Date.now()
-    },
-    initialization: 'complete'
+    timestamp: new Date().toISOString()
   });
 });
 
-// Render specifically checks /api/health
+// Render specifically checks /api/health - keep this minimal for fast response
 app.get('/api/health', (req, res) => {
-  res.json({
+  // Send immediate response - don't access complex objects that might not be ready
+  res.status(200).json({
     status: 'ok',
-    timestamp: new Date().toISOString(),
-    service: 'moonfeed-batch-backend',
-    uptime: process.uptime(),
-    currentCoins: currentCoins.length,
-    storage: batchStorage.getStorageInfo(),
-    hasApiKey: !!process.env.DEXSCREENER_API_KEY,
-    priceEngine: {
-      isRunning: priceEngine.isRunning,
-      clientCount: priceEngine.activeClients.size,
-      coinsCount: priceEngine.coins.size,
-      chartsCount: priceEngine.charts.size,
-      lastUpdate: Date.now()
-    },
-    initialization: 'complete'
+    timestamp: new Date().toISOString()
   });
+});
+
+// Detailed status endpoint (not used for health checks)
+app.get('/api/status', (req, res) => {
+  try {
+    res.json({
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      service: 'moonfeed-batch-backend',
+      uptime: process.uptime(),
+      currentCoins: currentCoins.length,
+      storage: batchStorage ? batchStorage.getStorageInfo() : { status: 'not initialized' },
+      hasApiKey: !!process.env.DEXSCREENER_API_KEY,
+      priceEngine: priceEngine ? {
+        isRunning: priceEngine.isRunning,
+        clientCount: priceEngine.activeClients ? priceEngine.activeClients.size : 0,
+        coinsCount: priceEngine.coins ? priceEngine.coins.size : 0,
+        chartsCount: priceEngine.charts ? priceEngine.charts.size : 0,
+        lastUpdate: Date.now()
+      } : { status: 'not initialized' },
+      initialization: 'complete'
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      message: error.message
+    });
+  }
 });
 
 // Start DexScreener auto-enricher for TRENDING feed
