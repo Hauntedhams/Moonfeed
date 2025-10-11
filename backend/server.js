@@ -338,11 +338,22 @@ app.get('/api/coins/new', async (req, res) => {
     
     // Return cached new coins (automatically refreshed every 30 minutes by auto-refresher)
     if (newCoins.length === 0) {
-      console.log('⏳ NEW feed not yet loaded, waiting for auto-refresher...');
-      return res.status(503).json({
-        success: false,
-        error: 'NEW feed is loading, please try again in a moment',
-        message: 'The NEW feed auto-refresher is fetching fresh coins from Solana Tracker'
+      console.log('⏳ NEW feed not yet loaded - returning empty array with loading indicator');
+      // MOBILE FIX: Return empty array instead of 503 to prevent crashes
+      return res.json({
+        success: true,
+        coins: [],
+        count: 0,
+        total: 0,
+        loading: true,
+        timestamp: new Date().toISOString(),
+        message: 'NEW feed is loading, please refresh in a moment',
+        criteria: {
+          age: '1-96 hours',
+          volume_5m: '$15k-$30k',
+          liquidity: '$10k+',
+          market_cap: '$50k+'
+        }
       });
     }
     

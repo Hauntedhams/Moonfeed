@@ -8,10 +8,20 @@ export function useLiveData() {
   const wsRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
   const reconnectAttempts = useRef(0);
-  const maxReconnectAttempts = 5;
+  // MOBILE FIX: Reduce max attempts on mobile to prevent battery drain
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  const maxReconnectAttempts = isMobile ? 2 : 5;
 
   const connect = useCallback(() => {
     try {
+      // MOBILE FIX: Disable WebSocket on mobile to prevent crashes and battery drain
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      if (isMobile && import.meta.env.PROD) {
+        console.log('📱 Mobile device detected - WebSocket disabled for stability');
+        setConnectionStatus('disabled');
+        return;
+      }
+
       // Use ws:// for local development, wss:// for production
       const wsUrl = import.meta.env.PROD 
         ? `wss://${window.location.host}/ws`

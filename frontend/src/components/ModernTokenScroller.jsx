@@ -88,6 +88,13 @@ const ModernTokenScroller = ({
   const enrichCoins = useCallback(async (mintAddresses) => {
     if (!mintAddresses || mintAddresses.length === 0) return;
     
+    // MOBILE FIX: Disable enrichment completely in production to prevent 404 errors
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    if (isMobile || import.meta.env.PROD) {
+      console.log('📱 Enrichment disabled (mobile/production mode)');
+      return;
+    }
+    
     try {
       console.log(`🎨 Enriching ${mintAddresses.length} coins with DexScreener data (including banners)...`);
       
@@ -263,8 +270,20 @@ const ModernTokenScroller = ({
       const data = await response.json();
       console.log('📊 Response data preview:', {
         coinsCount: data.coins?.length,
-        firstCoin: data.coins?.[0]?.symbol
+        firstCoin: data.coins?.[0]?.symbol,
+        loading: data.loading
       });
+      
+      // MOBILE FIX: Handle loading state when backend is initializing
+      if (data.loading && data.coins?.length === 0) {
+        console.log('⏳ Backend still loading, will retry shortly...');
+        setError('Loading coins... Please wait');
+        // Retry after 2 seconds
+        setTimeout(() => {
+          fetchCoins();
+        }, 2000);
+        return;
+      }
       
       if (!data.coins || !Array.isArray(data.coins)) {
         throw new Error('Invalid response format - no coins array');

@@ -11,9 +11,9 @@ import ProfileView from './components/ProfileView'
 import JupiterTradeModal from './components/JupiterTradeModal'
 
 function App() {
-  // Build timestamp to force cache invalidation - Updated for mobile optimization
-  console.log('%cMoonfeed Mobile Optimization Build: ' + '2025-10-10-v2-mobile-fix', 'background: #ff4444; color: white; padding:4px; font-weight: bold;');
-  console.log('%c🚀 Optimizations: Ultra-light mobile (10 coins), disabled enrichment, removed /fast endpoint', 'color: #00ff88;');
+  // Build timestamp to force cache invalidation - Mobile crash fix
+  console.log('%cMoonfeed Mobile Crash Fix: ' + '2025-10-10-v3-mobile-crash-fix', 'background: #00ff88; color: black; padding:4px; font-weight: bold;');
+  console.log('%c✅ CRITICAL FIXES: Disabled WebSocket on mobile, Fixed 503 errors, Removed 404 spam', 'color: #00ff88;');
 
 
   const [activeTab, setActiveTab] = useState('home');
