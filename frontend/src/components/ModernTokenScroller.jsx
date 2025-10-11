@@ -28,8 +28,8 @@ const ModernTokenScroller = ({
   const [enrichedCoins, setEnrichedCoins] = useState(new Map()); // Cache for enriched coin data
   const [expandedCoin, setExpandedCoin] = useState(null); // Track which coin is expanded
   
-  // Virtual scrolling state for mobile optimization
-  const [visibleRange, setVisibleRange] = useState({ start: 0, end: 14 }); // Show 15 cards on mobile (increased from 5)
+  // Virtual scrolling DISABLED - with WebSocket singleton, we can render all cards safely
+  const [visibleRange, setVisibleRange] = useState({ start: 0, end: 999 }); // Not used anymore
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   
   const scrollerRef = useRef(null);
@@ -39,50 +39,26 @@ const ModernTokenScroller = ({
   // API base configuration
   const API_BASE = API_CONFIG.COINS_API;
 
-  // Calculate visible range for virtual scrolling on mobile
+  // DISABLED: Virtual scrolling calculation (now render all cards on both mobile and desktop)
   const calculateVisibleRange = useCallback((index, totalCoins) => {
-    if (!isMobile) return { start: 0, end: totalCoins - 1 }; // Desktop shows all coins
-    
-    const visibleCount = 15; // Increased from 5 - WebSocket singleton allows more
-    const buffer = Math.floor(visibleCount / 2); // Cards before and after current
-    
-    let start = Math.max(0, index - buffer);
-    let end = Math.min(totalCoins - 1, start + visibleCount - 1);
-    
-    // Adjust start if we're near the end
-    if (end - start + 1 < visibleCount) {
-      start = Math.max(0, end - visibleCount + 1);
-    }
-    
-    return { start, end };
-  }, [isMobile]);
+    return { start: 0, end: totalCoins - 1 }; // Always render all coins
+  }, []);
 
-  // Virtual scrolling performance stats
+  // DISABLED: Virtual scrolling stats (now always 100%)
   const getVirtualScrollStats = useCallback(() => {
-    if (!isMobile) return { rendered: coins.length, total: coins.length, percentage: 100 };
-    const rendered = visibleRange.end - visibleRange.start + 1;
-    const percentage = Math.round((rendered / coins.length) * 100);
-    return { rendered, total: coins.length, percentage };
-  }, [isMobile, visibleRange, coins.length]);
+    return { rendered: coins.length, total: coins.length, percentage: 100 };
+  }, [coins.length]);
 
-  // Update mobile detection on window resize
+  // DISABLED: Update mobile detection on window resize (no longer need different rendering)
   useEffect(() => {
     const handleResize = () => {
       const mobile = window.innerWidth < 768;
       setIsMobile(mobile);
-      
-      // Reset visible range when switching between mobile/desktop
-      if (!mobile && coins.length > 0) {
-        setVisibleRange({ start: 0, end: coins.length - 1 });
-      } else if (mobile && coins.length > 0) {
-        const newRange = calculateVisibleRange(currentIndex, coins.length);
-        setVisibleRange(newRange);
-      }
     };
 
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, []); // Remove dependencies to prevent infinite loop
+  }, []);
 
   // Enrich coins with DexScreener data
   const enrichCoins = useCallback(async (mintAddresses) => {
@@ -192,8 +168,8 @@ const ModernTokenScroller = ({
     
     // Mobile detection - now safe to load more coins with WebSocket singleton fix
     const isMobile = window.innerWidth < 768;
-    const limit = isMobile ? 50 : 200; // Increased: WebSocket singleton prevents crashes
-    console.log(`📱 Device detection: ${isMobile ? 'Mobile' : 'Desktop'}, using limit: ${limit}`);
+    const limit = isMobile ? 50 : 200; // Mobile: 50 coins, Desktop: 200 coins
+    console.log(`📱 Device: ${isMobile ? 'Mobile' : 'Desktop'}, Loading ${limit} coins (all will be rendered - virtual scrolling disabled)`);
     
     try {
       if (onlyFavorites) {
@@ -447,23 +423,13 @@ const ModernTokenScroller = ({
     }
   }, [coins.length]); // Remove enrichCoins and getCoinsToEnrich dependencies to prevent infinite loop
 
-  // Update visible range for virtual scrolling when current index changes
+  // DISABLED: Update visible range for virtual scrolling (now always render all)
   useEffect(() => {
-    if (isMobile && coins.length > 0) {
-      const newRange = calculateVisibleRange(currentIndex, coins.length);
-      // Only log significant changes to reduce console spam
-      if (Math.abs(newRange.start - visibleRange.start) > 2) {
-        console.log(`📱 Virtual scrolling update: Index ${currentIndex}, Range ${newRange.start}-${newRange.end}, Total: ${coins.length}`);
-      }
-      setVisibleRange(newRange);
-    } else if (!isMobile && coins.length > 0) {
-      // Only log once on initial desktop load
-      if (visibleRange.start !== 0 || visibleRange.end !== coins.length - 1) {
-        console.log(`💻 Desktop mode: Rendering all ${coins.length} coins (100% rendered)`);
-      }
+    // Always render all coins on both mobile and desktop
+    if (coins.length > 0 && visibleRange.end !== coins.length - 1) {
       setVisibleRange({ start: 0, end: coins.length - 1 });
     }
-  }, [currentIndex, coins.length, isMobile]);
+  }, [coins.length]);
 
   // Handle expand state changes for coins
   const handleCoinExpandChange = useCallback((isExpanded, coinAddress) => {
@@ -517,6 +483,11 @@ const ModernTokenScroller = ({
     if (newIndex !== currentIndex && newIndex >= 0 && newIndex < coins.length) {
       const currentCoin = coins[newIndex];
       setCurrentIndex(newIndex);
+      
+      // Log scroll progress occasionally (every 5th coin)
+      if (newIndex % 5 === 0) {
+        console.log(`📜 Scrolling: Coin ${newIndex + 1}/${coins.length} - ${currentCoin?.symbol || 'Unknown'}`);
+      }
       
       // Trigger enrichment for the currently viewed coin if not already enriched
       // Use setTimeout to prevent blocking the scroll
@@ -714,7 +685,7 @@ const ModernTokenScroller = ({
       {/* DexScreener Manager */}
       <DexScreenerManager
         ref={dexManagerRef}
-        visibleCoins={isMobile && coins.length > 0 ? coins.slice(visibleRange.start, visibleRange.end + 1) : coins}
+        visibleCoins={coins}
         currentCoinIndex={currentIndex}
         preloadCount={3}
         cleanupThreshold={2}
@@ -725,32 +696,9 @@ const ModernTokenScroller = ({
         ref={scrollerRef}
         className={`modern-scroller-container ${expandedCoin ? 'scroll-locked' : ''}`}
       >
-        {/* Render coins - temporarily simplified for debugging */}
+        {/* Render all coins - no virtual scrolling */}
         {coins.length > 0 ? (
-          isMobile ? (
-            // Virtual scrolling for mobile
-            (() => {
-              const start = Math.max(0, visibleRange.start);
-              const end = Math.min(coins.length - 1, visibleRange.end);
-              // DEBUG: Mobile rendering logs disabled
-              // if (Math.random() < 0.1) {
-              //   console.log(`📱 Mobile rendering: ${start}-${end} from ${coins.length} coins`);
-              // }
-              
-              if (start > end || start >= coins.length) {
-                console.log(`❌ Invalid range: start=${start}, end=${end}, length=${coins.length}`);
-                return <div>Invalid range detected</div>;
-              }
-              
-              return coins.slice(start, end + 1).map((coin, relativeIndex) => {
-                const absoluteIndex = start + relativeIndex;
-                return renderCoinWithChart(coin, absoluteIndex);
-              });
-            })()
-          ) : (
-            // Desktop - render all coins
-            coins.map((coin, index) => renderCoinWithChart(coin, index))
-          )
+          coins.map((coin, index) => renderCoinWithChart(coin, index))
         ) : (
           <div style={{ color: 'white', padding: '20px', textAlign: 'center' }}>
             {loading ? 'Loading coins...' : 'No coins available'}
