@@ -453,6 +453,76 @@ async function fetchNewCoinBatch() {
 // API ROUTES
 // ========================================
 
+// TOP TRADERS endpoint - Get top traders for a specific coin
+app.get('/api/top-traders/:coinAddress', async (req, res) => {
+  try {
+    const { coinAddress } = req.params;
+    
+    if (!coinAddress) {
+      return res.status(400).json({
+        success: false,
+        error: 'Coin address is required'
+      });
+    }
+
+    // Validate that it looks like a Solana address (base58, typically 32-44 chars)
+    if (coinAddress.length < 32 || coinAddress.length > 44) {
+      console.warn(`⚠️ Suspicious coin address length: ${coinAddress.length}`);
+    }
+
+    console.log(`🔍 Fetching top traders for: ${coinAddress}`);
+
+    // Call Solana Tracker API for top traders
+    // Use the correct /top-traders/{token} endpoint
+    const apiUrl = `${SOLANA_TRACKER_BASE_URL}/top-traders/${coinAddress}`;
+    console.log(`📡 API URL: ${apiUrl}`);
+
+    const response = await fetch(apiUrl, {
+      method: 'GET',
+      headers: {
+        'x-api-key': SOLANA_TRACKER_API_KEY,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ Solana Tracker API error: ${response.status} ${response.statusText}`);
+      console.error(`❌ Response body: ${errorText}`);
+      throw new Error(`API error: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    
+    console.log(`✅ Raw API response:`, JSON.stringify(data).substring(0, 200));
+    
+    // Handle different response formats
+    let traders = data;
+    if (data.data) {
+      traders = data.data;
+    }
+    
+    const traderCount = Array.isArray(traders) ? traders.length : 0;
+    console.log(`✅ Fetched ${traderCount} top traders for ${coinAddress}`);
+
+    res.json({
+      success: true,
+      data: Array.isArray(traders) ? traders : [],
+      count: traderCount,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('❌ Error fetching top traders:', error.message);
+    console.error('❌ Stack:', error.stack);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch top traders',
+      details: error.message
+    });
+  }
+});
+
 // NEW FEED endpoint - Returns coins that are 1-96 hours old with $15k-$30k 5m volume
 app.get('/api/coins/new', async (req, res) => {
   try {

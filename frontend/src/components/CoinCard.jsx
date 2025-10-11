@@ -5,6 +5,7 @@ import PriceHistoryChart from './PriceHistoryChart';
 import LiquidityLockIndicator from './LiquidityLockIndicator';
 import TopTradersList from './TopTradersList';
 import { useLiveData } from '../hooks/useLiveDataContext.jsx';
+import { useHeliusTransactions } from '../hooks/useHeliusTransactions.jsx';
 
 const CoinCard = memo(({ 
   coin, 
@@ -23,7 +24,10 @@ const CoinCard = memo(({
   const [currentChartPage, setCurrentChartPage] = useState(0);
   const [hoveredMetric, setHoveredMetric] = useState(null);
   const [priceFlash, setPriceFlash] = useState('');
+  const [showLiveTransactions, setShowLiveTransactions] = useState(false);
+  const [showTopTraders, setShowTopTraders] = useState(false);
   const chartsContainerRef = useRef(null);
+  const chartNavRef = useRef(null);
   const prevPriceRef = useRef(null);
 
   // 🔥 MOBILE PERFORMANCE FIX: Detect mobile and disable live data
@@ -33,6 +37,13 @@ const CoinCard = memo(({
   const { getCoin, getChart, connected, connectionStatus } = useLiveData();
   const liveData = isMobile ? null : getCoin(coin.mintAddress || coin.address);
   const chartData = isMobile ? null : getChart(coin.mintAddress || coin.address);
+
+  // Helius live transactions
+  const mintAddress = coin.mintAddress || coin.mint || coin.address || coin.contract_address || coin.contractAddress || coin.tokenAddress;
+  const { transactions, isConnected: txConnected, error: txError, clearTransactions } = useHeliusTransactions(
+    mintAddress,
+    showLiveTransactions
+  );
 
   // Handle price flash animation (disabled on mobile for performance)
   useEffect(() => {
@@ -326,6 +337,114 @@ const CoinCard = memo(({
 
     container.addEventListener('scroll', handleChartScroll);
     return () => container.removeEventListener('scroll', handleChartScroll);
+  }, []);
+
+  // Handle touch/swipe on nav dots area to control chart navigation
+  useEffect(() => {
+    const navContainer = chartNavRef.current;
+    const chartsContainer = chartsContainerRef.current;
+    if (!navContainer || !chartsContainer) return;
+
+    let lastX = 0;
+    let lastY = 0;
+    let isDragging = false;
+    let isHorizontalSwipe = false;
+
+    const handleTouchStart = (e) => {
+      // Only start tracking if touch is directly on the nav dots container
+      lastX = e.touches[0].clientX;
+      lastY = e.touches[0].clientY;
+      isDragging = true;
+      isHorizontalSwipe = false;
+      console.log('🔍 [NAV DOTS] Touch start:', { lastX, lastY });
+    };
+
+    const handleTouchMove = (e) => {
+      if (!isDragging) return;
+      
+      const currentX = e.touches[0].clientX;
+      const currentY = e.touches[0].clientY;
+      const deltaX = Math.abs(currentX - lastX);
+      const deltaY = Math.abs(currentY - lastY);
+      
+      // Only enable horizontal swipe if horizontal movement is dominant
+      if (!isHorizontalSwipe && deltaX > 10 && deltaX > (deltaY * 2)) {
+        isHorizontalSwipe = true;
+      }
+      
+      // If it's a horizontal swipe, handle chart scrolling
+      if (isHorizontalSwipe) {
+        const scrollDelta = lastX - currentX;
+        const newScroll = chartsContainer.scrollLeft + (scrollDelta * 1.5);
+        chartsContainer.scrollLeft = newScroll;
+        
+        lastX = currentX;
+        
+        // Prevent default only for horizontal swipes
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+
+    const handleTouchEnd = () => {
+      console.log('🔍 [NAV DOTS] Touch end, was horizontal swipe:', isHorizontalSwipe);
+      isDragging = false;
+      isHorizontalSwipe = false;
+    };
+
+    // Mouse events for desktop
+    let isDown = false;
+    let mouseLastX = 0;
+
+    const handleMouseDown = (e) => {
+      isDown = true;
+      navContainer.style.cursor = 'grabbing';
+      mouseLastX = e.clientX;
+      e.preventDefault();
+      console.log('🔍 [NAV DOTS] Mouse down:', { mouseLastX });
+    };
+
+    const handleMouseMove = (e) => {
+      if (!isDown) return;
+      
+      const currentX = e.clientX;
+      const deltaX = mouseLastX - currentX;
+      
+      const newScroll = chartsContainer.scrollLeft + (deltaX * 1.5);
+      chartsContainer.scrollLeft = newScroll;
+      
+      mouseLastX = currentX;
+      e.preventDefault();
+    };
+
+    const handleMouseUp = () => {
+      isDown = false;
+      navContainer.style.cursor = 'grab';
+    };
+
+    const handleMouseLeave = () => {
+      isDown = false;
+      navContainer.style.cursor = 'grab';
+    };
+
+    // Add event listeners with capture phase for touch events
+    navContainer.addEventListener('touchstart', handleTouchStart, { passive: false, capture: true });
+    navContainer.addEventListener('touchmove', handleTouchMove, { passive: false, capture: true });
+    navContainer.addEventListener('touchend', handleTouchEnd, { passive: true, capture: true });
+    navContainer.addEventListener('mousedown', handleMouseDown);
+    navContainer.addEventListener('mousemove', handleMouseMove);
+    navContainer.addEventListener('mouseup', handleMouseUp);
+    navContainer.addEventListener('mouseleave', handleMouseLeave);
+
+    return () => {
+      navContainer.removeEventListener('touchstart', handleTouchStart, true);
+      navContainer.removeEventListener('touchmove', handleTouchMove, true);
+      navContainer.removeEventListener('touchend', handleTouchEnd, true);
+      navContainer.removeEventListener('mousedown', handleMouseDown);
+      navContainer.removeEventListener('mousemove', handleMouseMove);
+      navContainer.removeEventListener('mouseup', handleMouseUp);
+      navContainer.removeEventListener('mouseleave', handleMouseLeave);
+    };
   }, []);
 
   // Component cleanup on unmount
@@ -791,8 +910,11 @@ const CoinCard = memo(({
         <div className="info-layer-content">
           {/* Price Charts - Horizontal Scrollable with Snap */}
           <div className="charts-section">
-            {/* Navigation Dots Above Chart */}
-            <div className="chart-nav-dots-top">
+            {/* Navigation Dots Above Chart - Swipe area to control charts */}
+            <div 
+              className="chart-nav-dots-top" 
+              ref={chartNavRef}
+            >
               <div 
                 className={`nav-dot ${currentChartPage === 0 ? 'active' : ''}`}
                 onClick={() => navigateToChartPage(0)}
@@ -865,6 +987,104 @@ const CoinCard = memo(({
             </div>
           </div>
 
+          {/* Live Transactions Section */}
+          <div className="transactions-section">
+            <div className="transactions-section-header">Transactions</div>
+            {!showLiveTransactions ? (
+              <div className="load-transactions-wrapper">
+                <button 
+                    className="load-live-transactions-btn"
+                    onClick={() => setShowLiveTransactions(true)}
+                  >
+                    Load Live Transactions
+                  </button>
+                </div>
+            ) : (
+              <div className="live-transactions-content">
+                  <div className="transactions-header">
+                    <div className="transactions-status">
+                      <span className={`status-indicator ${txConnected ? 'connected' : 'disconnected'}`}>
+                        {txConnected ? '🟢 Live' : '🔴 Connecting...'}
+                      </span>
+                      <span className="tx-count">{transactions.length} transactions</span>
+                    </div>
+                    <button 
+                      className="close-transactions-btn"
+                      onClick={() => {
+                        setShowLiveTransactions(false);
+                        clearTransactions();
+                      }}
+                    >
+                      ✕ Close
+                    </button>
+                  </div>
+
+                  {txError && (
+                    <div className="tx-error">
+                      ⚠️ {txError}
+                    </div>
+                  )}
+
+                  <div className="transactions-list">
+                    {transactions.length === 0 ? (
+                      <div className="transactions-empty">
+                        <div className="empty-text">Waiting for transactions...</div>
+                        <div className="empty-subtext">Live monitoring is active</div>
+                      </div>
+                    ) : (
+                      transactions.map((tx, index) => (
+                        <div key={tx.signature} className="transaction-item" style={{
+                          animation: index === 0 ? 'slideIn 0.3s ease-out' : 'none'
+                        }}>
+                          <div className="tx-left">
+                            <div className="tx-signature-row">
+                              <span className="tx-type">{tx.type}</span>
+                              <div className="tx-signature">
+                                <a 
+                                  href={`https://solscan.io/tx/${tx.signature}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="tx-link"
+                                >
+                                  {tx.signature.substring(0, 8)}...{tx.signature.substring(tx.signature.length - 8)}
+                                  <span className="external-icon">↗</span>
+                                </a>
+                              </div>
+                            </div>
+                            {tx.err && (
+                              <div className="tx-error-badge">❌ Failed</div>
+                            )}
+                          </div>
+                          <div className="tx-right">
+                            <span className="tx-time">{new Date(tx.timestamp).toLocaleTimeString()}</span>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+          </div>
+
+          {/* Top Traders Section - Separate from Transactions */}
+          <div className="top-traders-section">
+            <div className="top-traders-section-header">Top Traders</div>
+            {!showTopTraders ? (
+              <div className="load-top-traders-wrapper">
+                <button 
+                  className="load-top-traders-btn"
+                  onClick={() => setShowTopTraders(true)}
+                >
+                  Load Top Traders
+                </button>
+              </div>
+            ) : (
+              <div className="top-traders-content">
+                <TopTradersList coinAddress={mintAddress} />
+              </div>
+            )}
+          </div>
+
           {/* Token Information - Comprehensive Solana Tracker Data */}
           <div className="token-info-grid-section">
             <h3 className="section-title">Token Information</h3>
@@ -873,7 +1093,7 @@ const CoinCard = memo(({
                 {/* Row 1: Trading Activity */}
                 {(coin.buys_24h > 0 || coin.sells_24h > 0 || coin.transactions_24h > 0) && (
                   <div className="info-card">
-                    <div className="info-card-header">📊 Trading Activity (24h)</div>
+                    <div className="info-card-header">Trading Activity (24h)</div>
                     <div className="info-card-content">
                       {coin.buys_24h > 0 && (
                         <div className="info-row">
@@ -907,7 +1127,7 @@ const CoinCard = memo(({
                 
                 {/* Row 2: Market Metrics */}
                 <div className="info-card">
-                  <div className="info-card-header">💰 Market Metrics</div>
+                  <div className="info-card-header">Market Metrics</div>
                   <div className="info-card-content">
                     {coin.market_cap_usd > 0 && (
                       <div className="info-row">
@@ -939,7 +1159,7 @@ const CoinCard = memo(({
                 {/* Row 3: Token Age & Creation */}
                 {(coin.age || coin.ageHours || coin.created_timestamp) && (
                   <div className="info-card">
-                    <div className="info-card-header">🕐 Token Age</div>
+                    <div className="info-card-header">Token Age</div>
                     <div className="info-card-content">
                       {(coin.age || coin.ageHours) && (
                         <div className="info-row">
@@ -976,7 +1196,7 @@ const CoinCard = memo(({
                 {/* Row 4: Additional Metrics */}
                 {(coin.holders || coin.holderCount || coin.priorityScore) && (
                   <div className="info-card">
-                    <div className="info-card-header">📈 Additional Metrics</div>
+                    <div className="info-card-header">Additional Metrics</div>
                     <div className="info-card-content">
                       {(coin.holders || coin.holderCount) && (
                         <div className="info-row">

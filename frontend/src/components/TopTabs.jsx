@@ -141,6 +141,7 @@ const TopTabs = ({ activeFilter, onFilterChange, showFilterButton = false, onFil
     let swipeStartX = 0;
     let swipeStartY = 0;
     let isSwiping = false;
+    let isVerticalScroll = false;
     
     const handleGlobalTouchStart = (e) => {
       // Don't process swipes if touch started on a button/interactive element
@@ -149,40 +150,61 @@ const TopTabs = ({ activeFilter, onFilterChange, showFilterButton = false, onFil
         return;
       }
       
+      // Only listen for swipes at the top 30% of the screen (near tabs)
+      const touchY = e.touches[0].clientY;
+      const screenHeight = window.innerHeight;
+      if (touchY > screenHeight * 0.3) {
+        return; // Ignore touches below top 30% of screen
+      }
+      
       swipeStartX = e.touches[0].clientX;
       swipeStartY = e.touches[0].clientY;
       isSwiping = false;
+      isVerticalScroll = false;
     };
 
     const handleGlobalTouchMove = (e) => {
-      if (swipeStartX === 0) return;
+      if (swipeStartX === 0 || isVerticalScroll) return;
       
       const currentX = e.touches[0].clientX;
       const currentY = e.touches[0].clientY;
       const diffX = Math.abs(currentX - swipeStartX);
       const diffY = Math.abs(currentY - swipeStartY);
       
-      // Only consider it a swipe if horizontal movement is dominant
-      if (diffX > diffY && diffX > 10) {
+      // Check if this is a vertical scroll (should NOT trigger tab change)
+      if (diffY > diffX && diffY > 20) {
+        isVerticalScroll = true;
+        swipeStartX = 0;
+        swipeStartY = 0;
+        return;
+      }
+      
+      // Only consider it a swipe if horizontal movement is SIGNIFICANTLY dominant
+      // Require horizontal movement to be at least 2x the vertical movement
+      if (diffX > (diffY * 2) && diffX > 30) {
         isSwiping = true;
       }
     };
 
     const handleGlobalTouchEnd = (e) => {
-      if (swipeStartX === 0 || !isSwiping) {
+      if (swipeStartX === 0 || !isSwiping || isVerticalScroll) {
         swipeStartX = 0;
         swipeStartY = 0;
         isSwiping = false;
+        isVerticalScroll = false;
         return;
       }
       
       const swipeEndX = e.changedTouches[0].clientX;
-      const distance = swipeStartX - swipeEndX;
-      const minSwipeDistance = 80; // Increased from 50 to prevent accidental triggers
+      const swipeEndY = e.changedTouches[0].clientY;
+      const distanceX = swipeStartX - swipeEndX;
+      const distanceY = Math.abs(swipeStartY - swipeEndY);
+      const minSwipeDistance = 100; // Increased from 80 to be even more deliberate
       
-      if (Math.abs(distance) > minSwipeDistance) {
+      // Final check: ensure horizontal swipe with minimal vertical movement
+      if (Math.abs(distanceX) > minSwipeDistance && distanceY < 50) {
         const currentIndex = tabs.findIndex(tab => tab.id === activeFilter);
-        const targetIndex = distance > 0 ? currentIndex + 1 : currentIndex - 1;
+        const targetIndex = distanceX > 0 ? currentIndex + 1 : currentIndex - 1;
         
         // Allow swiping to trending, new, and custom tabs
         if (targetIndex >= 0 && targetIndex < tabs.length && 
@@ -194,6 +216,7 @@ const TopTabs = ({ activeFilter, onFilterChange, showFilterButton = false, onFil
       swipeStartX = 0;
       swipeStartY = 0;
       isSwiping = false;
+      isVerticalScroll = false;
     };
 
     document.addEventListener('touchstart', handleGlobalTouchStart, { passive: true });

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { getFullApiUrl } from '../config/api';
 import './TopTradersList.css';
 
@@ -7,6 +7,13 @@ const TopTradersList = ({ coinAddress }) => {
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(null);
+
+  // Auto-load top traders when component mounts
+  useEffect(() => {
+    if (coinAddress && !loaded && !loading) {
+      loadTopTraders();
+    }
+  }, [coinAddress]);
 
   const loadTopTraders = async () => {
     if (!coinAddress) {
@@ -69,23 +76,6 @@ const TopTradersList = ({ coinAddress }) => {
     return ` / ${count} txns`;
   };
 
-  if (!loaded && !loading) {
-    return (
-      <div className="top-traders-container">
-        <button 
-          className="load-traders-btn"
-          onClick={loadTopTraders}
-          disabled={!coinAddress}
-        >
-          Load Top Traders
-        </button>
-        {!coinAddress && (
-          <p className="no-address-message">No coin address available</p>
-        )}
-      </div>
-    );
-  }
-
   if (loading) {
     return (
       <div className="traders-loading">
@@ -112,7 +102,7 @@ const TopTradersList = ({ coinAddress }) => {
   return (
     <div className="top-traders-container">
       <div className="top-traders-header">
-        <h3>Top Traders</h3>
+        <h3>Top {traders.length} Traders</h3>
         <button 
           className="refresh-traders-btn"
           onClick={loadTopTraders}
@@ -127,36 +117,34 @@ const TopTradersList = ({ coinAddress }) => {
       ) : (
         <div className="traders-table-container">
           <div className="traders-table">
-            <div className="table-header">
-              <div className="header-cell rank">RANK</div>
-              <div className="header-cell maker">MAKER</div>
-              <div className="header-cell bought">BOUGHT</div>
-              <div className="header-cell sold">SOLD</div>
-              <div className="header-cell pnl">PNL</div>
-            </div>
-            
-            {traders.map((trader, index) => (
-              <div key={trader.wallet || index} className="table-row">
-                <div className="table-cell rank">#{index + 1}</div>
-                <div className="table-cell maker">
-                  <span className="twitter-icon">🐦</span>
-                  <span className="wallet-address">{formatWallet(trader.wallet)}</span>
-                </div>
-                <div className="table-cell bought">
-                  <div className="amount-primary">{formatCurrency(trader.total_invested || 0)}</div>
-                  <div className="amount-secondary">{formatTokenAmount(trader.held || 0)}{formatTransactionCount(trader.buy_txns)}</div>
-                </div>
-                <div className="table-cell sold">
-                  <div className="amount-primary">{formatCurrency(trader.realized || 0)}</div>
-                  <div className="amount-secondary">{formatTokenAmount(trader.sold || 0)}{formatTransactionCount(trader.sell_txns)}</div>
-                </div>
-                <div className="table-cell pnl">
-                  <div className={`pnl-amount ${trader.total >= 0 ? 'positive' : 'negative'}`}>
-                    {formatCurrency(trader.total)}
+            <div className="traders-scroll-window">
+              {traders.map((trader, index) => (
+                <div key={trader.wallet || index} className="table-row">
+                  <div className="trader-left">
+                    <div className="trader-rank">#{index + 1}</div>
+                    <div className="trader-wallet">
+                      <span className="wallet-address">{formatWallet(trader.wallet)}</span>
+                      <div className="trader-stats">
+                        <span className="stat-item">
+                          🟢 {formatCurrency(trader.total_invested || 0)}
+                        </span>
+                        <span className="stat-item">
+                          🔴 {formatCurrency(trader.realized || 0)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="trader-right">
+                    <div className={`pnl-amount ${trader.total >= 0 ? 'positive' : 'negative'}`}>
+                      {formatCurrency(trader.total)}
+                    </div>
+                    <div className="pnl-details">
+                      {formatTokenAmount(trader.held || 0)} held
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       )}

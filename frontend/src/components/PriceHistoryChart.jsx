@@ -42,13 +42,21 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
     const mouseX = event.clientX - rect.left;
     const mouseY = event.clientY - rect.top;
 
-    // Find closest data point
+    // Find closest data point with updated padding
     const containerWidth = canvas.parentElement?.offsetWidth || (typeof chartWidth === 'number' ? chartWidth : 280);
     const containerHeight = height;
-    const padding = { top: 5, right: 0, bottom: 5, left: 0 };
-    const chartWidthCalc = containerWidth;
+    const padding = { top: 10, right: 10, bottom: 35, left: 55 };
+    const chartWidthCalc = containerWidth - padding.left - padding.right;
     
-    const pointIndex = Math.round((mouseX / chartWidthCalc) * (chartData.dataPoints.length - 1));
+    // Check if mouse is within chart area
+    if (mouseX < padding.left || mouseX > containerWidth - padding.right ||
+        mouseY < padding.top || mouseY > containerHeight - padding.bottom) {
+      setHoveredPoint(null);
+      return;
+    }
+    
+    const relativeX = mouseX - padding.left;
+    const pointIndex = Math.round((relativeX / chartWidthCalc) * (chartData.dataPoints.length - 1));
     const clampedIndex = Math.max(0, Math.min(pointIndex, chartData.dataPoints.length - 1));
     
     if (chartData.dataPoints[clampedIndex]) {
@@ -477,9 +485,9 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, containerWidth, containerHeight);
 
-    // Calculate dimensions - TRUE edge-to-edge, no padding at all
-    const padding = { top: 5, right: 0, bottom: 5, left: 0 };
-    const chartWidth = containerWidth; // Use full container width
+    // Calculate dimensions - Add padding for axis labels
+    const padding = { top: 10, right: 10, bottom: 35, left: 55 };
+    const chartWidth = containerWidth - padding.left - padding.right;
     const chartHeight = containerHeight - padding.top - padding.bottom;
 
     // Find min/max for scaling with slight padding
@@ -498,9 +506,72 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
     const isPositive = prices[prices.length - 1] > prices[0];
     const lineColor = isPositive ? '#22c55e' : '#ef4444';
 
-    // Build path points - TRUE edge-to-edge positioning
+    // Draw X and Y axes
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+    ctx.lineWidth = 1.5;
+    
+    // Y-axis (left side)
+    ctx.beginPath();
+    ctx.moveTo(padding.left, padding.top);
+    ctx.lineTo(padding.left, containerHeight - padding.bottom);
+    ctx.stroke();
+    
+    // X-axis (bottom)
+    ctx.beginPath();
+    ctx.moveTo(padding.left, containerHeight - padding.bottom);
+    ctx.lineTo(containerWidth - padding.right, containerHeight - padding.bottom);
+    ctx.stroke();
+    
+    // Y-axis labels (price values)
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.font = '10px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    
+    // Draw 4 price labels evenly spaced on Y-axis
+    const numYLabels = 4;
+    for (let i = 0; i <= numYLabels; i++) {
+      const priceValue = minPrice + (priceRange * (numYLabels - i) / numYLabels);
+      const yPos = padding.top + (chartHeight * i / numYLabels);
+      
+      // Format price based on magnitude (no $ sign, no leading zero)
+      let formattedPrice;
+      if (priceValue < 0.00001) {
+        formattedPrice = priceValue.toFixed(8).replace(/^0+/, ''); // Remove leading zeros
+        if (!formattedPrice.startsWith('.')) formattedPrice = '0' + formattedPrice; // Keep one 0 if needed
+      } else if (priceValue < 0.01) {
+        formattedPrice = priceValue.toFixed(6).replace(/^0+/, '');
+        if (!formattedPrice.startsWith('.')) formattedPrice = '0' + formattedPrice;
+      } else if (priceValue < 1) {
+        formattedPrice = priceValue.toFixed(4).replace(/^0\./, '.'); // Remove leading 0 for 0.xxxx
+      } else {
+        formattedPrice = priceValue.toFixed(2); // Keep regular format for >= 1
+      }
+      
+      ctx.fillText(formattedPrice, padding.left - 5, yPos);
+    }
+    
+    // X-axis labels (time values)
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    
+    // Draw 3 time labels evenly spaced on X-axis
+    const numXLabels = 3;
+    for (let i = 0; i <= numXLabels; i++) {
+      const dataIndex = Math.floor((dataPoints.length - 1) * i / numXLabels);
+      const point = dataPoints[dataIndex];
+      const xPos = padding.left + (chartWidth * i / numXLabels);
+      
+      // Format time
+      const date = new Date(point.timestamp);
+      const formattedTime = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      
+      ctx.fillText(formattedTime, xPos, containerHeight - padding.bottom + 5);
+    }
+
+    // Build path points - Adjust for padding
     const points = dataPoints.map((point, index) => {
-      const x = (index / (dataPoints.length - 1)) * chartWidth; // Start from 0, end at chartWidth
+      const x = padding.left + (index / (dataPoints.length - 1)) * chartWidth;
       const y = padding.top + (1 - (point.price - minPrice) / priceRange) * chartHeight;
       return { x, y };
     });
@@ -589,7 +660,7 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
       {/* Data Source Disclaimer */}
       <div className="chart-disclaimer">
         <span className="disclaimer-text">
-          📊 Blended 24h estimate from DexScreener price changes • Use "Advanced View" for live data
+          Blended 24h estimate from DexScreener price changes • Use "Advanced View" for live data
         </span>
       </div>
     </div>

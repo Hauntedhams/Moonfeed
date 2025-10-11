@@ -827,13 +827,48 @@
 }
 
 /* Navigation Dots Above Chart */
+/* Navigation Dots Above Chart */
 .chart-nav-dots-top {
   display: flex;
   justify-content: center;
   gap: 8px;
   margin-bottom: 8px;
   /* Add padding back since we removed it from charts-section */
-  padding: 0 20px;
+  padding: 12px 20px;
+  /* Make it a swipeable area but don't scroll */
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none; /* Prevent all default touch behaviors including back/forward */
+  position: relative;
+  /* Add visual hint that it's interactive */
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 12px;
+  margin-left: 20px;
+  margin-right: 20px;
+  transition: background 0.2s ease;
+}
+
+.chart-nav-dots-top:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.chart-nav-dots-top:active {
+  cursor: grabbing;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* Remove the nav-dots-wrapper since we don't need it anymore */
+.nav-dots-wrapper {
+  display: none;
+}
+
+.chart-nav-dots-top:active {
+  cursor: grabbing;
+}
+
+.chart-nav-dots-top::-webkit-scrollbar {
+  display: none; /* WebKit */
 }
 
 .charts-horizontal-container {
@@ -937,6 +972,8 @@
   background: rgba(0, 0, 0, 0.2);
   transition: all 0.3s ease;
   cursor: pointer;
+  flex-shrink: 0;
+  scroll-snap-align: center;
 }
 
 .nav-dot:hover {
@@ -950,17 +987,399 @@
   border-radius: 4px;
 }
 
-/* Swipe Hint - Removed as navigation is now in footer */
-.swipe-hint {
-  text-align: center;
-  margin-top: 8px;
-  padding: 0 20px;
+/* =============================================================================
+   LIVE TRANSACTIONS SECTION
+   ============================================================================= */
+
+/* Live Transactions Section - matches Market Metrics card style */
+.transactions-section {
+  margin: 16px 0;
+  background: linear-gradient(135deg, rgba(79, 195, 247, 0.05) 0%, rgba(103, 126, 234, 0.05) 100%);
+  border: 1px solid rgba(79, 195, 247, 0.2);
+  border-radius: 12px;
+  padding: 0;
+  transition: all 0.3s ease;
 }
 
-.swipe-hint span {
+.transactions-section:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(79, 195, 247, 0.15);
+  border-color: rgba(79, 195, 247, 0.4);
+}
+
+/* Section header with icon and title */
+.transactions-section-header {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #667eea;
+  padding: 16px;
+  border-bottom: 1px solid rgba(79, 195, 247, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Button wrapper - centered container */
+.load-transactions-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 120px;
+  padding: 20px;
+}
+
+.load-live-transactions-btn {
+  padding: 14px 28px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+  min-width: 200px;
+  min-height: 48px;
+}
+
+.load-live-transactions-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+}
+
+.load-live-transactions-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+/* Live transactions content */
+.live-transactions-content {
+  position: relative;
+  color: rgba(0, 0, 0, 0.8);
+  min-height: 200px;
+  padding: 16px;
+}
+
+.transactions-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 0 12px 0;
+  margin-bottom: 16px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.transactions-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+}
+
+.status-indicator.connected {
+  color: #22c55e;
+}
+
+.status-indicator.disconnected {
+  color: #ef4444;
+}
+
+.tx-count {
+  color: rgba(0, 0, 0, 0.6);
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.5);
-  font-style: italic;
+}
+
+.close-transactions-btn {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 8px;
+  padding: 6px 12px;
+  color: #ef4444;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.close-transactions-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
+  transform: translateY(-1px);
+}
+
+/* Transactions list - structured like Market Metrics */
+.transactions-list {
+  max-height: 500px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.transactions-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.transactions-list::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 4px;
+}
+
+.transactions-list::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+
+.transactions-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+/* Empty state */
+.transactions-empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: rgba(0, 0, 0, 0.5);
+}
+
+.empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.empty-text {
+  font-size: 16px;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.7);
+  margin-bottom: 8px;
+}
+
+.empty-subtext {
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.5);
+}
+
+/* Transaction item - structured like info-row */
+.transaction-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  transition: all 0.2s ease;
+}
+
+.transaction-item:last-child {
+  border-bottom: none;
+}
+
+.transaction-item:hover {
+  background: rgba(0, 0, 0, 0.02);
+  padding-left: 8px;
+  padding-right: 8px;
+  margin-left: -8px;
+  margin-right: -8px;
+  border-radius: 6px;
+}
+
+.tx-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.tx-signature-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tx-type {
+  display: inline-block;
+  padding: 2px 6px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.tx-signature {
+  font-family: 'Monaco', 'Courier New', monospace;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.7);
+}
+
+.tx-link {
+  color: #667eea;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s ease;
+}
+
+.tx-link:hover {
+  color: #764ba2;
+  text-decoration: underline;
+}
+
+.external-icon {
+  font-size: 10px;
+  opacity: 0.6;
+}
+
+.tx-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.tx-time {
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.5);
+  font-weight: 500;
+}
+
+.tx-error {
+  padding: 12px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 8px;
+  color: #ef4444;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.tx-error-badge {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 4px 8px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 6px;
+  color: #ef4444;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* Slide in animation for new transactions */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.transactions-placeholder {
+  text-align: center;
+  padding: 60px 20px;
+  color: rgba(0, 0, 0, 0.5);
+  font-size: 14px;
+}
+
+/* =============================================================================
+   TOP TRADERS SECTION
+   ============================================================================= */
+
+/* Top Traders Section - matches Market Metrics card style */
+.top-traders-section {
+  margin: 16px 0;
+  background: linear-gradient(135deg, rgba(79, 195, 247, 0.05) 0%, rgba(103, 126, 234, 0.05) 100%);
+  border: 1px solid rgba(79, 195, 247, 0.2);
+  border-radius: 12px;
+  padding: 0;
+  transition: all 0.3s ease;
+}
+
+.top-traders-section:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(79, 195, 247, 0.15);
+  border-color: rgba(79, 195, 247, 0.4);
+}
+
+/* Section header with icon and title */
+.top-traders-section-header {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #667eea;
+  padding: 16px;
+  border-bottom: 1px solid rgba(79, 195, 247, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Button wrapper for top traders */
+.load-top-traders-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 120px;
+  padding: 20px;
+}
+
+.load-top-traders-btn {
+  padding: 14px 28px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+  min-width: 200px;
+  min-height: 48px;
+}
+
+.load-top-traders-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+}
+
+.load-top-traders-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+/* Top traders content */
+.top-traders-content {
+  position: relative;
+  color: rgba(0, 0, 0, 0.8);
+  min-height: 200px;
+  padding: 16px;
 }
 
 /* =============================================================================
@@ -1107,51 +1526,75 @@
    MOBILE RESPONSIVE BANNER IMPROVEMENTS
    ============================================================================= */
 
-/* Small mobile devices */
+/* Default mobile - use shorter banner to prioritize info layer */
+@media (max-width: 768px) {
+  .coin-banner {
+    /* Much shorter banner on mobile to show more info layer content */
+    height: clamp(160px, 25vh, 220px);
+  }
+  
+  .coin-info-layer {
+    height: calc(100dvh - clamp(160px, 25vh, 220px));
+  }
+}
+
+/* Small mobile devices - even more compact */
 @media (max-width: 390px) {
   .coin-banner {
-    /* Ensure banner fills more space on smaller screens */
-    height: clamp(250px, 60vh, 400px);
+    /* Compact banner for small screens */
+    height: clamp(140px, 22vh, 200px);
   }
   
   .coin-info-layer {
-    height: calc(100dvh - clamp(250px, 60vh, 400px));
+    height: calc(100dvh - clamp(140px, 22vh, 200px));
   }
 }
 
-/* Large mobile devices and tablets */
-@media (min-width: 391px) and (max-width: 768px) {
+/* Medium mobile devices with problematic aspect ratios */
+@media (min-width: 391px) and (max-width: 430px) and (min-height: 800px) {
   .coin-banner {
-    /* Optimize for larger mobile screens */
-    height: clamp(300px, 50vh, 450px);
+    /* Target devices like iPhone 12 Pro, 13 Pro with tall screens */
+    height: clamp(170px, 23vh, 210px);
   }
   
   .coin-info-layer {
-    height: calc(100dvh - clamp(300px, 50vh, 450px));
+    height: calc(100dvh - clamp(170px, 23vh, 210px));
   }
 }
 
-/* Very tall screens */
-@media (min-height: 900px) {
+/* Very tall screens (tablets in portrait) */
+@media (min-height: 900px) and (max-width: 768px) {
   .coin-banner {
-    /* Prevent banner from becoming too tall on very tall screens */
+    /* Keep banner compact on tall mobile devices */
+    height: clamp(180px, 22vh, 240px);
+  }
+  
+  .coin-info-layer {
+    height: calc(100dvh - clamp(180px, 22vh, 240px));
+  }
+}
+
+/* Landscape orientation - ultra compact */
+@media (orientation: landscape) and (max-height: 500px) {
+  .coin-banner {
+    /* Very short in landscape to maximize info layer */
+    height: clamp(100px, 20vh, 140px);
+  }
+  
+  .coin-info-layer {
+    height: calc(100dvh - clamp(100px, 20vh, 140px));
+  }
+}
+
+/* Desktop and large tablets - can afford taller banner */
+@media (min-width: 769px) {
+  .coin-banner {
+    /* Taller banner is fine on desktop */
     height: clamp(220px, 30vh, 300px);
   }
   
   .coin-info-layer {
     height: calc(100dvh - clamp(220px, 30vh, 300px));
-  }
-}
-
-/* Landscape orientation */
-@media (orientation: landscape) and (max-height: 500px) {
-  .coin-banner {
-    /* Reduce banner height in landscape mode */
-    height: clamp(120px, 25vh, 180px);
-  }
-  
-  .coin-info-layer {
-    height: calc(100dvh - clamp(120px, 25vh, 180px));
   }
 }
 

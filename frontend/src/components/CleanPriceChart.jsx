@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, memo } from 'react';
 import './CleanPriceChart.css';
 
-const CleanPriceChart = memo(({ coin, width, height = 180 }) => {
+const CleanPriceChart = memo(({ coin, width, height = 220 }) => {
   // Use parent container width - if width is "100%" or similar, use full container
   const chartWidth = width === "100%" ? "100%" : (width || 280);
 
@@ -479,8 +479,8 @@ const CleanPriceChart = memo(({ coin, width, height = 180 }) => {
       const maxPrice = Math.max(...prices) * 1.02; // Add 2% padding
       const priceRange = maxPrice - minPrice;
       
-      // Add padding
-      const padding = { top: 20, right: 20, bottom: 30, left: 20 };
+      // Add padding - increased left and bottom for axis labels
+      const padding = { top: 20, right: 20, bottom: 40, left: 60 };
       const chartHeight = height - padding.top - padding.bottom;
 
       // Determine line color based on overall trend
@@ -494,6 +494,103 @@ const CleanPriceChart = memo(({ coin, width, height = 180 }) => {
       const gradient = ctx.createLinearGradient(0, padding.top, 0, height - padding.bottom);
       gradient.addColorStop(0, gradientColor);
       gradient.addColorStop(1, 'rgba(255,255,255,0)');
+
+      // Draw X and Y axes
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+      ctx.lineWidth = 1.5;
+      
+      // Y-axis (left side)
+      ctx.beginPath();
+      ctx.moveTo(padding.left, padding.top);
+      ctx.lineTo(padding.left, height - padding.bottom);
+      ctx.stroke();
+      
+      // X-axis (bottom)
+      ctx.beginPath();
+      ctx.moveTo(padding.left, height - padding.bottom);
+      ctx.lineTo(containerWidth - padding.right, height - padding.bottom);
+      ctx.stroke();
+      
+      // Y-axis labels (price values)
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      ctx.font = '11px Inter, -apple-system, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      
+      // Draw 4 price labels evenly spaced on Y-axis
+      const numYLabels = 4;
+      for (let i = 0; i <= numYLabels; i++) {
+        const priceValue = minPrice + (priceRange * (numYLabels - i) / numYLabels);
+        const yPos = padding.top + (chartHeight * i / numYLabels);
+        
+        // Format price based on magnitude
+        let formattedPrice;
+        if (priceValue < 0.00001) {
+          formattedPrice = `$${priceValue.toFixed(8)}`;
+        } else if (priceValue < 0.01) {
+          formattedPrice = `$${priceValue.toFixed(6)}`;
+        } else if (priceValue < 1) {
+          formattedPrice = `$${priceValue.toFixed(4)}`;
+        } else {
+          formattedPrice = `$${priceValue.toFixed(2)}`;
+        }
+        
+        ctx.fillText(formattedPrice, padding.left - 8, yPos);
+        
+        // Draw small tick mark
+        ctx.beginPath();
+        ctx.moveTo(padding.left - 4, yPos);
+        ctx.lineTo(padding.left, yPos);
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+      
+      // X-axis labels (time values)
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      
+      // Draw 4 time labels evenly spaced on X-axis
+      const numXLabels = 4;
+      for (let i = 0; i <= numXLabels; i++) {
+        const dataIndex = Math.floor((priceData.length - 1) * i / numXLabels);
+        const point = priceData[dataIndex];
+        const xPos = padding.left + ((containerWidth - padding.left - padding.right) * i / numXLabels);
+        
+        // Format time based on timeframe
+        let formattedTime;
+        const date = new Date(point.time);
+        
+        if (timeframe === '1s') {
+          // For 1-second chart, show seconds
+          formattedTime = date.toLocaleTimeString([], { minute: '2-digit', second: '2-digit' });
+        } else if (timeframe === '1m') {
+          // For 1-minute chart (1H view), show time
+          formattedTime = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        } else if (timeframe === '5m') {
+          // For 5-minute chart (1D view), show time
+          formattedTime = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        } else if (timeframe === '30m') {
+          // For 30-minute chart (1W view), show day
+          formattedTime = date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+        } else if (timeframe === '1h') {
+          // For 1-hour chart (1M view), show date
+          formattedTime = date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+        } else {
+          // For daily chart (YTD view), show date
+          formattedTime = date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+        }
+        
+        ctx.fillText(formattedTime, xPos, height - padding.bottom + 6);
+        
+        // Draw small tick mark
+        ctx.beginPath();
+        ctx.moveTo(xPos, height - padding.bottom);
+        ctx.lineTo(xPos, height - padding.bottom + 4);
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
 
       // Grid lines removed for cleaner look
 
@@ -757,8 +854,8 @@ const CleanPriceChart = memo(({ coin, width, height = 180 }) => {
     const mouseX = event.clientX - rect.left;
     const mouseY = event.clientY - rect.top;
 
-    // Chart dimensions and padding
-    const padding = { top: 20, right: 20, bottom: 30, left: 20 };
+    // Chart dimensions and padding (must match drawChart padding)
+    const padding = { top: 20, right: 20, bottom: 40, left: 60 };
     const chartHeight = height - padding.top - padding.bottom;
     const containerWidth = canvas.offsetWidth;
 
