@@ -82,6 +82,19 @@ function initializeWithLatestBatch() {
     
     console.log(`🚀 Initialized with latest batch: ${latestBatch.length} coins`);
     
+    // IMMEDIATE FETCH: Populate NEW feed immediately on startup
+    console.log('🆕 Fetching NEW feed immediately on startup...');
+    fetchNewCoinBatch()
+      .then(freshNewBatch => {
+        newCoins = freshNewBatch;
+        console.log(`✅ NEW feed initialized with ${freshNewBatch.length} coins`);
+        // Start enrichment for new coins
+        startNewFeedEnrichment();
+      })
+      .catch(error => {
+        console.error('❌ Failed to fetch initial NEW feed:', error.message);
+      });
+    
     // Start auto-processors for the loaded batch
     startDexscreenerAutoEnricher();  // Start DexScreener enrichment first
     startRugcheckAutoProcessor();     // Then start Rugcheck verification

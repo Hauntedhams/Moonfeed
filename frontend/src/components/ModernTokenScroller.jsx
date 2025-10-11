@@ -27,6 +27,8 @@ const ModernTokenScroller = ({
   const [error, setError] = useState(null);
   const [enrichedCoins, setEnrichedCoins] = useState(new Map()); // Cache for enriched coin data
   const [expandedCoin, setExpandedCoin] = useState(null); // Track which coin is expanded
+  const [retryCount, setRetryCount] = useState(0); // Track retry attempts
+  const [isBackendLoading, setIsBackendLoading] = useState(false); // Track backend loading state
   
   // Virtual scrolling DISABLED - with WebSocket singleton, we can render all cards safely
   const [visibleRange, setVisibleRange] = useState({ start: 0, end: 999 }); // Not used anymore
@@ -240,14 +242,31 @@ const ModernTokenScroller = ({
       
       // MOBILE FIX: Handle loading state when backend is initializing
       if (data.loading && data.coins?.length === 0) {
-        console.log('⏳ Backend still loading, will retry shortly...');
-        setError('Loading coins... Please wait');
-        // Retry after 2 seconds
+        console.log('⏳ Backend still loading NEW feed, will retry (attempt', retryCount + 1, '/10)...');
+        
+        // Limit retries to prevent infinite loop
+        if (retryCount >= 10) {
+          console.error('❌ Backend NEW feed took too long to load (10 retries). Showing loading state.');
+          setIsBackendLoading(true);
+          setLoading(false);
+          setError(null); // Clear error to show loading UI instead
+          return;
+        }
+        
+        // Increment retry count and retry after 3 seconds
+        setRetryCount(prev => prev + 1);
+        setIsBackendLoading(true);
+        setLoading(false); // Stop showing loading spinner to prevent flash
+        
         setTimeout(() => {
           fetchCoins();
-        }, 2000);
+        }, 3000); // Increased from 2 to 3 seconds to reduce spam
         return;
       }
+      
+      // Reset retry count on success
+      setRetryCount(0);
+      setIsBackendLoading(false);
       
       if (!data.coins || !Array.isArray(data.coins)) {
         throw new Error('Invalid response format - no coins array');
@@ -625,6 +644,19 @@ const ModernTokenScroller = ({
       <div className="modern-scroller-loading">
         <div className="loading-spinner"></div>
         <p>Loading moonfeed...</p>
+      </div>
+    );
+  }
+  
+  // Special loading state when backend is initializing (NEW feed)
+  if (isBackendLoading && coins.length === 0) {
+    return (
+      <div className="modern-scroller-loading">
+        <div className="loading-spinner"></div>
+        <p>Backend is loading NEW coins...</p>
+        <p style={{fontSize: '12px', opacity: 0.7, marginTop: '10px'}}>
+          This may take up to 30 seconds on first load
+        </p>
       </div>
     );
   }
