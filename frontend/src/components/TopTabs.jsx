@@ -138,18 +138,47 @@ const TopTabs = ({ activeFilter, onFilterChange, showFilterButton = false, onFil
 
   // Add touch listeners to the entire viewport for global swipe detection
   useEffect(() => {
+    let swipeStartX = 0;
+    let swipeStartY = 0;
+    let isSwiping = false;
+    
     const handleGlobalTouchStart = (e) => {
-      setTouchStartX(e.touches[0].clientX);
+      // Don't process swipes if touch started on a button/interactive element
+      const target = e.target;
+      if (target.closest('button') || target.closest('a') || target.closest('input')) {
+        return;
+      }
+      
+      swipeStartX = e.touches[0].clientX;
+      swipeStartY = e.touches[0].clientY;
+      isSwiping = false;
     };
 
     const handleGlobalTouchMove = (e) => {
-      setTouchEndX(e.touches[0].clientX);
+      if (swipeStartX === 0) return;
+      
+      const currentX = e.touches[0].clientX;
+      const currentY = e.touches[0].clientY;
+      const diffX = Math.abs(currentX - swipeStartX);
+      const diffY = Math.abs(currentY - swipeStartY);
+      
+      // Only consider it a swipe if horizontal movement is dominant
+      if (diffX > diffY && diffX > 10) {
+        isSwiping = true;
+      }
     };
 
-    const handleGlobalTouchEnd = () => {
-      // Handle global swipe functionality for navigation between tabs
-      const minSwipeDistance = 50;
-      const distance = touchStartX - touchEndX;
+    const handleGlobalTouchEnd = (e) => {
+      if (swipeStartX === 0 || !isSwiping) {
+        swipeStartX = 0;
+        swipeStartY = 0;
+        isSwiping = false;
+        return;
+      }
+      
+      const swipeEndX = e.changedTouches[0].clientX;
+      const distance = swipeStartX - swipeEndX;
+      const minSwipeDistance = 80; // Increased from 50 to prevent accidental triggers
       
       if (Math.abs(distance) > minSwipeDistance) {
         const currentIndex = tabs.findIndex(tab => tab.id === activeFilter);
@@ -162,20 +191,21 @@ const TopTabs = ({ activeFilter, onFilterChange, showFilterButton = false, onFil
         }
       }
       
-      setTouchStartX(0);
-      setTouchEndX(0);
+      swipeStartX = 0;
+      swipeStartY = 0;
+      isSwiping = false;
     };
 
-    document.addEventListener('touchstart', handleGlobalTouchStart);
-    document.addEventListener('touchmove', handleGlobalTouchMove);
-    document.addEventListener('touchend', handleGlobalTouchEnd);
+    document.addEventListener('touchstart', handleGlobalTouchStart, { passive: true });
+    document.addEventListener('touchmove', handleGlobalTouchMove, { passive: true });
+    document.addEventListener('touchend', handleGlobalTouchEnd, { passive: true });
 
     return () => {
       document.removeEventListener('touchstart', handleGlobalTouchStart);
       document.removeEventListener('touchmove', handleGlobalTouchMove);
       document.removeEventListener('touchend', handleGlobalTouchEnd);
     };
-  }, [touchStartX, touchEndX, activeFilter, onFilterChange]);
+  }, [activeFilter, onFilterChange]);
 
   return (
     <div className="top-tabs-container" ref={containerRef}>
@@ -209,7 +239,9 @@ const TopTabs = ({ activeFilter, onFilterChange, showFilterButton = false, onFil
             <button
               key={`${tab.id}-${tab.position}`}
               className={`top-tab ${isActive ? 'active' : ''} ${tab.position} ${showClickHint ? 'clickable-active' : ''} ${isDisabled ? 'disabled' : ''}`}
-              onClick={() => {
+              onClick={(e) => {
+                e.stopPropagation(); // Prevent event bubbling
+                
                 // Allow trending and new tabs always; custom only when filters are applied
                 if (tab.id === 'trending' || tab.id === 'new' || (tab.id === 'custom' && hasCustomFilters)) {
                   // If clicking on the already active tab, show the coin list modal
@@ -220,11 +252,16 @@ const TopTabs = ({ activeFilter, onFilterChange, showFilterButton = false, onFil
                   }
                 }
               }}
+              onTouchEnd={(e) => {
+                // Prevent touch event from triggering global swipe handler
+                e.stopPropagation();
+              }}
               style={{
                 opacity: isDisabled ? 0.4 : opacity,
                 zIndex,
                 transform: `scale(${scale})`,
-                cursor: (tab.id === 'trending' || tab.id === 'new' || (tab.id === 'custom' && hasCustomFilters)) ? 'pointer' : 'not-allowed'
+                cursor: (tab.id === 'trending' || tab.id === 'new' || (tab.id === 'custom' && hasCustomFilters)) ? 'pointer' : 'not-allowed',
+                touchAction: 'none' // Prevent default touch behaviors
               }}
             >
               <span className="tab-label" style={{

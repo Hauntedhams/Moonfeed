@@ -26,8 +26,8 @@
   top: 0;
   left: 0;
   width: 100%;
-  /* Moderate height that fills top area without being too large */
-  height: clamp(200px, 35vh, 280px);
+  /* Shorter height to show more of the banner sides */
+  height: clamp(180px, 30vh, 250px);
   background: linear-gradient(45deg, #667eea 0%, #764ba2 100%);
   display: flex;
   align-items: center;
@@ -203,8 +203,8 @@
   transition: transform 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94), 
               height 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
   transform: translateY(0%);
-  /* Adjust height to work with the new banner size */
-  height: calc(100dvh - clamp(200px, 35vh, 280px));
+  /* Adjust height to work with the new shorter banner size */
+  height: calc(100dvh - clamp(180px, 30vh, 250px));
   z-index: 50; /* Increased z-index to ensure it's above other elements */
   overflow: hidden;
   box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
@@ -324,8 +324,15 @@
 
 .header-left {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 16px;
+  flex: 1;
+}
+
+.price-and-social-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .price-section {
@@ -334,62 +341,60 @@
   gap: 12px;
 }
 
-.header-social-row {
-  display: flex;
-  justify-content: flex-start;
-  align-items: center;
-  width: 100%;
-  gap: 0px;
-}
-
 .header-social-icons {
   display: flex;
-  gap: 3px;
+  gap: 8px;
   align-items: center;
   flex-shrink: 0;
   min-width: fit-content;
-  padding-right: 0px;
 }
 
-/* Header Metrics Grid - Positioned to the right of social icons */
+.header-metrics-row {
+  display: flex;
+  width: 100%;
+}
+
+/* Header Metrics Grid - Full width row */
 .header-metrics-grid {
   display: flex;
-  gap: 8px;
+  gap: 16px;
   overflow-x: auto;
-  padding-bottom: 4px;
+  overflow-y: hidden;
+  padding: 0 4px 8px 4px;
   scroll-behavior: smooth;
   flex: 1;
-  min-width: 0; /* Allow flexbox to shrink */
+  width: 100%;
   position: relative;
-  margin-left: 0px; /* No additional space from social icons */
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
 }
 
 .header-metrics-grid::-webkit-scrollbar {
-  height: 3px;
+  height: 4px;
 }
 
 .header-metrics-grid::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.03);
+  background: rgba(0, 0, 0, 0.05);
   border-radius: 2px;
 }
 
 .header-metrics-grid::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.12);
+  background: rgba(0, 0, 0, 0.15);
   border-radius: 2px;
 }
 
 .header-metrics-grid::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.2);
+  background: rgba(0, 0, 0, 0.25);
 }
 
 .header-metric {
   background: transparent;
   border-radius: 0;
-  padding: 6px 12px;
+  padding: 8px 16px;
   text-align: center;
   border: none;
-  border-right: 1px solid rgba(0, 0, 0, 0.08);
-  flex: 0 0 90px;
+  border-right: 1px solid rgba(0, 0, 0, 0.1);
+  flex: 0 0 auto;
   min-width: 90px;
   transition: all 0.2s ease;
   position: relative;
@@ -423,6 +428,16 @@
   color: #000000;
   font-weight: 700;
   line-height: 1.1;
+}
+
+.header-metric-value-with-icon {
+  font-size: 0.85rem;
+  color: #000000;
+  font-weight: 700;
+  line-height: 1.1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 /* Metric Tooltip Styles */
@@ -717,7 +732,7 @@
    ============================================================================= */
 
 .social-links-section {
-  margin-bottom: 18px;
+  margin-bottom: 12px;
   padding-top: 8px;
 }
 
@@ -755,7 +770,7 @@
 .metrics-grid {
   display: flex;
   gap: 8px;
-  margin-bottom: 18px;
+  margin-bottom: 12px;
   overflow-x: auto;
   padding-bottom: 4px;
   scroll-behavior: smooth;
@@ -803,44 +818,22 @@
 
 /* Charts Section with Horizontal Snap Scrolling */
 .charts-section {
-  margin: 24px 0;
+  margin: 8px 0 16px 0;
   position: relative;
+  /* Break out of parent padding to allow full-width charts */
+  margin-left: -20px;
+  margin-right: -20px;
+  width: calc(100% + 40px);
 }
 
-.charts-header {
+/* Navigation Dots Above Chart */
+.chart-nav-dots-top {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0; /* Remove padding since parent already has padding */
-  margin-bottom: 56px;
-}
-
-.charts-header .section-title {
-  margin: 0;
-  padding: 0;
-}
-
-.chart-labels {
-  display: flex;
-  gap: 12px;
-}
-
-.chart-label {
-  font-size: 14px;
-  font-weight: 500;
-  color: #000;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 6px;
-  transition: background-color 0.2s ease;
-}
-
-.chart-label:hover {
-  background-color: rgba(0, 0, 0, 0.1);
-}
-
-.chart-label.active {
-  background-color: rgba(0, 0, 0, 0.1);
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  /* Add padding back since we removed it from charts-section */
+  padding: 0 20px;
 }
 
 .charts-horizontal-container {
@@ -854,8 +847,7 @@
   margin: 0;
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* Internet Explorer 10+ */
-  transform: translateY(-40px);
-  overflow-y: hidden; /* Prevent vertical overflow */
+  overflow-y: visible; /* Allow charts to use full height without clipping */
   position: relative; /* Establish stacking context */
 }
 
@@ -869,7 +861,7 @@
   padding: 0; /* Removed horizontal padding to allow full width */
   box-sizing: border-box;
   min-height: 280px;
-  overflow: hidden; /* Prevent content from bleeding into adjacent pages */
+  overflow: visible; /* Allow chart to expand beyond container */
   position: relative; /* Establish stacking context */
 }
 
@@ -913,7 +905,7 @@
 
 .advanced-chart-wrapper {
   width: 100%;
-  overflow: hidden; /* Prevent DexScreener iframe from bleeding */
+  overflow: visible; /* Allow DexScreener iframe to expand wider */
 }
 
 .price-history-wrapper {
@@ -936,24 +928,29 @@
   display: flex;
   justify-content: center;
   gap: 8px;
-  margin: 16px 0 8px;
 }
 
 .nav-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.3);
+  background: rgba(0, 0, 0, 0.2);
   transition: all 0.3s ease;
   cursor: pointer;
 }
 
-.nav-dot.active {
-  background: #fff;
+.nav-dot:hover {
+  background: rgba(0, 0, 0, 0.4);
   transform: scale(1.2);
 }
 
-/* Swipe Hint */
+.nav-dot.active {
+  background: rgba(0, 0, 0, 0.7);
+  width: 20px;
+  border-radius: 4px;
+}
+
+/* Swipe Hint - Removed as navigation is now in footer */
 .swipe-hint {
   text-align: center;
   margin-top: 8px;
@@ -1173,132 +1170,150 @@
   }
 }
 
-/* Mobile responsive styles for social icons */
-@media (max-width: 768px) {
-  .header-social-icon {
-    width: 28px;
-    height: 28px;
-  }
-  
-  .header-social-icon svg {
-    width: 14px;
-    height: 14px;
-  }
-}
-
-@media (max-width: 480px) {
-  .header-social-icons {
-    gap: 6px;
-  }
-  
-  .header-social-icon {
-    width: 26px;
-    height: 26px;
-  }
-  
-  .header-social-icon svg {
-    width: 13px;
-    height: 13px;
-  }
-}
-
-/* Mobile-specific optimizations for banner area */
-@media (max-width: 768px) {
-  .coin-banner {
-    /* Slightly smaller on mobile */
-    height: clamp(180px, 32vh, 250px);
-  }
-  
-  .coin-info-layer {
-    height: calc(100dvh - clamp(180px, 32vh, 250px));
-  }
-}
-
-@media (max-width: 480px) {
-  .coin-banner {
-    /* Compact on very small screens */
-    height: clamp(160px, 28vh, 220px);
-  }
-  
-  .coin-info-layer {
-    height: calc(100dvh - clamp(160px, 28vh, 220px));
-  }
-}
-
-/* For very tall screens, prevent banner from being too large */
-@media (min-height: 900px) {
-  .coin-banner {
-    height: clamp(220px, 30vh, 300px);
-  }
-  
-  .coin-info-layer {
-    height: calc(100dvh - clamp(220px, 30vh, 300px));
-  }
-}
-
 /* =============================================================================
-   MOBILE RESPONSIVE BANNER IMPROVEMENTS
+   PRICE CHANGE MODAL
    ============================================================================= */
 
-/* Small mobile devices */
-@media (max-width: 390px) {
-  .coin-banner {
-    /* Ensure banner fills more space on smaller screens */
-    height: clamp(250px, 60vh, 400px);
+.price-change-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  backdrop-filter: blur(4px);
+  animation: fadeIn 0.2s ease;
+}
+
+.price-change-modal-content {
+  background: #ffffff;
+  border-radius: 20px;
+  padding: 24px;
+  width: 90%;
+  max-width: 400px;
+  position: relative;
+  animation: slideUp 0.3s ease;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.price-change-modal-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: rgba(0, 0, 0, 0.05);
+  border: none;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  color: #000;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.price-change-modal-close:hover {
+  background: rgba(0, 0, 0, 0.1);
+  transform: scale(1.1);
+}
+
+.price-change-modal-title {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #000;
+  margin: 0 0 24px 0;
+  padding-right: 32px;
+}
+
+.price-change-modal-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.price-change-modal-item {
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: 12px;
+  padding: 16px;
+  text-align: center;
+}
+
+.price-change-modal-label {
+  font-size: 0.85rem;
+  color: rgba(0, 0, 0, 0.6);
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.price-change-modal-value {
+  font-size: 1.3rem;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 8px;
+  display: inline-block;
+}
+
+.price-change-modal-value.positive {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.1);
+}
+
+.price-change-modal-value.negative {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.price-change-modal-footer {
+  text-align: center;
+  padding-top: 16px;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.price-change-modal-footer p {
+  margin: 0;
+  font-size: 0.8rem;
+  color: rgba(0, 0, 0, 0.5);
+  font-style: italic;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
   }
-  
-  .coin-info-layer {
-    height: calc(100dvh - clamp(250px, 60vh, 400px));
+  to {
+    opacity: 1;
   }
 }
 
-/* Large mobile devices and tablets */
-@media (min-width: 391px) and (max-width: 768px) {
-  .coin-banner {
-    /* Optimize for larger mobile screens */
-    height: clamp(300px, 50vh, 450px);
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
   }
-  
-  .coin-info-layer {
-    height: calc(100dvh - clamp(300px, 50vh, 450px));
-  }
-}
-
-/* Very tall screens */
-@media (min-height: 900px) {
-  .coin-banner {
-    /* Prevent banner from becoming too tall on very tall screens */
-    height: clamp(220px, 30vh, 300px);
-  }
-  
-  .coin-info-layer {
-    height: calc(100dvh - clamp(220px, 30vh, 300px));
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
-/* Landscape orientation */
-@media (orientation: landscape) and (max-height: 500px) {
-  .coin-banner {
-    /* Reduce banner height in landscape mode */
-    height: clamp(120px, 25vh, 180px);
-  }
-  
-  .coin-info-layer {
-    height: calc(100dvh - clamp(120px, 25vh, 180px));
-  }
+/* Clickable price change indicator */
+.price-change.clickable {
+  transition: all 0.2s ease;
+  user-select: none;
 }
 
-/* Responsive image scaling for different screen sizes */
-@media (max-width: 768px) {
-  .coin-banner img {
-    width: 130%; /* Even wider on mobile for better content visibility */
-    left: -15%;
-  }
+.price-change.clickable:hover {
+  transform: scale(1.05);
+  opacity: 0.85;
 }
 
-@media (max-width: 480px) {
-  .coin-banner img {
-    width: 140%; /* Maximum width on very small screens */
-    left: -20%;
-  }
+.price-change.clickable:active {
+  transform: scale(0.95);
 }

@@ -1,17 +1,25 @@
 import React, { useState, useEffect, useRef } from 'react';
 
 const DexScreenerChart = ({ coin, isPreview = false }) => {
+  // 🔥 MOBILE PERFORMANCE FIX: Detect mobile device
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  
+  // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURNS
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [showIframe, setShowIframe] = useState(!isMobile); // Mobile: start hidden, Desktop: start visible
   const iframeRef = useRef(null);
   const timeoutRef = useRef(null);
 
   // Optimize the URL for faster loading with full chart visibility
-  // Always load live data regardless of preview mode
   const chartUrl = `https://dexscreener.com/${coin.chainId}/${coin.pairAddress || coin.tokenAddress}?embed=1&theme=dark&trades=0&info=0&interval=5m&chart=1&header=0&utm_source=moonfeed&utm_medium=embed&layout=base`;
 
+  // EFFECT 1: Preload and timeout
   useEffect(() => {
+    if (!showIframe) return; // Skip if iframe is not shown yet
+    
     // Preload the iframe URL to warm up the connection
     const link = document.createElement('link');
     link.rel = 'preload';
@@ -36,7 +44,21 @@ const DexScreenerChart = ({ coin, isPreview = false }) => {
         document.head.removeChild(link);
       }
     };
-  }, [chartUrl, isLoading]);
+  }, [chartUrl, isLoading, showIframe]);
+
+  // EFFECT 2: Mobile memory management - cleanup iframe when user navigates away
+  useEffect(() => {
+    if (isMobile && showIframe) {
+      console.log('📊 DexScreener chart loaded for', coin.symbol);
+      
+      return () => {
+        console.log('🧹 Cleaning up DexScreener chart for', coin.symbol);
+        setShowIframe(false);
+        setIsLoading(true);
+        setHasError(false);
+      };
+    }
+  }, [isMobile, showIframe, coin.symbol]);
 
   const handleLoad = () => {
     setIsLoading(false);
@@ -163,6 +185,109 @@ const DexScreenerChart = ({ coin, isPreview = false }) => {
     setRetryCount(prev => prev + 1);
   };
 
+  // NOW we can do conditional rendering AFTER all hooks are called
+  // 🔥 MOBILE FIX: Show placeholder with "Load Chart Here" button
+  if (isMobile && !showIframe) {
+    return (
+      <div style={{
+        height: '100%',
+        minHeight: isPreview ? '150px' : '320px',
+        background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.05) 0%, rgba(147, 51, 234, 0.05) 100%)',
+        borderRadius: '14px',
+        border: '1px solid rgba(59, 130, 246, 0.2)',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '100%',
+        margin: 0,
+        padding: '20px',
+        textAlign: 'center'
+      }}>
+        <div style={{ fontSize: '48px', marginBottom: '16px', opacity: 0.6 }}>📊</div>
+        <p style={{ color: 'rgba(0, 0, 0, 0.7)', marginBottom: '16px', fontSize: '0.95rem', fontWeight: '600' }}>
+          Interactive Chart Available
+        </p>
+        <p style={{ color: 'rgba(0, 0, 0, 0.5)', marginBottom: '20px', fontSize: '0.85rem', lineHeight: '1.4' }}>
+          Load live trading chart or view in new tab
+        </p>
+        
+        {/* Load Embedded Chart Button */}
+        <button 
+          onClick={() => {
+            setShowIframe(true);
+            setIsLoading(true);
+          }}
+          style={{
+            padding: '12px 24px',
+            background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+            color: 'white',
+            fontSize: '0.9rem',
+            fontWeight: '600',
+            borderRadius: '10px',
+            border: 'none',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+            boxShadow: '0 4px 12px rgba(34, 197, 94, 0.3)',
+            marginBottom: '12px',
+            width: '100%',
+            maxWidth: '280px'
+          }}
+          onMouseOver={e => {
+            e.target.style.transform = 'translateY(-2px)';
+            e.target.style.boxShadow = '0 6px 16px rgba(34, 197, 94, 0.4)';
+          }}
+          onMouseOut={e => {
+            e.target.style.transform = 'translateY(0)';
+            e.target.style.boxShadow = '0 4px 12px rgba(34, 197, 94, 0.3)';
+          }}
+        >
+          📈 Load Chart Here
+        </button>
+        
+        {/* Open in New Tab Button */}
+        <button 
+          onClick={() => window.open(`https://dexscreener.com/${coin.chainId}/${coin.pairAddress || coin.tokenAddress}`, '_blank')}
+          style={{
+            padding: '12px 24px',
+            background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+            color: 'white',
+            fontSize: '0.9rem',
+            fontWeight: '600',
+            borderRadius: '10px',
+            border: 'none',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+            boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)',
+            width: '100%',
+            maxWidth: '280px'
+          }}
+          onMouseOver={e => {
+            e.target.style.transform = 'translateY(-2px)';
+            e.target.style.boxShadow = '0 6px 16px rgba(59, 130, 246, 0.4)';
+          }}
+          onMouseOut={e => {
+            e.target.style.transform = 'translateY(0)';
+            e.target.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.3)';
+          }}
+        >
+          🔗 Open in New Tab
+        </button>
+        
+        <p style={{ 
+          marginTop: '16px', 
+          fontSize: '0.75rem', 
+          color: 'rgba(0, 0, 0, 0.4)',
+          fontStyle: 'italic',
+          lineHeight: '1.4'
+        }}>
+          💡 Tip: "Load Chart Here" uses ~8-10MB memory
+        </p>
+      </div>
+    );
+  }
+
+  // Error state
   if (hasError) {
     return (
       <div style={{ 
@@ -170,16 +295,13 @@ const DexScreenerChart = ({ coin, isPreview = false }) => {
         minHeight: '320px',
         background: 'rgba(0, 0, 0, 0.04)', 
         borderRadius: '14px',
-        marginLeft: '0px',
-        marginRight: '0px',
         border: '1px solid rgba(0, 0, 0, 0.08)',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        width: 'calc(100% + 40px)',
-        marginLeft: '-20px',
-        marginRight: '-20px'
+        width: '100%',
+        margin: 0
       }}>
         <div className="text-center p-4">
           <div style={{ color: '#ef4444', marginBottom: '8px', fontSize: '24px' }}>⚠️</div>
@@ -222,26 +344,29 @@ const DexScreenerChart = ({ coin, isPreview = false }) => {
     );
   }
 
+  // Chart iframe (loaded state)
   return (
     <div style={{
       position: 'relative',
-      width: '100%', /* Changed from calc(100% + 40px) to prevent overflow */
+      width: '100%',
       height: '100%',
-      minHeight: isPreview ? '150px' : '320px',
-      background: 'transparent',
-      overflow: 'hidden', /* Changed from visible to hidden to prevent bleeding */
-      margin: 0 /* Removed negative margins that cause bleeding */
+      minHeight: isPreview ? '150px' : (isExpanded ? '600px' : '320px'),
+      background: '#1a1a1a', // Match DexScreener dark theme to prevent flash
+      overflow: 'hidden',
+      margin: 0,
+      borderRadius: '14px',
+      transition: 'min-height 0.3s ease-in-out'
     }}>
       {isLoading && (
         <div style={{
           position: 'absolute',
           top: 0,
-          left: 0, /* Changed from '20px' since we removed negative margins */
-          right: 0, /* Changed from '20px' since we removed negative margins */
+          left: 0,
+          right: 0,
           bottom: 0,
-          background: 'rgba(0, 0, 0, 0.04)',
+          background: 'linear-gradient(135deg, rgba(26, 26, 26, 0.98) 0%, rgba(20, 20, 20, 0.98) 100%)',
           borderRadius: '14px',
-          border: '1px solid rgba(0, 0, 0, 0.08)',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -257,23 +382,23 @@ const DexScreenerChart = ({ coin, isPreview = false }) => {
               animation: 'spin 1s linear infinite',
               margin: '0 auto 8px'
             }}></div>
-            <p style={{ color: 'rgba(0, 0, 0, 0.7)', fontSize: '0.9rem', marginBottom: '4px' }}>Loading chart...</p>
-            <p style={{ color: 'rgba(0, 0, 0, 0.5)', fontSize: '0.8rem' }}>This may take a few seconds</p>
+            <p style={{ color: 'rgba(255, 255, 255, 0.9)', fontSize: '0.9rem', marginBottom: '4px' }}>Loading chart...</p>
+            <p style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.8rem' }}>This may take a few seconds</p>
           </div>
         </div>
       )}
       
       <iframe
         ref={iframeRef}
-        key={`${coin.tokenAddress}-${retryCount}`} // Force reload on retry
+        key={`${coin.tokenAddress}-${retryCount}`}
         src={chartUrl}
         className="w-full h-full border-0"
         style={{
-          background: 'transparent',
+          background: '#1a1a1a',
           width: '100%',
           height: '100%',
-          minHeight: isPreview ? '150px' : '320px',
-          borderRadius: '0',
+          minHeight: isPreview ? '150px' : (isExpanded ? '600px' : '320px'),
+          borderRadius: '14px',
           overflow: 'visible',
           border: 'none',
           margin: 0,
@@ -286,7 +411,8 @@ const DexScreenerChart = ({ coin, isPreview = false }) => {
           bottom: 0,
           opacity: isLoading ? 0 : 1,
           transition: 'opacity 0.3s ease-in-out',
-          pointerEvents: isPreview ? 'none' : 'auto'
+          pointerEvents: isPreview ? 'none' : 'auto',
+          colorScheme: 'dark'
         }}
         title={`${coin.symbol} Chart`}
         allow="fullscreen"
@@ -296,8 +422,59 @@ const DexScreenerChart = ({ coin, isPreview = false }) => {
         onError={handleError}
         sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-forms"
       />
+      
+      {/* Expand/Collapse Toggle Button */}
+      {!isPreview && !isLoading && !hasError && (
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          style={{
+            position: 'absolute',
+            bottom: '8px',
+            right: '8px',
+            width: '32px',
+            height: '32px',
+            borderRadius: '50%',
+            background: 'rgba(0, 0, 0, 0.6)',
+            backdropFilter: 'blur(8px)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            color: 'white',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '16px',
+            zIndex: 30,
+            transition: 'all 0.2s ease',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)'
+          }}
+          onMouseOver={(e) => {
+            e.currentTarget.style.background = 'rgba(0, 0, 0, 0.8)';
+            e.currentTarget.style.transform = 'scale(1.1)';
+          }}
+          onMouseOut={(e) => {
+            e.currentTarget.style.background = 'rgba(0, 0, 0, 0.6)';
+            e.currentTarget.style.transform = 'scale(1)';
+          }}
+          title={isExpanded ? 'Collapse chart' : 'Expand chart'}
+          aria-label={isExpanded ? 'Collapse chart' : 'Expand chart'}
+        >
+          <span style={{
+            display: 'inline-block',
+            transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+            transition: 'transform 0.3s ease'
+          }}>
+            ↓
+          </span>
+        </button>
+      )}
     </div>
   );
 };
 
-export default DexScreenerChart;
+// 🔥 PERFORMANCE FIX: Memoize component to prevent unnecessary re-renders
+export default React.memo(DexScreenerChart, (prevProps, nextProps) => {
+  // Only re-render if coin address changes
+  return prevProps.coin?.pairAddress === nextProps.coin?.pairAddress &&
+         prevProps.coin?.tokenAddress === nextProps.coin?.tokenAddress &&
+         prevProps.isPreview === nextProps.isPreview;
+});

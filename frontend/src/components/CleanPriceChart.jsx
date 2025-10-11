@@ -60,17 +60,64 @@ const CleanPriceChart = memo(({ coin, width, height = 180 }) => {
               
               if (chartData.success && chartData.chart && chartData.chart.points && chartData.chart.points.length > 0) {
                 // Transform chart data to our format
-                const priceData = chartData.chart.points.map((point) => ({
+                const rawPoints = chartData.chart.points.map((point) => ({
                   time: point.time, // Already in milliseconds
-                  price: point.price
+                  price: point.price,
+                  isReal: true // Mark real data points
                 }));
                 
+                console.log(`[CleanChart] 📊 Raw points from API: ${rawPoints.length}`);
+                
+                // Interpolate to create smoother graph with additional estimated points
+                // Goal: Double the points (5 real → 10 total with interpolation)
+                const interpolatedData = [];
+                
+                if (rawPoints.length >= 2) {
+                  for (let i = 0; i < rawPoints.length; i++) {
+                    // Add the real data point
+                    interpolatedData.push(rawPoints[i]);
+                    
+                    // Add interpolated point between this and next (except for last point)
+                    if (i < rawPoints.length - 1) {
+                      const current = rawPoints[i];
+                      const next = rawPoints[i + 1];
+                      
+                      // Simple linear interpolation for time and price
+                      const interpolatedTime = (current.time + next.time) / 2;
+                      const interpolatedPrice = (current.price + next.price) / 2;
+                      
+                      interpolatedData.push({
+                        time: interpolatedTime,
+                        price: interpolatedPrice,
+                        isReal: false, // Mark as interpolated/estimated
+                        isInterpolated: true
+                      });
+                    }
+                  }
+                } else {
+                  // If less than 2 points, just use what we have
+                  interpolatedData.push(...rawPoints);
+                }
+                
+                // Find high and low points
+                const prices = interpolatedData.map(d => d.price);
+                const highPrice = Math.max(...prices);
+                const lowPrice = Math.min(...prices);
+                
+                // Mark high and low points
+                interpolatedData.forEach(point => {
+                  if (point.price === highPrice) point.isHigh = true;
+                  if (point.price === lowPrice) point.isLow = true;
+                });
+                
                 const tokenInfo = chartData.tokenInfo;
-                console.log(`[CleanChart] 🎉 SUCCESS: ${priceData.length} real price points for ${tokenInfo?.symbol || 'token'}`);
+                console.log(`[CleanChart] 🎉 SUCCESS: ${rawPoints.length} real points → ${interpolatedData.length} total points (with interpolation)`);
+                console.log(`[CleanChart] 📈 Breakdown: ${rawPoints.length} real + ${interpolatedData.length - rawPoints.length} interpolated`);
                 console.log(`[CleanChart] Price range: $${chartData.chart.priceInfo.min.toFixed(8)} → $${chartData.chart.priceInfo.max.toFixed(8)}`);
                 console.log(`[CleanChart] 1H Change: ${chartData.chart.priceInfo.change > 0 ? '+' : ''}${chartData.chart.priceInfo.change.toFixed(2)}%`);
+                console.log(`[CleanChart] 📊 High: $${highPrice.toFixed(8)} | Low: $${lowPrice.toFixed(8)}`);
                 
-                setPriceData(priceData);
+                setPriceData(interpolatedData);
                 setDataSource('universal-real');
                 setLoading(false);
                 return;
@@ -504,28 +551,114 @@ const CleanPriceChart = memo(({ coin, width, height = 180 }) => {
         }
       }
       ctx.stroke();
+      
+      // 🎯 Draw markers for ALL data points (real and interpolated) to make graph more lively
+      console.log(`[CleanChart] 📍 Drawing ${priceData.length} data points on chart`);
+      priceData.forEach((point, index) => {
+        // Skip high and low points as they get special treatment below
+        if (point.isHigh || point.isLow) return;
+        
+        const x = padding.left + (index / (priceData.length - 1)) * (containerWidth - padding.left - padding.right);
+        const y = padding.top + (1 - (point.price - minPrice) / priceRange) * chartHeight;
+        
+        if (point.isReal) {
+          // Real data points - LARGER, very visible dots
+          console.log(`[CleanChart] 🔵 Real point ${index} at (${x.toFixed(0)}, ${y.toFixed(0)})`);
+          
+          // Outer glow for real points
+          ctx.beginPath();
+          ctx.arc(x, y, 8, 0, 2 * Math.PI);
+          ctx.fillStyle = lineColor + '40'; // 25% opacity
+          ctx.fill();
+          
+          // Main dot
+          ctx.beginPath();
+          ctx.arc(x, y, 5, 0, 2 * Math.PI);
+          ctx.fillStyle = lineColor;
+          ctx.fill();
+          
+          // Inner highlight
+          ctx.beginPath();
+          ctx.arc(x, y, 2, 0, 2 * Math.PI);
+          ctx.fillStyle = '#ffffff';
+          ctx.fill();
+        } else if (point.isInterpolated) {
+          // Interpolated/estimated points - visible but distinct
+          console.log(`[CleanChart] ⚪ Interpolated point ${index} at (${x.toFixed(0)}, ${y.toFixed(0)})`);
+          
+          // Semi-transparent dot with ring
+          ctx.beginPath();
+          ctx.arc(x, y, 6, 0, 2 * Math.PI);
+          ctx.fillStyle = lineColor + '60'; // 38% opacity
+          ctx.fill();
+          
+          // White center
+          ctx.beginPath();
+          ctx.arc(x, y, 2.5, 0, 2 * Math.PI);
+          ctx.fillStyle = '#ffffff';
+          ctx.fill();
+        }
+      });
 
-      // Draw price markers for highs and lows
+      // Draw price markers for highs and lows with enhanced styling
       const maxPriceIndex = prices.indexOf(Math.max(...prices));
       const minPriceIndex = prices.indexOf(Math.min(...prices));
       
-      // Draw max price marker
+      // Draw HIGH price marker with label
       const maxX = padding.left + (maxPriceIndex / (priceData.length - 1)) * (containerWidth - padding.left - padding.right);
       const maxY = padding.top + (1 - (prices[maxPriceIndex] - minPrice) / priceRange) * chartHeight;
       
+      // High marker outer glow
       ctx.beginPath();
-      ctx.arc(maxX, maxY, 3, 0, 2 * Math.PI);
+      ctx.arc(maxX, maxY, 6, 0, 2 * Math.PI);
+      ctx.fillStyle = 'rgba(34, 197, 94, 0.2)';
+      ctx.fill();
+      
+      // High marker middle ring
+      ctx.beginPath();
+      ctx.arc(maxX, maxY, 4, 0, 2 * Math.PI);
+      ctx.fillStyle = 'rgba(34, 197, 94, 0.5)';
+      ctx.fill();
+      
+      // High marker inner dot
+      ctx.beginPath();
+      ctx.arc(maxX, maxY, 2, 0, 2 * Math.PI);
       ctx.fillStyle = '#22c55e';
       ctx.fill();
       
-      // Draw min price marker
+      // High label
+      ctx.font = 'bold 10px Inter, -apple-system, sans-serif';
+      ctx.fillStyle = '#22c55e';
+      ctx.textAlign = 'center';
+      ctx.fillText('HIGH', maxX, maxY - 12);
+      
+      // Draw LOW price marker with label
       const minX = padding.left + (minPriceIndex / (priceData.length - 1)) * (containerWidth - padding.left - padding.right);
       const minY = padding.top + (1 - (prices[minPriceIndex] - minPrice) / priceRange) * chartHeight;
       
+      // Low marker outer glow
       ctx.beginPath();
-      ctx.arc(minX, minY, 3, 0, 2 * Math.PI);
+      ctx.arc(minX, minY, 6, 0, 2 * Math.PI);
+      ctx.fillStyle = 'rgba(239, 68, 68, 0.2)';
+      ctx.fill();
+      
+      // Low marker middle ring
+      ctx.beginPath();
+      ctx.arc(minX, minY, 4, 0, 2 * Math.PI);
+      ctx.fillStyle = 'rgba(239, 68, 68, 0.5)';
+      ctx.fill();
+      
+      // Low marker inner dot
+      ctx.beginPath();
+      ctx.arc(minX, minY, 2, 0, 2 * Math.PI);
       ctx.fillStyle = '#ef4444';
       ctx.fill();
+      
+      // Low label
+      ctx.font = 'bold 10px Inter, -apple-system, sans-serif';
+      ctx.fillStyle = '#ef4444';
+      ctx.textAlign = 'center';
+      ctx.fillText('LOW', minX, minY + 20);
 
       // Draw current price point with animation
       if (priceData.length > 0) {

@@ -592,23 +592,49 @@ async function applyEnrichmentData(coin, enrichmentData, options = {}) {
     enrichedCoin.description = enrichmentData.description;
   }
   
-  // ENHANCED MARKET DATA MERGING - Use DexScreener data when available as it's more accurate
+  // ENHANCED MARKET DATA MERGING - PRESERVE SOLANA TRACKER DATA
+  // Only use DexScreener data if Solana Tracker data is missing or clearly invalid
+  
+  // Market Cap: Only overwrite if original is missing or very small (< $1k indicates bad data)
   if (enrichmentData.marketCap && enrichmentData.marketCap > 0) {
-    enrichedCoin.market_cap_usd = enrichmentData.marketCap;
-    enrichedCoin.marketCap = enrichmentData.marketCap;
-    enrichedCoin.market_cap = enrichmentData.marketCap;
+    const originalMarketCap = coin.market_cap_usd || coin.marketCap || coin.market_cap || 0;
+    if (originalMarketCap < 1000) {
+      enrichedCoin.market_cap_usd = enrichmentData.marketCap;
+      enrichedCoin.marketCap = enrichmentData.marketCap;
+      enrichedCoin.market_cap = enrichmentData.marketCap;
+      console.log(`📊 Using DexScreener market cap for ${coin.symbol}: $${(enrichmentData.marketCap/1000000).toFixed(2)}M (original: $${(originalMarketCap/1000000).toFixed(2)}M)`);
+    }
   }
   
+  // Volume: Only overwrite if original is missing
   if (enrichmentData.volume24h && enrichmentData.volume24h > 0) {
-    enrichedCoin.volume_24h_usd = enrichmentData.volume24h;
-    enrichedCoin.volume24h = enrichmentData.volume24h;
-    enrichedCoin.volume_24h = enrichmentData.volume24h;
+    const originalVolume = coin.volume_24h_usd || coin.volume24h || coin.volume_24h || 0;
+    if (originalVolume < 100) {
+      enrichedCoin.volume_24h_usd = enrichmentData.volume24h;
+      enrichedCoin.volume24h = enrichmentData.volume24h;
+      enrichedCoin.volume_24h = enrichmentData.volume24h;
+      console.log(`📊 Using DexScreener volume for ${coin.symbol}: $${(enrichmentData.volume24h/1000).toFixed(1)}k (original: $${(originalVolume/1000).toFixed(1)}k)`);
+    }
   }
   
+  // LIQUIDITY: **NEVER** overwrite Solana Tracker liquidity data!
+  // Store DexScreener liquidity separately for comparison/validation
   if (enrichmentData.liquidity && enrichmentData.liquidity > 0) {
-    enrichedCoin.liquidity_usd = enrichmentData.liquidity;
-    enrichedCoin.liquidityUsd = enrichmentData.liquidity;
-    enrichedCoin.liquidity = enrichmentData.liquidity;
+    const originalLiquidity = coin.liquidity_usd || coin.liquidityUsd || coin.liquidity || 0;
+    
+    // Store DexScreener liquidity separately for debugging/comparison
+    enrichedCoin.dexscreenerLiquidity = enrichmentData.liquidity;
+    
+    // Only overwrite if Solana Tracker didn't provide any liquidity data
+    if (originalLiquidity === 0) {
+      enrichedCoin.liquidity_usd = enrichmentData.liquidity;
+      enrichedCoin.liquidityUsd = enrichmentData.liquidity;
+      enrichedCoin.liquidity = enrichmentData.liquidity;
+      console.log(`💧 Using DexScreener liquidity for ${coin.symbol}: $${(enrichmentData.liquidity/1000).toFixed(1)}k (original was missing)`);
+    } else {
+      // Keep original Solana Tracker liquidity
+      console.log(`✅ Preserving Solana Tracker liquidity for ${coin.symbol}: $${(originalLiquidity/1000).toFixed(1)}k (DexScreener: $${(enrichmentData.liquidity/1000).toFixed(1)}k)`);
+    }
   }
   
   if (enrichmentData.priceChange24h !== undefined) {

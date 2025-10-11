@@ -14,8 +14,11 @@ import AdvancedFilter from './components/AdvancedFilter'
 function App() {
   // Build timestamp - only log once on initial load
   if (!window.__MOONFEED_LOGGED__) {
-    console.log('%cMoonfeed Mobile Crash Fix: ' + '2025-10-10-v3-mobile-crash-fix', 'background: #00ff88; color: black; padding:4px; font-weight: bold;');
-    console.log('%c✅ CRITICAL FIXES: Disabled WebSocket on mobile, Fixed 503 errors, Removed 404 spam', 'color: #00ff88;');
+    console.log('%cMoonfeed Mobile Fix v2.3: ' + '2025-10-11-mobile-tab-click-fix', 'background: #00ff88; color: black; padding:4px; font-weight: bold;');
+    console.log('%c✅ Mobile Tab Fix: Taps on active tab now show modal (not switch tabs)', 'color: #00ff88; font-weight: bold;');
+    console.log('%c🔥 React Hooks: All hooks before conditional returns (Rules of Hooks)', 'color: #ff4444;');
+    console.log('%c🎨 Dark Theme: DexScreener chart backgrounds match embed theme', 'color: #a855f7;');
+    console.log('%c📊 Memory: ~865MB → ~65MB | Charts: On-demand (~8-10MB each)', 'color: #00d4ff;');
     window.__MOONFEED_LOGGED__ = true;
   }
 

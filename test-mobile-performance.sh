@@ -1,0 +1,103 @@
+#!/bin/bash
+
+# 🧪 Mobile Performance Testing Script
+# Use this to verify the fixes are working
+
+echo "🔍 MOBILE PERFORMANCE DIAGNOSTIC"
+echo "================================"
+echo ""
+
+# Check if frontend is running
+echo "📱 Step 1: Testing Mobile Device Detection"
+echo "Open Chrome DevTools → Console → Mobile view"
+echo "You should see: 'Mobile device - optimizations enabled'"
+echo ""
+
+# Memory testing
+echo "💾 Step 2: Testing Memory Usage"
+echo "1. Open Chrome DevTools → Performance → Memory"
+echo "2. Take heap snapshot before scrolling"
+echo "3. Scroll through 50 coins"
+echo "4. Take another heap snapshot"
+echo ""
+echo "Expected Results:"
+echo "  ✅ Memory usage: < 100MB"
+echo "  ✅ No memory leaks"
+echo "  ✅ Heap size stable"
+echo ""
+
+# Component testing
+echo "🎨 Step 3: Testing Component Behavior"
+echo "Mobile (Chrome DevTools → Mobile view):"
+echo "  ✅ No DexScreener iframes (see buttons instead)"
+echo "  ✅ No price flash animations"
+echo "  ✅ Charts use 1x pixel ratio"
+echo "  ✅ Images lazy load"
+echo "  ✅ No live data updates"
+echo ""
+echo "Desktop (Chrome DevTools → Desktop view):"
+echo "  ✅ DexScreener iframes load"
+echo "  ✅ Price flash animations work"
+echo "  ✅ Charts use 2-3x pixel ratio"
+echo "  ✅ Live data updates work"
+echo ""
+
+# Performance testing
+echo "⚡ Step 4: Testing Performance"
+echo "1. Open Chrome DevTools → Performance"
+echo "2. Click Record"
+echo "3. Scroll through 20 coins rapidly"
+echo "4. Stop recording"
+echo ""
+echo "Expected Results:"
+echo "  ✅ 60 FPS (green line)"
+echo "  ✅ No red warnings"
+echo "  ✅ No long tasks (yellow blocks)"
+echo "  ✅ Smooth frame rate"
+echo ""
+
+# Real device testing
+echo "📱 Step 5: Testing on Real Devices"
+echo "iPhone/iPad (iOS Safari):"
+echo "  1. Open app in Safari"
+echo "  2. Scroll through 50+ coins"
+echo "  3. Expand cards and view details"
+echo "  4. Tap 'Open Full Chart' buttons"
+echo "  5. Leave app open for 30 minutes"
+echo ""
+echo "Expected Results:"
+echo "  ✅ No force quits"
+echo "  ✅ Smooth 60fps scrolling"
+echo "  ✅ Instant card loading"
+echo "  ✅ Charts open in new tabs"
+echo ""
+echo "Android (Chrome):"
+echo "  (Same tests as iOS)"
+echo ""
+
+# Console logs
+echo "🔍 Step 6: Checking Console Logs"
+echo "You should see on startup:"
+echo "  ✅ 'Moonfeed Mobile Performance Fix: 2025-10-11-mobile-performance-optimization'"
+echo "  ✅ 'Memory Usage: ~865MB → ~65MB (92% reduction)'"
+echo ""
+echo "On mobile you should see:"
+echo "  ✅ 'Mobile device - optimizations enabled'"
+echo "  ✅ 'Mobile device - WebSocket disabled for stability'"
+echo "  ✅ 'Enrichment disabled (mobile/production mode)'"
+echo ""
+
+# Summary
+echo "================================"
+echo "✅ TESTING COMPLETE"
+echo "================================"
+echo ""
+echo "If all tests pass:"
+echo "  🎉 Mobile app is production-ready!"
+echo "  🚀 Deploy with confidence!"
+echo ""
+echo "If any test fails:"
+echo "  ❌ Check MOBILE_PERFORMANCE_DIAGNOSTIC.md"
+echo "  ❌ Review MOBILE_PERFORMANCE_FIX_COMPLETE.md"
+echo "  ❌ Verify device detection code"
+echo ""

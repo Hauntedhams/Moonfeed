@@ -100,22 +100,39 @@ function initializeWithLatestBatch() {
     // IMMEDIATE FETCH: Populate NEW feed immediately on startup (or refresh if old)
     console.log('🆕 Fetching NEW feed immediately on startup...');
     fetchNewCoinBatch()
-      .then(freshNewBatch => {
+      .then(async freshNewBatch => {
+        // Enrich first 10 coins BEFORE making them available
+        await enrichPriorityCoins(freshNewBatch, 10, 'NEW feed coins');
+        
         newCoins = freshNewBatch;
         newCoinStorage.saveBatch(freshNewBatch); // Save to disk
-        console.log(`✅ NEW feed initialized with ${freshNewBatch.length} coins`);
-        // Start enrichment for new coins
+        console.log(`✅ NEW feed initialized with ${freshNewBatch.length} coins (first 10 fully enriched)`);
+        // Start enrichment for remaining coins
         startNewFeedEnrichment();
       })
       .catch(error => {
         console.error('❌ Failed to fetch initial NEW feed:', error.message);
       });
     
-    // Start auto-processors for the loaded batch
-    startDexscreenerAutoEnricher();  // Start DexScreener enrichment first
-    startRugcheckAutoProcessor();     // Then start Rugcheck verification
-    startTrendingAutoRefresher();     // Start 24-hour auto-refresh for trending coins
-    startNewFeedAutoRefresher();      // Start 30-minute auto-refresh for new coins
+    // Enrich first 10 trending coins BEFORE starting background enrichment
+    console.log('🎯 Enriching first 10 TRENDING coins synchronously...');
+    enrichPriorityCoins(currentCoins, 10, 'TRENDING feed coins')
+      .then(() => {
+        console.log('✅ Priority TRENDING coins enriched');
+        // Start auto-processors for the loaded batch
+        startDexscreenerAutoEnricher();  // Start DexScreener enrichment first
+        startRugcheckAutoProcessor();     // Then start Rugcheck verification
+        startTrendingAutoRefresher();     // Start 24-hour auto-refresh for trending coins
+        startNewFeedAutoRefresher();      // Start 30-minute auto-refresh for new coins
+      })
+      .catch(error => {
+        console.error('❌ Priority enrichment failed:', error.message);
+        // Start background processors anyway
+        startDexscreenerAutoEnricher();
+        startRugcheckAutoProcessor();
+        startTrendingAutoRefresher();
+        startNewFeedAutoRefresher();
+      });
   } else {
     console.log('📭 No saved batches found, using sample data');
     // Sample data as fallback
@@ -157,6 +174,84 @@ function initializeWithLatestBatch() {
     // Make coins available to price engine
     global.coinsCache = currentCoins;
   }
+}
+
+// Helper function to enrich priority coins SYNCHRONOUSLY before serving
+async function enrichPriorityCoins(coins, count = 10, feedName = 'coins') {
+  if (!coins || coins.length === 0) {
+    return coins;
+  }
+  
+  const priorityCount = Math.min(count, coins.length);
+  const priorityCoins = coins.slice(0, priorityCount);
+  
+  console.log(`🎯 Enriching first ${priorityCount} ${feedName} synchronously before serving...`);
+  
+  try {
+    // Step 1: DexScreener enrichment (parallel)
+    const dexPromises = priorityCoins.map(async (coin) => {
+      try {
+        const enriched = await dexscreenerService.enrichCoin(coin, {
+          forceBannerEnrichment: true
+        });
+        enriched.dexscreenerProcessedAt = new Date().toISOString();
+        return enriched;
+      } catch (error) {
+        console.error(`❌ DexScreener enrichment failed for ${coin.symbol}:`, error.message);
+        return coin;
+      }
+    });
+    
+    const dexEnriched = await Promise.all(dexPromises);
+    
+    // Step 2: Rugcheck enrichment (parallel, batch of 3 at a time)
+    const mintAddresses = dexEnriched.map(coin => 
+      coin.mintAddress || coin.tokenAddress || coin.address
+    ).filter(Boolean);
+    
+    const rugcheckResults = await rugcheckService.checkMultipleTokens(mintAddresses, {
+      maxConcurrent: 3,
+      batchDelay: 1000,
+      maxTokens: priorityCount
+    });
+    
+    // Apply rugcheck data
+    dexEnriched.forEach(coin => {
+      const mintAddress = coin.mintAddress || coin.tokenAddress || coin.address;
+      const rugcheckData = rugcheckResults.find(r => r.address === mintAddress);
+      
+      if (rugcheckData && rugcheckData.rugcheckAvailable) {
+        coin.liquidityLocked = rugcheckData.liquidityLocked;
+        coin.lockPercentage = rugcheckData.lockPercentage;
+        coin.burnPercentage = rugcheckData.burnPercentage;
+        coin.rugcheckScore = rugcheckData.score;
+        coin.riskLevel = rugcheckData.riskLevel;
+        coin.freezeAuthority = rugcheckData.freezeAuthority;
+        coin.mintAuthority = rugcheckData.mintAuthority;
+        coin.topHolderPercent = rugcheckData.topHolderPercent;
+        coin.isHoneypot = rugcheckData.isHoneypot;
+        coin.rugcheckVerified = true;
+        coin.rugcheckProcessedAt = new Date().toISOString();
+      } else {
+        coin.rugcheckVerified = false;
+        coin.rugcheckProcessedAt = new Date().toISOString();
+      }
+    });
+    
+    // Replace priority coins in original array
+    for (let i = 0; i < priorityCount; i++) {
+      coins[i] = dexEnriched[i];
+    }
+    
+    const enrichedCount = dexEnriched.filter(c => c.enriched).length;
+    const rugcheckCount = dexEnriched.filter(c => c.rugcheckVerified).length;
+    console.log(`✅ Priority enrichment complete: ${enrichedCount}/${priorityCount} enriched, ${rugcheckCount}/${priorityCount} rugchecked`);
+    
+  } catch (error) {
+    console.error(`❌ Priority enrichment error:`, error.message);
+  }
+  
+  return coins;
 }
 
 // Make Solana Tracker API request
@@ -584,22 +679,26 @@ app.get('/api/coins/custom', async (req, res) => {
     dexscreenerAutoEnricher.stopCustomFeed();
     rugcheckAutoProcessor.stopCustomFeed();
     
-    // Cache the results
+    // Enrich first 10 coins SYNCHRONOUSLY before returning to user
+    console.log('🎯 Enriching first 10 custom filtered coins synchronously...');
+    await enrichPriorityCoins(coinsWithPriority, 10, 'custom filtered coins');
+    
+    // Cache the results (with first 10 already enriched)
     customCoins = coinsWithPriority;
     
     // Save to storage with filters
     customCoinStorage.saveBatch(coinsWithPriority, req.query);
     
-    // Start enrichment for custom filtered coins
-    if (coinsWithPriority.length > 0) {
-      console.log('🎨 Starting enrichment for custom filtered coins');
-      // Start DexScreener enrichment (prioritize first 10)
+    // Start enrichment for REMAINING custom filtered coins
+    if (coinsWithPriority.length > 10) {
+      console.log(`🎨 Starting background enrichment for remaining ${coinsWithPriority.length - 10} coins`);
+      // Start DexScreener enrichment (first 10 already done)
       dexscreenerAutoEnricher.startCustomFeed(() => customCoins);
-      // Start Rugcheck verification (prioritize first 10)
+      // Start Rugcheck verification (first 10 already done)
       rugcheckAutoProcessor.startCustomFeed(() => customCoins);
     }
 
-    console.log(`✅ Returning ${coinsWithPriority.length} custom filtered coins`);
+    console.log(`✅ Returning ${coinsWithPriority.length} custom filtered coins (first 10 fully enriched)`);
     
     res.json({
       success: true,
@@ -783,19 +882,23 @@ function startNewFeedAutoRefresher() {
     // Callback when refresh completes - update cache and restart enrichment
     async (freshNewBatch) => {
       console.log(`🔄 Updating NEW feed cache with ${freshNewBatch.length} fresh coins`);
+      
+      // Enrich first 10 coins SYNCHRONOUSLY before making them available
+      await enrichPriorityCoins(freshNewBatch, 10, 'refreshed NEW coins');
+      
       newCoins = freshNewBatch;
       
       // Save to disk (overwrites old batch)
       newCoinStorage.saveBatch(freshNewBatch);
       
-      // Restart enrichment processes for the new batch
-      console.log('🚀 Restarting enrichment for NEW feed...');
+      // Restart enrichment processes for the remaining new coins
+      console.log('🚀 Restarting enrichment for remaining NEW feed coins...');
       
       // Stop existing enrichment processes for new feed ONLY
       dexscreenerAutoEnricher.stopNewFeed();
       rugcheckAutoProcessor.stopNewFeed();
       
-      // Start fresh enrichment with priority for first 10 coins
+      // Start fresh enrichment (priority coins already done)
       startNewFeedEnrichment();
       
       console.log('✅ NEW feed cache updated and enrichment restarted');

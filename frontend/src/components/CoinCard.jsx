@@ -19,19 +19,26 @@ const CoinCard = memo(({
   const [isExpanded, setIsExpanded] = useState(false);
   const [showBannerModal, setShowBannerModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showPriceChangeModal, setShowPriceChangeModal] = useState(false);
   const [currentChartPage, setCurrentChartPage] = useState(0);
   const [hoveredMetric, setHoveredMetric] = useState(null);
   const [priceFlash, setPriceFlash] = useState('');
   const chartsContainerRef = useRef(null);
   const prevPriceRef = useRef(null);
 
-  // Get live data from WebSocket
-  const { getCoin, getChart, connected, connectionStatus } = useLiveData();
-  const liveData = getCoin(coin.mintAddress || coin.address);
-  const chartData = getChart(coin.mintAddress || coin.address);
+  // 🔥 MOBILE PERFORMANCE FIX: Detect mobile and disable live data
+  const isMobile = useRef(/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)).current;
 
-  // Handle price flash animation
+  // Get live data from WebSocket (disabled on mobile for performance)
+  const { getCoin, getChart, connected, connectionStatus } = useLiveData();
+  const liveData = isMobile ? null : getCoin(coin.mintAddress || coin.address);
+  const chartData = isMobile ? null : getChart(coin.mintAddress || coin.address);
+
+  // Handle price flash animation (disabled on mobile for performance)
   useEffect(() => {
+    // 🔥 MOBILE PERFORMANCE FIX: Skip animations on mobile
+    if (isMobile) return;
+    
     const currentPrice = liveData?.price || coin.price_usd || coin.priceUsd || coin.price || 0;
     const prevPrice = prevPriceRef.current;
     
@@ -111,30 +118,82 @@ const CoinCard = memo(({
           example: `$${exactValue} worth of ${coin.symbol || 'tokens'} have been bought and sold in the past 24 hours`
         };
       case 'liquidity':
-        // Build rugcheck status message
+        // Build comprehensive rugcheck security information
         let rugcheckInfo = '';
         if (coin.rugcheckVerified) {
+          rugcheckInfo = '\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━';
+          rugcheckInfo += '\n🔐 SECURITY ANALYSIS (Rugcheck)';
+          rugcheckInfo += '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━';
+          
+          // Liquidity Lock Status
           if (coin.liquidityLocked) {
-            const lockPct = Math.max(coin.lockPercentage || 0, coin.burnPercentage || 0);
-            rugcheckInfo = `\n\n🔒 Liquidity Security: ${lockPct}% locked/burned`;
-            if (coin.riskLevel && coin.riskLevel !== 'unknown') {
-              rugcheckInfo += `\n⚠️ Risk Level: ${coin.riskLevel}`;
+            rugcheckInfo += '\n\n✅ LIQUIDITY STATUS: LOCKED';
+            if (coin.lockPercentage > 0) {
+              rugcheckInfo += `\n   🔒 Locked: ${coin.lockPercentage}%`;
             }
-            if (coin.rugcheckScore) {
-              rugcheckInfo += `\n✅ Rugcheck Score: ${coin.rugcheckScore}`;
+            if (coin.burnPercentage > 0) {
+              rugcheckInfo += `\n   🔥 Burned: ${coin.burnPercentage}%`;
             }
+            const totalSecured = Math.max(coin.lockPercentage || 0, coin.burnPercentage || 0);
+            rugcheckInfo += `\n   � Total Secured: ${totalSecured}%`;
           } else {
-            rugcheckInfo = '\n\n⚠️ Liquidity Security: Unlocked';
-            if (coin.riskLevel && coin.riskLevel !== 'unknown') {
-              rugcheckInfo += `\n⚠️ Risk Level: ${coin.riskLevel}`;
-            }
-            if (coin.rugcheckScore) {
-              rugcheckInfo += `\n✅ Rugcheck Score: ${coin.rugcheckScore}`;
+            rugcheckInfo += '\n\n⚠️ LIQUIDITY STATUS: UNLOCKED';
+            rugcheckInfo += '\n   ⚡ Developers can remove liquidity';
+          }
+          
+          // Risk Assessment
+          if (coin.riskLevel && coin.riskLevel !== 'unknown') {
+            const riskEmoji = coin.riskLevel === 'low' ? '🟢' : 
+                             coin.riskLevel === 'medium' ? '🟡' : '🔴';
+            rugcheckInfo += `\n\n${riskEmoji} RISK LEVEL: ${coin.riskLevel.toUpperCase()}`;
+          }
+          
+          // Rugcheck Score
+          if (coin.rugcheckScore) {
+            const scoreEmoji = coin.rugcheckScore >= 1000 ? '🌟' :
+                              coin.rugcheckScore >= 500 ? '⭐' : '⚡';
+            rugcheckInfo += `\n${scoreEmoji} Rugcheck Score: ${coin.rugcheckScore}/5000`;
+          }
+          
+          // Token Authorities
+          rugcheckInfo += '\n\n🔑 TOKEN AUTHORITIES:';
+          if (coin.freezeAuthority !== undefined) {
+            rugcheckInfo += `\n   ${coin.freezeAuthority ? '❌ Freeze Authority: Active' : '✅ Freeze Authority: Revoked'}`;
+          }
+          if (coin.mintAuthority !== undefined) {
+            rugcheckInfo += `\n   ${coin.mintAuthority ? '❌ Mint Authority: Active' : '✅ Mint Authority: Revoked'}`;
+          }
+          
+          // Top Holder
+          if (coin.topHolderPercent > 0) {
+            const holderWarning = coin.topHolderPercent > 20 ? '⚠️' : 
+                                 coin.topHolderPercent > 10 ? '⚡' : '✅';
+            rugcheckInfo += `\n\n${holderWarning} TOP HOLDER: ${coin.topHolderPercent.toFixed(1)}% of supply`;
+            if (coin.topHolderPercent > 20) {
+              rugcheckInfo += '\n   (High concentration - potential dump risk)';
             }
           }
+          
+          // Honeypot Warning (Critical)
           if (coin.isHoneypot) {
-            rugcheckInfo += '\n⚠️ WARNING: Potential honeypot detected';
+            rugcheckInfo += '\n\n🚨 CRITICAL WARNING: HONEYPOT DETECTED';
+            rugcheckInfo += '\n   ⛔ You may not be able to sell this token!';
+            rugcheckInfo += '\n   ⛔ DO NOT BUY - This is likely a scam!';
           }
+          
+          // DexScreener Liquidity Comparison (if available)
+          if (coin.dexscreenerLiquidity && coin.dexscreenerLiquidity !== value) {
+            rugcheckInfo += '\n\n📊 DATA COMPARISON:';
+            rugcheckInfo += `\n   Solana Tracker: $${formatCompact(value)} (shown)`;
+            rugcheckInfo += `\n   DexScreener: $${formatCompact(coin.dexscreenerLiquidity)}`;
+          }
+          
+          rugcheckInfo += '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━';
+          rugcheckInfo += '\n✅ Verified by Rugcheck API';
+          
+        } else {
+          rugcheckInfo = '\n\n⏳ Security data not yet verified';
+          rugcheckInfo += '\n   Rugcheck analysis in progress...';
         }
         
         return {
@@ -406,6 +465,8 @@ const CoinCard = memo(({
           <img 
             src={coin.banner || coin.bannerImage || coin.header || coin.bannerUrl}
             alt={coin.name || 'Token banner'}
+            loading="lazy"
+            decoding="async"
             onError={(e) => { 
               // Reduce image error logging to prevent spam
               if (Math.random() < 0.1) {
@@ -467,7 +528,7 @@ const CoinCard = memo(({
       {/* Info Layer */}
       <div className={`coin-info-layer ${isExpanded ? 'expanded' : ''}`}>
         <div className="info-layer-header">
-          {/* Top row: Profile, Price, Price Change, Expand Arrow */}
+          {/* Top row: Profile, Price with Social Links, Expand Arrow */}
           <div className="header-top-row">
             <div className="header-left">
               <div 
@@ -479,6 +540,8 @@ const CoinCard = memo(({
                   <img
                     src={coin.profileImage}
                     alt={coin.name || 'Token logo'}
+                    loading="lazy"
+                    decoding="async"
                     onError={(e) => { e.currentTarget.src = '/profile-placeholder.png'; }}
                   />
                 ) : (
@@ -486,25 +549,101 @@ const CoinCard = memo(({
                 )}
               </div>
               
-              <div className="price-section">
-                <div className={`coin-price ${priceFlash}`}>
-                  {/* Live indicators */}
-                  <div className="live-indicators">
-                    <div className={`live-indicator ${connected ? 'connected' : 'disconnected'}`} 
-                         title={connected ? 'Connected to live data' : 'Disconnected from live data'}>
-                      <div className="live-dot"></div>
-                    </div>
-                    {liveData?.jupiterLive && (
-                      <div className="jupiter-live-indicator" 
-                           title="Live Jupiter pricing active">
-                        🪐
+              <div className="price-and-social-section">
+                <div className="price-section">
+                  <div className={`coin-price ${priceFlash}`}>
+                    {/* Live indicators */}
+                    <div className="live-indicators">
+                      <div className={`live-indicator ${connected ? 'connected' : 'disconnected'}`} 
+                           title={connected ? 'Connected to live data' : 'Disconnected from live data'}>
+                        <div className="live-dot"></div>
                       </div>
-                    )}
+                      {liveData?.jupiterLive && (
+                        <div className="jupiter-live-indicator" 
+                             title="Live Jupiter pricing active">
+                          🪐
+                        </div>
+                      )}
+                    </div>
+                    {formatPrice(price)}
                   </div>
-                  {formatPrice(price)}
+                  <div 
+                    className={`price-change ${Number(changePct) >= 0 ? 'positive' : 'negative'} clickable`}
+                    onClick={() => setShowPriceChangeModal(true)}
+                    style={{ cursor: 'pointer' }}
+                    title="Click to view price change history"
+                  >
+                    {formatPercent(changePct)}
+                  </div>
                 </div>
-                <div className={`price-change ${Number(changePct) >= 0 ? 'positive' : 'negative'}`}>
-                  {formatPercent(changePct)}
+                
+                {/* Social icons directly under price */}
+                <div className="header-social-icons">
+                  {(coin.socialLinks?.twitter || coin.twitter) && (
+                    <a 
+                      href={coin.socialLinks?.twitter || coin.twitter} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="header-social-icon twitter-icon" 
+                      aria-label="Twitter/X"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                      </svg>
+                    </a>
+                  )}
+                  {(coin.socialLinks?.telegram || coin.telegram) && (
+                    <a 
+                      href={coin.socialLinks?.telegram || coin.telegram} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="header-social-icon telegram-icon" 
+                      aria-label="Telegram"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 0 0-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/>
+                      </svg>
+                    </a>
+                  )}
+                  {(coin.socialLinks?.discord || coin.discord) && (
+                    <a 
+                      href={coin.socialLinks?.discord || coin.discord} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="header-social-icon discord-icon" 
+                      aria-label="Discord"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515a.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0a12.64 12.64 0 0 0-.617-1.25a.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057a19.9 19.9 0 0 0 5.993 3.03a.078.078 0 0 0 .084-.028a14.09 14.09 0 0 0 1.226-1.994a.076.076 0 0 0-.041-.106a13.107 13.107 0 0 1-1.872-.892a.077.077 0 0 1-.008-.128a10.2 10.2 0 0 0 .372-.292a.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127a12.299 12.299 0 0 1-1.873.892a.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028a19.839 19.839 0 0 0 6.002-3.03a.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419c0-1.333.956-2.419 2.157-2.419c1.21 0 2.176 1.096 2.157 2.42c0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419c0-1.333.955-2.419 2.157-2.419c1.21 0 2.176 1.096 2.157 2.42c0 1.333-.946 2.418-2.157 2.418z"/>
+                      </svg>
+                    </a>
+                  )}
+                  {(coin.socialLinks?.tiktok || coin.tiktok) && (
+                    <a 
+                      href={coin.socialLinks?.tiktok || coin.tiktok} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="header-social-icon tiktok-icon" 
+                      aria-label="TikTok"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z"/>
+                      </svg>
+                    </a>
+                  )}
+                  {(coin.socialLinks?.website || coin.website || coin.info?.website) && (
+                    <a 
+                      href={coin.socialLinks?.website || coin.website || coin.info?.website} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="header-social-icon website-icon" 
+                      aria-label="Website"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                      </svg>
+                    </a>
+                  )}
                 </div>
               </div>
             </div>
@@ -536,79 +675,10 @@ const CoinCard = memo(({
             </div>
           </div>
 
-          {/* Bottom row: Social Icons and Metrics */}
-          <div className="header-social-row">
-            <div className="header-social-icons">
-              {(coin.socialLinks?.twitter || coin.twitter) && (
-                <a 
-                  href={coin.socialLinks?.twitter || coin.twitter} 
-                  target="_blank" 
-                  rel="noopener noreferrer" 
-                  className="header-social-icon twitter-icon" 
-                  aria-label="Twitter/X"
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-                  </svg>
-                </a>
-              )}
-              {(coin.socialLinks?.telegram || coin.telegram) && (
-                <a 
-                  href={coin.socialLinks?.telegram || coin.telegram} 
-                  target="_blank" 
-                  rel="noopener noreferrer" 
-                  className="header-social-icon telegram-icon" 
-                  aria-label="Telegram"
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 0 0-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/>
-                  </svg>
-                </a>
-              )}
-              {(coin.socialLinks?.discord || coin.discord) && (
-                <a 
-                  href={coin.socialLinks?.discord || coin.discord} 
-                  target="_blank" 
-                  rel="noopener noreferrer" 
-                  className="header-social-icon discord-icon" 
-                  aria-label="Discord"
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515a.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0a12.64 12.64 0 0 0-.617-1.25a.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057a19.9 19.9 0 0 0 5.993 3.03a.078.078 0 0 0 .084-.028a14.09 14.09 0 0 0 1.226-1.994a.076.076 0 0 0-.041-.106a13.107 13.107 0 0 1-1.872-.892a.077.077 0 0 1-.008-.128a10.2 10.2 0 0 0 .372-.292a.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127a12.299 12.299 0 0 1-1.873.892a.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028a19.839 19.839 0 0 0 6.002-3.03a.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419c0-1.333.956-2.419 2.157-2.419c1.21 0 2.176 1.096 2.157 2.42c0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419c0-1.333.955-2.419 2.157-2.419c1.21 0 2.176 1.096 2.157 2.42c0 1.333-.946 2.418-2.157 2.418z"/>
-                  </svg>
-                </a>
-              )}
-              {(coin.socialLinks?.tiktok || coin.tiktok) && (
-                <a 
-                  href={coin.socialLinks?.tiktok || coin.tiktok} 
-                  target="_blank" 
-                  rel="noopener noreferrer" 
-                  className="header-social-icon tiktok-icon" 
-                  aria-label="TikTok"
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z"/>
-                  </svg>
-                </a>
-              )}
-              {(coin.socialLinks?.website || coin.website || coin.info?.website) && (
-                <a 
-                  href={coin.socialLinks?.website || coin.website || coin.info?.website} 
-                  target="_blank" 
-                  rel="noopener noreferrer" 
-                  className="header-social-icon website-icon" 
-                  aria-label="Website"
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
-                  </svg>
-                </a>
-              )}
-            </div>
-            
-            {/* Metrics Grid - Moved to header level */}
+          {/* Bottom row: Full-width Metrics Grid */}
+          <div className="header-metrics-row">
             <div className="header-metrics-grid">
-              {/* Always show core metrics */}
+              {/* Core metrics in priority order */}
               <div 
                 className="header-metric"
                 onMouseEnter={() => setHoveredMetric({ type: 'marketCap', value: marketCap, element: 'marketCap' })}
@@ -630,34 +700,30 @@ const CoinCard = memo(({
                 onMouseEnter={() => setHoveredMetric({ type: 'liquidity', value: liquidity, element: 'liquidity' })}
                 onMouseLeave={() => setHoveredMetric(null)}
               >
-                <div className="header-metric-label-with-icon">
+                <div className="header-metric-label">Liquidity</div>
+                <div className="header-metric-value-with-icon">
+                  <span>${formatCompact(liquidity)}</span>
                   <LiquidityLockIndicator coin={coin} size="small" />
-                  <div className="header-metric-label">Liquidity</div>
                 </div>
-                <div className="header-metric-value">${formatCompact(liquidity)}</div>
               </div>
-              {holders > 0 && (
-                <div 
-                  className="header-metric"
-                  onMouseEnter={() => setHoveredMetric({ type: 'holders', value: holders, element: 'holders' })}
-                  onMouseLeave={() => setHoveredMetric(null)}
-                >
-                  <div className="header-metric-label">Holders</div>
-                  <div className="header-metric-value">{formatCompact(holders)}</div>
+              <div 
+                className="header-metric"
+                onMouseEnter={() => setHoveredMetric({ type: 'age', value: ageHours, element: 'age' })}
+                onMouseLeave={() => setHoveredMetric(null)}
+              >
+                <div className="header-metric-label">Age</div>
+                <div className="header-metric-value">
+                  {ageHours > 0 ? (ageHours < 24 ? `${ageHours}h` : `${Math.floor(ageHours / 24)}d`) : '-'}
                 </div>
-              )}
-              {ageHours > 0 && (
-                <div 
-                  className="header-metric"
-                  onMouseEnter={() => setHoveredMetric({ type: 'age', value: ageHours, element: 'age' })}
-                  onMouseLeave={() => setHoveredMetric(null)}
-                >
-                  <div className="header-metric-label">Age</div>
-                  <div className="header-metric-value">
-                    {ageHours < 24 ? `${ageHours}h` : `${Math.floor(ageHours / 24)}d`}
-                  </div>
-                </div>
-              )}
+              </div>
+              <div 
+                className="header-metric"
+                onMouseEnter={() => setHoveredMetric({ type: 'holders', value: holders, element: 'holders' })}
+                onMouseLeave={() => setHoveredMetric(null)}
+              >
+                <div className="header-metric-label">Holders</div>
+                <div className="header-metric-value">{holders > 0 ? formatCompact(holders) : '-'}</div>
+              </div>
               {/* Additional metrics when available */}
               {fdv > 0 && (
                 <div 
@@ -725,22 +791,18 @@ const CoinCard = memo(({
         <div className="info-layer-content">
           {/* Price Charts - Horizontal Scrollable with Snap */}
           <div className="charts-section">
-            <div className="charts-header">
-              <div className="chart-labels">
-                <span 
-                  className={`chart-label ${currentChartPage === 0 ? 'active' : ''}`} 
-                  onClick={() => navigateToChartPage(0)}
-                >
-                  Clean
-                </span>
-                <span 
-                  className={`chart-label ${currentChartPage === 1 ? 'active' : ''}`} 
-                  onClick={() => navigateToChartPage(1)}
-                >
-                  Advanced
-                </span>
-              </div>
+            {/* Navigation Dots Above Chart */}
+            <div className="chart-nav-dots-top">
+              <div 
+                className={`nav-dot ${currentChartPage === 0 ? 'active' : ''}`}
+                onClick={() => navigateToChartPage(0)}
+              ></div>
+              <div 
+                className={`nav-dot ${currentChartPage === 1 ? 'active' : ''}`}
+                onClick={() => navigateToChartPage(1)}
+              ></div>
             </div>
+            
             <div className="charts-horizontal-container" ref={chartsContainerRef}>
               {/* Graph Page */}
               <div className="chart-page">
@@ -800,25 +862,6 @@ const CoinCard = memo(({
                   )}
                 </div>
               </div>
-            </div>
-            
-            {/* Navigation Dots */}
-            <div className="chart-nav-dots">
-              <div 
-                className={`nav-dot ${currentChartPage === 0 ? 'active' : ''}`}
-                onClick={() => navigateToChartPage(0)}
-              ></div>
-              <div 
-                className={`nav-dot ${currentChartPage === 1 ? 'active' : ''}`}
-                onClick={() => navigateToChartPage(1)}
-              ></div>
-            </div>
-            
-            {/* Swipe Hint */}
-            <div className="swipe-hint">
-              <span>← Swipe for {
-                currentChartPage === 0 ? 'Advanced' : 'Clean'
-              } →</span>
             </div>
           </div>
 
@@ -1193,6 +1236,49 @@ const CoinCard = memo(({
             <div className="profile-modal-info">
               <h3 className="profile-modal-name">{coin.name || 'Unknown Token'}</h3>
               <p className="profile-modal-symbol">{coin.symbol || coin.ticker || 'N/A'}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Price Change Modal */}
+      {showPriceChangeModal && coin.dexscreener?.priceChanges && (
+        <div className="price-change-modal-overlay" onClick={() => setShowPriceChangeModal(false)}>
+          <div className="price-change-modal-content" onClick={(e) => e.stopPropagation()}>
+            <button className="price-change-modal-close" onClick={() => setShowPriceChangeModal(false)}>
+              ×
+            </button>
+            <h3 className="price-change-modal-title">
+              {coin.symbol || coin.ticker || 'Token'} Price Changes
+            </h3>
+            <div className="price-change-modal-grid">
+              <div className="price-change-modal-item">
+                <div className="price-change-modal-label">5 Minutes</div>
+                <div className={`price-change-modal-value ${coin.dexscreener.priceChanges.change5m >= 0 ? 'positive' : 'negative'}`}>
+                  {formatPercent(coin.dexscreener.priceChanges.change5m)}
+                </div>
+              </div>
+              <div className="price-change-modal-item">
+                <div className="price-change-modal-label">1 Hour</div>
+                <div className={`price-change-modal-value ${coin.dexscreener.priceChanges.change1h >= 0 ? 'positive' : 'negative'}`}>
+                  {formatPercent(coin.dexscreener.priceChanges.change1h)}
+                </div>
+              </div>
+              <div className="price-change-modal-item">
+                <div className="price-change-modal-label">6 Hours</div>
+                <div className={`price-change-modal-value ${coin.dexscreener.priceChanges.change6h >= 0 ? 'positive' : 'negative'}`}>
+                  {formatPercent(coin.dexscreener.priceChanges.change6h)}
+                </div>
+              </div>
+              <div className="price-change-modal-item">
+                <div className="price-change-modal-label">24 Hours</div>
+                <div className={`price-change-modal-value ${coin.dexscreener.priceChanges.change24h >= 0 ? 'positive' : 'negative'}`}>
+                  {formatPercent(coin.dexscreener.priceChanges.change24h)}
+                </div>
+              </div>
+            </div>
+            <div className="price-change-modal-footer">
+              <p>Data from DexScreener</p>
             </div>
           </div>
         </div>
