@@ -167,29 +167,29 @@ async function makeSolanaTrackerRequest(endpoint, params = {}) {
 // OPTIMIZED PARAMETERS - Target high-potential meme coins with 10-100x potential
 async function fetchFreshCoinBatch() {
   const searchParams = {
-    // Liquidity - Sweet spot for growth (increased from $50k-$500k)
-    minLiquidity: 100000,       // $100k minimum (stability threshold, prevents manipulation)
-    maxLiquidity: 2000000,      // $2M maximum (proven liquidity but room to grow)
+    // Liquidity - Relaxed to get more coins
+    minLiquidity: 50000,        // $50k minimum (lowered from $100k)
+    maxLiquidity: 5000000,      // $5M maximum (increased from $2M)
     
-    // Volume - Show strong interest (increased from $50k-$5M)
-    minVolume: 150000,          // $150k minimum 24h volume (real trading interest)
-    maxVolume: 10000000,        // $10M maximum (catch big momentum)
+    // Volume - Relaxed to get more coins
+    minVolume: 50000,           // $50k minimum (lowered from $150k)
+    maxVolume: 20000000,        // $20M maximum (increased from $10M)
     volumeTimeframe: "24h",     // 24 hour timeframe
     
-    // Market Cap - Growth stage (adjusted from $300k-$10M)
-    minMarketCap: 500000,       // $500k minimum (proven concept only)
-    maxMarketCap: 50000000,     // $50M maximum (room for 10x+ growth)
+    // Market Cap - Wider range to capture more opportunities
+    minMarketCap: 100000,       // $100k minimum (lowered from $500k)
+    maxMarketCap: 100000000,    // $100M maximum (increased from $50M)
     
-    // 🆕 AGE FILTER - CRITICAL FOR QUALITY!
-    // Target coins that are proven legitimate but still in growth phase
-    minCreatedAt: Date.now() - (30 * 24 * 60 * 60 * 1000),  // 30 days ago (not too old)
-    maxCreatedAt: Date.now() - (3 * 24 * 60 * 60 * 1000),   // 3 days ago (proven, not brand new)
+    // 🆕 AGE FILTER - Relaxed for more variety
+    minCreatedAt: Date.now() - (60 * 24 * 60 * 60 * 1000),  // 60 days ago (was 30)
+    maxCreatedAt: Date.now() - (1 * 24 * 60 * 60 * 1000),   // 1 day ago (was 3 days)
     
     // Sorting - Show highest momentum first
     sortBy: 'volume_24h',       // Sort by 24h volume (momentum indicator)
     sortOrder: 'desc',          // Highest volume first
     
-    // NO LIMIT - get all available coins that match criteria
+    // Request more results from API
+    limit: 200,                 // Get up to 200 coins from API
     page: 1                     // First page
   };
 
@@ -334,7 +334,8 @@ app.get('/api/coins/new', async (req, res) => {
   try {
     console.log('🆕 /api/coins/new endpoint called');
     
-    const limit = Math.min(parseInt(req.query.limit) || 100, 200);
+    // If no limit specified, return ALL coins (with WebSocket singleton, frontend can handle it)
+    const limit = req.query.limit ? Math.min(parseInt(req.query.limit), 500) : 9999; // No limit by default
     
     // Return cached new coins (automatically refreshed every 30 minutes by auto-refresher)
     if (newCoins.length === 0) {
@@ -359,7 +360,7 @@ app.get('/api/coins/new', async (req, res) => {
     
     const limitedCoins = newCoins.slice(0, limit);
     
-    console.log(`✅ Returning ${limitedCoins.length} cached new coins (auto-refreshed every 30 min)`);
+    console.log(`✅ Returning ${limitedCoins.length}/${newCoins.length} new coins (limit: ${limit === 9999 ? 'ALL' : limit}, auto-refreshed every 30 min)`);
     
     res.json({
       success: true,
@@ -388,7 +389,9 @@ app.get('/api/coins/trending', async (req, res) => {
   try {
     console.log('🔥 /api/coins/trending endpoint called');
     
-    const limit = Math.min(parseInt(req.query.limit) || 50, 300);
+    // If no limit specified, return ALL coins (previously default was 100, max 500)
+    // With WebSocket singleton, frontend can handle all coins safely
+    const limit = req.query.limit ? Math.min(parseInt(req.query.limit), 500) : 9999; // No limit by default
     
     // Return current cached coins or fetch fresh
     let trendingCoins = currentCoins;
@@ -401,7 +404,7 @@ app.get('/api/coins/trending', async (req, res) => {
     
     const limitedCoins = trendingCoins.slice(0, limit);
     
-    console.log(`✅ Returning ${limitedCoins.length} trending coins`);
+    console.log(`✅ Returning ${limitedCoins.length}/${trendingCoins.length} trending coins (limit: ${limit === 9999 ? 'ALL' : limit})`);
     
     res.json({
       success: true,

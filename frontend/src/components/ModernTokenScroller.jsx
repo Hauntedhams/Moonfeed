@@ -166,10 +166,10 @@ const ModernTokenScroller = ({
     setLoading(true);
     setError(null);
     
-    // Mobile detection - now safe to load more coins with WebSocket singleton fix
+    // REMOVED: No need to limit coins on frontend - backend handles this
+    // Just fetch ALL coins the backend has cached and enriched
     const isMobile = window.innerWidth < 768;
-    const limit = isMobile ? 50 : 200; // Mobile: 50 coins, Desktop: 200 coins
-    console.log(`📱 Device: ${isMobile ? 'Mobile' : 'Desktop'}, Loading ${limit} coins (all will be rendered - virtual scrolling disabled)`);
+    console.log(`📱 Device: ${isMobile ? 'Mobile' : 'Desktop'}, fetching ALL coins from backend`);
     
     try {
       if (onlyFavorites) {
@@ -212,23 +212,11 @@ const ModernTokenScroller = ({
       } else if (filters.type === 'new') {
         // Use the new endpoint for "new" tab
         endpoint = `${API_BASE}/new`;
-        const queryParams = new URLSearchParams();
-        queryParams.append('limit', limit.toString());
-        endpoint += `?${queryParams.toString()}`;
+        // NO LIMIT - backend will return all "new" coins it has
         console.log('🆕 Using NEW endpoint for emerging coins:', endpoint);
       } else {
-        // For all other cases, use the trending endpoint with query parameters
-        const queryParams = new URLSearchParams();
-        queryParams.append('limit', limit.toString());
-        
-        if (filters.type === 'volume') {
-          // Fast endpoint will return raw data, we'll sort client-side if needed
-          queryParams.append('sortBy', 'volume');
-        } else if (filters.type === 'latest') {
-          queryParams.append('sortBy', 'latest');
-        }
-        
-        endpoint += `?${queryParams.toString()}`;
+        // For all other cases, use the trending endpoint WITHOUT limit
+        // Backend will return all coins it has cached
         console.log('⚡ Using trending endpoint for immediate load:', endpoint);
       }
       
