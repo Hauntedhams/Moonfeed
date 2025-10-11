@@ -300,10 +300,29 @@ function sortCoinsByPriority(coins) {
     ...coin,
     priorityScore: calculatePriorityScore(coin)
   })).sort((a, b) => {
-    // Prioritize coins with all features
+    // 1. HIGHEST PRIORITY: Coins with BOTH banner AND locked liquidity
+    const aHasBoth = (a.banner || a.bannerUrl || a.imageUrl) && (a.liquidityLocked === true || a.lockPercentage > 50 || a.burnPercentage > 50);
+    const bHasBoth = (b.banner || b.bannerUrl || b.imageUrl) && (b.liquidityLocked === true || b.lockPercentage > 50 || b.burnPercentage > 50);
+    if (aHasBoth && !bHasBoth) return -1;
+    if (!aHasBoth && bHasBoth) return 1;
+    
+    // 2. Second priority: Coins with locked liquidity (even without banner)
+    const aHasLockedLiq = a.liquidityLocked === true || a.lockPercentage > 50 || a.burnPercentage > 50;
+    const bHasLockedLiq = b.liquidityLocked === true || b.lockPercentage > 50 || b.burnPercentage > 50;
+    if (aHasLockedLiq && !bHasLockedLiq) return -1;
+    if (!aHasLockedLiq && bHasLockedLiq) return 1;
+    
+    // 3. Third priority: Coins with banners (even without locked liquidity)
+    const aHasBanner = a.banner || a.bannerUrl || a.imageUrl;
+    const bHasBanner = b.banner || b.bannerUrl || b.imageUrl;
+    if (aHasBanner && !bHasBanner) return -1;
+    if (!aHasBanner && bHasBanner) return 1;
+    
+    // 4. Fourth priority: Coins with all features
     if (a.priorityScore.hasAllFeatures && !b.priorityScore.hasAllFeatures) return -1;
     if (!a.priorityScore.hasAllFeatures && b.priorityScore.hasAllFeatures) return 1;
-    // Then by score
+    
+    // 5. Finally, sort by overall priority score
     return b.priorityScore.score - a.priorityScore.score;
   });
 }
