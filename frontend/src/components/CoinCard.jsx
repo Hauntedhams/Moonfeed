@@ -4,7 +4,7 @@ import DexScreenerChart from './DexScreenerChart';
 import PriceHistoryChart from './PriceHistoryChart';
 import LiquidityLockIndicator from './LiquidityLockIndicator';
 import TopTradersList from './TopTradersList';
-import { useLiveData } from '../hooks/useLiveData';
+import { useLiveData } from '../hooks/useLiveDataContext';
 
 const CoinCard = memo(({ 
   coin, 
