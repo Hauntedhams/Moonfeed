@@ -386,16 +386,10 @@ const CoinCard = memo(({
   const ageHours = liveData?.ageHours ?? coin.ageHours ?? coin.dexscreener?.poolInfo?.ageHours ?? 0;
   const boosts = liveData?.boosts ?? coin.boosts ?? coin.dexscreener?.boosts ?? 0;
 
-  // Debug log for social links - reduce frequency to prevent console spam
-  if ((coin.socialLinks || coin.twitter || coin.telegram || coin.website) && Math.random() < 0.05) {
-    console.log(`🔗 Social data available for ${coin.symbol}:`, {
-      socialLinks: coin.socialLinks,
-      twitter: coin.twitter,
-      telegram: coin.telegram,
-      website: coin.website,
-      info: coin.info
-    });
-  }
+  // Debug log for social links - DISABLED to prevent console spam
+  // if ((coin.socialLinks || coin.twitter || coin.telegram || coin.website) && Math.random() < 0.05) {
+  //   console.log(`🔗 Social data available for ${coin.symbol}:`, { ... });
+  // }
 
   return (
     <div className="coin-card">

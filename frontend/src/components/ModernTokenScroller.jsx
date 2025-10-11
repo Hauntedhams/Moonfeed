@@ -657,7 +657,8 @@ const ModernTokenScroller = ({
   // Debug logging - reduce frequency to prevent console spam
   const shouldLog = Math.random() < 0.1; // Only log 10% of renders
   if (shouldLog) {
-    console.log(`📊 ModernTokenScroller render: coins=${coins.length}, loading=${loading}, error=${error}, isMobile=${isMobile}, visibleRange=${JSON.stringify(visibleRange)}`);
+  // DEBUG: Render logging disabled to prevent console spam
+  // console.log(`📊 ModernTokenScroller render: coins=${coins.length}, loading=${loading}, error=${error}, isMobile=${isMobile}, visibleRange=${JSON.stringify(visibleRange)}`);
   }
   
   if (loading && coins.length === 0) {
@@ -731,10 +732,10 @@ const ModernTokenScroller = ({
             (() => {
               const start = Math.max(0, visibleRange.start);
               const end = Math.min(coins.length - 1, visibleRange.end);
-              // Reduce mobile rendering logs
-              if (Math.random() < 0.1) {
-                console.log(`📱 Mobile rendering: ${start}-${end} from ${coins.length} coins`);
-              }
+              // DEBUG: Mobile rendering logs disabled
+              // if (Math.random() < 0.1) {
+              //   console.log(`📱 Mobile rendering: ${start}-${end} from ${coins.length} coins`);
+              // }
               
               if (start > end || start >= coins.length) {
                 console.log(`❌ Invalid range: start=${start}, end=${end}, length=${coins.length}`);

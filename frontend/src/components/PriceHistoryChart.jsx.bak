@@ -3,7 +3,7 @@ import './PriceHistoryChart.css';
 
 // DEBUG MODE - Set to false to disable all diagnostic logging (massive performance boost)
 const DEBUG_MODE = false;
-const debugLog = (...args) => { if (DEBUG_MODE) debugLog(...args); };
+const debugLog = (...args) => { if (DEBUG_MODE) console.log(...args); };
 
 const PriceHistoryChart = ({ coin, width, height = 200 }) => {
   // Use parent container width - if width is "100%" or similar, use full container
@@ -69,8 +69,8 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
   
   useEffect(() => {
     if (DEBUG_MODE) {
-      debugLog('🔍 [CHART DIAGNOSTIC] Component mounted at:', new Date().toISOString());
-      debugLog('🔍 [CHART DIAGNOSTIC] Coin data:', {
+      console.log('🔍 [CHART DIAGNOSTIC] Component mounted at:', new Date().toISOString());
+      console.log('🔍 [CHART DIAGNOSTIC] Coin data:', {
         symbol: coin?.symbol,
         tokenAddress: coin?.tokenAddress,
         mintAddress: coin?.mintAddress,
@@ -82,21 +82,21 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
     return () => {
       if (DEBUG_MODE) {
         const totalTime = Date.now() - mountTimeRef.current;
-        debugLog('🔍 [CHART DIAGNOSTIC] Component unmounted after', totalTime, 'ms');
+        console.log('🔍 [CHART DIAGNOSTIC] Component unmounted after', totalTime, 'ms');
       }
     };
   }, []);
 
   useEffect(() => {
     if (DEBUG_MODE) {
-      debugLog('🔍 [CHART DIAGNOSTIC] Dependency changed - coin data');
-      debugLog('🔍 [CHART DIAGNOSTIC] Generating 24-hour blended chart from DexScreener price changes');
+      console.log('🔍 [CHART DIAGNOSTIC] Dependency changed - coin data');
+      console.log('🔍 [CHART DIAGNOSTIC] Generating 24-hour blended chart from DexScreener price changes');
     }
     
     if (coin) {
       // Check if we have pre-generated chart data from backend enrichment
       if (coin.cleanChartData && coin.cleanChartData.dataPoints) {
-        if (DEBUG_MODE) debugLog('✅ [CHART] Using pre-generated chart data from backend enrichment');
+        if (DEBUG_MODE) console.log('✅ [CHART] Using pre-generated chart data from backend enrichment');
         const chartData = coin.cleanChartData;
         
         // Calculate min/max for display
@@ -121,11 +121,11 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
         setLoading(false);
       } else {
         // Fallback: Generate chart from DexScreener price change anchors client-side
-        debugLog('⚠️  [CHART] No pre-generated data, generating client-side');
+        console.log('⚠️  [CHART] No pre-generated data, generating client-side');
         generateBlended24HourChart();
       }
     } else {
-      debugLog('❌ [CHART DIAGNOSTIC] No coin data available');
+      console.log('❌ [CHART DIAGNOSTIC] No coin data available');
       setError('No coin data available');
       setLoading(false);
     }
@@ -133,7 +133,7 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
 
   // Draw chart immediately when data is ready
   useEffect(() => {
-    debugLog('🔍 [CHART DIAGNOSTIC] Chart data effect triggered:', {
+    console.log('🔍 [CHART DIAGNOSTIC] Chart data effect triggered:', {
       hasChartData: !!chartData,
       hasDataPoints: !!(chartData?.dataPoints),
       dataPointsLength: chartData?.dataPoints?.length || 0
@@ -143,14 +143,14 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
       drawTimeRef.current = Date.now();
       drawChart(chartData.dataPoints);
       const drawDuration = Date.now() - drawTimeRef.current;
-      debugLog('🔍 [CHART DIAGNOSTIC] Chart drawn in', drawDuration, 'ms');
+      console.log('🔍 [CHART DIAGNOSTIC] Chart drawn in', drawDuration, 'ms');
     }
   }, [chartData]);
 
   // Generate blended 24-hour chart using multiple DexScreener price change anchors
   const generateBlended24HourChart = () => {
     const generateStartTime = Date.now();
-    debugLog('📊 [BLENDED CHART] Starting 24-hour blended chart generation');
+    console.log('📊 [BLENDED CHART] Starting 24-hour blended chart generation');
     
     setLoading(true);
     setError(null);
@@ -169,7 +169,7 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
       const change6h = priceChanges.change6h || priceChanges.h6 || coin?.change_6h || null;
       const change24h = priceChanges.change24h || priceChanges.h24 || coin?.change_24h || coin?.change24h || 0;
       
-      debugLog('📊 [BLENDED CHART] Price change anchors:', {
+      console.log('📊 [BLENDED CHART] Price change anchors:', {
         currentPrice,
         change5m,
         change1h,
@@ -204,7 +204,7 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
       });
       
       const totalDuration = Date.now() - generateStartTime;
-      debugLog(`✅ [BLENDED CHART] Generated ${dataPoints.length} points in ${totalDuration}ms`);
+      console.log(`✅ [BLENDED CHART] Generated ${dataPoints.length} points in ${totalDuration}ms`);
       
     } catch (error) {
       console.error('❌ [BLENDED CHART] Generation failed:', error);
@@ -267,7 +267,7 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
     // Sort by time (oldest first)
     anchors.sort((a, b) => b.hoursAgo - a.hoursAgo);
     
-    debugLog('📊 [BLENDED CHART] Created anchors:', anchors.map(a => ({
+    console.log('📊 [BLENDED CHART] Created anchors:', anchors.map(a => ({
       hoursAgo: a.hoursAgo,
       price: a.price
     })));
@@ -354,11 +354,11 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
   
   const drawChart = (dataPoints) => {
     const drawStartTime = Date.now();
-    debugLog('🔍 [CHART DIAGNOSTIC] Starting chart draw with', dataPoints.length, 'points');
+    console.log('🔍 [CHART DIAGNOSTIC] Starting chart draw with', dataPoints.length, 'points');
     
     const canvas = canvasRef.current;
     if (!canvas || !dataPoints || dataPoints.length === 0) {
-      debugLog('❌ [CHART DIAGNOSTIC] Draw aborted - missing canvas or data');
+      console.log('❌ [CHART DIAGNOSTIC] Draw aborted - missing canvas or data');
       return;
     }
 
@@ -371,7 +371,7 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
     // Use device pixel ratio for HD rendering
     const dpr = window.devicePixelRatio || 1;
     
-    debugLog('🔍 [CHART DIAGNOSTIC] Canvas dimensions:', {
+    console.log('🔍 [CHART DIAGNOSTIC] Canvas dimensions:', {
       width: containerWidth,
       height: containerHeight,
       dpr: dpr,
@@ -386,7 +386,7 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
     ctx.scale(dpr, dpr);
 
     // Debug: Log actual canvas and chart dimensions
-    debugLog('📐 [CHART DIMENSIONS]', {
+    console.log('📐 [CHART DIMENSIONS]', {
       containerWidth: containerWidth,
       containerHeight: containerHeight,
       canvasWidth: canvas.width,
@@ -409,7 +409,7 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
     const maxPrice = Math.max(...prices) * 1.02; // 2% padding
     const priceRange = maxPrice - minPrice || 0.0001;
 
-    debugLog('🔍 [CHART DIAGNOSTIC] Price range:', {
+    console.log('🔍 [CHART DIAGNOSTIC] Price range:', {
       min: minPrice,
       max: maxPrice,
       range: priceRange
@@ -427,7 +427,7 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
     });
 
     // Debug: Log actual drawing coordinates
-    debugLog('📍 [CHART COORDINATES]', {
+    console.log('📍 [CHART COORDINATES]', {
       chartWidth,
       chartHeight, 
       padding,
@@ -452,7 +452,7 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
     ctx.stroke();
     
     const drawDuration = Date.now() - drawStartTime;
-    debugLog('🔍 [CHART DIAGNOSTIC] Chart drawing completed in', drawDuration, 'ms');
+    console.log('🔍 [CHART DIAGNOSTIC] Chart drawing completed in', drawDuration, 'ms');
   };
 
   if (error) {

@@ -178,18 +178,12 @@ export function useLiveData() {
       };
 
       wsRef.current.onerror = (error) => {
-        // Reduce error logging frequency to prevent spam
-        if (Math.random() < 0.1) {
-          console.error('❌ WebSocket error:', error);
-        }
+        // Suppress error logging to prevent console spam (backend may be starting)
         setConnectionStatus('error');
       };
 
       wsRef.current.onclose = (event) => {
-        // Reduce disconnection logging
-        if (reconnectAttempts.current === 0 || Math.random() < 0.2) {
-          console.log(`🔴 WebSocket disconnected (${event.code}: ${event.reason || 'No reason'})`);
-        }
+        // Only log disconnections occasionally
         setConnected(false);
         setConnectionStatus('disconnected');
         wsRef.current = null;
@@ -197,10 +191,7 @@ export function useLiveData() {
         // Attempt to reconnect with exponential backoff
         if (reconnectAttempts.current < maxReconnectAttempts) {
           const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
-          // Only log every 3rd reconnection attempt to reduce spam
-          if (reconnectAttempts.current % 3 === 0) {
-            console.log(`🔄 Reconnecting in ${delay}ms (attempt ${reconnectAttempts.current + 1}/${maxReconnectAttempts})`);
-          }
+          // Suppress reconnection logs to prevent console spam
           setConnectionStatus('reconnecting');
           
           reconnectTimeoutRef.current = setTimeout(() => {
@@ -208,7 +199,8 @@ export function useLiveData() {
             connect();
           }, delay);
         } else {
-          console.error('❌ Max reconnection attempts reached');
+          // Only log when giving up
+          console.warn('WebSocket: Max reconnection attempts reached');
           setConnectionStatus('failed');
         }
       };

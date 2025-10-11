@@ -11,9 +11,12 @@ import ProfileView from './components/ProfileView'
 import JupiterTradeModal from './components/JupiterTradeModal'
 
 function App() {
-  // Build timestamp to force cache invalidation - Mobile crash fix
-  console.log('%cMoonfeed Mobile Crash Fix: ' + '2025-10-10-v3-mobile-crash-fix', 'background: #00ff88; color: black; padding:4px; font-weight: bold;');
-  console.log('%c✅ CRITICAL FIXES: Disabled WebSocket on mobile, Fixed 503 errors, Removed 404 spam', 'color: #00ff88;');
+  // Build timestamp - only log once on initial load
+  if (!window.__MOONFEED_LOGGED__) {
+    console.log('%cMoonfeed Mobile Crash Fix: ' + '2025-10-10-v3-mobile-crash-fix', 'background: #00ff88; color: black; padding:4px; font-weight: bold;');
+    console.log('%c✅ CRITICAL FIXES: Disabled WebSocket on mobile, Fixed 503 errors, Removed 404 spam', 'color: #00ff88;');
+    window.__MOONFEED_LOGGED__ = true;
+  }
 
 
   const [activeTab, setActiveTab] = useState('home');
@@ -92,13 +95,8 @@ function App() {
 
   // Handle current coin change from TokenScroller (for auto-tracking the coin in view)
   const handleCurrentCoinChange = (coin, index) => {
-    console.log('🎯 APP: Current coin changed:', {
-      symbol: coin?.symbol,
-      mintAddress: coin?.mintAddress,
-      index: index,
-      isEnriched: coin?.enriched,
-      hasRealData: coin?.market_cap_usd > 0
-    });
+    // DEBUG: Disabled to reduce console spam
+    // console.log('🎯 APP: Current coin changed:', { symbol: coin?.symbol, ... });
     
     setCurrentViewedCoin(coin);
     setCurrentCoinIndex(index); // Track the current coin index
