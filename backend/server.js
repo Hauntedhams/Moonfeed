@@ -361,23 +361,29 @@ async function fetchFreshCoinBatch() {
 // NEW FEED - Separate API call for recently created coins with 5-minute volume
 // Parameters: 1-96 hours age, $20k-$70k 5m volume
 async function fetchNewCoinBatch() {
-  // Calculate timestamps for 1-96 hour age range
+  // Calculate timestamps for 0-96 hour age range
   const now = Date.now();
   const minCreatedAt = now - (96 * 60 * 60 * 1000); // 96 hours ago (4 days)
-  const maxCreatedAt = now - (1 * 60 * 60 * 1000);  // 1 hour ago (coins need time to settle)
+  const maxCreatedAt = now;                         // Now (include brand new coins)
   
   const searchParams = {
-    // 5-minute volume - Shows immediate interest
-    minVolume_5m: 20000,          // $20k minimum 5-minute volume
-    maxVolume_5m: 70000,          // $70k maximum 5-minute volume
+    // Liquidity range - $5k to $200k
+    minLiquidity: 5000,           // $5k minimum liquidity
+    maxLiquidity: 200000,         // $200k maximum liquidity
     
-    // Age - 1 to 96 hours old
+    // Market cap range - $20k to $1M
+    minMarketCap: 20000,          // $20k minimum market cap
+    maxMarketCap: 1000000,        // $1M maximum market cap
+    
+    // 1H volume - $5k to Max
+    minVolume_1h: 5000,           // $5k minimum 1-hour volume
+    
+    // 6H volume - $20k to Max
+    minVolume_6h: 20000,          // $20k minimum 6-hour volume
+    
+    // Age - 0 to 96 hours old
     minCreatedAt: minCreatedAt,   // 96 hours ago
-    maxCreatedAt: maxCreatedAt,   // 1 hour ago
-    
-    // Safety filters
-    minLiquidity: 10000,          // $10k minimum liquidity
-    minMarketCap: 50000,          // $50k minimum market cap
+    maxCreatedAt: maxCreatedAt,   // Now
     
     // Sorting
     sortBy: 'createdAt',          // Sort by creation date
@@ -386,10 +392,10 @@ async function fetchNewCoinBatch() {
     page: 1
   };
 
-  console.log(`🆕 NEW FEED - Fetching recently created coins with 5m volume activity`);
-  console.log(`📊 Filters: 5m Vol $20k-$70k | Liq $10k+ | MC $50k+ | Age 1-96h`);
+  console.log(`🆕 NEW FEED - Fetching recently created coins with updated parameters`);
+  console.log(`📊 Filters: Liq $5k-$200k | MC $20k-$1M | 1H Vol $5k+ | 6H Vol $20k+ | Age 0-96h`);
   console.log(`📅 Time range: ${new Date(minCreatedAt).toISOString()} to ${new Date(maxCreatedAt).toISOString()}`);
-  console.log(`⏰ Coins must be 1 to 96 hours old`);
+  console.log(`⏰ Coins must be 0 to 96 hours old`);
   
   const response = await makeSolanaTrackerRequest('/search', searchParams);
   
@@ -398,7 +404,7 @@ async function fetchNewCoinBatch() {
   }
 
   const tokens = response.data;
-  console.log(`🆕 Got ${tokens.length} NEW tokens (1-96 hours old)`);
+  console.log(`🆕 Got ${tokens.length} NEW tokens (0-96 hours old)`);
 
   // Format tokens for frontend with all available data
   const formattedTokens = tokens.map((token, index) => {
@@ -415,7 +421,9 @@ async function fetchNewCoinBatch() {
       logo: token.image || `https://via.placeholder.com/64/00d4ff/ffffff?text=${(token.symbol || 'T').charAt(0)}`,
       price_usd: token.priceUsd || 0,
       market_cap_usd: token.marketCapUsd || 0,
+      volume_1h: token.volume_1h || 0,
       volume_5m: token.volume_5m || 0,
+      volume_6h: token.volume_6h || 0,
       volume_24h_usd: token.volume_24h || 0,
       liquidity: token.liquidity || 0,
       liquidity_usd: token.liquidityUsd || token.liquidity || 0,
@@ -544,10 +552,11 @@ app.get('/api/coins/new', async (req, res) => {
         timestamp: new Date().toISOString(),
         message: 'NEW feed is loading, please refresh in a moment',
         criteria: {
-          age: '1-96 hours',
-          volume_5m: '$20k-$70k',
-          liquidity: '$10k+',
-          market_cap: '$50k+'
+          age: '0-96 hours',
+          liquidity: '$5k-$200k',
+          market_cap: '$20k-$1M',
+          volume_1h: '$5k+',
+          volume_6h: '$20k+'
         }
       });
     }
@@ -563,8 +572,11 @@ app.get('/api/coins/new', async (req, res) => {
       total: newCoins.length,
       timestamp: new Date().toISOString(),
       criteria: {
-        age: '1-96 hours',
-        volume_5m: '$20k-$70k'
+        age: '0-96 hours',
+        liquidity: '$5k-$200k',
+        market_cap: '$20k-$1M',
+        volume_1h: '$5k+',
+        volume_6h: '$20k+'
       }
     });
     
@@ -814,6 +826,36 @@ app.post('/api/admin/refresh-trending', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to trigger trending refresh',
+      details: error.message
+    });
+  }
+});
+
+// ADMIN endpoint - Manually trigger NEW feed refresh
+app.post('/api/admin/refresh-new', async (req, res) => {
+  try {
+    console.log('🔧 Manual NEW feed refresh requested');
+    
+    const result = await newFeedAutoRefresher.triggerRefresh();
+    
+    if (result.success) {
+      res.json({
+        success: true,
+        message: 'NEW feed refresh triggered successfully',
+        status: newFeedAutoRefresher.getStatus()
+      });
+    } else {
+      res.status(429).json({
+        success: false,
+        message: result.message
+      });
+    }
+    
+  } catch (error) {
+    console.error('❌ Error triggering NEW feed refresh:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to trigger NEW feed refresh',
       details: error.message
     });
   }
