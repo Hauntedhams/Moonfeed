@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './TopTabs.css';
 
-const TopTabs = ({ activeFilter, onFilterChange, showFilterButton = false, onFilterClick, isFilterActive = false, onActiveTabClick }) => {
+const TopTabs = ({ activeFilter, onFilterChange, showFilterButton = false, onFilterClick, isFilterActive = false, onActiveTabClick, hasCustomFilters = false }) => {
   const [touchStartX, setTouchStartX] = useState(0);
   const [touchEndX, setTouchEndX] = useState(0);
   const containerRef = useRef(null);
@@ -201,16 +201,17 @@ const TopTabs = ({ activeFilter, onFilterChange, showFilterButton = false, onFil
             scale = 0.9;
           }
           
-          const canClick = tab.id === 'trending' || tab.id === 'new' || tab.id === 'custom';
+          const canClick = tab.id === 'trending' || tab.id === 'new' || (tab.id === 'custom' && hasCustomFilters);
           const showClickHint = isActive && isCenter && canClick && onActiveTabClick;
+          const isDisabled = tab.id === 'custom' && !hasCustomFilters;
           
           return (
             <button
               key={`${tab.id}-${tab.position}`}
-              className={`top-tab ${isActive ? 'active' : ''} ${tab.position} ${showClickHint ? 'clickable-active' : ''}`}
+              className={`top-tab ${isActive ? 'active' : ''} ${tab.position} ${showClickHint ? 'clickable-active' : ''} ${isDisabled ? 'disabled' : ''}`}
               onClick={() => {
-                // Allow trending, new, and custom tabs; graduating is disabled
-                if (tab.id === 'trending' || tab.id === 'new' || tab.id === 'custom') {
+                // Allow trending and new tabs always; custom only when filters are applied
+                if (tab.id === 'trending' || tab.id === 'new' || (tab.id === 'custom' && hasCustomFilters)) {
                   // If clicking on the already active tab, show the coin list modal
                   if (isActive && onActiveTabClick) {
                     onActiveTabClick(tab.id);
@@ -220,15 +221,17 @@ const TopTabs = ({ activeFilter, onFilterChange, showFilterButton = false, onFil
                 }
               }}
               style={{
-                opacity,
+                opacity: isDisabled ? 0.4 : opacity,
                 zIndex,
                 transform: `scale(${scale})`,
-                cursor: (tab.id === 'trending' || tab.id === 'new' || tab.id === 'custom') ? 'pointer' : 'not-allowed'
+                cursor: (tab.id === 'trending' || tab.id === 'new' || (tab.id === 'custom' && hasCustomFilters)) ? 'pointer' : 'not-allowed'
               }}
             >
               <span className="tab-label" style={{
-                opacity: (tab.id === 'trending' || tab.id === 'new' || tab.id === 'custom') ? 1 : 0.5,
-                color: (tab.id === 'trending' || tab.id === 'new' || tab.id === 'custom')
+                opacity: (tab.id === 'trending' || tab.id === 'new' || (tab.id === 'custom' && hasCustomFilters))
+                  ? (isActive ? 1 : 0.8)
+                  : 0.5,
+                color: (tab.id === 'trending' || tab.id === 'new' || (tab.id === 'custom' && hasCustomFilters))
                   ? (isActive ? 'rgba(255, 255, 255, 1)' : 'rgba(255, 255, 255, 0.8)')
                   : 'rgba(255, 255, 255, 0.5)'
               }}>{tab.label}</span>
@@ -240,8 +243,15 @@ const TopTabs = ({ activeFilter, onFilterChange, showFilterButton = false, onFil
       {/* Filter Button - positioned absolutely in top right */}
       {showFilterButton && (
         <button
-          onClick={onFilterClick}
+          onClick={(e) => {
+            e.stopPropagation();
+            console.log('🔥 Filter button clicked!', { onFilterClick, isFilterActive });
+            if (onFilterClick) {
+              onFilterClick();
+            }
+          }}
           className={`top-tab filter-tab ${isFilterActive ? 'active' : ''}`}
+          style={{ pointerEvents: 'auto', cursor: 'pointer' }}
         >
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M3 4.5H21V6H3V4.5ZM6 10.5H18V12H6V10.5ZM9 16.5H15V18H9V16.5Z" fill="currentColor"/>

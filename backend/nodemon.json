@@ -1,0 +1,16 @@
+{
+  "ignore": [
+    "storage/**",
+    "*.log",
+    "test-*.js",
+    "diagnostic-*.js",
+    "debug-*.js",
+    "*.md"
+  ],
+  "watch": [
+    "*.js",
+    "services/**/*.js"
+  ],
+  "ext": "js,json",
+  "delay": "2500"
+}

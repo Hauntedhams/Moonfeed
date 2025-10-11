@@ -13,6 +13,8 @@ function CoinListModal({ visible, onClose, filterType, onCoinSelect, currentCoin
   const getApiUrl = () => {
     if (filterType === 'trending') {
       return `${API_BASE}/trending`;
+    } else if (filterType === 'new') {
+      return `${API_BASE}/new`;
     } else if (filterType === 'graduating') {
       return `${API_BASE}/graduating`;
     } else if (filterType === 'custom') {
@@ -62,6 +64,8 @@ function CoinListModal({ visible, onClose, filterType, onCoinSelect, currentCoin
     switch (filterType) {
       case 'trending':
         return 'Trending Coins';
+      case 'new':
+        return 'New Coins';
       case 'graduating':
         return 'Graduating Coins';
       case 'custom':

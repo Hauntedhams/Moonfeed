@@ -4,6 +4,7 @@ const cors = require('cors');
 const fetch = require('node-fetch');
 const http = require('http');
 const CoinStorage = require('./coin-storage');
+const NewCoinStorage = require('./new-coin-storage');
 const priceEngine = require('./services/priceEngine');
 const WebSocketServer = require('./services/websocketServer');
 const JupiterLivePriceService = require('./jupiterLivePriceService');
@@ -22,6 +23,9 @@ const TokenMetadataService = require('./tokenMetadataService');
 const app = express();
 const PORT = process.env.PORT || 3001;
 const coinStorage = new CoinStorage();
+const newCoinStorage = new NewCoinStorage();
+const CustomCoinStorage = require('./custom-coin-storage');
+const customCoinStorage = new CustomCoinStorage();
 
 // Middleware
 app.use(cors({
@@ -47,6 +51,7 @@ const SOLANA_TRACKER_BASE_URL = 'https://data.solanatracker.io';
 // Current serving cache (from latest batch)
 let currentCoins = [];
 let newCoins = []; // Separate cache for new feed
+let customCoins = []; // Cache for custom filtered coins
 
 // Initialize Rugcheck auto-processor
 const rugcheckAutoProcessor = new RugcheckAutoProcessor();
@@ -82,11 +87,22 @@ function initializeWithLatestBatch() {
     
     console.log(`🚀 Initialized with latest batch: ${latestBatch.length} coins`);
     
-    // IMMEDIATE FETCH: Populate NEW feed immediately on startup
+    // Try to load saved NEW feed batch first
+    const savedNewBatch = newCoinStorage.getCurrentBatch();
+    if (savedNewBatch.length > 0) {
+      newCoins = savedNewBatch;
+      const batchInfo = newCoinStorage.getBatchInfo();
+      console.log(`📂 Loaded saved NEW feed: ${savedNewBatch.length} coins (age: ${batchInfo.age} min)`);
+      // Start enrichment for loaded coins
+      startNewFeedEnrichment();
+    }
+    
+    // IMMEDIATE FETCH: Populate NEW feed immediately on startup (or refresh if old)
     console.log('🆕 Fetching NEW feed immediately on startup...');
     fetchNewCoinBatch()
       .then(freshNewBatch => {
         newCoins = freshNewBatch;
+        newCoinStorage.saveBatch(freshNewBatch); // Save to disk
         console.log(`✅ NEW feed initialized with ${freshNewBatch.length} coins`);
         // Start enrichment for new coins
         startNewFeedEnrichment();
@@ -248,7 +264,7 @@ async function fetchFreshCoinBatch() {
 }
 
 // NEW FEED - Separate API call for recently created coins with 5-minute volume
-// Parameters: 1-96 hours age, $15k-$30k 5m volume
+// Parameters: 1-96 hours age, $20k-$70k 5m volume
 async function fetchNewCoinBatch() {
   // Calculate timestamps for 1-96 hour age range
   const now = Date.now();
@@ -257,8 +273,8 @@ async function fetchNewCoinBatch() {
   
   const searchParams = {
     // 5-minute volume - Shows immediate interest
-    minVolume_5m: 15000,          // $15k minimum 5-minute volume
-    maxVolume_5m: 30000,          // $30k maximum 5-minute volume
+    minVolume_5m: 20000,          // $20k minimum 5-minute volume
+    maxVolume_5m: 70000,          // $70k maximum 5-minute volume
     
     // Age - 1 to 96 hours old
     minCreatedAt: minCreatedAt,   // 96 hours ago
@@ -276,7 +292,7 @@ async function fetchNewCoinBatch() {
   };
 
   console.log(`🆕 NEW FEED - Fetching recently created coins with 5m volume activity`);
-  console.log(`📊 Filters: 5m Vol $15k-$30k | Liq $10k+ | MC $50k+ | Age 1-96h`);
+  console.log(`📊 Filters: 5m Vol $20k-$70k | Liq $10k+ | MC $50k+ | Age 1-96h`);
   console.log(`📅 Time range: ${new Date(minCreatedAt).toISOString()} to ${new Date(maxCreatedAt).toISOString()}`);
   console.log(`⏰ Coins must be 1 to 96 hours old`);
   
@@ -364,7 +380,7 @@ app.get('/api/coins/new', async (req, res) => {
         message: 'NEW feed is loading, please refresh in a moment',
         criteria: {
           age: '1-96 hours',
-          volume_5m: '$15k-$30k',
+          volume_5m: '$20k-$70k',
           liquidity: '$10k+',
           market_cap: '$50k+'
         }
@@ -383,7 +399,7 @@ app.get('/api/coins/new', async (req, res) => {
       timestamp: new Date().toISOString(),
       criteria: {
         age: '1-96 hours',
-        volume_5m: '$15k-$30k'
+        volume_5m: '$20k-$70k'
       }
     });
     
@@ -432,6 +448,173 @@ app.get('/api/coins/trending', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to fetch trending coins',
+      details: error.message
+    });
+  }
+});
+
+// CUSTOM FILTER endpoint - Returns coins based on user-defined filters
+app.get('/api/coins/custom', async (req, res) => {
+  try {
+    console.log('🎯 /api/coins/custom endpoint called with filters:', req.query);
+    
+    // Check if filters are provided
+    const hasFilters = Object.keys(req.query).length > 0;
+    
+    // If no filters provided, return cached custom coins
+    if (!hasFilters) {
+      console.log('📦 No filters provided, returning cached custom coins');
+      
+      if (customCoins.length === 0) {
+        // Try to load from storage
+        const savedCoins = customCoinStorage.getCurrentBatch();
+        if (savedCoins.length > 0) {
+          customCoins = savedCoins;
+          console.log(`📂 Loaded ${savedCoins.length} coins from storage`);
+        }
+      }
+      
+      if (customCoins.length === 0) {
+        return res.json({
+          success: true,
+          coins: [],
+          count: 0,
+          total: 0,
+          message: 'No custom filters applied yet',
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      // Return cached coins (with any enrichment updates)
+      return res.json({
+        success: true,
+        coins: customCoins,
+        count: customCoins.length,
+        total: customCoins.length,
+        timestamp: new Date().toISOString(),
+        cached: true
+      });
+    }
+    
+    // Build search params from query parameters
+    const searchParams = {};
+    
+    // Liquidity filters
+    if (req.query.minLiquidity) searchParams.minLiquidity = parseFloat(req.query.minLiquidity);
+    if (req.query.maxLiquidity) searchParams.maxLiquidity = parseFloat(req.query.maxLiquidity);
+    
+    // Market cap filters
+    if (req.query.minMarketCap) searchParams.minMarketCap = parseFloat(req.query.minMarketCap);
+    if (req.query.maxMarketCap) searchParams.maxMarketCap = parseFloat(req.query.maxMarketCap);
+    
+    // Volume filters
+    if (req.query.minVolume) {
+      const timeframe = req.query.volumeTimeframe || '24h';
+      const volumeKey = `minVolume_${timeframe}`;
+      searchParams[volumeKey] = parseFloat(req.query.minVolume);
+    }
+    if (req.query.maxVolume) {
+      const timeframe = req.query.volumeTimeframe || '24h';
+      const volumeKey = `maxVolume_${timeframe}`;
+      searchParams[volumeKey] = parseFloat(req.query.maxVolume);
+    }
+    
+    // Creation date filters (convert dates to timestamps)
+    if (req.query.minCreatedAt) {
+      const date = new Date(req.query.minCreatedAt);
+      searchParams.minCreatedAt = date.getTime();
+    }
+    if (req.query.maxCreatedAt) {
+      const date = new Date(req.query.maxCreatedAt);
+      date.setHours(23, 59, 59, 999); // End of day
+      searchParams.maxCreatedAt = date.getTime();
+    }
+    
+    // Trading activity filters
+    if (req.query.minBuys) searchParams.minBuys = parseInt(req.query.minBuys);
+    if (req.query.minSells) searchParams.minSells = parseInt(req.query.minSells);
+    if (req.query.minTotalTransactions) searchParams.minTotalTransactions = parseInt(req.query.minTotalTransactions);
+    
+    // Default sorting and limit
+    searchParams.sortBy = 'volume_24h';
+    searchParams.sortOrder = 'desc';
+    searchParams.limit = 200;
+    searchParams.page = 1;
+    
+    console.log('📊 Solana Tracker search params:', searchParams);
+    
+    // Make API call to Solana Tracker
+    const response = await makeSolanaTrackerRequest('/search', searchParams);
+    
+    if (response.status !== 'success' || !response.data) {
+      throw new Error('Invalid response from Solana Tracker');
+    }
+
+    const tokens = response.data;
+    console.log(`🔍 Got ${tokens.length} tokens from custom filters`);
+
+    // Format tokens for frontend
+    const formattedTokens = tokens.map((token, index) => ({
+      mintAddress: token.mint,
+      name: token.name || 'Unknown',
+      symbol: token.symbol || 'UNKNOWN',
+      image: token.image || `https://via.placeholder.com/64/00d4ff/ffffff?text=${(token.symbol || 'T').charAt(0)}`,
+      profileImage: token.image || `https://via.placeholder.com/64/00d4ff/ffffff?text=${(token.symbol || 'T').charAt(0)}`,
+      logo: token.image || `https://via.placeholder.com/64/00d4ff/ffffff?text=${(token.symbol || 'T').charAt(0)}`,
+      price_usd: token.priceUsd || 0,
+      market_cap_usd: token.marketCapUsd || 0,
+      volume_24h_usd: token.volume_24h || 0,
+      volume_5m: token.volume_5m || 0,
+      liquidity: token.liquidity || 0,
+      liquidity_usd: token.liquidityUsd || token.liquidity || 0,
+      created_timestamp: token.createdAt ? new Date(token.createdAt).getTime() : Date.now(),
+      description: token.description || '',
+      buys_24h: token.buys_24h || 0,
+      sells_24h: token.sells_24h || 0,
+      transactions_24h: (token.buys_24h || 0) + (token.sells_24h || 0),
+      priority: index + 1,
+      source: 'custom-filter'
+    }));
+    
+    // Apply priority scoring
+    const coinsWithPriority = rugcheckService.sortCoinsByPriority(formattedTokens);
+
+    // Stop previous custom feed enrichment before starting new one
+    console.log('🛑 Stopping previous custom feed enrichment...');
+    dexscreenerAutoEnricher.stopCustomFeed();
+    rugcheckAutoProcessor.stopCustomFeed();
+    
+    // Cache the results
+    customCoins = coinsWithPriority;
+    
+    // Save to storage with filters
+    customCoinStorage.saveBatch(coinsWithPriority, req.query);
+    
+    // Start enrichment for custom filtered coins
+    if (coinsWithPriority.length > 0) {
+      console.log('🎨 Starting enrichment for custom filtered coins');
+      // Start DexScreener enrichment (prioritize first 10)
+      dexscreenerAutoEnricher.startCustomFeed(() => customCoins);
+      // Start Rugcheck verification (prioritize first 10)
+      rugcheckAutoProcessor.startCustomFeed(() => customCoins);
+    }
+
+    console.log(`✅ Returning ${coinsWithPriority.length} custom filtered coins`);
+    
+    res.json({
+      success: true,
+      coins: coinsWithPriority,
+      count: coinsWithPriority.length,
+      total: coinsWithPriority.length,
+      timestamp: new Date().toISOString(),
+      filters: req.query
+    });
+    
+  } catch (error) {
+    console.error('❌ Error in /api/coins/custom endpoint:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch custom filtered coins',
       details: error.message
     });
   }
@@ -578,13 +761,9 @@ function startTrendingAutoRefresher() {
         // Restart enrichment processes for the new batch
         console.log('🚀 Restarting enrichment for TRENDING feed...');
         
-        // Stop existing enrichment processes for trending feed
-        if (dexscreenerAutoEnricher.intervalId) {
-          dexscreenerAutoEnricher.stop();
-        }
-        if (rugcheckAutoProcessor.intervalId) {
-          rugcheckAutoProcessor.stop();
-        }
+        // Stop existing enrichment processes for trending feed ONLY
+        dexscreenerAutoEnricher.stopTrending();
+        rugcheckAutoProcessor.stopTrending();
         
         // Start fresh enrichment with priority for first 10 coins
         startDexscreenerAutoEnricher();
@@ -606,16 +785,15 @@ function startNewFeedAutoRefresher() {
       console.log(`🔄 Updating NEW feed cache with ${freshNewBatch.length} fresh coins`);
       newCoins = freshNewBatch;
       
+      // Save to disk (overwrites old batch)
+      newCoinStorage.saveBatch(freshNewBatch);
+      
       // Restart enrichment processes for the new batch
       console.log('🚀 Restarting enrichment for NEW feed...');
       
-      // Stop existing enrichment processes for new feed
-      if (dexscreenerAutoEnricher.newFeedIntervalId) {
-        dexscreenerAutoEnricher.stop();
-      }
-      if (rugcheckAutoProcessor.newFeedIntervalId) {
-        rugcheckAutoProcessor.stop();
-      }
+      // Stop existing enrichment processes for new feed ONLY
+      dexscreenerAutoEnricher.stopNewFeed();
+      rugcheckAutoProcessor.stopNewFeed();
       
       // Start fresh enrichment with priority for first 10 coins
       startNewFeedEnrichment();

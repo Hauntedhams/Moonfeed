@@ -12,18 +12,8 @@
   justify-content: center;
   z-index: 10000;
   padding: 16px;
+  backdrop-filter: blur(8px);
   animation: fadeIn 0.2s ease;
-}
-
-/* Desktop: Remove blur and align left */
-@media (min-width: 769px) {
-  .jupiter-modal-overlay {
-    justify-content: flex-start;
-    align-items: flex-start;
-    padding: 40px;
-    background: rgba(0, 0, 0, 0.85);
-    backdrop-filter: none;
-  }
 }
 
 .jupiter-modal-content {

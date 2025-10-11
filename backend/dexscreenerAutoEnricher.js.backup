@@ -5,7 +5,6 @@ class DexscreenerAutoEnricher {
   constructor() {
     this.isProcessing = false;
     this.isProcessingNewFeed = false;
-    this.isProcessingCustomFeed = false;
     this.processInterval = 30000; // Check every 30 seconds
     this.batchSize = 8; // Process 8 coins at a time (parallel) - reduced from 25 to avoid rate limits
     this.reEnrichmentInterval = 5 * 60 * 1000; // Re-enrich every 5 minutes
@@ -24,16 +23,6 @@ class DexscreenerAutoEnricher {
       reEnrichments: 0
     };
     this.newFeedStats = {
-      totalProcessed: 0,
-      totalEnriched: 0,
-      withBanners: 0,
-      withSocials: 0,
-      batchesCompleted: 0,
-      lastProcessedAt: null,
-      errors: 0,
-      reEnrichments: 0
-    };
-    this.customFeedStats = {
       totalProcessed: 0,
       totalEnriched: 0,
       withBanners: 0,
@@ -255,33 +244,6 @@ class DexscreenerAutoEnricher {
     }
   }
 
-  // Stop only the TRENDING feed enricher
-  stopTrending() {
-    if (this.intervalId) {
-      clearInterval(this.intervalId);
-      this.intervalId = null;
-      console.log('🛑 DexScreener auto-enricher stopped for TRENDING feed only');
-    }
-  }
-
-  // Stop only the NEW feed enricher
-  stopNewFeed() {
-    if (this.newFeedIntervalId) {
-      clearInterval(this.newFeedIntervalId);
-      this.newFeedIntervalId = null;
-      console.log('🛑 DexScreener auto-enricher stopped for NEW feed only');
-    }
-  }
-
-  // Stop only the CUSTOM feed enricher
-  stopCustomFeed() {
-    if (this.customFeedIntervalId) {
-      clearInterval(this.customFeedIntervalId);
-      this.customFeedIntervalId = null;
-      console.log('🛑 DexScreener auto-enricher stopped for CUSTOM feed only');
-    }
-  }
-
   // Start periodic re-enrichment (every 5 minutes)
   startPeriodicReEnrichment() {
     if (this.reEnrichmentIntervalId) {
@@ -500,7 +462,7 @@ class DexscreenerAutoEnricher {
 
     } catch (error) {
       console.error('❌ Error in priority enrichment for CUSTOM:', error.message);
-      this.customFeedStats.errors++;
+      this.stats.errors++;
     }
   }
 
@@ -712,12 +674,12 @@ class DexscreenerAutoEnricher {
         }
       }
 
-      this.customFeedStats.totalProcessed += coinsToProcess;
-      this.customFeedStats.totalEnriched += enrichedCount;
-      this.customFeedStats.withBanners += bannersAdded;
-      this.customFeedStats.withSocials += socialsAdded;
-      this.customFeedStats.batchesCompleted++;
-      this.customFeedStats.lastProcessedAt = new Date().toISOString();
+      this.stats.totalProcessed += coinsToProcess;
+      this.stats.totalEnriched += enrichedCount;
+      this.stats.withBanners += bannersAdded;
+      this.stats.withSocials += socialsAdded;
+      this.stats.batchesCompleted++;
+      this.stats.lastProcessedAt = new Date().toISOString();
 
       const newProcessedCount = totalCoins - (unenrichedCoins.length - coinsToProcess);
       const progressPercentage = Math.round((newProcessedCount / totalCoins) * 100);
@@ -732,11 +694,11 @@ class DexscreenerAutoEnricher {
 
     } catch (error) {
       console.error('❌ Error in CUSTOM feed auto-enricher:', error.message);
-      this.customFeedStats.errors++;
+      this.stats.errors++;
     } finally {
       this.isProcessingCustomFeed = false;
     }
   }
 }
 
-module.exports = new DexscreenerAutoEnricher();
+module.exports = new DexScreenerAutoEnricher();

@@ -91,12 +91,13 @@ const AdvancedFilter = ({ onFilter, isActive, hideButton = false, isModalOpen, o
       {/* Filters Button - only show if not hidden */}
       {!hideButton && (
         <button
-          onClick={() => {
-            console.log('Filters button clicked!');
+          onClick={(e) => {
+            e.stopPropagation();
+            console.log('🔥🔥🔥 AdvancedFilter button clicked!');
+            console.log('Button props:', { hideButton, isActive, customClassName });
             setModalOpen(true);
           }}
           className={`filters-button ${isActive ? 'active' : ''} ${customClassName}`}
-          style={{ pointerEvents: 'auto' }}
         >
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M3 4.5H21V6H3V4.5ZM6 10.5H18V12H6V10.5ZM9 16.5H15V18H9V16.5Z" fill="currentColor"/>

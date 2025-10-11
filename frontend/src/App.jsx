@@ -9,6 +9,7 @@ import CoinSearchModal from './components/CoinSearchModal'
 import CoinListModal from './components/CoinListModal'
 import ProfileView from './components/ProfileView'
 import JupiterTradeModal from './components/JupiterTradeModal'
+import AdvancedFilter from './components/AdvancedFilter'
 
 function App() {
   // Build timestamp - only log once on initial load
@@ -31,7 +32,7 @@ function App() {
   const [filters, setFilters] = useState({ type: 'trending' });
   const [advancedFilters, setAdvancedFilters] = useState(null); // For advanced filtering
   const [isAdvancedFilterActive, setIsAdvancedFilterActive] = useState(false);
-  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false); // For filter modal state
+  const [advancedFilterModalOpen, setAdvancedFilterModalOpen] = useState(false); // Control modal open/close
   const [selectedCoin, setSelectedCoin] = useState(null); // For full coin view
   const [currentViewedCoin, setCurrentViewedCoin] = useState(null); // For current viewing
   const [visibleCoins, setVisibleCoins] = useState([]); // Track currently visible coins
@@ -119,6 +120,12 @@ function App() {
 
   // Handle advanced filter changes
   const handleAdvancedFilter = (advancedFilterParams) => {
+    // If called with null, it means open the modal (triggered by banner button click)
+    if (advancedFilterParams === null) {
+      setAdvancedFilterModalOpen(true);
+      return;
+    }
+    
     console.log('🔧 APP: Advanced filters applied:', advancedFilterParams);
     setAdvancedFilters(advancedFilterParams);
     setIsAdvancedFilterActive(true);
@@ -188,10 +195,7 @@ function App() {
           onFilterChange={handleTopTabFilterChange}
           onActiveTabClick={handleActiveTabClick}
           showFilterButton={false}
-          onFilterClick={() => {
-            setIsFilterModalOpen(true);
-          }}
-          isFilterActive={isAdvancedFilterActive}
+          hasCustomFilters={isAdvancedFilterActive}
         />
       )}
       
@@ -305,6 +309,15 @@ function App() {
         coin={coinToTrade}
         onSwapSuccess={handleSwapSuccess}
         onSwapError={handleSwapError}
+      />
+      
+      {/* Advanced Filter Modal */}
+      <AdvancedFilter
+        onFilter={handleAdvancedFilter}
+        isActive={isAdvancedFilterActive}
+        hideButton={true}
+        isModalOpen={advancedFilterModalOpen}
+        onModalClose={() => setAdvancedFilterModalOpen(false)}
       />
     </div>
   )

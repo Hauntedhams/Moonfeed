@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import CoinCard from './CoinCard';
 import DexScreenerManager from './DexScreenerManager';
-import AdvancedFilter from './AdvancedFilter';
 import MoonfeedInfoButton from './MoonfeedInfoModal';
 import { API_CONFIG, getApiUrl, getFullApiUrl } from '../config/api';
 import './ModernTokenScroller.css';
@@ -18,8 +17,7 @@ const ModernTokenScroller = ({
   advancedFilters = null, // Add advanced filters prop
   // New props for filter handling
   onAdvancedFilter = null,
-  isAdvancedFilterActive = false,
-  showFiltersButton = false // Control whether to show the filters button
+  isAdvancedFilterActive = false
 }) => {
   const [coins, setCoins] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -200,17 +198,16 @@ const ModernTokenScroller = ({
       
       // Handle different filter types
       if (filters.type === 'custom' && advancedFilters) {
-        // Use filtered endpoint for custom filters (this will be slower but more comprehensive)
-        endpoint = `${API_BASE}/filtered`;
-        requestOptions = {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(advancedFilters)
-        };
-        console.log('🔍 Using custom filtered endpoint (comprehensive but slower):', endpoint);
-        console.log('🔍 Request body:', JSON.stringify(advancedFilters, null, 2));
+        // Use custom endpoint with query parameters
+        const queryParams = new URLSearchParams();
+        Object.entries(advancedFilters).forEach(([key, value]) => {
+          if (value !== null && value !== undefined && value !== '') {
+            queryParams.append(key, value);
+          }
+        });
+        endpoint = `${API_BASE}/custom?${queryParams.toString()}`;
+        console.log('🔍 Using custom filter endpoint:', endpoint);
+        console.log('🔍 Filter params:', advancedFilters);
       } else if (filters.type === 'new') {
         // Use the new endpoint for "new" tab
         endpoint = `${API_BASE}/new`;
@@ -691,14 +688,21 @@ const ModernTokenScroller = ({
         {/* Moonfeed Info Button - top left */}
         <MoonfeedInfoButton className="banner-positioned-left" />
         
-        {/* Filters Button - top right (only show if enabled) */}
-        {showFiltersButton && onAdvancedFilter && (
-          <AdvancedFilter
-            onFilter={onAdvancedFilter}
-            isActive={isAdvancedFilterActive}
-            hideButton={false}
-            customClassName="banner-positioned"
-          />
+        {/* Filter Button - top right (only show on main feed) */}
+        {onAdvancedFilter && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              console.log('🔥 Banner filter button clicked!');
+              onAdvancedFilter && onAdvancedFilter(null); // Open modal by triggering callback
+            }}
+            className={`banner-filter-button ${isAdvancedFilterActive ? 'active' : ''}`}
+          >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M3 4.5H21V6H3V4.5ZM6 10.5H18V12H6V10.5ZM9 16.5H15V18H9V16.5Z" fill="currentColor"/>
+            </svg>
+            Filter
+          </button>
         )}
       </div>
       
