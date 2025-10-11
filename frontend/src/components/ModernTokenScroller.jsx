@@ -29,7 +29,7 @@ const ModernTokenScroller = ({
   const [expandedCoin, setExpandedCoin] = useState(null); // Track which coin is expanded
   
   // Virtual scrolling state for mobile optimization
-  const [visibleRange, setVisibleRange] = useState({ start: 0, end: 4 }); // Show 5 cards on mobile
+  const [visibleRange, setVisibleRange] = useState({ start: 0, end: 14 }); // Show 15 cards on mobile (increased from 5)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   
   const scrollerRef = useRef(null);
@@ -43,8 +43,8 @@ const ModernTokenScroller = ({
   const calculateVisibleRange = useCallback((index, totalCoins) => {
     if (!isMobile) return { start: 0, end: totalCoins - 1 }; // Desktop shows all coins
     
-    const visibleCount = 5; // Show 5 cards on mobile
-    const buffer = Math.floor(visibleCount / 2); // 2 cards before and after current
+    const visibleCount = 15; // Increased from 5 - WebSocket singleton allows more
+    const buffer = Math.floor(visibleCount / 2); // Cards before and after current
     
     let start = Math.max(0, index - buffer);
     let end = Math.min(totalCoins - 1, start + visibleCount - 1);
@@ -190,10 +190,10 @@ const ModernTokenScroller = ({
     setLoading(true);
     setError(null);
     
-    // Mobile detection for ULTRA-LIGHT limits to prevent crashes
+    // Mobile detection - now safe to load more coins with WebSocket singleton fix
     const isMobile = window.innerWidth < 768;
-    const limit = isMobile ? 10 : 100; // Reduced from 20/200 to prevent memory issues
-    console.log(`📱 Device detection: ${isMobile ? 'Mobile (LIGHT MODE)' : 'Desktop'}, using limit: ${limit}`);
+    const limit = isMobile ? 50 : 200; // Increased: WebSocket singleton prevents crashes
+    console.log(`📱 Device detection: ${isMobile ? 'Mobile' : 'Desktop'}, using limit: ${limit}`);
     
     try {
       if (onlyFavorites) {

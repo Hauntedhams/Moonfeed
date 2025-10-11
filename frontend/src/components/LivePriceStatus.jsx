@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useLiveData } from '../hooks/useLiveDataContext';
+import { useLiveData } from '../hooks/useLiveDataContext.jsx';
 
 const LivePriceStatus = ({ coin }) => {
   const { getCoin, connected, connectionStatus } = useLiveData();

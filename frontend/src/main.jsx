@@ -10,7 +10,7 @@ import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
 import { clusterApiUrl } from '@solana/web3.js';
 
 // WebSocket context for singleton connection
-import { LiveDataProvider } from './hooks/useLiveDataContext';
+import { LiveDataProvider } from './hooks/useLiveDataContext.jsx';
 
 // Default styles for wallet adapter
 import '@solana/wallet-adapter-react-ui/styles.css';
