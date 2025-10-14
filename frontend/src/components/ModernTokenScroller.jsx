@@ -576,6 +576,10 @@ const ModernTokenScroller = ({
     const shouldShowChart = Math.abs(index - currentIndex) <= 2; // Show chart for current and 2 adjacent
     const isVisible = Math.abs(index - currentIndex) <= 1; // Coin is visible if it's current or adjacent
     
+    // Auto-load transactions for current coin and 2 ahead (3 total)
+    // This gives users a preview of recent transaction activity
+    const shouldAutoLoadTransactions = index >= currentIndex && index <= currentIndex + 2;
+    
     // Use enriched coin data if available
     const enrichedCoin = getEnrichedCoin(coin);
     
@@ -601,6 +605,7 @@ const ModernTokenScroller = ({
           chartComponent={chartComponent}
           isVisible={isVisible}
           onExpandChange={(isExpanded) => handleCoinExpandChange(isExpanded, coin.mintAddress || coin.tokenAddress)}
+          autoLoadTransactions={shouldAutoLoadTransactions}
         />
       </div>
     );

@@ -15,7 +15,8 @@ const CoinCard = memo(({
   isTrending,
   onExpandChange,
   isVisible = true,
-  chartComponent // optional preloaded chart from manager
+  chartComponent, // optional preloaded chart from manager
+  autoLoadTransactions = false // NEW: auto-load transactions when true
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showBannerModal, setShowBannerModal] = useState(false);
@@ -38,12 +39,26 @@ const CoinCard = memo(({
   const liveData = isMobile ? null : getCoin(coin.mintAddress || coin.address);
   const chartData = isMobile ? null : getChart(coin.mintAddress || coin.address);
 
-  // Helius live transactions
+  // Helius live transactions - auto-load when autoLoadTransactions is true
   const mintAddress = coin.mintAddress || coin.mint || coin.address || coin.contract_address || coin.contractAddress || coin.tokenAddress;
   const { transactions, isConnected: txConnected, error: txError, clearTransactions } = useHeliusTransactions(
     mintAddress,
-    showLiveTransactions
+    showLiveTransactions || autoLoadTransactions // Connect when manually shown OR auto-loaded
   );
+
+  // Auto-show transactions UI when autoLoadTransactions is true
+  useEffect(() => {
+    if (autoLoadTransactions && !showLiveTransactions) {
+      console.log(`🔄 Auto-loading transactions for coin: ${coin.symbol || coin.name}`);
+      setShowLiveTransactions(true);
+    }
+    // Clean up when no longer auto-loading
+    if (!autoLoadTransactions && showLiveTransactions) {
+      console.log(`🛑 Stopping auto-loaded transactions for coin: ${coin.symbol || coin.name}`);
+      setShowLiveTransactions(false);
+      clearTransactions();
+    }
+  }, [autoLoadTransactions, coin.symbol, coin.name]);
 
   // Handle price flash animation (disabled on mobile for performance)
   useEffect(() => {
@@ -989,7 +1004,9 @@ const CoinCard = memo(({
 
           {/* Live Transactions Section */}
           <div className="transactions-section">
-            <div className="transactions-section-header">Transactions</div>
+            <div className="transactions-section-header">
+              Transactions
+            </div>
             {!showLiveTransactions ? (
               <div className="load-transactions-wrapper">
                 <button 
@@ -1001,24 +1018,6 @@ const CoinCard = memo(({
                 </div>
             ) : (
               <div className="live-transactions-content">
-                  <div className="transactions-header">
-                    <div className="transactions-status">
-                      <span className={`status-indicator ${txConnected ? 'connected' : 'disconnected'}`}>
-                        {txConnected ? '🟢 Live' : '🔴 Connecting...'}
-                      </span>
-                      <span className="tx-count">{transactions.length} transactions</span>
-                    </div>
-                    <button 
-                      className="close-transactions-btn"
-                      onClick={() => {
-                        setShowLiveTransactions(false);
-                        clearTransactions();
-                      }}
-                    >
-                      ✕ Close
-                    </button>
-                  </div>
-
                   {txError && (
                     <div className="tx-error">
                       ⚠️ {txError}

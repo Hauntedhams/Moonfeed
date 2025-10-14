@@ -1017,6 +1017,32 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  justify-content: space-between;
+}
+
+.auto-loaded-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  padding: 4px 10px;
+  border-radius: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+  }
+  50% {
+    box-shadow: 0 2px 12px rgba(16, 185, 129, 0.5);
+  }
 }
 
 /* Button wrapper - centered container */
@@ -1126,7 +1152,7 @@
 
 /* Transactions list - structured like Market Metrics */
 .transactions-list {
-  max-height: 500px;
+  max-height: 150px; /* Reduced from 200px to show ~2-3 transactions compactly */
   overflow-y: auto;
   display: flex;
   flex-direction: column;
