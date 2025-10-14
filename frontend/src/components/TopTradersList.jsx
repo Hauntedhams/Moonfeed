@@ -55,7 +55,20 @@ const TopTradersList = ({ coinAddress }) => {
       console.log(`🔍 Loading top traders for: ${coinAddress}`);
       console.log(`📡 Request URL: ${url}`);
       
-      const response = await fetch(url);
+      // Add timeout for mobile devices
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+      
+      const response = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      clearTimeout(timeoutId);
+      
       console.log(`📊 Response status: ${response.status} ${response.statusText}`);
       console.log(`📊 Response ok: ${response.ok}`);
       
@@ -91,7 +104,16 @@ const TopTradersList = ({ coinAddress }) => {
         message: err.message,
         stack: err.stack
       });
-      setError(err.message);
+      
+      // Better error messages for users
+      if (err.name === 'AbortError') {
+        setError('Request timed out. Please try again.');
+      } else if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+        setError('Network error. Please check your connection.');
+      } else {
+        setError(err.message || 'Failed to load top traders');
+      }
+      
       setLoaded(false); // Allow retry
     } finally {
       setLoading(false);

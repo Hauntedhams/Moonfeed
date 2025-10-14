@@ -45,6 +45,22 @@ app.use(cors({
 app.use(express.json());
 app.use(express.json());
 
+// Version endpoint to verify deployment
+app.get('/api/version', (req, res) => {
+  res.json({
+    version: '2.0.0',
+    deploymentDate: '2025-10-14T07:30:00Z',
+    features: {
+      walletTracker: true,
+      topTraders: true,
+      enrichedCoins: true,
+      jupiterLivePrices: true
+    },
+    commit: '95ed14d',
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Mount wallet routes
 app.use('/api/wallet', walletRoutes);
 
