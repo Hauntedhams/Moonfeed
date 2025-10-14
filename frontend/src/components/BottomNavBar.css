@@ -1,55 +1,57 @@
 .bottom-nav {
   position: fixed;
-  bottom: 16px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: calc(100% - 32px); /* respect parent container width */
-  max-width: 398px; /* 430px container - 32px margins = 398px max */
+  bottom: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
+  max-width: 430px; /* match container max width */
+  margin: 0 auto;
   display: flex;
   justify-content: center;
   align-items: center;
-  background: rgba(0, 0, 0, 0.95) !important;
+  background: rgba(255, 255, 255, 0.95) !important;
   backdrop-filter: blur(20px);
-  box-shadow: 0 4px 32px 0 rgba(0, 0, 0, 0.3);
+  box-shadow: 0 -4px 32px 0 rgba(0, 0, 0, 0.1);
   z-index: 100;
-  padding: 0 4px;
-  height: 48px;
+  padding: 8px 16px calc(env(safe-area-inset-bottom) + 8px) 16px; /* respect safe area on iOS */
+  height: auto;
+  min-height: 60px;
   gap: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 32px;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 0; /* no border radius for full width */
 }
 
 .nav-btn {
   background: none;
   border: none;
-  color: rgba(255, 255, 255, 0.7); /* light gray for inactive state */
+  color: rgba(0, 0, 0, 0.6); /* dark gray for inactive state */
   font-size: 13px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   flex: 1 1 0;
-  min-width: 44px;
+  min-width: 52px;
   cursor: pointer;
-  padding: 6px 0; /* reduced padding for more compact feel */
+  padding: 6px 0; /* more padding for larger touch area */
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); /* smooth modern transition */
-  border-radius: 12px; /* more rounded for modern look */
+  border-radius: 16px; /* more rounded for modern look */
 }
 
 .nav-btn:hover {
-  color: rgba(255, 255, 255, 0.9);
-  background: rgba(255, 255, 255, 0.05);
+  color: rgba(0, 0, 0, 0.9);
+  background: rgba(0, 0, 0, 0.05);
   transform: translateY(-1px); /* subtle hover lift */
 }
 
 .nav-btn.active {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.08);
+  color: #000;
+  background: rgba(0, 0, 0, 0.1);
 }
 
 .nav-btn:active, .nav-btn:focus {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.1);
+  color: #000;
+  background: rgba(0, 0, 0, 0.15);
   outline: none;
 }
 
@@ -83,7 +85,7 @@
 }
 
 .nav-icon {
-  font-size: 18px;
+  font-size: 20px;
   margin-bottom: 1px;
 }
 
@@ -97,29 +99,29 @@
 /* Responsive design for smaller screens */
 @media (max-width: 430px) {
   .bottom-nav {
-    width: calc(100vw - 24px); /* use viewport width on small screens */
-    max-width: none;
-    bottom: 12px;
+    width: 100%;
+    max-width: 100%;
+    padding: 8px 12px calc(env(safe-area-inset-bottom) + 8px) 12px;
     gap: 6px;
   }
 }
 
 @media (max-width: 380px) {
   .bottom-nav {
-    width: calc(100vw - 20px);
+    width: 100%;
     gap: 4px;
-    height: 44px;
-    padding: 0 2px;
+    min-height: 58px;
+    padding: 7px 10px calc(env(safe-area-inset-bottom) + 7px) 10px;
   }
   
   .nav-btn {
-    min-width: 40px;
-    padding: 4px 0;
+    min-width: 48px;
+    padding: 5px 0;
     font-size: 12px;
   }
   
   .nav-icon {
-    font-size: 16px;
+    font-size: 18px;
   }
   
   .nav-label {
@@ -135,20 +137,19 @@
 
 @media (max-width: 320px) {
   .bottom-nav {
-    width: calc(100vw - 16px);
-    bottom: 8px;
+    width: 100%;
     gap: 2px;
-    height: 40px;
-    padding: 0 1px;
+    min-height: 54px;
+    padding: 6px 8px calc(env(safe-area-inset-bottom) + 6px) 8px;
   }
   
   .nav-btn {
-    min-width: 36px;
-    padding: 3px 0;
+    min-width: 44px;
+    padding: 4px 0;
   }
   
   .nav-icon {
-    font-size: 15px;
+    font-size: 16px;
   }
   
   .nav-label {
