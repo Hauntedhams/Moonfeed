@@ -907,145 +907,54 @@ app.get('/api/status', (req, res) => {
   }
 });
 
-// Start DexScreener auto-enricher for TRENDING feed
-function startDexscreenerAutoEnricher() {
-  if (currentCoins.length > 0) {
-    console.log('🎨 Starting DexScreener enrichment for TRENDING feed (first 10 prioritized)');
-    dexscreenerAutoEnricher.start(() => currentCoins, 'trending');
-    
-    // Start periodic re-enrichment (every 5 minutes)
-    dexscreenerAutoEnricher.startPeriodicReEnrichment();
+// Admin endpoint: Check trending auto-refresher status
+app.get('/api/admin/trending-refresher-status', (req, res) => {
+  try {
+    const status = trendingAutoRefresher.getStatus();
+    res.json(status);
+  } catch (error) {
+    res.status(500).json({
+      error: error.message,
+      isRunning: false
+    });
   }
-}
-
-// Start DexScreener auto-enricher for NEW feed
-function startNewFeedDexscreenerEnricher() {
-  if (newCoins.length > 0) {
-    console.log('🎨 Starting DexScreener enrichment for NEW feed (first 10 prioritized)');
-    dexscreenerAutoEnricher.startNewFeed(() => newCoins);
-  }
-}
-
-// Start Rugcheck auto-processor for TRENDING feed
-function startRugcheckAutoProcessor() {
-  if (currentCoins.length > 0) {
-    console.log('🔍 Starting Rugcheck for TRENDING feed (first 10 prioritized)');
-    rugcheckAutoProcessor.start(() => currentCoins, 'trending');
-  }
-}
-
-// Start Rugcheck auto-processor for NEW feed
-function startNewFeedRugcheckProcessor() {
-  if (newCoins.length > 0) {
-    console.log('🔍 Starting Rugcheck for NEW feed (first 10 prioritized)');
-    rugcheckAutoProcessor.startNewFeed(() => newCoins);
-  }
-}
-
-// Start all enrichment for NEW feed
-function startNewFeedEnrichment() {
-  startNewFeedDexscreenerEnricher();
-  startNewFeedRugcheckProcessor();
-}
-
-// Start trending auto-refresher (refreshes trending coins every 24 hours)
-function startTrendingAutoRefresher() {
-  if (currentCoins.length > 0) {
-    trendingAutoRefresher.start(
-      // Function to fetch fresh TRENDING coins
-      fetchFreshCoinBatch,
-      // Function to save batch to storage
-      (freshBatch) => {
-        coinStorage.saveBatch(freshBatch);
-      },
-      // Callback when refresh completes - update cache and restart enrichment
-      async (freshTrendingBatch) => {
-        console.log(`🔄 Updating TRENDING feed cache with ${freshTrendingBatch.length} fresh coins`);
-        currentCoins = freshTrendingBatch;
-        global.coinsCache = freshTrendingBatch;
-        
-        // Update Jupiter Live Price Service with new coin list
-        if (jupiterLivePriceService && jupiterLivePriceService.isRunning) {
-          jupiterLivePriceService.updateCoinList(freshTrendingBatch);
-        }
-        
-        // Restart enrichment processes for the new batch
-        console.log('🚀 Restarting enrichment for TRENDING feed...');
-        
-        // Stop existing enrichment processes for trending feed ONLY
-        dexscreenerAutoEnricher.stopTrending();
-        rugcheckAutoProcessor.stopTrending();
-        
-        // Start fresh enrichment with priority for first 10 coins
-        startDexscreenerAutoEnricher();
-        startRugcheckAutoProcessor();
-        
-        console.log('✅ TRENDING feed cache updated and enrichment restarted');
-      }
-    );
-  }
-}
-
-// Start new feed auto-refresher (refreshes new coins every 30 minutes)
-function startNewFeedAutoRefresher() {
-  newFeedAutoRefresher.start(
-    // Function to fetch fresh NEW coins
-    fetchNewCoinBatch,
-    // Callback when refresh completes - update cache and restart enrichment
-    async (freshNewBatch) => {
-      console.log(`🔄 Updating NEW feed cache with ${freshNewBatch.length} fresh coins`);
-      
-      // Enrich first 10 coins SYNCHRONOUSLY before making them available
-      await enrichPriorityCoins(freshNewBatch, 10, 'refreshed NEW coins');
-      
-      newCoins = freshNewBatch;
-      
-      // Save to disk (overwrites old batch)
-      newCoinStorage.saveBatch(freshNewBatch);
-      
-      // Restart enrichment processes for the remaining new coins
-      console.log('🚀 Restarting enrichment for remaining NEW feed coins...');
-      
-      // Stop existing enrichment processes for new feed ONLY
-      dexscreenerAutoEnricher.stopNewFeed();
-      rugcheckAutoProcessor.stopNewFeed();
-      
-      // Start fresh enrichment (priority coins already done)
-      startNewFeedEnrichment();
-      
-      console.log('✅ NEW feed cache updated and enrichment restarted');
-    }
-  );
-}
-
-// ========================================
-// SERVER INITIALIZATION
-// ========================================
-
-// Create HTTP server
-const server = http.createServer(app);
-
-// Initialize WebSocket server
-const wsServer = new WebSocketServer(server);
-
-// Start server FIRST (critical for Render health checks)
-server.listen(PORT, () => {
-  console.log(`🚀 MoonFeed Backend Server running on port ${PORT}`);
-  console.log(`📊 Health check: http://localhost:${PORT}/health`);
-  console.log(`📊 Health check (Render): http://localhost:${PORT}/api/health`);
-  console.log(`🔥 Trending coins: http://localhost:${PORT}/api/coins/trending`);
-  console.log(`🆕 New coins: http://localhost:${PORT}/api/coins/new`);
-  console.log(`🌐 WebSocket server ready for connections`);
-  console.log(`💾 Server initialization complete - ready for health checks`);
-  
-  // Defer ALL initialization by 3 seconds to ensure health checks respond first
-  // This gives Render time to verify the server is up before any heavy operations
-  console.log('⏳ Will initialize coin data in 3 seconds...');
-  setTimeout(() => {
-    console.log('🔄 Starting background initialization...');
-    initializeWithLatestBatch();
-    console.log(`✅ Background initialization complete: ${currentCoins.length} coins cached`);
-  }, 3000);
 });
 
-module.exports = app;
+// Admin endpoint: Check new feed auto-refresher status
+app.get('/api/admin/new-refresher-status', (req, res) => {
+  try {
+    const status = newFeedAutoRefresher.getStatus();
+    res.json(status);
+  } catch (error) {
+    res.status(500).json({
+      error: error.message,
+      isRunning: false
+    });
+  }
+});
+
+// Admin endpoint: Manually trigger trending refresh
+app.post('/api/admin/trending-refresh-trigger', async (req, res) => {
+  try {
+    const result = await trendingAutoRefresher.triggerRefresh();
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
+// Admin endpoint: Manually trigger new feed refresh
+app.post('/api/admin/new-refresh-trigger', async (req, res) => {
+  try {
+    const result = await newFeedAutoRefresher.triggerRefresh();
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
