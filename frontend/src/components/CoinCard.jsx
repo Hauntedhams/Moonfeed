@@ -4,6 +4,7 @@ import DexScreenerChart from './DexScreenerChart';
 import PriceHistoryChart from './PriceHistoryChart';
 import LiquidityLockIndicator from './LiquidityLockIndicator';
 import TopTradersList from './TopTradersList';
+import WalletModal from './WalletModal';
 import { useLiveData } from '../hooks/useLiveDataContext.jsx';
 import { useHeliusTransactions } from '../hooks/useHeliusTransactions.jsx';
 
@@ -27,6 +28,7 @@ const CoinCard = memo(({
   const [priceFlash, setPriceFlash] = useState('');
   const [showLiveTransactions, setShowLiveTransactions] = useState(false);
   const [showTopTraders, setShowTopTraders] = useState(false);
+  const [selectedWallet, setSelectedWallet] = useState(null);
   const chartsContainerRef = useRef(null);
   const chartNavRef = useRef(null);
   const prevPriceRef = useRef(null);
@@ -1035,26 +1037,26 @@ const CoinCard = memo(({
                         <div key={tx.signature} className="transaction-item" style={{
                           animation: index === 0 ? 'slideIn 0.3s ease-out' : 'none'
                         }}>
-                          <div className="tx-left">
-                            <div className="tx-signature-row">
-                              <span className="tx-type">{tx.type}</span>
-                              <div className="tx-signature">
-                                <a 
-                                  href={`https://solscan.io/tx/${tx.signature}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="tx-link"
-                                >
-                                  {tx.signature.substring(0, 8)}...{tx.signature.substring(tx.signature.length - 8)}
-                                  <span className="external-icon">↗</span>
-                                </a>
-                              </div>
-                            </div>
-                            {tx.err && (
-                              <div className="tx-error-badge">❌ Failed</div>
-                            )}
+                          <div className="tx-wallet">
+                            <a 
+                              href={`https://solscan.io/tx/${tx.signature}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="tx-link"
+                            >
+                              {tx.signature.substring(0, 4)}..{tx.signature.substring(tx.signature.length - 4)}
+                              <span className="external-icon">↗</span>
+                            </a>
                           </div>
-                          <div className="tx-right">
+                          <div className="tx-type-col">
+                            <span className="tx-type">{tx.type}</span>
+                          </div>
+                          {tx.err && (
+                            <div className="tx-error-col">
+                              <span className="tx-error-badge">Failed</span>
+                            </div>
+                          )}
+                          <div className="tx-time-col">
                             <span className="tx-time">{new Date(tx.timestamp).toLocaleTimeString()}</span>
                           </div>
                         </div>
@@ -1501,6 +1503,14 @@ const CoinCard = memo(({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Wallet Modal */}
+      {selectedWallet && (
+        <WalletModal 
+          walletAddress={selectedWallet}
+          onClose={() => setSelectedWallet(null)}
+        />
       )}
     </div>
   );

@@ -60,6 +60,42 @@
   flex-direction: column;
 }
 
+/* Column Headers */
+.table-header {
+  display: grid;
+  grid-template-columns: 28px 58px 68px 68px 70px;
+  gap: 3px;
+  align-items: center;
+  padding: 8px 4px 12px 4px;
+  border-bottom: 2px solid rgba(0, 0, 0, 0.1);
+  margin-bottom: 4px;
+  color: rgba(0, 0, 0, 0.6);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.table-header .col-rank {
+  text-align: left;
+}
+
+.table-header .col-wallet {
+  text-align: left;
+}
+
+.table-header .col-buy {
+  text-align: right;
+}
+
+.table-header .col-sell {
+  text-align: right;
+}
+
+.table-header .col-pnl {
+  text-align: right;
+}
+
 .traders-scroll-window {
   max-height: 400px;
   overflow-y: auto;
@@ -86,12 +122,13 @@
   background: rgba(0, 0, 0, 0.3);
 }
 
-/* Table row - styled like info-row */
+/* Table row - 5 clean columns layout */
 .table-row {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 28px 58px 68px 68px 70px;
+  gap: 3px;
   align-items: center;
-  padding: 12px 0;
+  padding: 10px 4px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.06);
   transition: all 0.2s ease;
 }
@@ -102,84 +139,78 @@
 
 .table-row:hover {
   background: rgba(0, 0, 0, 0.02);
-  padding-left: 8px;
-  padding-right: 8px;
-  margin-left: -8px;
-  margin-right: -8px;
   border-radius: 6px;
 }
 
-/* Left side - Rank + Wallet */
-.trader-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex: 1;
-  min-width: 0;
-}
-
-.trader-rank {
+/* Column 1: Rank (smallest) */
+.col-rank {
   color: rgba(0, 0, 0, 0.5);
   font-size: 12px;
-  font-weight: 600;
-  min-width: 20px;
-}
-
-.trader-wallet {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-  flex: 1;
-}
-
-.wallet-address {
-  color: rgba(0, 0, 0, 0.9);
-  font-size: 13px;
   font-family: 'Monaco', 'Courier New', monospace;
-  font-weight: 600;
+  font-weight: 500;
+  text-align: left;
+}
+
+/* Column 2: Wallet */
+.col-wallet {
+  color: rgba(0, 0, 0, 0.9);
+  font-size: 12px;
+  font-family: 'Monaco', 'Courier New', monospace;
+  font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.trader-stats {
-  display: flex;
-  gap: 8px;
-  font-size: 11px;
-  color: rgba(0, 0, 0, 0.5);
+/* Clickable wallet styling */
+.col-wallet.clickable {
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: #667eea;
+  font-weight: 600;
 }
 
-.stat-item {
-  display: flex;
-  align-items: center;
-  gap: 3px;
+.col-wallet.clickable:hover {
+  color: #764ba2;
+  background: rgba(102, 126, 234, 0.1);
+  border-radius: 4px;
+  padding: 2px 6px;
+  margin: -2px -6px;
+  text-decoration: underline;
 }
 
-/* Right side - PNL */
-.trader-right {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
+/* Column 3: Buy */
+.col-buy {
+  color: #22c55e;
+  font-size: 12px;
+  font-family: 'Monaco', 'Courier New', monospace;
+  font-weight: 500;
+  text-align: right;
 }
 
-.pnl-amount {
-  font-size: 14px;
-  font-weight: 700;
+/* Column 4: Sell */
+.col-sell {
+  color: #ef4444;
+  font-size: 12px;
+  font-family: 'Monaco', 'Courier New', monospace;
+  font-weight: 500;
+  text-align: right;
 }
 
-.pnl-amount.positive {
+/* Column 5: PnL (far right) */
+.col-pnl {
+  font-size: 12px;
+  font-family: 'Monaco', 'Courier New', monospace;
+  font-weight: 500;
+  text-align: right;
+}
+
+.col-pnl.positive {
   color: #22c55e;
 }
 
-.pnl-amount.negative {
+.col-pnl.negative {
   color: #ef4444;
-}
-
-.pnl-details {
-  font-size: 10px;
-  color: rgba(0, 0, 0, 0.5);
 }
 
 /* Loading and error states */

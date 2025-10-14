@@ -19,6 +19,7 @@ const newFeedAutoRefresher = require('./newFeedAutoRefresher');
 const JupiterTokenService = require('./jupiterTokenService');
 const JupiterDataService = require('./jupiterDataService');
 const TokenMetadataService = require('./tokenMetadataService');
+const walletRoutes = require('./routes/walletRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -44,6 +45,9 @@ app.use(cors({
 app.use(express.json());
 app.use(express.json());
 
+// Mount wallet routes
+app.use('/api/wallet', walletRoutes);
+
 // Solana Tracker API Configuration
 const SOLANA_TRACKER_API_KEY = process.env.SOLANA_TRACKER_API_KEY;
 const SOLANA_TRACKER_BASE_URL = 'https://data.solanatracker.io';
@@ -52,6 +56,10 @@ const SOLANA_TRACKER_BASE_URL = 'https://data.solanatracker.io';
 let currentCoins = [];
 let newCoins = []; // Separate cache for new feed
 let customCoins = []; // Cache for custom filtered coins
+
+// Top traders cache to prevent duplicate API calls
+const topTradersCache = new Map();
+const TOP_TRADERS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 // Initialize Rugcheck auto-processor
 const rugcheckAutoProcessor = new RugcheckAutoProcessor();
@@ -252,6 +260,32 @@ async function enrichPriorityCoins(coins, count = 10, feedName = 'coins') {
   }
   
   return coins;
+}
+
+// Helper function to apply live Jupiter prices to coins
+function applyLivePrices(coins) {
+  if (!jupiterLivePriceService || !jupiterLivePriceService.isRunning) {
+    return coins;
+  }
+  
+  // Apply latest prices from Jupiter cache
+  const updatedCoins = coins.map(coin => {
+    const mintAddress = coin.mintAddress || coin.address || coin.tokenAddress;
+    const cachedPrice = jupiterLivePriceService.priceCache.get(mintAddress);
+    
+    if (cachedPrice && cachedPrice.price) {
+      return {
+        ...coin,
+        price_usd: cachedPrice.price,
+        jupiterLive: true,
+        lastPriceUpdate: cachedPrice.timestamp || Date.now()
+      };
+    }
+    
+    return coin;
+  });
+  
+  return updatedCoins;
 }
 
 // Make Solana Tracker API request
@@ -478,6 +512,19 @@ app.get('/api/top-traders/:coinAddress', async (req, res) => {
       console.warn(`⚠️ Suspicious coin address length: ${coinAddress.length}`);
     }
 
+    // Check cache first
+    const cached = topTradersCache.get(coinAddress);
+    if (cached && (Date.now() - cached.timestamp) < TOP_TRADERS_CACHE_TTL) {
+      console.log(`💾 Returning cached top traders for: ${coinAddress} (age: ${Math.round((Date.now() - cached.timestamp) / 1000)}s)`);
+      return res.json({
+        success: true,
+        data: cached.data,
+        count: cached.data.length,
+        cached: true,
+        timestamp: new Date(cached.timestamp).toISOString()
+      });
+    }
+
     console.log(`🔍 Fetching top traders for: ${coinAddress}`);
 
     // Call Solana Tracker API for top traders
@@ -497,6 +544,20 @@ app.get('/api/top-traders/:coinAddress', async (req, res) => {
       const errorText = await response.text();
       console.error(`❌ Solana Tracker API error: ${response.status} ${response.statusText}`);
       console.error(`❌ Response body: ${errorText}`);
+      
+      // If we have stale cached data, return it rather than failing
+      if (cached) {
+        console.log(`⚠️ API error, returning stale cache (age: ${Math.round((Date.now() - cached.timestamp) / 1000)}s)`);
+        return res.json({
+          success: true,
+          data: cached.data,
+          count: cached.data.length,
+          cached: true,
+          stale: true,
+          timestamp: new Date(cached.timestamp).toISOString()
+        });
+      }
+      
       throw new Error(`API error: ${response.status} - ${errorText}`);
     }
 
@@ -513,10 +574,18 @@ app.get('/api/top-traders/:coinAddress', async (req, res) => {
     const traderCount = Array.isArray(traders) ? traders.length : 0;
     console.log(`✅ Fetched ${traderCount} top traders for ${coinAddress}`);
 
+    // Cache the result
+    const tradersArray = Array.isArray(traders) ? traders : [];
+    topTradersCache.set(coinAddress, {
+      data: tradersArray,
+      timestamp: Date.now()
+    });
+
     res.json({
       success: true,
-      data: Array.isArray(traders) ? traders : [],
+      data: tradersArray,
       count: traderCount,
+      cached: false,
       timestamp: new Date().toISOString()
     });
 
@@ -563,12 +632,15 @@ app.get('/api/coins/new', async (req, res) => {
     
     const limitedCoins = newCoins.slice(0, limit);
     
-    console.log(`✅ Returning ${limitedCoins.length}/${newCoins.length} new coins (limit: ${limit === 9999 ? 'ALL' : limit}, auto-refreshed every 30 min)`);
+    // Apply live Jupiter prices before returning
+    const coinsWithLivePrices = applyLivePrices(limitedCoins);
+    
+    console.log(`✅ Returning ${coinsWithLivePrices.length}/${newCoins.length} new coins (limit: ${limit === 9999 ? 'ALL' : limit}, auto-refreshed every 30 min)`);
     
     res.json({
       success: true,
-      coins: limitedCoins,
-      count: limitedCoins.length,
+      coins: coinsWithLivePrices,
+      count: coinsWithLivePrices.length,
       total: newCoins.length,
       timestamp: new Date().toISOString(),
       criteria: {
@@ -608,14 +680,20 @@ app.get('/api/coins/trending', async (req, res) => {
       global.coinsCache = trendingCoins;
     }
     
+    // Apply live prices from Jupiter before serving
+    trendingCoins = applyLivePrices(trendingCoins);
+    
     const limitedCoins = trendingCoins.slice(0, limit);
     
-    console.log(`✅ Returning ${limitedCoins.length}/${trendingCoins.length} trending coins (limit: ${limit === 9999 ? 'ALL' : limit})`);
+    // Apply live Jupiter prices before returning
+    const coinsWithLivePrices = applyLivePrices(limitedCoins);
+    
+    console.log(`✅ Returning ${coinsWithLivePrices.length}/${trendingCoins.length} trending coins (limit: ${limit === 9999 ? 'ALL' : limit})`);
     
     res.json({
       success: true,
-      coins: limitedCoins,
-      count: limitedCoins.length,
+      coins: coinsWithLivePrices,
+      count: coinsWithLivePrices.length,
       total: trendingCoins.length,
       timestamp: new Date().toISOString()
     });
@@ -780,12 +858,15 @@ app.get('/api/coins/custom', async (req, res) => {
       rugcheckAutoProcessor.startCustomFeed(() => customCoins);
     }
 
-    console.log(`✅ Returning ${coinsWithPriority.length} custom filtered coins (first 10 fully enriched)`);
+    // Apply live Jupiter prices before returning
+    const coinsWithLivePrices = applyLivePrices(coinsWithPriority);
+
+    console.log(`✅ Returning ${coinsWithLivePrices.length} custom filtered coins (first 10 fully enriched)`);
     
     res.json({
       success: true,
-      coins: coinsWithPriority,
-      count: coinsWithPriority.length,
+      coins: coinsWithLivePrices,
+      count: coinsWithLivePrices.length,
       total: coinsWithPriority.length,
       timestamp: new Date().toISOString(),
       filters: req.query
@@ -890,6 +971,14 @@ app.get('/api/status', (req, res) => {
       currentCoins: currentCoins.length,
       storage: batchStorage ? batchStorage.getStorageInfo() : { status: 'not initialized' },
       hasApiKey: !!process.env.DEXSCREENER_API_KEY,
+      jupiterLivePrice: {
+        isRunning: jupiterLivePriceService.isRunning,
+        coinsTracked: jupiterLivePriceService.coinList?.length || 0,
+        subscribers: jupiterLivePriceService.subscribers?.size || 0,
+        updateFrequency: jupiterLivePriceService.updateFrequency || 5000,
+        lastUpdate: jupiterLivePriceService.lastUpdate || null,
+        lastSuccessfulFetch: jupiterLivePriceService.lastSuccessfulFetch || null
+      },
       priceEngine: priceEngine ? {
         isRunning: priceEngine.isRunning,
         clientCount: priceEngine.activeClients ? priceEngine.activeClients.size : 0,
@@ -1098,6 +1187,11 @@ server.listen(PORT, () => {
     console.log('🔄 Starting background initialization...');
     initializeWithLatestBatch();
     console.log(`✅ Background initialization complete: ${currentCoins.length} coins cached`);
+    
+    // Start Jupiter Live Price Service for real-time price updates
+    console.log('🪐 Starting Jupiter Live Price Service...');
+    jupiterLivePriceService.start(currentCoins);
+    console.log('✅ Jupiter Live Price Service started');
   }, 3000);
 });
 

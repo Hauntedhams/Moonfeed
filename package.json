@@ -15,7 +15,18 @@
   "devDependencies": {
     "concurrently": "^8.2.2"
   },
-  "keywords": ["meme", "crypto", "solana", "defi", "trading"],
+  "keywords": [
+    "meme",
+    "crypto",
+    "solana",
+    "defi",
+    "trading"
+  ],
   "author": "Moonfeed Team",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.12.2",
+    "dotenv": "^17.2.3",
+    "ws": "^8.18.3"
+  }
 }

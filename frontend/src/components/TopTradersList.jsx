@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { getFullApiUrl } from '../config/api';
+import WalletModal from './WalletModal';
 import './TopTradersList.css';
 
 const TopTradersList = ({ coinAddress }) => {
@@ -7,53 +8,102 @@ const TopTradersList = ({ coinAddress }) => {
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(null);
+  const [selectedWallet, setSelectedWallet] = useState(null);
+  const [selectedTraderData, setSelectedTraderData] = useState(null);
+  const loadingRef = useRef(false); // Prevent duplicate calls
 
   // Auto-load top traders when component mounts
   useEffect(() => {
-    if (coinAddress && !loaded && !loading) {
+    console.log('🔄 TopTradersList useEffect triggered:', {
+      coinAddress,
+      loaded,
+      loading,
+      loadingRef: loadingRef.current,
+      shouldLoad: coinAddress && !loaded && !loading && !loadingRef.current
+    });
+    
+    // Prevent duplicate calls using ref
+    if (coinAddress && !loaded && !loading && !loadingRef.current) {
+      console.log('✅ Conditions met - calling loadTopTraders()');
       loadTopTraders();
+    } else {
+      if (!coinAddress) console.log('⚠️ No coinAddress provided');
+      if (loaded) console.log('⚠️ Already loaded');
+      if (loading || loadingRef.current) console.log('⚠️ Already loading');
     }
   }, [coinAddress]);
 
   const loadTopTraders = async () => {
     if (!coinAddress) {
+      console.error('❌ No coin address provided');
       setError('No coin address provided');
       return;
     }
 
+    // Prevent duplicate concurrent calls
+    if (loadingRef.current) {
+      console.warn('⚠️ Already loading, skipping duplicate call');
+      return;
+    }
+
+    loadingRef.current = true;
     setLoading(true);
     setError(null);
 
     try {
+      const url = getFullApiUrl(`/api/top-traders/${coinAddress}`);
       console.log(`🔍 Loading top traders for: ${coinAddress}`);
+      console.log(`📡 Request URL: ${url}`);
       
-      const response = await fetch(getFullApiUrl(`/api/top-traders/${coinAddress}`));
+      const response = await fetch(url);
+      console.log(`📊 Response status: ${response.status} ${response.statusText}`);
+      console.log(`📊 Response ok: ${response.ok}`);
+      
       const result = await response.json();
+      console.log(`📦 Response data:`, result);
+      console.log(`📦 Has success field: ${result.hasOwnProperty('success')}, value: ${result.success}`);
+      console.log(`📦 Has data field: ${result.hasOwnProperty('data')}, is array: ${Array.isArray(result.data)}, length: ${result.data?.length}`);
 
       if (!response.ok) {
-        throw new Error(result.error || 'Failed to fetch top traders');
+        console.error(`❌ Response not OK: ${response.status}`);
+        throw new Error(result.error || result.details || `HTTP ${response.status}: Failed to fetch top traders`);
       }
 
       if (result.success && result.data) {
+        console.log(`✅ Setting ${result.data.length} traders to state`);
         setTraders(result.data);
         setLoaded(true);
-        console.log(`✅ Loaded ${result.data.length} top traders`);
+        console.log(`✅ Successfully loaded ${result.data.length} top traders`);
       } else {
-        throw new Error('Invalid response format');
+        console.error('❌ Invalid response format:', {
+          success: result.success,
+          hasData: !!result.data,
+          dataType: typeof result.data,
+          isArray: Array.isArray(result.data)
+        });
+        throw new Error('Invalid response format - missing success or data field');
       }
 
     } catch (err) {
       console.error('❌ Error loading top traders:', err);
+      console.error('❌ Error details:', {
+        name: err.name,
+        message: err.message,
+        stack: err.stack
+      });
       setError(err.message);
+      setLoaded(false); // Allow retry
     } finally {
       setLoading(false);
+      loadingRef.current = false;
+      console.log(`🏁 loadTopTraders finished. Loading: false`);
     }
   };
 
   const formatWallet = (wallet) => {
     if (!wallet) return 'Unknown';
-    // Make wallet address even shorter for better space utilization
-    return `${wallet.slice(0, 2)}...${wallet.slice(-2)}`;
+    // Short format: F8..dt (2 chars + .. + 2 chars)
+    return `${wallet.slice(0, 2)}..${wallet.slice(-2)}`;
   };
 
   const formatTokenAmount = (amount) => {
@@ -101,52 +151,55 @@ const TopTradersList = ({ coinAddress }) => {
 
   return (
     <div className="top-traders-container">
-      <div className="top-traders-header">
-        <h3>Top {traders.length} Traders</h3>
-        <button 
-          className="refresh-traders-btn"
-          onClick={loadTopTraders}
-          disabled={loading}
-        >
-          {loading ? '↻' : '↻'}
-        </button>
-      </div>
-      
       {traders.length === 0 ? (
         <div className="no-traders">No trader data available</div>
       ) : (
         <div className="traders-table-container">
           <div className="traders-table">
+            {/* Column Headers */}
+            <div className="table-header">
+              <div className="col-rank">#</div>
+              <div className="col-wallet">Wallet</div>
+              <div className="col-buy">Buy</div>
+              <div className="col-sell">Sell</div>
+              <div className="col-pnl">PnL</div>
+            </div>
             <div className="traders-scroll-window">
               {traders.map((trader, index) => (
                 <div key={trader.wallet || index} className="table-row">
-                  <div className="trader-left">
-                    <div className="trader-rank">#{index + 1}</div>
-                    <div className="trader-wallet">
-                      <span className="wallet-address">{formatWallet(trader.wallet)}</span>
-                      <div className="trader-stats">
-                        <span className="stat-item">
-                          🟢 {formatCurrency(trader.total_invested || 0)}
-                        </span>
-                        <span className="stat-item">
-                          🔴 {formatCurrency(trader.realized || 0)}
-                        </span>
-                      </div>
-                    </div>
+                  <div className="col-rank">#{index + 1}</div>
+                  <div 
+                    className="col-wallet clickable"
+                    onClick={() => {
+                      setSelectedWallet(trader.wallet);
+                      setSelectedTraderData(trader); // Pass full trader data
+                    }}
+                    title="Click to view wallet details"
+                  >
+                    {formatWallet(trader.wallet)}
                   </div>
-                  <div className="trader-right">
-                    <div className={`pnl-amount ${trader.total >= 0 ? 'positive' : 'negative'}`}>
-                      {formatCurrency(trader.total)}
-                    </div>
-                    <div className="pnl-details">
-                      {formatTokenAmount(trader.held || 0)} held
-                    </div>
+                  <div className="col-buy">{formatCurrency(trader.total_invested || 0)}</div>
+                  <div className="col-sell">{formatCurrency(trader.realized || 0)}</div>
+                  <div className={`col-pnl ${trader.total >= 0 ? 'positive' : 'negative'}`}>
+                    {formatCurrency(trader.total)}
                   </div>
                 </div>
               ))}
             </div>
           </div>
         </div>
+      )}
+      
+      {/* Wallet Modal */}
+      {selectedWallet && (
+        <WalletModal 
+          walletAddress={selectedWallet}
+          traderData={selectedTraderData}
+          onClose={() => {
+            setSelectedWallet(null);
+            setSelectedTraderData(null);
+          }}
+        />
       )}
     </div>
   );

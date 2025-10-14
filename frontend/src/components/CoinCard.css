@@ -1201,10 +1201,11 @@
   color: rgba(0, 0, 0, 0.5);
 }
 
-/* Transaction item - structured like info-row */
+/* Transaction item - horizontal layout: wallet | type | error (if any) | time */
 .transaction-item {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  gap: 12px;
   align-items: center;
   padding: 12px 0;
   border-bottom: 1px solid rgba(0, 0, 0, 0.06);
@@ -1224,35 +1225,12 @@
   border-radius: 6px;
 }
 
-.tx-left {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex: 1;
-}
-
-.tx-signature-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.tx-type {
-  display: inline-block;
-  padding: 2px 6px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.tx-signature {
+/* Wallet column (far left) */
+.tx-wallet {
   font-family: 'Monaco', 'Courier New', monospace;
   font-size: 12px;
   color: rgba(0, 0, 0, 0.7);
+  min-width: 0;
 }
 
 .tx-link {
@@ -1274,17 +1252,58 @@
   opacity: 0.6;
 }
 
-.tx-right {
+/* Type column */
+.tx-type-col {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
+  align-items: center;
+}
+
+.tx-type {
+  display: inline-block;
+  padding: 2px 6px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: 'Monaco', 'Courier New', monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+/* Error column (conditional) */
+.tx-error-col {
+  display: flex;
+  align-items: center;
+}
+
+.tx-error-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 4px;
+  color: #ef4444;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: 'Monaco', 'Courier New', monospace;
+  white-space: nowrap;
+}
+
+/* Time column (far right) */
+.tx-time-col {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
 }
 
 .tx-time {
   font-size: 12px;
+  font-family: 'Monaco', 'Courier New', monospace;
   color: rgba(0, 0, 0, 0.5);
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .tx-error {
@@ -1295,18 +1314,6 @@
   color: #ef4444;
   font-size: 13px;
   margin-bottom: 12px;
-}
-
-.tx-error-badge {
-  display: inline-block;
-  margin-top: 8px;
-  padding: 4px 8px;
-  background: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.2);
-  border-radius: 6px;
-  color: #ef4444;
-  font-size: 11px;
-  font-weight: 600;
 }
 
 /* Slide in animation for new transactions */
@@ -1440,6 +1447,7 @@
 .info-card-header {
   font-size: 0.95rem;
   font-weight: 700;
+  font-family: 'Monaco', 'Courier New', monospace;
   color: #667eea;
   margin-bottom: 12px;
   padding-bottom: 8px;
@@ -1461,16 +1469,19 @@
   align-items: center;
   font-size: 0.9rem;
   line-height: 1.4;
+  font-family: 'Monaco', 'Courier New', monospace;
 }
 
 .info-label {
   color: rgba(0, 0, 0, 0.7);
-  font-weight: 500;
+  font-weight: 700;
+  font-family: 'Monaco', 'Courier New', monospace;
 }
 
 .info-value {
   color: rgba(0, 0, 0, 0.9);
-  font-weight: 600;
+  font-weight: 500;
+  font-family: 'Monaco', 'Courier New', monospace;
   text-align: right;
 }
 
