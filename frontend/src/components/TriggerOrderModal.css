@@ -1,0 +1,451 @@
+.trigger-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  padding: 20px;
+}
+
+.trigger-modal-content {
+  background: linear-gradient(135deg, rgba(16, 23, 31, 0.98), rgba(23, 30, 39, 0.98));
+  border: 1px solid rgba(79, 195, 247, 0.2);
+  border-radius: 24px;
+  max-width: 500px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.trigger-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px;
+  border-bottom: 1px solid rgba(79, 195, 247, 0.1);
+}
+
+.trigger-modal-header h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  background: linear-gradient(135deg, #4FC3F7, #677EEA);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.close-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  color: white;
+  font-size: 1.5rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.close-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.1);
+}
+
+.coin-info-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 24px;
+  background: rgba(79, 195, 247, 0.05);
+  border-bottom: 1px solid rgba(79, 195, 247, 0.1);
+}
+
+.coin-info-section .coin-image {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.coin-info-section h3 {
+  margin: 0;
+  font-size: 1.2rem;
+  color: white;
+}
+
+.coin-info-section .current-price {
+  margin: 4px 0 0 0;
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.order-type-section,
+.side-section,
+.input-section,
+.trigger-price-section,
+.quick-percentage-section,
+.expiry-section {
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(79, 195, 247, 0.1);
+}
+
+.order-type-section label,
+.side-section label,
+.input-section label,
+.trigger-price-section label,
+.quick-percentage-section label,
+.expiry-section label {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.8);
+  font-weight: 500;
+}
+
+.toggle-group {
+  display: flex;
+  gap: 8px;
+}
+
+.toggle-btn {
+  flex: 1;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(79, 195, 247, 0.2);
+  border-radius: 12px;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.toggle-btn:hover {
+  background: rgba(79, 195, 247, 0.1);
+  border-color: rgba(79, 195, 247, 0.4);
+}
+
+.toggle-btn.active {
+  background: linear-gradient(135deg, rgba(79, 195, 247, 0.2), rgba(103, 126, 234, 0.2));
+  border-color: #4FC3F7;
+  color: white;
+}
+
+.toggle-btn.buy.active {
+  background: linear-gradient(135deg, rgba(76, 175, 80, 0.2), rgba(56, 142, 60, 0.2));
+  border-color: #4CAF50;
+}
+
+.toggle-btn.sell.active {
+  background: linear-gradient(135deg, rgba(239, 83, 80, 0.2), rgba(211, 47, 47, 0.2));
+  border-color: #EF5350;
+}
+
+.help-text {
+  margin-top: 8px;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.5);
+  font-style: italic;
+}
+
+.help-text.warning {
+  color: #FFA726;
+  font-weight: 500;
+}
+
+.input-section input,
+.trigger-price-section input {
+  width: 100%;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(79, 195, 247, 0.2);
+  border-radius: 12px;
+  color: white;
+  font-size: 1.1rem;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.input-section input:focus,
+.trigger-price-section input:focus {
+  outline: none;
+  border-color: #4FC3F7;
+  background: rgba(79, 195, 247, 0.1);
+}
+
+.price-toggle {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.price-toggle-btn {
+  flex: 1;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(79, 195, 247, 0.2);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.price-toggle-btn.active {
+  background: rgba(79, 195, 247, 0.2);
+  border-color: #4FC3F7;
+  color: white;
+}
+
+.price-preview {
+  margin-top: 8px;
+  font-size: 0.9rem;
+  color: #4FC3F7;
+  font-weight: 500;
+}
+
+.quick-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.quick-btn {
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(79, 195, 247, 0.2);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.quick-btn.positive {
+  border-color: rgba(76, 175, 80, 0.3);
+  background: rgba(76, 175, 80, 0.05);
+}
+
+.quick-btn.positive:hover {
+  background: rgba(76, 175, 80, 0.15);
+  border-color: #4CAF50;
+  color: #4CAF50;
+}
+
+.quick-btn.negative {
+  border-color: rgba(244, 67, 54, 0.3);
+  background: rgba(244, 67, 54, 0.05);
+}
+
+.quick-btn.negative:hover {
+  background: rgba(244, 67, 54, 0.15);
+  border-color: #F44336;
+  color: #F44336;
+}
+
+.quick-btn:hover {
+  background: rgba(79, 195, 247, 0.1);
+  border-color: #4FC3F7;
+  color: white;
+}
+
+.expiry-options {
+  display: flex;
+  gap: 8px;
+}
+
+.expiry-btn {
+  flex: 1;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(79, 195, 247, 0.2);
+  border-radius: 10px;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.expiry-btn:hover {
+  background: rgba(79, 195, 247, 0.1);
+}
+
+.expiry-btn.active {
+  background: rgba(79, 195, 247, 0.2);
+  border-color: #4FC3F7;
+  color: white;
+}
+
+.order-summary {
+  margin: 20px 24px;
+  padding: 16px;
+  background: rgba(79, 195, 247, 0.05);
+  border: 1px solid rgba(79, 195, 247, 0.2);
+  border-radius: 12px;
+}
+
+.order-summary h4 {
+  margin: 0 0 12px 0;
+  font-size: 1rem;
+  color: white;
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 0.9rem;
+}
+
+.summary-row span:first-child {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.summary-row span:last-child {
+  color: white;
+  font-weight: 500;
+}
+
+.error-message {
+  margin: 16px 24px;
+  padding: 12px;
+  background: rgba(239, 83, 80, 0.1);
+  border: 1px solid rgba(239, 83, 80, 0.3);
+  border-radius: 10px;
+  color: #EF5350;
+  font-size: 0.9rem;
+}
+
+.warning-message {
+  margin: 16px 24px;
+  padding: 12px;
+  background: rgba(255, 193, 7, 0.1);
+  border: 1px solid rgba(255, 193, 7, 0.3);
+  border-radius: 10px;
+  color: #FFC107;
+  font-size: 0.9rem;
+}
+
+.create-order-btn {
+  width: calc(100% - 48px);
+  margin: 20px 24px 24px;
+  padding: 16px;
+  background: linear-gradient(135deg, #4FC3F7, #677EEA);
+  border: none;
+  border-radius: 14px;
+  color: white;
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.create-order-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(79, 195, 247, 0.4);
+}
+
+.create-order-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.help-note {
+  padding: 0 24px 24px;
+  margin: 0;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.5);
+  text-align: center;
+}
+
+.success-message {
+  padding: 60px 40px;
+  text-align: center;
+}
+
+.success-icon {
+  font-size: 4rem;
+  margin-bottom: 20px;
+  animation: scaleIn 0.5s ease-out;
+}
+
+@keyframes scaleIn {
+  from {
+    transform: scale(0);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+.success-message h3 {
+  margin: 0 0 12px 0;
+  font-size: 1.5rem;
+  color: white;
+}
+
+.success-message p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* Mobile optimizations */
+@media (max-width: 768px) {
+  .trigger-modal-content {
+    max-height: 85vh;
+  }
+
+  .trigger-modal-header h2 {
+    font-size: 1.3rem;
+  }
+
+  .quick-btn {
+    font-size: 0.75rem;
+    padding: 6px 10px;
+  }
+
+  .expiry-btn {
+    font-size: 0.85rem;
+    padding: 8px;
+  }
+}

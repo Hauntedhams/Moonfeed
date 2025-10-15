@@ -1,13 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react';
+import TriggerOrderModal from './TriggerOrderModal';
+import { useWallet } from '../contexts/WalletContext';
 import './JupiterTradeModal.css';
 
 const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError }) => {
   const jupiterInitialized = useRef(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [activeTab, setActiveTab] = useState('swap'); // 'swap' or 'limit'
+  const [showTriggerModal, setShowTriggerModal] = useState(false);
+  const { walletAddress } = useWallet();
 
   useEffect(() => {
-    if (isOpen && coin) {
+    if (isOpen && coin && activeTab === 'swap') {
       // Simple check and initialize
       if (window.Jupiter && !jupiterInitialized.current) {
         initializeJupiter();
@@ -33,13 +38,13 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError }
       }
     }
     
-    // Clean up on close
-    if (!isOpen && jupiterInitialized.current) {
+    // Clean up on close or tab change
+    if ((!isOpen || activeTab === 'limit') && jupiterInitialized.current) {
       jupiterInitialized.current = false;
       setIsLoading(true);
       setError(null);
     }
-  }, [isOpen, coin]);
+  }, [isOpen, coin, activeTab]);
 
   const initializeJupiter = async () => {
     try {
@@ -120,69 +125,117 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError }
     jupiterInitialized.current = false;
     setIsLoading(true);
     setError(null);
+    setActiveTab('swap');
     onClose();
+  };
+
+  const handleTabChange = (tab) => {
+    if (tab === 'limit') {
+      setShowTriggerModal(true);
+    } else {
+      setActiveTab(tab);
+    }
+  };
+
+  const handleTriggerModalClose = () => {
+    setShowTriggerModal(false);
+  };
+
+  const handleOrderCreated = (result) => {
+    console.log('✅ Limit order created:', result);
+    // You can add success notification here
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="jupiter-modal-overlay" onClick={handleClose}>
-      <div className="jupiter-modal-content" onClick={(e) => e.stopPropagation()}>
-        {/* Header */}
-        <div className="jupiter-modal-header">
-          <div className="coin-info">
-            <img 
-              src={coin?.image || '/default-coin.svg'} 
-              alt={coin?.symbol || 'Coin'} 
-              className="coin-image"
-              onError={(e) => e.target.src = '/default-coin.svg'}
-            />
-            <div>
-              <h3>{coin?.name || 'Unknown'}</h3>
-              <p className="coin-symbol">{coin?.symbol || 'N/A'}</p>
+    <>
+      <div className="jupiter-modal-overlay" onClick={handleClose}>
+        <div className="jupiter-modal-content" onClick={(e) => e.stopPropagation()}>
+          {/* Header */}
+          <div className="jupiter-modal-header">
+            <div className="coin-info">
+              <img 
+                src={coin?.image || '/default-coin.svg'} 
+                alt={coin?.symbol || 'Coin'} 
+                className="coin-image"
+                onError={(e) => e.target.src = '/default-coin.svg'}
+              />
+              <div>
+                <h3>{coin?.name || 'Unknown'}</h3>
+                <p className="coin-symbol">{coin?.symbol || 'N/A'}</p>
+              </div>
             </div>
+            <button className="close-button" onClick={handleClose}>
+              ✕
+            </button>
           </div>
-          <button className="close-button" onClick={handleClose}>
-            ✕
-          </button>
-        </div>
 
-        {/* Jupiter Container */}
-        <div className="jupiter-widget-wrapper">
-          {isLoading && (
-            <div className="loading-state">
-              <div className="loading-spinner"></div>
-              <p>Loading...</p>
+          {/* Tab Navigation */}
+          <div className="jupiter-tab-nav">
+            <button 
+              className={`tab-btn ${activeTab === 'swap' ? 'active' : ''}`}
+              onClick={() => handleTabChange('swap')}
+            >
+              <span className="tab-icon">⚡</span>
+              Instant Swap
+            </button>
+            <button 
+              className={`tab-btn ${activeTab === 'limit' ? 'active' : ''}`}
+              onClick={() => handleTabChange('limit')}
+            >
+              <span className="tab-icon">🎯</span>
+              Limit Order
+            </button>
+          </div>
+
+          {/* Jupiter Container - only shown when swap tab is active */}
+          {activeTab === 'swap' && (
+            <div className="jupiter-widget-wrapper">
+              {isLoading && (
+                <div className="loading-state">
+                  <div className="loading-spinner"></div>
+                  <p>Loading...</p>
+                </div>
+              )}
+              
+              {error && (
+                <div className="error-state">
+                  <p>Failed to load</p>
+                  <button onClick={initializeJupiter} className="retry-button">
+                    Retry
+                  </button>
+                </div>
+              )}
+              
+              <div 
+                id="jupiter-container"
+                style={{ 
+                  width: '100%', 
+                  height: '600px',
+                  minHeight: '600px',
+                  opacity: isLoading || error ? 0 : 1,
+                  transition: 'opacity 0.3s'
+                }}
+              />
             </div>
           )}
-          
-          {error && (
-            <div className="error-state">
-              <p>Failed to load</p>
-              <button onClick={initializeJupiter} className="retry-button">
-                Retry
-              </button>
-            </div>
-          )}
-          
-          <div 
-            id="jupiter-container"
-            style={{ 
-              width: '100%', 
-              height: '600px',
-              minHeight: '600px',
-              opacity: isLoading || error ? 0 : 1,
-              transition: 'opacity 0.3s'
-            }}
-          />
-        </div>
 
-        {/* Footer */}
-        <div className="jupiter-modal-footer">
-          <p className="powered-by">Powered by Jupiter</p>
+          {/* Footer */}
+          <div className="jupiter-modal-footer">
+            <p className="powered-by">Powered by Jupiter</p>
+          </div>
         </div>
       </div>
-    </div>
+
+      {/* Trigger Order Modal */}
+      <TriggerOrderModal
+        isOpen={showTriggerModal}
+        onClose={handleTriggerModalClose}
+        coin={coin}
+        onOrderCreated={handleOrderCreated}
+      />
+    </>
   );
 };
 

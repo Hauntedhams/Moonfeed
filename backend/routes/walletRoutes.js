@@ -12,7 +12,15 @@
 
 const express = require('express');
 const fetch = require('node-fetch');
+const BirdeyeWalletService = require('../services/birdeyeWalletService');
+const SolscanWalletService = require('../services/solscanWalletService');
+const HeliusWalletService = require('../services/heliusWalletService');
 const router = express.Router();
+
+// Initialize services
+const birdeyeService = new BirdeyeWalletService();
+const solscanService = new SolscanWalletService();
+const heliusService = new HeliusWalletService();
 
 // Wallet data cache to prevent duplicate API calls
 const walletCache = new Map();
@@ -77,8 +85,8 @@ const callSolanaTrackerAPI = async (endpoint, cacheKey) => {
 
 /**
  * GET /api/wallet/:owner
- * Fetch comprehensive wallet information from Solana Tracker
- * Returns: Full portfolio, PnL stats, holdings, trading stats, win rate, etc.
+ * Fetch comprehensive wallet analytics using Helius (FREE)
+ * Returns: Trading history, token trades, transaction stats
  */
 router.get('/:owner', async (req, res) => {
   try {
@@ -96,16 +104,22 @@ router.get('/:owner', async (req, res) => {
       console.warn(`⚠️ Suspicious wallet address length: ${owner.length}`);
     }
 
-    console.log(`🔍 Fetching full wallet data for: ${owner.slice(0, 4)}...${owner.slice(-4)}`);
+    console.log(`🔍 Fetching Helius wallet analytics for: ${owner.slice(0, 4)}...${owner.slice(-4)}`);
 
-    const result = await callSolanaTrackerAPI(`/wallet/${owner}`, `wallet-full-${owner}`);
+    // Use Helius for FREE comprehensive analytics
+    const analyticsData = await heliusService.getWalletAnalytics(owner);
     
-    console.log(`✅ Successfully fetched wallet data for ${owner.slice(0, 4)}...${owner.slice(-4)}`);
+    if (!analyticsData.success) {
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to fetch wallet analytics',
+        details: analyticsData.error
+      });
+    }
 
-    res.json({
-      success: true,
-      ...result
-    });
+    console.log(`✅ Successfully fetched wallet analytics for ${owner.slice(0, 4)}...${owner.slice(-4)}`);
+
+    res.json(analyticsData);
 
   } catch (error) {
     console.error('❌ Error fetching wallet data:', error.message);
@@ -273,6 +287,48 @@ router.get('/:owner/page/:page', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to fetch wallet page',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/wallet/:owner/analytics
+ * Fetch comprehensive wallet analytics using Birdeye API
+ * Returns: PnL, net worth, trading stats, transaction history
+ */
+router.get('/:owner/analytics', async (req, res) => {
+  try {
+    const { owner } = req.params;
+    
+    if (!owner) {
+      return res.status(400).json({
+        success: false,
+        error: 'Wallet address is required'
+      });
+    }
+
+    console.log(`🔍 Fetching Birdeye analytics for: ${owner.slice(0, 4)}...${owner.slice(-4)}`);
+
+    const analyticsData = await birdeyeService.getComprehensiveWalletData(owner);
+    
+    if (!analyticsData.success) {
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to fetch wallet analytics',
+        details: analyticsData.error
+      });
+    }
+
+    console.log(`✅ Successfully fetched Birdeye analytics`);
+
+    res.json(analyticsData);
+
+  } catch (error) {
+    console.error('❌ Error fetching wallet analytics:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch wallet analytics',
       details: error.message
     });
   }

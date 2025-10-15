@@ -210,9 +210,11 @@ const ModernTokenScroller = ({
         console.log('🔍 Filter params:', advancedFilters);
       } else if (filters.type === 'new') {
         // Use the new endpoint for "new" tab
-        endpoint = `${API_BASE}/new`;
-        // NO LIMIT - backend will return all "new" coins it has
-        console.log('🆕 Using NEW endpoint for emerging coins:', endpoint);
+        // 🔥 MOBILE FIX: Add limit for mobile devices to prevent memory issues
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        const limit = isMobile ? 30 : 50; // Limit to 30 on mobile, 50 on desktop
+        endpoint = `${API_BASE}/new?limit=${limit}`;
+        console.log(`🆕 Using NEW endpoint for emerging coins (limit: ${limit} for ${isMobile ? 'mobile' : 'desktop'}):`, endpoint);
       } else {
         // For all other cases, use the trending endpoint WITHOUT limit
         // Backend will return all coins it has cached

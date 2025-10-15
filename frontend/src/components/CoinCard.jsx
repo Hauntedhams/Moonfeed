@@ -1038,15 +1038,16 @@ const CoinCard = memo(({
                           animation: index === 0 ? 'slideIn 0.3s ease-out' : 'none'
                         }}>
                           <div className="tx-wallet">
-                            <a 
-                              href={`https://solscan.io/tx/${tx.signature}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="tx-link"
+                            <span 
+                              onClick={() => tx.feePayer && setSelectedWallet(tx.feePayer)}
+                              style={{ 
+                                cursor: tx.feePayer ? 'pointer' : 'default',
+                                color: tx.feePayer ? '#4FC3F7' : 'inherit',
+                                textDecoration: tx.feePayer ? 'underline' : 'none'
+                              }}
                             >
-                              {tx.signature.substring(0, 4)}..{tx.signature.substring(tx.signature.length - 4)}
-                              <span className="external-icon">↗</span>
-                            </a>
+                              {tx.feePayer ? `${tx.feePayer.substring(0, 4)}..${tx.feePayer.substring(tx.feePayer.length - 4)}` : 'Unknown'}
+                            </span>
                           </div>
                           <div className="tx-type-col">
                             <span className="tx-type">{tx.type}</span>
@@ -1057,7 +1058,16 @@ const CoinCard = memo(({
                             </div>
                           )}
                           <div className="tx-time-col">
-                            <span className="tx-time">{new Date(tx.timestamp).toLocaleTimeString()}</span>
+                            <a 
+                              href={`https://solscan.io/tx/${tx.signature}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="tx-link"
+                              title="View on Solscan"
+                            >
+                              {new Date(tx.timestamp).toLocaleTimeString()}
+                              <span className="external-icon" style={{ marginLeft: '4px' }}>↗</span>
+                            </a>
                           </div>
                         </div>
                       ))

@@ -20,6 +20,8 @@ const JupiterTokenService = require('./jupiterTokenService');
 const JupiterDataService = require('./jupiterDataService');
 const TokenMetadataService = require('./tokenMetadataService');
 const walletRoutes = require('./routes/walletRoutes');
+const triggerRoutes = require('./routes/trigger');
+const searchRoutes = require('./routes/search');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -63,6 +65,12 @@ app.get('/api/version', (req, res) => {
 
 // Mount wallet routes
 app.use('/api/wallet', walletRoutes);
+
+// Mount Jupiter Trigger routes
+app.use('/api/trigger', triggerRoutes);
+
+// Mount Jupiter Ultra Search routes
+app.use('/api/search', searchRoutes);
 
 // Solana Tracker API Configuration
 const SOLANA_TRACKER_API_KEY = process.env.SOLANA_TRACKER_API_KEY;
