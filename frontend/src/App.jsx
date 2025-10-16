@@ -168,9 +168,19 @@ function App() {
 
   // Handle found coin from search
   const handleCoinFound = (coinData) => {
+    // IMPORTANT: Always create a new object reference to force React re-render
+    // This ensures memoized components (CoinCard) detect changes
+    const newCoinData = { ...coinData };
+    
+    console.log('🔍 Coin selected from search:', {
+      symbol: newCoinData.symbol,
+      hasEnrichment: !!(newCoinData.banner || newCoinData.website || newCoinData.rugcheck),
+      enriched: newCoinData.enriched
+    });
+    
     // Set the found coin as selected and navigate to coin detail view
-    setSelectedCoin(coinData);
-    setCurrentViewedCoin(coinData);
+    setSelectedCoin(newCoinData);
+    setCurrentViewedCoin(newCoinData);
     setActiveTab('coin-detail');
   };
 

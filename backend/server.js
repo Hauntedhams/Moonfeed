@@ -22,6 +22,7 @@ const TokenMetadataService = require('./tokenMetadataService');
 const walletRoutes = require('./routes/walletRoutes');
 const triggerRoutes = require('./routes/trigger');
 const searchRoutes = require('./routes/search');
+const onDemandEnrichment = require('./services/OnDemandEnrichmentService');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -71,6 +72,72 @@ app.use('/api/trigger', triggerRoutes);
 
 // Mount Jupiter Ultra Search routes
 app.use('/api/search', searchRoutes);
+
+// ⭐ On-demand enrichment endpoint for single coins
+app.post('/api/coins/enrich-single', async (req, res) => {
+  try {
+    const { mintAddress, coin } = req.body;
+    
+    if (!mintAddress && !coin?.mintAddress) {
+      return res.status(400).json({
+        success: false,
+        error: 'mintAddress or coin object is required'
+      });
+    }
+
+    const targetAddress = mintAddress || coin.mintAddress;
+    console.log(`🎯 Fast enrichment requested for ${targetAddress}`);
+
+    // Find coin in cache or use provided coin object
+    let baseCoin = coin;
+    if (!baseCoin) {
+      baseCoin = currentCoins.find(c => c.mintAddress === targetAddress) ||
+                 newCoins.find(c => c.mintAddress === targetAddress) ||
+                 customCoins.find(c => c.mintAddress === targetAddress);
+      
+      if (!baseCoin) {
+        return res.status(404).json({
+          success: false,
+          error: 'Coin not found in cache'
+        });
+      }
+    }
+
+    // Use fast on-demand enrichment service
+    const enrichedCoin = await onDemandEnrichment.enrichCoin(baseCoin, {
+      skipCache: false, // Use cache if available
+      timeout: 3000 // 3 second timeout for fast response
+    });
+
+    console.log(`✅ Fast enrichment complete for ${enrichedCoin.symbol} in ${enrichedCoin.enrichmentTime}ms`);
+
+    res.json({
+      success: true,
+      coin: enrichedCoin,
+      enrichmentTime: enrichedCoin.enrichmentTime,
+      cached: enrichedCoin.enrichmentTime < 100,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('❌ Error in fast enrichment:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to enrich coin',
+      details: error.message
+    });
+  }
+});
+
+// Get enrichment statistics
+app.get('/api/enrichment/stats', (req, res) => {
+  const stats = onDemandEnrichment.getStats();
+  res.json({
+    success: true,
+    stats,
+    timestamp: new Date().toISOString()
+  });
+});
 
 // Solana Tracker API Configuration
 const SOLANA_TRACKER_API_KEY = process.env.SOLANA_TRACKER_API_KEY;

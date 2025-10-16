@@ -87,27 +87,56 @@ function CoinSearchModal({ visible, onClose, onCoinSelect }) {
     }
   };
 
-  // Handle clicking on search result
-  const handleResultClick = (tokenData) => {
-    // Transform Jupiter Ultra format to Moonfeed format if needed
+  // Handle clicking on search result - NOW WITH ENRICHMENT!
+  const handleResultClick = async (tokenData) => {
+    // Transform Jupiter Ultra format to Moonfeed format
     const coinData = {
       ...tokenData,
-      id: tokenData.mint || tokenData.id,
-      tokenAddress: tokenData.mint || tokenData.tokenAddress,
-      mintAddress: tokenData.mint || tokenData.mintAddress,
+      id: tokenData.mintAddress || tokenData.mint || tokenData.id,
+      tokenAddress: tokenData.mintAddress || tokenData.mint || tokenData.tokenAddress,
+      mintAddress: tokenData.mintAddress || tokenData.mint,
       symbol: tokenData.symbol,
       name: tokenData.name,
       image: tokenData.image || tokenData.profilePic,
-      priceUsd: tokenData.price,
+      priceUsd: tokenData.priceUsd || tokenData.price,
       marketCap: tokenData.marketCap,
       description: tokenData.description
     };
 
-    if (onCoinSelect) onCoinSelect(coinData);
+    // Clean up search UI
     setSearchQuery('');
     setSearchResults([]);
     setError(null);
     onClose();
+
+    console.log(`🔄 Enriching ${coinData.symbol}...`);
+    
+    try {
+      // Send coin data to backend for enrichment
+      const response = await fetch(`${API_ROOT}/api/coins/enrich-single`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ coin: coinData })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          console.log(`✅ Enriched ${coinData.symbol} in ${data.enrichmentTime}ms (cached: ${data.cached})`);
+          // Show coin with enriched data (only call once!)
+          if (onCoinSelect) onCoinSelect(data.coin);
+        } else {
+          console.warn('⚠️ Enrichment failed, showing basic data');
+          if (onCoinSelect) onCoinSelect(coinData);
+        }
+      } else {
+        console.warn(`⚠️ Enrichment API returned ${response.status}, showing basic data`);
+        if (onCoinSelect) onCoinSelect(coinData);
+      }
+    } catch (enrichError) {
+      console.error('❌ Enrichment error, showing basic data:', enrichError);
+      if (onCoinSelect) onCoinSelect(coinData);
+    }
   };
 
   // Handle enter key press

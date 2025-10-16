@@ -33,6 +33,18 @@ const CoinCard = memo(({
   const chartNavRef = useRef(null);
   const prevPriceRef = useRef(null);
 
+  // Track if coin is enriched (has banner, socials, rugcheck, etc.)
+  const isEnriched = !!(
+    coin.enriched || 
+    coin.banner || 
+    coin.bannerImage || 
+    coin.header || 
+    coin.bannerUrl ||
+    coin.website || 
+    coin.twitter ||
+    (coin.rugcheck && Object.keys(coin.rugcheck).length > 0)
+  );
+
   // 🔥 MOBILE PERFORMANCE FIX: Detect mobile and disable live data
   const isMobile = useRef(/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)).current;
 
@@ -592,6 +604,41 @@ const CoinCard = memo(({
       {!connected && (
         <div className="connection-status-overlay" title="Disconnected from live data">
           <div className="connection-status-badge">⚠️ Offline</div>
+        </div>
+      )}
+      
+      {/* Enrichment status badge */}
+      {!isEnriched && (
+        <div 
+          className="enrichment-status-badge"
+          style={{
+            position: 'absolute',
+            top: 10,
+            left: 10,
+            zIndex: 100,
+            background: 'rgba(255, 165, 0, 0.9)',
+            color: 'white',
+            padding: '4px 8px',
+            borderRadius: '6px',
+            fontSize: '11px',
+            fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            backdropFilter: 'blur(10px)',
+            animation: 'pulse 2s ease-in-out infinite'
+          }}
+          title="Loading full coin data..."
+        >
+          <span style={{ 
+            display: 'inline-block', 
+            width: '8px', 
+            height: '8px', 
+            borderRadius: '50%',
+            background: 'currentColor',
+            animation: 'blink 1s ease-in-out infinite'
+          }}></span>
+          Loading...
         </div>
       )}
       
@@ -1521,6 +1568,14 @@ const CoinCard = memo(({
           walletAddress={selectedWallet}
           onClose={() => setSelectedWallet(null)}
         />
+      )}
+
+      {/* Loading Indicator - Shown when enrichment is in progress */}
+      {!isEnriched && (
+        <div className="enrichment-loading">
+          <div className="loading-spinner"></div>
+          <div className="loading-text">Enriching data...</div>
+        </div>
       )}
     </div>
   );

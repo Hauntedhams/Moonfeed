@@ -2,6 +2,25 @@
    COIN CARD - Streamlined Two-Layer TikTok-style Component (CLEAN STYLES)
    ============================================================================= */
 
+/* Enrichment status badge animations */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.enrichment-status-badge {
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.enrichment-status-badge span {
+  animation: blink 1s ease-in-out infinite;
+}
+
 .coin-card {
   position: relative;
   width: 100%;

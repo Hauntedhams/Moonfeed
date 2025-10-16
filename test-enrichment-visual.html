@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Enrichment Visual Test</title>
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #0b1220;
+      color: white;
+      padding: 20px;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    
+    .test-card {
+      background: #1a2332;
+      border-radius: 12px;
+      padding: 20px;
+      margin: 20px 0;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    
+    .status {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-left: 10px;
+    }
+    
+    .status.loading {
+      background: rgba(255, 165, 0, 0.2);
+      color: orange;
+    }
+    
+    .status.success {
+      background: rgba(0, 255, 0, 0.2);
+      color: lime;
+    }
+    
+    .status.error {
+      background: rgba(255, 0, 0, 0.2);
+      color: red;
+    }
+    
+    .banner-preview {
+      width: 100%;
+      height: 200px;
+      object-fit: cover;
+      border-radius: 8px;
+      margin: 10px 0;
+    }
+    
+    .social-link {
+      display: inline-block;
+      margin: 5px 10px 5px 0;
+      padding: 8px 16px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 6px;
+      text-decoration: none;
+      color: white;
+      font-size: 14px;
+    }
+    
+    .social-link:hover {
+      background: rgba(255,255,255,0.2);
+    }
+    
+    button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      margin: 10px 10px 10px 0;
+    }
+    
+    button:hover {
+      opacity: 0.9;
+    }
+    
+    .loading-spinner {
+      animation: spin 1s linear infinite;
+      display: inline-block;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    pre {
+      background: #0b1220;
+      padding: 15px;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <h1>🧪 Enrichment System Visual Test</h1>
+  <p>This page tests the coin enrichment flow end-to-end.</p>
+
+  <div class="test-card">
+    <h2>Step 1: Search for Coin <span id="search-status" class="status loading">Ready</span></h2>
+    <button onclick="searchCoin()">Search for POPCAT</button>
+    <div id="search-results"></div>
+  </div>
+
+  <div class="test-card">
+    <h2>Step 2: Enrich Coin <span id="enrich-status" class="status loading">Waiting</span></h2>
+    <button id="enrich-btn" onclick="enrichCoin()" disabled>Enrich Selected Coin</button>
+    <div id="enrich-results"></div>
+  </div>
+
+  <div class="test-card">
+    <h2>Step 3: Display Enriched Data <span id="display-status" class="status loading">Waiting</span></h2>
+    <div id="display-results"></div>
+  </div>
+
+  <script>
+    const API_BASE = 'http://localhost:3001';
+    let selectedCoin = null;
+
+    async function searchCoin() {
+      const statusEl = document.getElementById('search-status');
+      const resultsEl = document.getElementById('search-results');
+      
+      statusEl.textContent = '⏳ Searching...';
+      statusEl.className = 'status loading';
+      resultsEl.innerHTML = '';
+      
+      try {
+        const response = await fetch(`${API_BASE}/api/search?query=POPCAT`);
+        const data = await response.json();
+        
+        if (data.success && data.results.length > 0) {
+          selectedCoin = data.results[0];
+          
+          statusEl.textContent = '✅ Found';
+          statusEl.className = 'status success';
+          
+          resultsEl.innerHTML = `
+            <div style="margin-top: 15px;">
+              <p><strong>${selectedCoin.name}</strong> (${selectedCoin.symbol})</p>
+              <p>Mint: <code>${selectedCoin.mintAddress}</code></p>
+              <p>Price: $${selectedCoin.priceUsd?.toFixed(6) || 'N/A'}</p>
+              <p>Market Cap: $${(selectedCoin.marketCap / 1e6).toFixed(2)}M</p>
+              <p>Has enrichment data: <strong style="color: orange;">NO</strong></p>
+            </div>
+          `;
+          
+          document.getElementById('enrich-btn').disabled = false;
+        } else {
+          throw new Error('No results found');
+        }
+      } catch (error) {
+        statusEl.textContent = '❌ Failed';
+        statusEl.className = 'status error';
+        resultsEl.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+      }
+    }
+
+    async function enrichCoin() {
+      if (!selectedCoin) {
+        alert('Please search for a coin first');
+        return;
+      }
+
+      const statusEl = document.getElementById('enrich-status');
+      const resultsEl = document.getElementById('enrich-results');
+      
+      statusEl.innerHTML = '<span class="loading-spinner">⏳</span> Enriching...';
+      statusEl.className = 'status loading';
+      resultsEl.innerHTML = '';
+      
+      const startTime = Date.now();
+      
+      try {
+        const coinData = {
+          mintAddress: selectedCoin.mintAddress,
+          symbol: selectedCoin.symbol,
+          name: selectedCoin.name,
+          image: selectedCoin.image,
+          priceUsd: selectedCoin.priceUsd,
+          marketCap: selectedCoin.marketCap
+        };
+
+        const response = await fetch(`${API_BASE}/api/coins/enrich-single`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ coin: coinData })
+        });
+        
+        const data = await response.json();
+        const duration = Date.now() - startTime;
+        
+        if (data.success) {
+          statusEl.textContent = `✅ Enriched in ${duration}ms`;
+          statusEl.className = 'status success';
+          
+          const enrichedCoin = data.coin;
+          
+          resultsEl.innerHTML = `
+            <div style="margin-top: 15px;">
+              <p><strong>Enrichment Time:</strong> ${data.enrichmentTime}ms</p>
+              <p><strong>Cached:</strong> ${data.cached ? 'Yes' : 'No'}</p>
+              <p><strong>Has Banner:</strong> ${enrichedCoin.banner ? '✅ Yes' : '❌ No'}</p>
+              <p><strong>Has Socials:</strong> ${enrichedCoin.socialLinks ? '✅ Yes' : '❌ No'}</p>
+              <p><strong>Has Rugcheck:</strong> ${enrichedCoin.liquidityLocked !== undefined ? '✅ Yes' : '❌ No'}</p>
+            </div>
+          `;
+          
+          displayEnrichedData(enrichedCoin);
+        } else {
+          throw new Error(data.error || 'Enrichment failed');
+        }
+      } catch (error) {
+        statusEl.textContent = '❌ Failed';
+        statusEl.className = 'status error';
+        resultsEl.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+      }
+    }
+
+    function displayEnrichedData(coin) {
+      const statusEl = document.getElementById('display-status');
+      const resultsEl = document.getElementById('display-results');
+      
+      statusEl.textContent = '✅ Displaying';
+      statusEl.className = 'status success';
+      
+      const hasBanner = !!coin.banner;
+      const hasSocials = !!coin.socialLinks;
+      const hasRugcheck = coin.liquidityLocked !== undefined;
+      
+      resultsEl.innerHTML = `
+        <div style="margin-top: 15px;">
+          <h3>${coin.name} (${coin.symbol})</h3>
+          
+          ${hasBanner ? `
+            <div>
+              <h4>🎨 Banner Image:</h4>
+              <img src="${coin.banner}" class="banner-preview" alt="Banner" />
+            </div>
+          ` : '<p style="color: orange;">No banner available</p>'}
+          
+          ${hasSocials ? `
+            <div>
+              <h4>🔗 Social Links:</h4>
+              ${coin.socialLinks.website ? `<a href="${coin.socialLinks.website}" class="social-link" target="_blank">🌐 Website</a>` : ''}
+              ${coin.socialLinks.twitter ? `<a href="${coin.socialLinks.twitter}" class="social-link" target="_blank">🐦 Twitter</a>` : ''}
+              ${coin.socialLinks.telegram ? `<a href="${coin.socialLinks.telegram}" class="social-link" target="_blank">💬 Telegram</a>` : ''}
+            </div>
+          ` : '<p style="color: orange;">No social links available</p>'}
+          
+          ${hasRugcheck ? `
+            <div>
+              <h4>🔒 Security Info:</h4>
+              <p><strong>Liquidity Locked:</strong> ${coin.liquidityLocked ? '✅ Yes' : '❌ No'}</p>
+              <p><strong>Lock Percentage:</strong> ${coin.lockPercentage || 0}%</p>
+              <p><strong>Rugcheck Score:</strong> ${coin.rugcheckScore || 'N/A'}</p>
+              <p><strong>Risk Level:</strong> ${coin.riskLevel || 'Unknown'}</p>
+              <p><strong>Freeze Authority:</strong> ${coin.freezeAuthority ? '⚠️ Active' : '✅ Disabled'}</p>
+              <p><strong>Mint Authority:</strong> ${coin.mintAuthority ? '⚠️ Active' : '✅ Disabled'}</p>
+            </div>
+          ` : '<p style="color: orange;">No rugcheck data available</p>'}
+          
+          <div>
+            <h4>💰 Market Data:</h4>
+            <p><strong>Price:</strong> $${coin.priceUsd || coin.price_usd || 0}</p>
+            <p><strong>Market Cap:</strong> $${((coin.marketCap || 0) / 1e6).toFixed(2)}M</p>
+            <p><strong>Liquidity:</strong> $${((coin.liquidity_usd || 0) / 1e6).toFixed(2)}M</p>
+            <p><strong>24h Volume:</strong> $${((coin.volume_24h_usd || 0) / 1e3).toFixed(2)}K</p>
+          </div>
+          
+          <details style="margin-top: 20px;">
+            <summary style="cursor: pointer; font-weight: 600;">📋 Raw JSON Data</summary>
+            <pre>${JSON.stringify(coin, null, 2)}</pre>
+          </details>
+        </div>
+      `;
+    }
+  </script>
+</body>
+</html>

@@ -64,6 +64,12 @@ const ModernTokenScroller = ({
   const enrichCoins = useCallback(async (mintAddresses) => {
     if (!mintAddresses || mintAddresses.length === 0) return;
     
+    // Skip enrichment - coins are already enriched when searched or loaded
+    // Individual coin enrichment is handled by CoinSearchModal
+    console.log('📱 Enrichment skipped (coins are pre-enriched)');
+    return;
+    
+    /* DISABLED - Old batch enrichment endpoint doesn't exist
     // MOBILE FIX: Disable enrichment completely in production to prevent 404 errors
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     if (isMobile || import.meta.env.PROD) {
@@ -113,6 +119,7 @@ const ModernTokenScroller = ({
     } catch (error) {
       console.error('❌ Error enriching coins with DexScreener data:', error);
     }
+    */
   }, []);
 
   // Get coins around current index for enrichment (current + 2 ahead + 2 behind)
@@ -147,6 +154,14 @@ const ModernTokenScroller = ({
 
   // Get enriched coin data or fall back to original
   const getEnrichedCoin = useCallback((coin) => {
+    // First check if the coin itself already has enrichment data (e.g., from search)
+    const coinHasEnrichment = coin.banner || coin.website || coin.rugcheck || coin.twitter;
+    if (coinHasEnrichment) {
+      console.log(`📱 Using pre-enriched data for ${coin.symbol}`);
+      return coin;
+    }
+    
+    // Otherwise check the enrichment cache
     const enriched = enrichedCoins.get(coin.mintAddress);
     if (enriched) {
       // Merge enriched data with original, preserving original banner if enriched doesn't have one
