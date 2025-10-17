@@ -103,18 +103,58 @@ class OnDemandEnrichmentService {
       };
 
       // Apply DexScreener data (priority)
+      let hasDexScreenerData = false;
       if (dexResult.status === 'fulfilled' && dexResult.value) {
         Object.assign(enrichedData, this.processDexScreenerData(dexResult.value, coin));
+        hasDexScreenerData = true;
       }
 
       // Apply Rugcheck data (optional)
       if (rugResult.status === 'fulfilled' && rugResult.value) {
-        Object.assign(enrichedData, this.processRugcheckData(rugResult.value));
+        const rugcheckData = this.processRugcheckData(rugResult.value);
+        Object.assign(enrichedData, rugcheckData);
+        console.log(`🔐 Rugcheck data applied for ${coin.symbol}:`, {
+          liquidityLocked: rugcheckData.liquidityLocked,
+          lockPercentage: rugcheckData.lockPercentage,
+          burnPercentage: rugcheckData.burnPercentage,
+          riskLevel: rugcheckData.riskLevel,
+          rugcheckScore: rugcheckData.rugcheckScore,
+          rugcheckVerified: rugcheckData.rugcheckVerified,
+          freezeAuthority: rugcheckData.freezeAuthority,
+          mintAuthority: rugcheckData.mintAuthority
+        });
+      } else {
+        console.warn(`⚠️ Rugcheck data not available for ${coin.symbol}:`, 
+          rugResult.status === 'rejected' ? rugResult.reason?.message : 'No data returned');
+        // Set rugcheckVerified to false when rugcheck fails
+        enrichedData.rugcheckVerified = false;
       }
 
-      // NOTE: Birdeye removed - redundant price data already available from:
-      // - Jupiter Ultra (initial search)
-      // - DexScreener (enrichment)
+      // ✨ ALWAYS GENERATE CHART with LIVE JUPITER PRICE
+      // Priority: coin.price_usd (Jupiter) > enrichedData.price_usd (DexScreener)
+      const livePrice = coin.price_usd || coin.priceUsd || coin.price || enrichedData.price_usd;
+      
+      if (livePrice && hasDexScreenerData) {
+        // Override DexScreener price with live Jupiter price for accuracy
+        if (coin.price_usd && enrichedData.price_usd && coin.price_usd !== enrichedData.price_usd) {
+          console.log(`🔄 Overriding DexScreener price $${enrichedData.price_usd} with live Jupiter price $${livePrice}`);
+        }
+        enrichedData.price_usd = livePrice; // Always use live price
+        
+        // Generate clean chart with live price and DexScreener price changes
+        const priceChanges = enrichedData.priceChange || enrichedData.priceChanges || {};
+        enrichedData.cleanChartData = this.generateCleanChart(livePrice, priceChanges);
+        
+        if (enrichedData.cleanChartData) {
+          console.log(`✅ Generated clean chart with ${enrichedData.cleanChartData.dataPoints?.length || 0} points`);
+        } else {
+          console.warn(`⚠️ Failed to generate clean chart for ${coin.symbol}`);
+        }
+      } else if (!hasDexScreenerData) {
+        console.warn(`⚠️ No DexScreener data for ${coin.symbol}, cannot generate chart`);
+      } else {
+        console.warn(`⚠️ No valid price for ${coin.symbol}, cannot generate chart`);
+      }
 
       // Cache the enriched data
       this.saveToCache(mintAddress, enrichedData);
@@ -351,6 +391,7 @@ class OnDemandEnrichmentService {
     const markets = data.markets || [];
     let liquidityLocked = false;
     let lockPercentage = 0;
+    let burnPercentage = 0;
 
     for (const market of markets) {
       const lp = market.lp || {};
@@ -361,18 +402,22 @@ class OnDemandEnrichmentService {
         liquidityLocked = true;
       }
       
-      lockPercentage = Math.max(lockPercentage, lockedPct, burnedPct);
+      lockPercentage = Math.max(lockPercentage, lockedPct);
+      burnPercentage = Math.max(burnPercentage, burnedPct);
     }
 
     return {
       liquidityLocked,
       lockPercentage: Math.round(lockPercentage),
+      burnPercentage: Math.round(burnPercentage),
       riskLevel: data.riskLevel || 'unknown',
       rugcheckScore: data.score || 0,
-      freezeAuthority: data.tokenMeta?.freezeAuthority === null,
-      mintAuthority: data.tokenMeta?.mintAuthority === null,
+      freezeAuthority: data.tokenMeta?.freezeAuthority !== null,
+      mintAuthority: data.tokenMeta?.mintAuthority !== null,
       topHolderPercent: data.topHolders?.[0]?.pct || 0,
-      isHoneypot: data.risks?.includes('honeypot') || false
+      isHoneypot: data.risks?.includes('honeypot') || false,
+      rugcheckVerified: true, // Mark that rugcheck data is available
+      rugcheckProcessedAt: new Date().toISOString()
     };
   }
 
@@ -427,6 +472,94 @@ class OnDemandEnrichmentService {
       ...this.stats,
       cacheSize: this.cache.size,
       cacheHitRate: this.stats.cacheHits / (this.stats.cacheHits + this.stats.cacheMisses) * 100
+    };
+  }
+
+  /**
+   * Generate clean chart data from current price and price changes
+   * Uses the LIVE price to ensure the chart always reflects current reality
+   * @param {number} currentPrice - The current live price (from Jupiter)
+   * @param {object} priceChanges - DexScreener price change percentages (m5, h1, h6, h24)
+   * @returns {object} Chart data with dataPoints array
+   */
+  generateCleanChart(currentPrice, priceChanges = {}) {
+    if (!currentPrice || typeof currentPrice !== 'number' || currentPrice <= 0) {
+      console.warn('⚠️ Invalid currentPrice for chart generation:', currentPrice);
+      return null;
+    }
+
+    // Extract price change percentages from DexScreener
+    // Handle both formats: {m5, h1, h6, h24} and {change5m, change1h, change6h, change24h}
+    const change5m = priceChanges.m5 || priceChanges.change5m || 0;
+    const change1h = priceChanges.h1 || priceChanges.change1h || 0;
+    const change6h = priceChanges.h6 || priceChanges.change6h || 0;
+    const change24h = priceChanges.h24 || priceChanges.change24h || 0;
+
+    // Calculate prices at each time point by working BACKWARDS from current price
+    // Formula: oldPrice = currentPrice / (1 + (changePercent / 100))
+    const price5mAgo = currentPrice / (1 + (change5m / 100));
+    const price1hAgo = currentPrice / (1 + (change1h / 100));
+    const price6hAgo = currentPrice / (1 + (change6h / 100));
+    const price24hAgo = currentPrice / (1 + (change24h / 100));
+
+    // Create 5-point chart showing the key anchor times
+    const now = Date.now();
+    const dataPoints = [];
+    
+    // Point 1: 24h ago (leftmost)
+    dataPoints.push({
+      timestamp: now - 24 * 60 * 60 * 1000,
+      time: new Date(now - 24 * 60 * 60 * 1000).toISOString(),
+      price: price24hAgo,
+      label: '24h'
+    });
+    
+    // Point 2: 6h ago
+    dataPoints.push({
+      timestamp: now - 6 * 60 * 60 * 1000,
+      time: new Date(now - 6 * 60 * 60 * 1000).toISOString(),
+      price: price6hAgo,
+      label: '6h'
+    });
+    
+    // Point 3: 1h ago
+    dataPoints.push({
+      timestamp: now - 1 * 60 * 60 * 1000,
+      time: new Date(now - 1 * 60 * 60 * 1000).toISOString(),
+      price: price1hAgo,
+      label: '1h'
+    });
+    
+    // Point 4: 5m ago
+    dataPoints.push({
+      timestamp: now - 5 * 60 * 1000,
+      time: new Date(now - 5 * 60 * 1000).toISOString(),
+      price: price5mAgo,
+      label: '5m'
+    });
+    
+    // Point 5: Now (rightmost) - LIVE PRICE from Jupiter
+    dataPoints.push({
+      timestamp: now,
+      time: new Date(now).toISOString(),
+      price: currentPrice,
+      label: 'now'
+    });
+
+    console.log(`✅ Generated clean chart with live price $${currentPrice.toFixed(8)}:`);
+    console.log(`   24h ago: $${price24hAgo.toFixed(8)} (${change24h.toFixed(2)}%)`);
+    console.log(`   6h ago: $${price6hAgo.toFixed(8)} (${change6h.toFixed(2)}%)`);
+    console.log(`   1h ago: $${price1hAgo.toFixed(8)} (${change1h.toFixed(2)}%)`);
+    console.log(`   5m ago: $${price5mAgo.toFixed(8)} (${change5m.toFixed(2)}%)`);
+    console.log(`   NOW: $${currentPrice.toFixed(8)} ← LIVE JUPITER PRICE`);
+    
+    return {
+      dataPoints,
+      metadata: {
+        timeframe: '24H',
+        source: 'Live Jupiter price + DexScreener changes',
+        generatedAt: new Date().toISOString()
+      }
     };
   }
 }

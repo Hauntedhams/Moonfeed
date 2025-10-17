@@ -215,7 +215,7 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
       setError('No coin data available');
       setLoading(false);
     }
-  }, [coin?.mintAddress || coin?.tokenAddress]);
+  }, [coin?.mintAddress || coin?.tokenAddress, coin?.cleanChartData]);
 
   // Draw chart immediately when data is ready
   useEffect(() => {
@@ -669,9 +669,10 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
 
 // 🔥 PERFORMANCE FIX: Memoize component to prevent unnecessary re-renders
 export default React.memo(PriceHistoryChart, (prevProps, nextProps) => {
-  // Only re-render if coin address or price changes
+  // Only re-render if coin address, price, or cleanChartData changes
   return prevProps.coin?.mintAddress === nextProps.coin?.mintAddress &&
          prevProps.coin?.price === nextProps.coin?.price &&
+         prevProps.coin?.cleanChartData === nextProps.coin?.cleanChartData &&
          prevProps.width === nextProps.width &&
          prevProps.height === nextProps.height;
 });

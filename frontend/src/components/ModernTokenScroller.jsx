@@ -113,6 +113,60 @@ const ModernTokenScroller = ({
     }
   }, [coins, enrichedCoins, API_BASE]);
 
+  // Handle enrichment completion from CoinCard
+  const handleEnrichmentComplete = useCallback((mintAddress, enrichedData) => {
+    console.log(`📦 Storing enrichment data for ${enrichedData.symbol || mintAddress}`);
+    console.log(`📊 Enriched data includes:`, {
+      hasCleanChartData: !!enrichedData.cleanChartData,
+      hasRugcheck: !!enrichedData.rugcheckScore || !!enrichedData.liquidityLocked,
+      hasBanner: !!enrichedData.banner,
+      hasPriceChange: !!enrichedData.priceChange || !!enrichedData.priceChanges,
+      enriched: enrichedData.enriched
+    });
+    
+    // Update the enrichedCoins cache
+    setEnrichedCoins(prev => new Map(prev).set(mintAddress, enrichedData));
+    
+    // 🔥 CRITICAL FIX: Also update the coins array so React re-renders with the enriched data
+    // This ensures banner, clean chart, AND rugcheck data load together immediately
+    setCoins(prevCoins => prevCoins.map(coin => {
+      if (coin.mintAddress === mintAddress) {
+        // Merge ALL enriched data, ensuring nothing is lost
+        const mergedCoin = {
+          ...coin,
+          ...enrichedData,
+          // Preserve original banner if enriched doesn't have one
+          banner: enrichedData.banner || coin.banner,
+          // Ensure these critical fields are present
+          enriched: enrichedData.enriched || true,
+          cleanChartData: enrichedData.cleanChartData,
+          priceChange: enrichedData.priceChange || enrichedData.priceChanges,
+          priceChanges: enrichedData.priceChanges || enrichedData.priceChange,
+          // Rugcheck data
+          rugcheckScore: enrichedData.rugcheckScore,
+          rugcheckVerified: enrichedData.rugcheckVerified,
+          liquidityLocked: enrichedData.liquidityLocked,
+          lockPercentage: enrichedData.lockPercentage,
+          burnPercentage: enrichedData.burnPercentage,
+          riskLevel: enrichedData.riskLevel,
+          freezeAuthority: enrichedData.freezeAuthority,
+          mintAuthority: enrichedData.mintAuthority,
+          topHolderPercent: enrichedData.topHolderPercent,
+          isHoneypot: enrichedData.isHoneypot
+        };
+        
+        console.log(`✅ Updated coin in array for ${coin.symbol}:`, {
+          hasCleanChartData: !!mergedCoin.cleanChartData,
+          hasRugcheck: !!mergedCoin.rugcheckScore || !!mergedCoin.liquidityLocked,
+          hasBanner: !!mergedCoin.banner
+        });
+        
+        return mergedCoin;
+      }
+      return coin;
+    }));
+  }, []);
+
   // OLD BATCH ENRICHMENT CODE - DISABLED
   /* DISABLED - Old batch enrichment endpoint doesn't exist
   const enrichCoinsOld = useCallback(async (mintAddresses) => {
@@ -178,6 +232,9 @@ const ModernTokenScroller = ({
     return coinsToEnrich.map(coin => coin.mintAddress).filter(Boolean);
   }, [coins]);
 
+  // DISABLED: Scroll-based enrichment removed - using on-view enrichment only
+  // This ensures clean, simple enrichment like the search feature
+  /*
   // Enrich coins around current index when it changes - throttled to prevent white flash
   useEffect(() => {
     if (coins.length > 0 && currentIndex >= 0) {
@@ -188,17 +245,16 @@ const ModernTokenScroller = ({
       
       if (needsEnrichment.length > 0) {
         // Throttle enrichment to prevent frequent API calls during scrolling
-        // Disable enrichment on mobile for better performance
-        if (window.innerWidth >= 768) {
-          const timer = setTimeout(() => {
-            enrichCoins(needsEnrichment);
-          }, 300);
-          
-          return () => clearTimeout(timer);
-        }
+        // NOW ENABLED ON ALL DEVICES (mobile + desktop)
+        const timer = setTimeout(() => {
+          enrichCoins(needsEnrichment);
+        }, 300);
+        
+        return () => clearTimeout(timer);
       }
     }
   }, [currentIndex, coins]);
+  */
 
   // Get enriched coin data or fall back to original
   const getEnrichedCoin = useCallback((coin) => {
@@ -672,6 +728,7 @@ const ModernTokenScroller = ({
           isVisible={isVisible}
           onExpandChange={(isExpanded) => handleCoinExpandChange(isExpanded, coin.mintAddress || coin.tokenAddress)}
           autoLoadTransactions={shouldAutoLoadTransactions}
+          onEnrichmentComplete={handleEnrichmentComplete} // Pass handler to CoinCard
         />
       </div>
     );

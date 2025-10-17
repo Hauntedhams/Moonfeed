@@ -1,4 +1,5 @@
 import React, { memo, useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import './CoinCard.css';
 import DexScreenerChart from './DexScreenerChart';
 import PriceHistoryChart from './PriceHistoryChart';
@@ -998,8 +999,8 @@ const CoinCard = memo(({
                 </div>
               )}
               
-              {/* Tooltip */}
-              {hoveredMetric && (
+              {/* Tooltip - Rendered via Portal to escape stacking contexts */}
+              {hoveredMetric && createPortal(
                 <div className="metric-tooltip">
                   {(() => {
                     const tooltipData = getTooltipContent(hoveredMetric.type, hoveredMetric.value, coin);
@@ -1016,7 +1017,8 @@ const CoinCard = memo(({
                       </>
                     );
                   })()}
-                </div>
+                </div>,
+                document.body
               )}
             </div>
           </div>
