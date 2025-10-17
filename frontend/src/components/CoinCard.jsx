@@ -7,6 +7,7 @@ import TopTradersList from './TopTradersList';
 import WalletModal from './WalletModal';
 import { useLiveData } from '../hooks/useLiveDataContext.jsx';
 import { useHeliusTransactions } from '../hooks/useHeliusTransactions.jsx';
+import { API_CONFIG } from '../config/api.js';
 
 const CoinCard = memo(({ 
   coin, 
@@ -17,7 +18,8 @@ const CoinCard = memo(({
   onExpandChange,
   isVisible = true,
   chartComponent, // optional preloaded chart from manager
-  autoLoadTransactions = false // NEW: auto-load transactions when true
+  autoLoadTransactions = false, // NEW: auto-load transactions when true
+  onEnrichmentComplete = null // Callback when enrichment completes
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showBannerModal, setShowBannerModal] = useState(false);
@@ -59,6 +61,68 @@ const CoinCard = memo(({
     mintAddress,
     showLiveTransactions || autoLoadTransactions // Connect when manually shown OR auto-loaded
   );
+
+  // 🆕 ON-VIEW ENRICHMENT: Trigger enrichment when coin becomes visible
+  const [enrichmentRequested, setEnrichmentRequested] = useState(false);
+  
+  useEffect(() => {
+    // Only enrich if:
+    // 1. Coin is visible
+    // 2. Coin is NOT already enriched
+    // 3. We haven't already requested enrichment for this coin
+    if (isVisible && !isEnriched && !enrichmentRequested && mintAddress) {
+      // Reduced logging for production
+      if (!import.meta.env.PROD) {
+        console.log(`🎯 On-view enrichment triggered for ${coin.symbol || coin.name}`);
+      }
+      setEnrichmentRequested(true);
+      
+      // Call backend enrichment API
+      const enrichCoin = async () => {
+        try {
+          const apiUrl = `${API_CONFIG.COINS_API}/enrich-single`;
+          console.log(`🔄 Enriching ${coin.symbol} via ${apiUrl}`);
+          
+          const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              mintAddress,
+              coin: coin 
+            })
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.coin) {
+              console.log(`✅ On-view enrichment complete for ${coin.symbol} in ${data.enrichmentTime}ms`);
+              console.log(`📊 Enriched coin data:`, {
+                hasCleanChartData: !!data.coin.cleanChartData,
+                hasRugcheck: !!data.coin.rugcheckScore || !!data.coin.liquidityLocked,
+                hasBanner: !!data.coin.banner
+              });
+              
+              // Notify parent component of enrichment completion
+              if (onEnrichmentComplete && typeof onEnrichmentComplete === 'function') {
+                onEnrichmentComplete(mintAddress, data.coin);
+              }
+            } else {
+              console.warn(`⚠️ Enrichment returned success:false for ${coin.symbol}:`, data);
+            }
+          } else {
+            const errorData = await response.json().catch(() => ({ error: response.statusText }));
+            console.error(`❌ Enrichment API error for ${coin.symbol}:`, response.status, errorData);
+          }
+        } catch (error) {
+          console.error(`❌ On-view enrichment failed for ${coin.symbol}:`, error.message);
+        }
+      };
+      
+      // Debounce enrichment by 500ms to prevent spam during rapid scrolling
+      const timer = setTimeout(enrichCoin, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [isVisible, isEnriched, enrichmentRequested, mintAddress, coin, onEnrichmentComplete]);
 
   // Auto-show transactions UI when autoLoadTransactions is true
   useEffect(() => {
@@ -158,89 +222,106 @@ const CoinCard = memo(({
           example: `$${exactValue} worth of ${coin.symbol || 'tokens'} have been bought and sold in the past 24 hours`
         };
       case 'liquidity':
-        // Build comprehensive rugcheck security information
+        // Build comprehensive rugcheck security information with proper HTML formatting
         let rugcheckInfo = '';
         if (coin.rugcheckVerified) {
-          rugcheckInfo = '\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━';
-          rugcheckInfo += '\n🔐 SECURITY ANALYSIS (Rugcheck)';
-          rugcheckInfo += '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━';
+          rugcheckInfo = '<div style="margin-top: 16px; padding: 12px; background: rgba(0,0,0,0.03); border-radius: 8px; border-left: 3px solid #4F46E5;">';
+          rugcheckInfo += '<div style="font-weight: 700; font-size: 0.85rem; color: #4F46E5; margin-bottom: 10px;">🔐 SECURITY ANALYSIS</div>';
           
           // Liquidity Lock Status
           if (coin.liquidityLocked) {
-            rugcheckInfo += '\n\n✅ LIQUIDITY STATUS: LOCKED';
+            rugcheckInfo += '<div style="margin-bottom: 10px; padding: 8px; background: rgba(34, 197, 94, 0.1); border-radius: 6px;">';
+            rugcheckInfo += '<div style="font-weight: 600; color: #16a34a; margin-bottom: 4px;">✅ Liquidity: LOCKED</div>';
             if (coin.lockPercentage > 0) {
-              rugcheckInfo += `\n   🔒 Locked: ${coin.lockPercentage}%`;
+              rugcheckInfo += `<div style="font-size: 0.75rem; color: #15803d; margin-left: 16px;">🔒 Locked: ${coin.lockPercentage}%</div>`;
             }
             if (coin.burnPercentage > 0) {
-              rugcheckInfo += `\n   🔥 Burned: ${coin.burnPercentage}%`;
+              rugcheckInfo += `<div style="font-size: 0.75rem; color: #15803d; margin-left: 16px;">🔥 Burned: ${coin.burnPercentage}%</div>`;
             }
             const totalSecured = Math.max(coin.lockPercentage || 0, coin.burnPercentage || 0);
-            rugcheckInfo += `\n   � Total Secured: ${totalSecured}%`;
+            rugcheckInfo += `<div style="font-size: 0.75rem; font-weight: 600; color: #15803d; margin-left: 16px; margin-top: 4px;">🛡️ Total Secured: ${totalSecured}%</div>`;
+            rugcheckInfo += '</div>';
           } else {
-            rugcheckInfo += '\n\n⚠️ LIQUIDITY STATUS: UNLOCKED';
-            rugcheckInfo += '\n   ⚡ Developers can remove liquidity';
+            rugcheckInfo += '<div style="margin-bottom: 10px; padding: 8px; background: rgba(239, 68, 68, 0.1); border-radius: 6px;">';
+            rugcheckInfo += '<div style="font-weight: 600; color: #dc2626; margin-bottom: 4px;">⚠️ Liquidity: UNLOCKED</div>';
+            rugcheckInfo += '<div style="font-size: 0.75rem; color: #b91c1c; margin-left: 16px;">⚡ Developers can remove liquidity</div>';
+            rugcheckInfo += '</div>';
           }
           
-          // Risk Assessment
+          // Risk Assessment & Score
+          const riskSection = [];
           if (coin.riskLevel && coin.riskLevel !== 'unknown') {
             const riskEmoji = coin.riskLevel === 'low' ? '🟢' : 
                              coin.riskLevel === 'medium' ? '🟡' : '🔴';
-            rugcheckInfo += `\n\n${riskEmoji} RISK LEVEL: ${coin.riskLevel.toUpperCase()}`;
+            const riskColor = coin.riskLevel === 'low' ? '#16a34a' : 
+                             coin.riskLevel === 'medium' ? '#ca8a04' : '#dc2626';
+            riskSection.push(`<div style="font-weight: 600; color: ${riskColor}; margin-bottom: 4px;">${riskEmoji} Risk Level: ${coin.riskLevel.toUpperCase()}</div>`);
           }
-          
-          // Rugcheck Score
           if (coin.rugcheckScore) {
             const scoreEmoji = coin.rugcheckScore >= 1000 ? '🌟' :
                               coin.rugcheckScore >= 500 ? '⭐' : '⚡';
-            rugcheckInfo += `\n${scoreEmoji} Rugcheck Score: ${coin.rugcheckScore}/5000`;
+            riskSection.push(`<div style="font-weight: 600; color: #7c3aed;">${scoreEmoji} Score: ${coin.rugcheckScore}/5000</div>`);
+          }
+          if (riskSection.length > 0) {
+            rugcheckInfo += '<div style="margin-bottom: 10px; padding: 8px; background: rgba(124, 58, 237, 0.05); border-radius: 6px;">';
+            rugcheckInfo += riskSection.join('');
+            rugcheckInfo += '</div>';
           }
           
           // Token Authorities
-          rugcheckInfo += '\n\n🔑 TOKEN AUTHORITIES:';
-          if (coin.freezeAuthority !== undefined) {
-            rugcheckInfo += `\n   ${coin.freezeAuthority ? '❌ Freeze Authority: Active' : '✅ Freeze Authority: Revoked'}`;
-          }
-          if (coin.mintAuthority !== undefined) {
-            rugcheckInfo += `\n   ${coin.mintAuthority ? '❌ Mint Authority: Active' : '✅ Mint Authority: Revoked'}`;
+          if (coin.freezeAuthority !== undefined || coin.mintAuthority !== undefined) {
+            rugcheckInfo += '<div style="margin-bottom: 10px; padding: 8px; background: rgba(0,0,0,0.02); border-radius: 6px;">';
+            rugcheckInfo += '<div style="font-weight: 600; color: #334155; margin-bottom: 6px;">🔑 Token Authorities</div>';
+            if (coin.freezeAuthority !== undefined) {
+              const freezeColor = coin.freezeAuthority ? '#dc2626' : '#16a34a';
+              const freezeIcon = coin.freezeAuthority ? '❌' : '✅';
+              rugcheckInfo += `<div style="font-size: 0.75rem; color: ${freezeColor}; margin-left: 16px; margin-bottom: 3px;">${freezeIcon} Freeze Authority: ${coin.freezeAuthority ? 'Active' : 'Revoked'}</div>`;
+            }
+            if (coin.mintAuthority !== undefined) {
+              const mintColor = coin.mintAuthority ? '#dc2626' : '#16a34a';
+              const mintIcon = coin.mintAuthority ? '❌' : '✅';
+              rugcheckInfo += `<div style="font-size: 0.75rem; color: ${mintColor}; margin-left: 16px;">${mintIcon} Mint Authority: ${coin.mintAuthority ? 'Active' : 'Revoked'}</div>`;
+            }
+            rugcheckInfo += '</div>';
           }
           
           // Top Holder
           if (coin.topHolderPercent > 0) {
             const holderWarning = coin.topHolderPercent > 20 ? '⚠️' : 
                                  coin.topHolderPercent > 10 ? '⚡' : '✅';
-            rugcheckInfo += `\n\n${holderWarning} TOP HOLDER: ${coin.topHolderPercent.toFixed(1)}% of supply`;
+            const holderColor = coin.topHolderPercent > 20 ? '#dc2626' : 
+                               coin.topHolderPercent > 10 ? '#ca8a04' : '#16a34a';
+            rugcheckInfo += '<div style="margin-bottom: 10px; padding: 8px; background: rgba(0,0,0,0.02); border-radius: 6px;">';
+            rugcheckInfo += `<div style="font-weight: 600; color: ${holderColor};">${holderWarning} Top Holder: ${coin.topHolderPercent.toFixed(1)}%</div>`;
             if (coin.topHolderPercent > 20) {
-              rugcheckInfo += '\n   (High concentration - potential dump risk)';
+              rugcheckInfo += '<div style="font-size: 0.7rem; color: #b91c1c; margin-left: 16px; margin-top: 3px;">(High concentration risk)</div>';
             }
+            rugcheckInfo += '</div>';
           }
           
           // Honeypot Warning (Critical)
           if (coin.isHoneypot) {
-            rugcheckInfo += '\n\n🚨 CRITICAL WARNING: HONEYPOT DETECTED';
-            rugcheckInfo += '\n   ⛔ You may not be able to sell this token!';
-            rugcheckInfo += '\n   ⛔ DO NOT BUY - This is likely a scam!';
+            rugcheckInfo += '<div style="margin-bottom: 10px; padding: 10px; background: rgba(239, 68, 68, 0.15); border-radius: 6px; border: 2px solid #dc2626;">';
+            rugcheckInfo += '<div style="font-weight: 700; color: #dc2626; margin-bottom: 4px;">🚨 HONEYPOT DETECTED</div>';
+            rugcheckInfo += '<div style="font-size: 0.7rem; color: #b91c1c; line-height: 1.4;">⛔ You may not be able to sell!<br/>⛔ DO NOT BUY - Likely a scam!</div>';
+            rugcheckInfo += '</div>';
           }
           
-          // DexScreener Liquidity Comparison (if available)
-          if (coin.dexscreenerLiquidity && coin.dexscreenerLiquidity !== value) {
-            rugcheckInfo += '\n\n📊 DATA COMPARISON:';
-            rugcheckInfo += `\n   Solana Tracker: $${formatCompact(value)} (shown)`;
-            rugcheckInfo += `\n   DexScreener: $${formatCompact(coin.dexscreenerLiquidity)}`;
-          }
-          
-          rugcheckInfo += '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━';
-          rugcheckInfo += '\n✅ Verified by Rugcheck API';
+          rugcheckInfo += '<div style="font-size: 0.7rem; color: #64748b; margin-top: 8px; text-align: center;">✅ Verified by Rugcheck API</div>';
+          rugcheckInfo += '</div>';
           
         } else {
-          rugcheckInfo = '\n\n⏳ Security data not yet verified';
-          rugcheckInfo += '\n   Rugcheck analysis in progress...';
+          rugcheckInfo = '<div style="margin-top: 16px; padding: 12px; background: rgba(249, 115, 22, 0.1); border-radius: 8px; border-left: 3px solid #f97316; text-align: center;">';
+          rugcheckInfo += '<div style="font-size: 0.8rem; color: #c2410c;">⏳ Security data loading...</div>';
+          rugcheckInfo += '</div>';
         }
         
         return {
           title: 'Liquidity',
           exact: `$${exactValue}`,
           description: 'The amount of money available for trading. Higher liquidity means easier buying/selling with less price impact.',
-          example: `There's $${exactValue} available in trading pools for ${coin.symbol || 'this token'}, making it ${value > 100000 ? 'relatively easy' : value > 10000 ? 'moderately easy' : 'potentially difficult'} to trade large amounts${rugcheckInfo}`
+          example: `There's $${exactValue} available in trading pools for ${coin.symbol || 'this token'}, making it ${value > 100000 ? 'relatively easy' : value > 10000 ? 'moderately easy' : 'potentially difficult'} to trade large amounts.${rugcheckInfo}`,
+          isHtml: true
         };
       case 'holders':
         return {
@@ -307,13 +388,11 @@ const CoinCard = memo(({
       e.nativeEvent.stopImmediatePropagation();
     }
     
-    console.log('🔄 Expand toggle clicked, current state:', isExpanded);
     const next = !isExpanded;
     setIsExpanded(next);
     
     // Call parent's expand change handler which should lock scrolling
     onExpandChange?.(next);
-    console.log('🔄 Expand toggle new state:', next);
   };
 
   // Chart navigation functions
@@ -329,11 +408,7 @@ const CoinCard = memo(({
   };
 
   const navigateToChartPage = (pageIndex) => {
-    const navigationStartTime = Date.now();
-    console.log('🔍 [NAVIGATION DIAGNOSTIC] Navigating to chart page:', pageIndex);
-    
     if (!chartsContainerRef.current) {
-      console.log('❌ [NAVIGATION DIAGNOSTIC] No chart container ref');
       return;
     }
     
@@ -341,22 +416,12 @@ const CoinCard = memo(({
     const containerWidth = container.clientWidth;
     const targetScrollLeft = pageIndex * containerWidth;
     
-    console.log('🔍 [NAVIGATION DIAGNOSTIC] Container info:', {
-      containerWidth,
-      currentScrollLeft: container.scrollLeft,
-      targetScrollLeft,
-      pageIndex
-    });
-    
     container.scrollTo({
       left: targetScrollLeft,
       behavior: 'smooth'
     });
     
     setCurrentChartPage(pageIndex);
-    
-    const navigationDuration = Date.now() - navigationStartTime;
-    console.log('🔍 [NAVIGATION DIAGNOSTIC] Navigation completed in', navigationDuration, 'ms');
   };
 
   // Add scroll listener for chart navigation
@@ -385,7 +450,6 @@ const CoinCard = memo(({
       lastY = e.touches[0].clientY;
       isDragging = true;
       isHorizontalSwipe = false;
-      console.log('🔍 [NAV DOTS] Touch start:', { lastX, lastY });
     };
 
     const handleTouchMove = (e) => {
@@ -416,7 +480,6 @@ const CoinCard = memo(({
     };
 
     const handleTouchEnd = () => {
-      console.log('🔍 [NAV DOTS] Touch end, was horizontal swipe:', isHorizontalSwipe);
       isDragging = false;
       isHorizontalSwipe = false;
     };
@@ -430,7 +493,6 @@ const CoinCard = memo(({
       navContainer.style.cursor = 'grabbing';
       mouseLastX = e.clientX;
       e.preventDefault();
-      console.log('🔍 [NAV DOTS] Mouse down:', { mouseLastX });
     };
 
     const handleMouseMove = (e) => {
@@ -493,12 +555,8 @@ const CoinCard = memo(({
 
   // Banner modal handlers
   const handleBannerClick = (e) => {
-    console.log('Banner clicked!', coin.name);
     if (coin.banner || coin.bannerImage || coin.header || coin.bannerUrl) {
-      console.log('Opening banner modal');
       setShowBannerModal(true);
-    } else {
-      console.log('No banner image available');
     }
   };
 
@@ -510,12 +568,8 @@ const CoinCard = memo(({
   const handleProfileClick = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    console.log('Profile clicked!', coin.name);
     if (coin.profileImage) {
-      console.log('Opening profile modal');
       setShowProfileModal(true);
-    } else {
-      console.log('No profile image available');
     }
   };
 
@@ -531,31 +585,15 @@ const CoinCard = memo(({
     // Check for various address field names used in the coin data
     const address = coin.mintAddress || coin.mint || coin.address || coin.contract_address || coin.contractAddress || coin.tokenAddress;
     
-    console.log('🔍 Checking for address in coin object:', {
-      mintAddress: coin.mintAddress,
-      mint: coin.mint,
-      address: coin.address,
-      contract_address: coin.contract_address,
-      contractAddress: coin.contractAddress,
-      tokenAddress: coin.tokenAddress,
-      selectedAddress: address
-    });
-    
     if (!address) {
-      console.log('❌ No address available for', coin.name || coin.symbol);
-      console.log('Full coin object:', coin);
       return;
     }
 
     try {
       await navigator.clipboard.writeText(address);
-      console.log('✅ Address copied to clipboard:', address);
-      
       // Optional: Show a brief success indicator
       // You could add a toast notification here if you have one
     } catch (err) {
-      console.error('Failed to copy address:', err);
-      
       // Fallback method for older browsers
       try {
         const textArea = document.createElement('textarea');
@@ -568,7 +606,6 @@ const CoinCard = memo(({
         textArea.select();
         document.execCommand('copy');
         textArea.remove();
-        console.log('✅ Address copied using fallback method:', address);
       } catch (fallbackErr) {
         console.error('Fallback copy failed:', fallbackErr);
       }
@@ -886,7 +923,17 @@ const CoinCard = memo(({
                 <div className="header-metric-label">Liquidity</div>
                 <div className="header-metric-value-with-icon">
                   <span>${formatCompact(liquidity)}</span>
-                  <LiquidityLockIndicator coin={coin} size="small" />
+                  {/* Show red flag if rugcheck verified and liquidity is unlocked */}
+                  {coin.rugcheckVerified && !coin.liquidityLocked ? (
+                    <span style={{ 
+                      marginLeft: '4px', 
+                      fontSize: '14px',
+                      color: '#ef4444',
+                      lineHeight: 1
+                    }}>🚩</span>
+                  ) : (
+                    <LiquidityLockIndicator coin={coin} size="small" />
+                  )}
                 </div>
               </div>
               <div 
@@ -961,7 +1008,11 @@ const CoinCard = memo(({
                         <div className="tooltip-title">{tooltipData.title}</div>
                         <div className="tooltip-exact">{tooltipData.exact}</div>
                         <div className="tooltip-description">{tooltipData.description}</div>
-                        <div className="tooltip-example">{tooltipData.example}</div>
+                        {tooltipData.isHtml ? (
+                          <div className="tooltip-example" dangerouslySetInnerHTML={{ __html: tooltipData.example }} />
+                        ) : (
+                          <div className="tooltip-example">{tooltipData.example}</div>
+                        )}
                       </>
                     );
                   })()}
@@ -994,11 +1045,24 @@ const CoinCard = memo(({
               <div className="chart-page">
                 <div className="price-history-wrapper">
                   {currentChartPage === 0 ? (
-                    <PriceHistoryChart 
-                      coin={coin} 
-                      width="100%" 
-                      height={200} 
-                    />
+                    isVisible ? (
+                      <PriceHistoryChart 
+                        coin={coin} 
+                        width="100%" 
+                        height={200} 
+                      />
+                    ) : (
+                      <div className="chart-placeholder" style={{ 
+                        background: 'white', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center',
+                        color: '#666',
+                        fontSize: '14px'
+                      }}>
+                        {/* Chart not rendered for off-screen coin */}
+                      </div>
+                    )
                   ) : (
                     <div className="chart-placeholder" style={{ 
                       background: 'white', 

@@ -53,7 +53,10 @@ export function LiveDataProvider({ children }) {
         ? `wss://${window.location.host}/ws`
         : 'ws://localhost:3001/ws';
       
-      console.log('🔗 Connecting to WebSocket:', wsUrl);
+      // Reduced logging for production
+      if (!import.meta.env.PROD) {
+        console.log('🔗 Connecting to WebSocket:', wsUrl);
+      }
       setConnectionStatus('connecting');
       connectionState = 'connecting';
       
@@ -61,7 +64,10 @@ export function LiveDataProvider({ children }) {
       wsInstance = wsRef.current;
 
       wsRef.current.onopen = () => {
-        console.log('🟢 WebSocket connected');
+        // Reduced logging for production
+        if (!import.meta.env.PROD) {
+          console.log('🟢 WebSocket connected');
+        }
         setConnected(true);
         setConnectionStatus('connected');
         connectionState = 'connected';

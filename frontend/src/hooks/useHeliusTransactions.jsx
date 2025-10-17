@@ -90,7 +90,7 @@ export const useHeliusTransactions = (mintAddress, isActive) => {
               slot: logData.context?.slot
             };
 
-            console.log('⚡ New transaction detected:', signature.substring(0, 8));
+            // Removed console.log to prevent spam on mobile
             addTransaction(transaction);
           }
         } catch (err) {
