@@ -60,13 +60,62 @@ const ModernTokenScroller = ({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Enrich coins with DexScreener data
+  // Enrich coins with DexScreener data (ON-DEMAND via backend)
   const enrichCoins = useCallback(async (mintAddresses) => {
     if (!mintAddresses || mintAddresses.length === 0) return;
     
-    // Skip enrichment - coins are already enriched when searched or loaded
-    // Individual coin enrichment is handled by CoinSearchModal
-    console.log('📱 Enrichment skipped (coins are pre-enriched)');
+    // Use on-demand enrichment for each coin as user scrolls to it
+    console.log(`🎨 On-demand enriching ${mintAddresses.length} coin(s)...`);
+    
+    try {
+      // Enrich each coin using the fast on-demand endpoint
+      const enrichmentPromises = mintAddresses.map(async (mintAddress) => {
+        const coin = coins.find(c => c.mintAddress === mintAddress);
+        if (!coin) return null;
+        
+        // Skip if already in enrichment cache
+        if (enrichedCoins.has(mintAddress)) {
+          console.log(`📦 Already enriched: ${coin.symbol}`);
+          return null;
+        }
+        
+        const response = await fetch(`${API_BASE}/enrich-single`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ coin })
+        });
+        
+        if (!response.ok) {
+          console.warn(`⚠️ Enrichment failed for ${coin.symbol}: ${response.status}`);
+          return null;
+        }
+        
+        const data = await response.json();
+        if (data.success && data.coin) {
+          console.log(`✅ Enriched ${coin.symbol} in ${data.enrichmentTime}ms`);
+          return { mintAddress, enrichedData: data.coin };
+        }
+        
+        return null;
+      });
+      
+      const results = await Promise.all(enrichmentPromises);
+      
+      // Update enriched coins map
+      results.forEach(result => {
+        if (result && result.enrichedData) {
+          setEnrichedCoins(prev => new Map(prev).set(result.mintAddress, result.enrichedData));
+        }
+      });
+      
+    } catch (error) {
+      console.error('❌ On-demand enrichment error:', error);
+    }
+  }, [coins, enrichedCoins, API_BASE]);
+
+  // OLD BATCH ENRICHMENT CODE - DISABLED
+  /* DISABLED - Old batch enrichment endpoint doesn't exist
+  const enrichCoinsOld = useCallback(async (mintAddresses) => {
     return;
     
     /* DISABLED - Old batch enrichment endpoint doesn't exist
@@ -120,7 +169,6 @@ const ModernTokenScroller = ({
       console.error('❌ Error enriching coins with DexScreener data:', error);
     }
     */
-  }, []);
 
   // Get coins around current index for enrichment (current + 2 ahead + 2 behind)
   const getCoinsToEnrich = useCallback((index) => {
@@ -154,9 +202,10 @@ const ModernTokenScroller = ({
 
   // Get enriched coin data or fall back to original
   const getEnrichedCoin = useCallback((coin) => {
-    // First check if the coin itself already has enrichment data (e.g., from search)
-    const coinHasEnrichment = coin.banner || coin.website || coin.rugcheck || coin.twitter;
-    if (coinHasEnrichment) {
+    // First check if the coin itself already has COMPLETE enrichment data (e.g., from search)
+    // Only consider fully enriched if it has the 'enriched' flag AND price change data (for charts)
+    const isFullyEnriched = coin.enriched === true && coin.priceChange;
+    if (isFullyEnriched) {
       console.log(`📱 Using pre-enriched data for ${coin.symbol}`);
       return coin;
     }
@@ -644,9 +693,28 @@ const ModernTokenScroller = ({
     if (coins.length > 0 && currentIndex >= 0 && currentIndex < coins.length) {
       const currentCoin = coins[currentIndex];
       
-      // If current coin isn't enriched, enrich it immediately
-      if (currentCoin && !enrichedCoins.has(currentCoin.mintAddress) && window.innerWidth >= 768) {
-        enrichCoins([currentCoin.mintAddress]);
+      // Always enrich current coin + next 2 coins for smooth scrolling
+      const coinsToEnrich = [];
+      
+      // Current coin
+      if (currentCoin && !enrichedCoins.has(currentCoin.mintAddress)) {
+        coinsToEnrich.push(currentCoin.mintAddress);
+      }
+      
+      // Next 2 coins (prefetch for smooth scrolling)
+      for (let i = 1; i <= 2; i++) {
+        const nextIndex = currentIndex + i;
+        if (nextIndex < coins.length) {
+          const nextCoin = coins[nextIndex];
+          if (nextCoin && !enrichedCoins.has(nextCoin.mintAddress)) {
+            coinsToEnrich.push(nextCoin.mintAddress);
+          }
+        }
+      }
+      
+      if (coinsToEnrich.length > 0) {
+        console.log(`🔄 Enriching current coin + ${coinsToEnrich.length - 1} ahead...`);
+        enrichCoins(coinsToEnrich);
       }
     }
   }, [currentIndex, coins.length]); // Remove enrichedCoins and enrichCoins dependencies
