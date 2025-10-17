@@ -5,7 +5,7 @@ import DexScreenerChart from './DexScreenerChart';
 import PriceHistoryChart from './PriceHistoryChart';
 import LiquidityLockIndicator from './LiquidityLockIndicator';
 import TopTradersList from './TopTradersList';
-import WalletModal from './WalletModal';
+import WalletPopup from './WalletPopup';
 import { useLiveData } from '../hooks/useLiveDataContext.jsx';
 import { useHeliusTransactions } from '../hooks/useHeliusTransactions.jsx';
 import { API_CONFIG } from '../config/api.js';
@@ -216,11 +216,155 @@ const CoinCard = memo(({
           example: `If ${coin.symbol || 'this token'} has ${formatCompact(coin.totalSupply || 1000000)} tokens and costs ${formatPrice(coin.price_usd || coin.priceUsd || coin.price || 0)} each, the market cap is ${formatPrice(coin.price_usd || coin.priceUsd || coin.price || 0)} × ${formatCompact(coin.totalSupply || 1000000)} = $${exactValue}`
         };
       case 'volume':
+        // Build comprehensive price change information with proper HTML formatting
+        let priceChangeInfo = '';
+        
+        // Get price change data - backend stores this at the root level as priceChange/priceChanges
+        // The backend sets both priceChange (raw DexScreener format with m5, h1, h6, h24)
+        // and priceChanges (same data, alternative field name)
+        let changes = null;
+        
+        // Priority order: coin.priceChanges > coin.priceChange > coin.dexscreener?.priceChanges
+        const rawPriceChange = coin.priceChanges || coin.priceChange || coin.dexscreener?.priceChanges;
+        
+        if (rawPriceChange) {
+          // Check if it's in DexScreener format (m5, h1, h6, h24) or already converted
+          if ('m5' in rawPriceChange || 'h1' in rawPriceChange || 'h6' in rawPriceChange || 'h24' in rawPriceChange) {
+            // Convert from DexScreener format
+            changes = {
+              change5m: parseFloat(rawPriceChange.m5 || 0),
+              change1h: parseFloat(rawPriceChange.h1 || 0),
+              change6h: parseFloat(rawPriceChange.h6 || 0),
+              change24h: parseFloat(rawPriceChange.h24 || 0)
+            };
+          } else if ('change5m' in rawPriceChange || 'change1h' in rawPriceChange || 'change6h' in rawPriceChange || 'change24h' in rawPriceChange) {
+            // Already in converted format
+            changes = rawPriceChange;
+          }
+        }
+        
+        // Debug logging to understand the data structure
+        console.log(`📊 Volume tooltip for ${coin.symbol}:`, {
+          hasChanges: !!changes,
+          changes: changes,
+          rawPriceChange: rawPriceChange,
+          enriched: coin.enriched,
+          hasCleanChart: !!coin.cleanChartData
+        });
+        
+        // Start the price changes section
+        priceChangeInfo = '<div style="margin-top: 16px; padding: 12px; background: rgba(0,0,0,0.03); border-radius: 8px; border-left: 3px solid #4F46E5;">';
+        priceChangeInfo += '<div style="font-weight: 700; font-size: 0.85rem; color: #4F46E5; margin-bottom: 10px;">📊 PRICE CHANGES</div>';
+        
+        // Simplified check: just check if changes object exists
+        if (changes) {
+          // Display all available price changes - show ALL that exist (including 0%)
+          let hasAnyChange = false;
+          
+          // 5 minute change - show if property exists (even if 0)
+          if ('change5m' in changes) {
+            hasAnyChange = true;
+            const change5m = Number(changes.change5m);
+            const color5m = change5m >= 0 ? '#16a34a' : '#dc2626';
+            const bgColor5m = change5m >= 0 ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)';
+            const arrow5m = change5m >= 0 ? '📈' : '📉';
+            priceChangeInfo += `<div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; background: ${bgColor5m}; border-radius: 6px; margin-bottom: 6px;">`;
+            priceChangeInfo += `<span style="font-size: 0.75rem; color: #64748b;">5 minutes:</span>`;
+            priceChangeInfo += `<span style="font-size: 0.8rem; font-weight: 600; color: ${color5m};">${arrow5m} ${formatPercent(change5m)}</span>`;
+            priceChangeInfo += '</div>';
+          }
+          
+          // 1 hour change - show if property exists (even if 0)
+          if ('change1h' in changes) {
+            hasAnyChange = true;
+            const change1h = Number(changes.change1h);
+            const color1h = change1h >= 0 ? '#16a34a' : '#dc2626';
+            const bgColor1h = change1h >= 0 ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)';
+            const arrow1h = change1h >= 0 ? '📈' : '📉';
+            priceChangeInfo += `<div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; background: ${bgColor1h}; border-radius: 6px; margin-bottom: 6px;">`;
+            priceChangeInfo += `<span style="font-size: 0.75rem; color: #64748b;">1 hour:</span>`;
+            priceChangeInfo += `<span style="font-size: 0.8rem; font-weight: 600; color: ${color1h};">${arrow1h} ${formatPercent(change1h)}</span>`;
+            priceChangeInfo += '</div>';
+          }
+          
+          // 6 hour change - show if property exists (even if 0)
+          if ('change6h' in changes) {
+            hasAnyChange = true;
+            const change6h = Number(changes.change6h);
+            const color6h = change6h >= 0 ? '#16a34a' : '#dc2626';
+            const bgColor6h = change6h >= 0 ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)';
+            const arrow6h = change6h >= 0 ? '📈' : '📉';
+            priceChangeInfo += `<div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; background: ${bgColor6h}; border-radius: 6px; margin-bottom: 6px;">`;
+            priceChangeInfo += `<span style="font-size: 0.75rem; color: #64748b;">6 hours:</span>`;
+            priceChangeInfo += `<span style="font-size: 0.8rem; font-weight: 600; color: ${color6h};">${arrow6h} ${formatPercent(change6h)}</span>`;
+            priceChangeInfo += '</div>';
+          }
+          
+          // 24 hour change - show if property exists (even if 0)
+          if ('change24h' in changes) {
+            hasAnyChange = true;
+            const change24h = Number(changes.change24h);
+            const color24h = change24h >= 0 ? '#16a34a' : '#dc2626';
+            const bgColor24h = change24h >= 0 ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)';
+            const arrow24h = change24h >= 0 ? '📈' : '📉';
+            priceChangeInfo += `<div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; background: ${bgColor24h}; border-radius: 6px; margin-bottom: 6px;">`;
+            priceChangeInfo += `<span style="font-size: 0.75rem; color: #64748b;">24 hours:</span>`;
+            priceChangeInfo += `<span style="font-size: 0.8rem; font-weight: 600; color: ${color24h};">${arrow24h} ${formatPercent(change24h)}</span>`;
+            priceChangeInfo += '</div>';
+          }
+          
+          // If no price changes found, show a message
+          if (!hasAnyChange) {
+            priceChangeInfo += '<div style="padding: 8px; text-align: center; color: #94a3b8; font-size: 0.75rem;">Price change data loading...</div>';
+          }
+          
+          // Buy/Sell transaction counts if available
+          const buys = coin.dexscreener?.transactions?.buys24h || coin.buys24h || 0;
+          const sells = coin.dexscreener?.transactions?.sells24h || coin.sells24h || 0;
+          if (buys > 0 || sells > 0) {
+            priceChangeInfo += '<div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(0,0,0,0.1);">';
+            priceChangeInfo += '<div style="font-weight: 600; font-size: 0.75rem; color: #334155; margin-bottom: 6px;">📈 Transaction Activity</div>';
+            priceChangeInfo += '<div style="display: flex; justify-content: space-between; margin-bottom: 4px;">';
+            priceChangeInfo += `<span style="font-size: 0.75rem; color: #16a34a;">✅ Buys: ${buys}</span>`;
+            priceChangeInfo += `<span style="font-size: 0.75rem; color: #dc2626;">❌ Sells: ${sells}</span>`;
+            priceChangeInfo += '</div>';
+            const buyRatio = buys + sells > 0 ? ((buys / (buys + sells)) * 100).toFixed(1) : 0;
+            const sentiment = buyRatio > 60 ? '🟢 Bullish' : buyRatio < 40 ? '🔴 Bearish' : '🟡 Neutral';
+            priceChangeInfo += `<div style="font-size: 0.7rem; color: #64748b; text-align: center; margin-top: 4px;">${sentiment} (${buyRatio}% buys)</div>`;
+            priceChangeInfo += '</div>';
+          }
+          
+          priceChangeInfo += '<div style="font-size: 0.7rem; color: #64748b; margin-top: 8px; text-align: center;">✅ Live price tracking</div>';
+          priceChangeInfo += '</div>';
+        } else {
+          // Fallback: show at least the 24h change we have
+          const change24h = coin.change_24h || coin.priceChange24h || coin.change24h || 0;
+          if (change24h !== 0) {
+            const color24h = change24h >= 0 ? '#16a34a' : '#dc2626';
+            const bgColor24h = change24h >= 0 ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)';
+            const arrow24h = change24h >= 0 ? '📈' : '📉';
+            priceChangeInfo += `<div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; background: ${bgColor24h}; border-radius: 6px; margin-bottom: 6px;">`;
+            priceChangeInfo += `<span style="font-size: 0.75rem; color: #64748b;">24 hours:</span>`;
+            priceChangeInfo += `<span style="font-size: 0.8rem; font-weight: 600; color: ${color24h};">${arrow24h} ${formatPercent(change24h)}</span>`;
+            priceChangeInfo += '</div>';
+            // Only show "more timeframes available after enrichment" if coin is NOT yet enriched
+            if (!coin.enriched && !coin.cleanChartData) {
+              priceChangeInfo += '<div style="font-size: 0.7rem; color: #64748b; margin-top: 8px; text-align: center;">📊 More timeframes available after enrichment</div>';
+            }
+          } else {
+            priceChangeInfo += '<div style="padding: 16px; text-align: center;">';
+            priceChangeInfo += '<div style="font-size: 0.8rem; color: #64748b;">📊 Price change data will load shortly</div>';
+            priceChangeInfo += '</div>';
+          }
+          priceChangeInfo += '</div>';
+        }
+        
         return {
           title: '24h Trading Volume',
           exact: `$${exactValue}`,
           description: 'The total dollar value of tokens traded in the last 24 hours. Higher volume indicates more activity and liquidity.',
-          example: `$${exactValue} worth of ${coin.symbol || 'tokens'} have been bought and sold in the past 24 hours`
+          example: `$${exactValue} worth of ${coin.symbol || 'tokens'} have been bought and sold in the past 24 hours.${priceChangeInfo}`,
+          isHtml: true
         };
       case 'liquidity':
         // Build comprehensive rugcheck security information with proper HTML formatting
@@ -1156,9 +1300,14 @@ const CoinCard = memo(({
                               style={{ 
                                 cursor: tx.feePayer ? 'pointer' : 'default',
                                 color: tx.feePayer ? '#4FC3F7' : 'inherit',
-                                textDecoration: tx.feePayer ? 'underline' : 'none'
+                                textDecoration: tx.feePayer ? 'underline' : 'none',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px'
                               }}
+                              title={tx.feePayer ? 'Click to view wallet details' : ''}
                             >
+                              {tx.feePayer && <span style={{ fontSize: '10px' }}>👛</span>}
                               {tx.feePayer ? `${tx.feePayer.substring(0, 4)}..${tx.feePayer.substring(tx.feePayer.length - 4)}` : 'Unknown'}
                             </span>
                           </div>
@@ -1353,44 +1502,11 @@ const CoinCard = memo(({
             </div>
           </div>
 
-          {/* Transaction Analytics */}
-          <div className="transactions-section">
-            <h3 className="section-title">Transaction Analytics</h3>
-            <div className="section-content">
-              {coin.dexscreener?.transactions ? (
-                <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '12px', textAlign: 'center'}}>
-                  <div>
-                    <div style={{fontSize: '0.8rem', color: 'rgba(0,0,0,0.6)', marginBottom: '4px'}}>5m</div>
-                    <div style={{fontSize: '0.9rem', fontWeight: '600', color: '#22c55e'}}>{coin.dexscreener.transactions.buys5m}B</div>
-                    <div style={{fontSize: '0.9rem', fontWeight: '600', color: '#ef4444'}}>{coin.dexscreener.transactions.sells5m}S</div>
-                  </div>
-                  <div>
-                    <div style={{fontSize: '0.8rem', color: 'rgba(0,0,0,0.6)', marginBottom: '4px'}}>1h</div>
-                    <div style={{fontSize: '0.9rem', fontWeight: '600', color: '#22c55e'}}>{coin.dexscreener.transactions.buys1h}B</div>
-                    <div style={{fontSize: '0.9rem', fontWeight: '600', color: '#ef4444'}}>{coin.dexscreener.transactions.sells1h}S</div>
-                  </div>
-                  <div>
-                    <div style={{fontSize: '0.8rem', color: 'rgba(0,0,0,0.6)', marginBottom: '4px'}}>6h</div>
-                    <div style={{fontSize: '0.9rem', fontWeight: '600', color: '#22c55e'}}>{coin.dexscreener.transactions.buys6h}B</div>
-                    <div style={{fontSize: '0.9rem', fontWeight: '600', color: '#ef4444'}}>{coin.dexscreener.transactions.sells6h}S</div>
-                  </div>
-                  <div>
-                    <div style={{fontSize: '0.8rem', color: 'rgba(0,0,0,0.6)', marginBottom: '4px'}}>24h</div>
-                    <div style={{fontSize: '0.9rem', fontWeight: '600', color: '#22c55e'}}>{coin.dexscreener.transactions.buys24h}B</div>
-                    <div style={{fontSize: '0.9rem', fontWeight: '600', color: '#ef4444'}}>{coin.dexscreener.transactions.sells24h}S</div>
-                  </div>
-                </div>
-              ) : (
-                <div className="content-placeholder">Transaction data will appear when available</div>
-              )}
-            </div>
-          </div>
-
           {/* Token Details */}
           <div className="token-details-section">
-            <h3 className="section-title">Token Details</h3>
+            <h3 className="section-title" style={{color: 'rgba(0,0,0,0.9)'}}>Token Details</h3>
             <div className="section-content">
-              <div style={{fontSize: '0.9rem', lineHeight: '1.6'}}>
+              <div style={{fontSize: '0.9rem', lineHeight: '1.6', color: 'rgba(0,0,0,0.9)'}}>
                 <div style={{marginBottom: '8px'}}>
                   <strong>Contract:</strong> <span style={{fontFamily: 'monospace', fontSize: '0.85rem'}}>{coin.mintAddress || coin.contract_address || coin.mint || coin.tokenAddress || 'N/A'}</span>
                 </div>
@@ -1628,9 +1744,9 @@ const CoinCard = memo(({
         </div>
       )}
 
-      {/* Wallet Modal */}
+      {/* Wallet Popup */}
       {selectedWallet && (
-        <WalletModal 
+        <WalletPopup 
           walletAddress={selectedWallet}
           onClose={() => setSelectedWallet(null)}
         />

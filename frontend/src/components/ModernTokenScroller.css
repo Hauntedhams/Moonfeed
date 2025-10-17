@@ -8,6 +8,8 @@
   /* Performance optimizations */
   will-change: transform;
   contain: layout style paint;
+  /* Prevent page-level scrolling */
+  overscroll-behavior: none;
 }
 
 /* Background enrichment status indicator */
@@ -106,6 +108,8 @@
   will-change: scroll-position;
   contain: layout style paint;
   transform: translateZ(0); /* Force hardware acceleration */
+  /* Prevent bounce/overscroll on iOS */
+  overscroll-behavior: none;
 }
 
 .modern-scroller-container.scroll-locked {

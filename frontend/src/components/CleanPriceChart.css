@@ -171,6 +171,18 @@
   cursor: crosshair;
   background: #fff;
   border-radius: 0; /* Remove border radius for edge-to-edge */
+  /* Force high-quality rendering */
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
+  /* Use GPU acceleration */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  /* Prevent blurry scaling */
+  -ms-interpolation-mode: nearest-neighbor;
+  /* Force crisp rendering on all browsers */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .chart-footer {

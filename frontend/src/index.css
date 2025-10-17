@@ -5,6 +5,14 @@
   box-sizing: border-box;
 }
 
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden; /* Prevent page-level scrolling */
+  position: fixed; /* Lock the body in place */
+  overscroll-behavior: none; /* Prevent bounce scrolling on iOS */
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background: linear-gradient(135deg, #0b1220 0%, #0e1426 50%, #0b1220 100%);
@@ -15,9 +23,12 @@ body {
 #root {
   width: 100%;
   max-width: 430px;
+  height: 100%;
   margin: 0 auto;
   background: linear-gradient(135deg, #0b1220 0%, #0e1426 50%, #0b1220 100%);
   box-shadow: 0 0 20px rgba(0,0,0,0.1);
+  overflow: hidden; /* Prevent root-level scrolling */
+  position: relative;
 }
 
 /* Anchor */

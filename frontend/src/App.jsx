@@ -11,8 +11,7 @@ import ProfileView from './components/ProfileView'
 import JupiterTradeModal from './components/JupiterTradeModal'
 import AdvancedFilter from './components/AdvancedFilter'
 import { WalletProvider } from './contexts/WalletContext'
-import WalletButton from './components/WalletButton'
-import ActiveOrdersModal from './components/ActiveOrdersModal'
+import { TrackedWalletsProvider } from './contexts/TrackedWalletsContext'
 
 function App() {
   // Build timestamp - only log once on initial load
@@ -48,7 +47,6 @@ function App() {
   const [coinListModalFilter, setCoinListModalFilter] = useState(null); // Filter type for coin list modal
   const [currentCoinIndex, setCurrentCoinIndex] = useState(0); // Current coin index in scroller
   const [totalCoinsInList, setTotalCoinsInList] = useState(0); // Total coins in current list
-  const [ordersModalOpen, setOrdersModalOpen] = useState(false); // Active orders modal
 
   // Listen for favorites changes from TokenScroller
   const handleFavoritesChange = (newFavs) => {
@@ -204,36 +202,9 @@ function App() {
   };
 
   return (
-    <WalletProvider>
-      <div style={{ minHeight: '100vh', position: 'relative', paddingBottom: 72 }}>
-        {/* Wallet Button - Fixed position */}
-        <div style={{
-          position: 'fixed',
-          top: 20,
-          right: 20,
-          zIndex: 9999,
-          display: 'flex',
-          gap: '10px'
-        }}>
-          <WalletButton />
-        </div>
-
-        {/* Orders Button - Fixed position (only when wallet connected) */}
-        <div style={{
-          position: 'fixed',
-          bottom: 90,
-          right: 20,
-          zIndex: 9998
-        }}>
-          <button
-            className="floating-orders-btn"
-            onClick={() => setOrdersModalOpen(true)}
-            title="View Limit Orders"
-          >
-            📋
-          </button>
-        </div>
-
+    <TrackedWalletsProvider>
+      <WalletProvider>
+        <div style={{ minHeight: '100vh', position: 'relative', paddingBottom: 72 }}>
         {/* Top tabs - only show on home screen */}
         {activeTab !== 'favorites' && activeTab !== 'coin-detail' && activeTab !== 'profile' && (
           <TopTabs 
@@ -365,14 +336,9 @@ function App() {
         isModalOpen={advancedFilterModalOpen}
         onModalClose={() => setAdvancedFilterModalOpen(false)}
       />
-
-      {/* Active Orders Modal */}
-      <ActiveOrdersModal
-        isOpen={ordersModalOpen}
-        onClose={() => setOrdersModalOpen(false)}
-      />
-    </div>
-    </WalletProvider>
+        </div>
+      </WalletProvider>
+    </TrackedWalletsProvider>
   )
 }
 

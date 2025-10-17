@@ -6,7 +6,7 @@ const DEBUG_MODE = false;
 const debugLog = (...args) => { if (DEBUG_MODE) debugLog(...args); };
 
 const PriceHistoryChart = ({ coin, width, height = 200 }) => {
-  // 🔥 MOBILE PERFORMANCE FIX: Reduce pixel ratio on mobile
+  // Detect mobile devices
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
   
   // Use parent container width - if width is "100%" or similar, use full container
@@ -448,14 +448,14 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
       return;
     }
 
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { alpha: false }); // Disable alpha for better performance
     
     // Use parent container width like CleanPriceChart does
     const containerWidth = canvas.parentElement?.offsetWidth || (typeof chartWidth === 'number' ? chartWidth : 280);
     const containerHeight = height;
     
-    // 🔥 MOBILE PERFORMANCE FIX: Use lower pixel ratio on mobile to save memory
-    const dpr = isMobile ? 1 : (window.devicePixelRatio || 1);
+    // Always use at least 2x pixel ratio for crisp rendering, up to device max
+    const dpr = Math.max(2, window.devicePixelRatio || 2);
     
     debugLog('🔍 [CHART DIAGNOSTIC] Canvas dimensions:', {
       width: containerWidth,
@@ -465,12 +465,25 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
       isMobile: isMobile
     });
     
-    // Set canvas size for crisp HD rendering using container dimensions
-    canvas.width = containerWidth * dpr;
-    canvas.height = containerHeight * dpr;
-    canvas.style.width = containerWidth + 'px';
-    canvas.style.height = containerHeight + 'px';
+    // Set canvas size for ULTRA crisp HD rendering with high pixel ratio
+    const scaledWidth = Math.round(containerWidth * dpr);
+    const scaledHeight = Math.round(containerHeight * dpr);
+    
+    // Only resize if dimensions changed (prevents unnecessary redraws)
+    if (canvas.width !== scaledWidth || canvas.height !== scaledHeight) {
+      canvas.width = scaledWidth;
+      canvas.height = scaledHeight;
+      canvas.style.width = containerWidth + 'px';
+      canvas.style.height = containerHeight + 'px';
+    }
+    
+    // Reset transform and scale for crisp rendering
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.scale(dpr, dpr);
+    
+    // Enable high-quality image smoothing
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
 
     // Debug: Log actual canvas and chart dimensions
     debugLog('📐 [CHART DIMENSIONS]', {
@@ -586,20 +599,37 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
       totalPoints: points.length
     });
 
-    // Draw smooth line with better quality
+    // Draw smooth line with HIGH-QUALITY anti-aliasing
     ctx.beginPath();
     ctx.moveTo(points[0].x, points[0].y);
     
-    // Use smooth curves for better appearance
+    // Use quadratic curves for smoother lines
     for (let i = 1; i < points.length; i++) {
-      ctx.lineTo(points[i].x, points[i].y);
+      if (i === points.length - 1) {
+        // Last point - draw straight line
+        ctx.lineTo(points[i].x, points[i].y);
+      } else {
+        // Calculate control point for smooth curve
+        const xc = (points[i].x + points[i + 1].x) / 2;
+        const yc = (points[i].y + points[i + 1].y) / 2;
+        ctx.quadraticCurveTo(points[i].x, points[i].y, xc, yc);
+      }
     }
     
     ctx.strokeStyle = lineColor;
     ctx.lineWidth = 2.5;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
+    // Enable shadow for depth
+    ctx.shadowColor = lineColor;
+    ctx.shadowBlur = 2;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 1;
     ctx.stroke();
+    
+    // Reset shadow for other drawings
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
     
     // ✨ Clean line chart - no dots, just smooth line with interpolated points
     console.log(`[PriceHistoryChart] � Clean chart rendered with ${points.length} points (5 real + 5 interpolated)`);

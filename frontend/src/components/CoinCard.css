@@ -34,6 +34,8 @@
   color: white;
   /* Ensure interactions work */
   pointer-events: auto;
+  /* Prevent overscroll behavior */
+  overscroll-behavior: none;
 }
 
 /* =============================================================================
@@ -471,6 +473,7 @@
   border-radius: 12px;
   width: 360px; /* Slightly smaller */
   max-width: 92vw;
+  max-height: 90vh; /* Constrain to viewport but allow expansion */
   font-size: 0.8rem; /* Slightly smaller text */
   line-height: 1.35;
   z-index: 999999; /* Maximum z-index for mobile compatibility */
@@ -478,8 +481,7 @@
   backdrop-filter: blur(10px);
   border: 1px solid rgba(0, 0, 0, 0.1);
   pointer-events: none;
-  max-height: 70vh; /* Much shorter for conciseness */
-  overflow-y: auto;
+  overflow-y: auto; /* Only show scroll if content exceeds 90vh */
   /* Ensure it's above everything on mobile */
   isolation: isolate;
 }
@@ -778,6 +780,11 @@
   /* Establish proper stacking context */
   position: relative;
   z-index: 55;
+  /* Isolate scrolling to this container */
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  /* Ensure scroll stays within this container */
+  touch-action: pan-y;
 }
 
 .coin-info-layer.expanded .info-layer-content {
@@ -1254,6 +1261,18 @@
   font-size: 12px;
   color: rgba(0, 0, 0, 0.7);
   min-width: 0;
+}
+
+.tx-wallet span[style*="cursor: pointer"] {
+  transition: all 0.2s ease;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.tx-wallet span[style*="cursor: pointer"]:hover {
+  background: rgba(79, 195, 247, 0.1);
+  color: #4FC3F7 !important;
+  text-decoration: underline !important;
 }
 
 .tx-link {

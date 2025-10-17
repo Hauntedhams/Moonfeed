@@ -19,6 +19,7 @@
   min-height: 100dvh; /* Use dynamic viewport height */
   box-sizing: border-box;
   position: relative;
+  overflow: hidden; /* Prevent root-level scrolling */
 }
 
 .card {
@@ -32,40 +33,6 @@
 
 .read-the-docs {
   color: #6B728E;
-}
-
-/* Floating Orders Button */
-.floating-orders-btn {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #4FC3F7, #677EEA);
-  border: none;
-  font-size: 1.5rem;
-  cursor: pointer;
-  box-shadow: 0 4px 12px rgba(79, 195, 247, 0.4);
-  transition: all 0.3s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-}
-
-.floating-orders-btn:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 20px rgba(79, 195, 247, 0.6);
-}
-
-.floating-orders-btn:active {
-  transform: translateY(-2px);
-}
-
-@media (max-width: 768px) {
-  .floating-orders-btn {
-    width: 50px;
-    height: 50px;
-    font-size: 1.3rem;
-  }
 }
 
 .logo {

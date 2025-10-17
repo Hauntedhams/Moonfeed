@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { getFullApiUrl } from '../config/api';
-import WalletModal from './WalletModal';
+import WalletPopup from './WalletPopup';
 import './TopTradersList.css';
 
 const TopTradersList = ({ coinAddress }) => {
@@ -212,9 +212,9 @@ const TopTradersList = ({ coinAddress }) => {
         </div>
       )}
       
-      {/* Wallet Modal */}
+      {/* Wallet Popup */}
       {selectedWallet && (
-        <WalletModal 
+        <WalletPopup 
           walletAddress={selectedWallet}
           traderData={selectedTraderData}
           onClose={() => {

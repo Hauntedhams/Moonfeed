@@ -125,9 +125,22 @@
   display: block;
   border: none;
   border-radius: 0;
-  image-rendering: optimizeQuality;
+  /* Force high-quality crisp rendering */
   image-rendering: -webkit-optimize-contrast;
   image-rendering: crisp-edges;
+  image-rendering: pixelated;
+  /* Use GPU acceleration for smooth rendering */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  will-change: transform;
+  /* Prevent blurry scaling */
+  -ms-interpolation-mode: nearest-neighbor;
+  /* Force crisp text and shapes */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Ensure no blur on mobile */
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 /* Loading State - CLEAN */

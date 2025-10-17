@@ -451,8 +451,10 @@ const CleanPriceChart = memo(({ coin, width, height = 220 }) => {
     if (!priceData.length || !canvasRef.current) return;
 
     const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    const dpr = window.devicePixelRatio || 1;
+    const ctx = canvas.getContext('2d', { alpha: false }); // Disable alpha for better performance
+    
+    // Always use at least 2x pixel ratio for crisp rendering, up to device max
+    const dpr = Math.max(2, window.devicePixelRatio || 2);
     
     // Get actual canvas container width
     const containerWidth = canvas.parentElement?.offsetWidth || (typeof chartWidth === 'number' ? chartWidth : 280);
@@ -461,12 +463,25 @@ const CleanPriceChart = memo(({ coin, width, height = 220 }) => {
     let animationFrameId;
     
     const drawChart = () => {
-      // Set canvas size with device pixel ratio
-      canvas.width = containerWidth * dpr;
-      canvas.height = height * dpr;
-      canvas.style.width = containerWidth + 'px';
-      canvas.style.height = height + 'px';
+      // Set canvas size with HIGH device pixel ratio for crisp rendering
+      const scaledWidth = Math.round(containerWidth * dpr);
+      const scaledHeight = Math.round(height * dpr);
+      
+      // Only resize if dimensions changed (prevents unnecessary redraws)
+      if (canvas.width !== scaledWidth || canvas.height !== scaledHeight) {
+        canvas.width = scaledWidth;
+        canvas.height = scaledHeight;
+        canvas.style.width = containerWidth + 'px';
+        canvas.style.height = height + 'px';
+      }
+      
+      // Reset transform and scale for crisp rendering
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.scale(dpr, dpr);
+      
+      // Enable image smoothing for better quality
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
 
       // Clear canvas
       ctx.clearRect(0, 0, containerWidth, height);

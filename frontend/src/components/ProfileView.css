@@ -1,14 +1,18 @@
 /* ProfileView.css */
 .profile-view {
-  min-height: 100vh;
+  height: 100dvh;
   background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 100%);
-  padding: 20px;
-  padding-bottom: 100px; /* Space for bottom nav */
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 .profile-container {
   max-width: 600px;
   margin: 0 auto;
+  padding: 20px;
+  padding-bottom: 100px; /* Space for bottom nav */
 }
 
 /* Header Styles */
@@ -394,91 +398,590 @@
   font-weight: 600;
 }
 
+/* Profile Picture Section */
+.profile-picture-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.profile-picture-container {
+  position: relative;
+  width: 120px;
+  height: 120px;
+}
+
+.profile-picture-container .connected-indicator {
+  position: absolute;
+  bottom: 5px;
+  right: 5px;
+  width: 28px;
+  height: 28px;
+  background: #10b981;
+  color: #fff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: bold;
+  border: 3px solid #0f0f1a;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
+}
+
+.profile-picture {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 4px solid #10b981;
+  box-shadow: 0 4px 20px rgba(16, 185, 129, 0.3);
+}
+
+.profile-picture-placeholder {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(34, 197, 94, 0.2) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.8);
+  border: 4px solid rgba(16, 185, 129, 0.3);
+}
+
+.profile-picture-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.change-picture-btn,
+.remove-picture-btn {
+  padding: 8px 16px;
+  border-radius: 12px;
+  border: none;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.change-picture-btn {
+  background: linear-gradient(135deg, #4FC3F7, #677EEA);
+  color: white;
+  box-shadow: 0 4px 12px rgba(79, 195, 247, 0.3);
+}
+
+.change-picture-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(79, 195, 247, 0.4);
+}
+
+.remove-picture-btn {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.remove-picture-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+  transform: translateY(-2px);
+}
+
+/* Orders Section */
+.orders-section {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 20px;
+  padding: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(20px);
+  margin-bottom: 24px;
+}
+
+.orders-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.orders-header h3 {
+  color: #fff;
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.orders-filter {
+  display: flex;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 4px;
+  border-radius: 12px;
+}
+
+.filter-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.filter-btn.active {
+  background: linear-gradient(135deg, #4FC3F7, #677EEA);
+  color: white;
+  box-shadow: 0 2px 8px rgba(79, 195, 247, 0.3);
+}
+
+.filter-btn:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* Orders Loading/Error/Empty States */
+.orders-loading,
+.orders-error,
+.orders-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid rgba(255, 255, 255, 0.1);
+  border-top-color: #4FC3F7;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 16px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.orders-error p {
+  color: #ef4444;
+  margin-bottom: 16px;
+}
+
+.retry-btn {
+  padding: 10px 20px;
+  border-radius: 12px;
+  border: none;
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.retry-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+  transform: translateY(-2px);
+}
+
+.empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.empty-hint {
+  display: block;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 8px;
+}
+
+/* Orders List */
+.orders-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.order-card {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 16px;
+  padding: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
+}
+
+.order-card:hover {
+  border-color: rgba(79, 195, 247, 0.3);
+  box-shadow: 0 4px 16px rgba(79, 195, 247, 0.1);
+  transform: translateY(-2px);
+}
+
+.order-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.order-token {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.token-symbol {
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.order-type {
+  font-size: 14px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.order-type.buy {
+  color: #22c55e;
+}
+
+.order-type.sell {
+  color: #ef4444;
+}
+
+.order-status {
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.order-status.active {
+  background: rgba(34, 197, 94, 0.1);
+  color: #22c55e;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.order-status.executed {
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.order-status.cancelled {
+  background: rgba(156, 163, 175, 0.1);
+  color: #9ca3af;
+  border: 1px solid rgba(156, 163, 175, 0.3);
+}
+
+.order-status.failed {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.order-details {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.order-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+}
+
+.detail-label {
+  color: rgba(255, 255, 255, 0.6);
+  font-weight: 500;
+}
+
+.detail-value {
+  color: #fff;
+  font-weight: 600;
+  font-family: 'SF Mono', 'Roboto Mono', monospace;
+}
+
+.order-actions {
+  display: flex;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.cancel-order-btn {
+  flex: 1;
+  padding: 12px;
+  border-radius: 12px;
+  border: none;
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.cancel-order-btn:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.2);
+  transform: translateY(-2px);
+}
+
+.cancel-order-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.order-executed-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  background: rgba(34, 197, 94, 0.1);
+  border-radius: 8px;
+  font-size: 13px;
+  margin-top: 12px;
+}
+
+.executed-label {
+  color: #22c55e;
+  font-weight: 600;
+}
+
+.executed-date {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+}
+
+/* Tracked Wallets Section */
+.tracked-wallets-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tracked-wallet-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
+}
+
+.tracked-wallet-item:hover {
+  border-color: rgba(79, 195, 247, 0.3);
+  box-shadow: 0 4px 16px rgba(79, 195, 247, 0.1);
+  transform: translateY(-2px);
+}
+
+.tracked-wallet-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+.tracked-wallet-address {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tracked-wallet-address:hover {
+  color: #4FC3F7;
+}
+
+.wallet-icon {
+  font-size: 18px;
+}
+
+.wallet-addr {
+  color: #fff;
+  font-family: 'SF Mono', 'Roboto Mono', monospace;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.tracked-wallet-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.wallet-label {
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 500;
+}
+
+.wallet-date {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 11px;
+}
+
+.tracked-wallet-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.view-wallet-btn,
+.untrack-wallet-btn {
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.view-wallet-btn {
+  background: rgba(79, 195, 247, 0.1);
+  color: #4FC3F7;
+}
+
+.view-wallet-btn:hover {
+  background: rgba(79, 195, 247, 0.2);
+  transform: translateY(-2px);
+}
+
+.untrack-wallet-btn {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.untrack-wallet-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+  transform: translateY(-2px);
+}
+
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.empty-state p {
+  margin: 0 0 8px 0;
+}
+
+.empty-state-hint {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
-  .profile-view {
-    padding: 15px;
+  .profile-container {
+    padding: 16px;
+    padding-bottom: 100px;
   }
 
   .profile-header {
-    padding: 25px 15px;
-    margin-bottom: 30px;
+    padding: 24px 16px;
+    margin-bottom: 24px;
   }
 
   .profile-header h1 {
     font-size: 24px;
   }
 
-  .profile-subtitle {
-    font-size: 14px;
+  .profile-picture-container {
+    width: 100px;
+    height: 100px;
   }
 
-  .connection-card {
-    padding: 30px 20px;
+  .profile-picture-container .connected-indicator {
+    width: 24px;
+    height: 24px;
+    font-size: 12px;
+    border-width: 2px;
   }
 
-  .connection-card h3 {
-    font-size: 20px;
+  .orders-section {
+    padding: 16px;
   }
 
-  .connection-card p {
-    font-size: 14px;
-  }
-
-  .feature-grid {
-    grid-template-columns: 1fr;
-    gap: 15px;
-  }
-
-  .feature-item {
-    padding: 15px;
-  }
-
-  .wallet-info-card,
-  .feature-section {
-    padding: 20px;
-  }
-
-  .wallet-header {
+  .orders-header {
     flex-direction: column;
+    gap: 12px;
     align-items: flex-start;
-    gap: 10px;
   }
 
-  .wallet-address-row,
-  .balance-row {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-  }
-
-  .address-container,
-  .balance-container {
+  .orders-filter {
     width: 100%;
-    justify-content: space-between;
+  }
+
+  .filter-btn {
+    flex: 1;
+    text-align: center;
+  }
+
+  .order-card {
+    padding: 16px;
+  }
+
+  .token-symbol {
+    font-size: 16px;
+  }
+
+  .order-detail-row {
+    font-size: 13px;
   }
 }
 
 @media (max-width: 480px) {
-  .profile-view {
-    padding: 10px;
+  .profile-container {
+    padding: 12px;
   }
 
-  .profile-icon {
-    width: 60px;
-    height: 60px;
+  .profile-header {
+    padding: 20px 12px;
   }
 
-  .profile-icon svg {
-    width: 32px;
-    height: 32px;
+  .profile-picture-actions {
+    flex-direction: column;
+    width: 100%;
   }
 
-  .connection-icon {
-    font-size: 36px;
+  .change-picture-btn,
+  .remove-picture-btn {
+    width: 100%;
   }
 
-  .feature-icon {
-    font-size: 24px;
+  .wallet-info-card {
+    padding: 16px;
+  }
+
+  .order-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
   }
 }

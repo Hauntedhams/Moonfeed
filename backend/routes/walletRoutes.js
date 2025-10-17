@@ -15,12 +15,14 @@ const fetch = require('node-fetch');
 const BirdeyeWalletService = require('../services/birdeyeWalletService');
 const SolscanWalletService = require('../services/solscanWalletService');
 const HeliusWalletService = require('../services/heliusWalletService');
+const DexCheckWalletService = require('../services/dexcheckWalletService');
 const router = express.Router();
 
 // Initialize services
 const birdeyeService = new BirdeyeWalletService();
 const solscanService = new SolscanWalletService();
 const heliusService = new HeliusWalletService();
+const dexcheckService = new DexCheckWalletService();
 
 // Wallet data cache to prevent duplicate API calls
 const walletCache = new Map();
@@ -104,22 +106,54 @@ router.get('/:owner', async (req, res) => {
       console.warn(`⚠️ Suspicious wallet address length: ${owner.length}`);
     }
 
-    console.log(`🔍 Fetching Helius wallet analytics for: ${owner.slice(0, 4)}...${owner.slice(-4)}`);
+    console.log(`🔍 Fetching comprehensive wallet analytics for: ${owner.slice(0, 4)}...${owner.slice(-4)}`);
 
-    // Use Helius for FREE comprehensive analytics
-    const analyticsData = await heliusService.getWalletAnalytics(owner);
+    // Fetch from both Helius and DexCheck in parallel
+    const [heliusData, dexcheckData] = await Promise.all([
+      heliusService.getWalletAnalytics(owner),
+      dexcheckService.getComprehensiveAnalytics(owner)
+    ]);
     
-    if (!analyticsData.success) {
+    if (!heliusData.success && !dexcheckData.success) {
       return res.status(500).json({
         success: false,
-        error: 'Failed to fetch wallet analytics',
-        details: analyticsData.error
+        error: 'Failed to fetch wallet analytics from all sources',
+        details: {
+          helius: heliusData.error,
+          dexcheck: dexcheckData.error
+        }
       });
     }
 
-    console.log(`✅ Successfully fetched wallet analytics for ${owner.slice(0, 4)}...${owner.slice(-4)}`);
+    // Combine data from both sources
+    const combinedData = {
+      success: true,
+      wallet: owner,
+      timestamp: new Date().toISOString(),
+      
+      // Helius data (transaction history, token trades)
+      ...heliusData,
+      
+      // DexCheck data (whale status, top trader rankings, recent activity)
+      dexcheck: dexcheckData.success ? {
+        trading: dexcheckData.trading,
+        whale: dexcheckData.whale,
+        topTrader: dexcheckData.topTrader,
+        recentActivity: dexcheckData.recentActivity
+      } : null,
+      
+      // Data source metadata
+      dataSources: {
+        helius: heliusData.success,
+        dexcheck: dexcheckData.success
+      }
+    };
 
-    res.json(analyticsData);
+    console.log(`✅ Successfully fetched wallet analytics for ${owner.slice(0, 4)}...${owner.slice(-4)}`);
+    console.log(`   📊 Helius: ${heliusData.success ? 'OK' : 'FAILED'}`);
+    console.log(`   📊 DexCheck: ${dexcheckData.success ? 'OK' : 'FAILED'}`);
+
+    res.json(combinedData);
 
   } catch (error) {
     console.error('❌ Error fetching wallet data:', error.message);
