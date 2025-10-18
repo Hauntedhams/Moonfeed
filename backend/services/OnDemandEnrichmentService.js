@@ -11,6 +11,7 @@
  */
 
 const fetch = require('node-fetch');
+const pumpFunService = require('./pumpFunService');
 
 class OnDemandEnrichmentService {
   constructor() {
@@ -31,6 +32,9 @@ class OnDemandEnrichmentService {
     
     // API keys
     this.birdeyeKey = process.env.BIRDEYE_API_KEY || '29e047952f0d45ed8927939bbc08f09c';
+    
+    // Pump.fun service
+    this.pumpFunService = pumpFunService;
     
     // Performance tracking
     this.stats = {
@@ -81,7 +85,8 @@ class OnDemandEnrichmentService {
       // REMOVED: Birdeye (redundant - we already have price from Jupiter Ultra + DexScreener)
       const enrichmentPromises = {
         dex: this.fetchDexScreener(mintAddress),
-        rug: this.fetchRugcheck(mintAddress)
+        rug: this.fetchRugcheck(mintAddress),
+        pumpfun: this.fetchPumpFunDescription(mintAddress)
       };
 
       // Wait for all APIs with timeout
@@ -93,7 +98,7 @@ class OnDemandEnrichmentService {
       ]);
 
       // Process results
-      const [dexResult, rugResult] = results;
+      const [dexResult, rugResult, pumpfunResult] = results;
       
       const enrichedData = {
         ...coin,
@@ -128,6 +133,17 @@ class OnDemandEnrichmentService {
           rugResult.status === 'rejected' ? rugResult.reason?.message : 'No data returned');
         // Set rugcheckVerified to false when rugcheck fails
         enrichedData.rugcheckVerified = false;
+      }
+
+      // Apply Pump.fun description (if available, replaces generic description)
+      if (pumpfunResult.status === 'fulfilled' && pumpfunResult.value) {
+        enrichedData.description = pumpfunResult.value;
+        enrichedData.descriptionSource = 'pump.fun';
+        console.log(`🚀 Pump.fun description applied for ${coin.symbol}: "${pumpfunResult.value.substring(0, 50)}..."`);
+      } else {
+        // Remove description entirely if no Pump.fun description (don't use generic fallback)
+        delete enrichedData.description;
+        console.log(`ℹ️ No Pump.fun description for ${coin.symbol}, leaving blank`);
       }
 
       // ✨ ALWAYS GENERATE CHART with LIVE JUPITER PRICE
@@ -279,6 +295,19 @@ class OnDemandEnrichmentService {
   }
 
   /**
+   * Fetch Pump.fun description
+   */
+  async fetchPumpFunDescription(mintAddress) {
+    try {
+      const description = await this.pumpFunService.getDescription(mintAddress);
+      return description;
+    } catch (error) {
+      console.warn(`⚠️ Pump.fun description fetch failed for ${mintAddress}:`, error.message);
+      return null;
+    }
+  }
+
+  /**
    * Fetch Birdeye price data
    */
   async fetchBirdeyePrice(mintAddress) {
@@ -353,8 +382,7 @@ class OnDemandEnrichmentService {
       profileImage: info.imageUrl || baseToken.image,
       logo: baseToken.image,
       
-      // Metadata
-      description: info.description || `${baseToken.symbol} trading on ${pair.dexId}`,
+      // Metadata (NO generic description - will be replaced by Pump.fun or left blank)
       dexscreenerUrl: pair.url || `https://dexscreener.com/solana/${coin.mintAddress}`,
       pairAddress: pair.pairAddress,
       

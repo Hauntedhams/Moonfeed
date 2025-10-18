@@ -9,6 +9,12 @@ import WalletPopup from './WalletPopup';
 import { useLiveData } from '../hooks/useLiveDataContext.jsx';
 import { useHeliusTransactions } from '../hooks/useHeliusTransactions.jsx';
 import { API_CONFIG } from '../config/api.js';
+import { 
+  calculateGraduationPercentage, 
+  formatGraduationPercentage, 
+  getGraduationStatus,
+  getGraduationColor 
+} from '../utils/graduationCalculator.js';
 
 const CoinCard = memo(({ 
   coin, 
@@ -16,6 +22,7 @@ const CoinCard = memo(({
   onFavoriteToggle, 
   onTradeClick, 
   isTrending,
+  isGraduating = false, // NEW: Is this a graduating Pump.fun token?
   onExpandChange,
   isVisible = true,
   chartComponent, // optional preloaded chart from manager
@@ -28,6 +35,8 @@ const CoinCard = memo(({
   const [showPriceChangeModal, setShowPriceChangeModal] = useState(false);
   const [currentChartPage, setCurrentChartPage] = useState(0);
   const [hoveredMetric, setHoveredMetric] = useState(null);
+  const [showGraduationInfo, setShowGraduationInfo] = useState(false);
+  const [graduationIconPosition, setGraduationIconPosition] = useState(null);
   const [priceFlash, setPriceFlash] = useState('');
   const [showLiveTransactions, setShowLiveTransactions] = useState(false);
   const [showTopTraders, setShowTopTraders] = useState(false);
@@ -35,6 +44,7 @@ const CoinCard = memo(({
   const chartsContainerRef = useRef(null);
   const chartNavRef = useRef(null);
   const prevPriceRef = useRef(null);
+  const graduationIconRef = useRef(null);
 
   // Track if coin is enriched (has banner, socials, rugcheck, etc.)
   const isEnriched = !!(
@@ -124,6 +134,8 @@ const CoinCard = memo(({
       return () => clearTimeout(timer);
     }
   }, [isVisible, isEnriched, enrichmentRequested, mintAddress, coin, onEnrichmentComplete]);
+
+
 
   // Auto-show transactions UI when autoLoadTransactions is true
   useEffect(() => {
@@ -701,6 +713,7 @@ const CoinCard = memo(({
   // Banner modal handlers
   const handleBannerClick = (e) => {
     if (coin.banner || coin.bannerImage || coin.header || coin.bannerUrl) {
+      e.stopPropagation(); // Prevent event bubbling
       setShowBannerModal(true);
     }
   };
@@ -774,6 +787,28 @@ const CoinCard = memo(({
   const totalTxns24h = liveData?.totalTransactions ?? coin.totalTransactions ?? (buys24h + sells24h) ?? 0;
   const ageHours = liveData?.ageHours ?? coin.ageHours ?? coin.dexscreener?.poolInfo?.ageHours ?? 0;
   const boosts = liveData?.boosts ?? coin.boosts ?? coin.dexscreener?.boosts ?? 0;
+
+  // 🎓 GRADUATING TOKENS: Calculate live graduation percentage
+  let graduationPercentage = null;
+  let graduationStatus = null;
+  let graduationColor = null;
+  
+  if (isGraduating || coin.status === 'graduating' || coin.isPumpFun) {
+    // Try to get live baseBalance from liveData or coin data
+    const baseBalance = liveData?.baseBalance ?? coin.baseBalance ?? 0;
+    
+    if (baseBalance > 0) {
+      // Calculate live graduation percentage
+      graduationPercentage = calculateGraduationPercentage(baseBalance);
+      graduationStatus = getGraduationStatus(graduationPercentage);
+      graduationColor = getGraduationColor(graduationPercentage);
+    } else if (coin.bondingCurveProgress) {
+      // Fallback to static bonding curve progress from backend
+      graduationPercentage = parseFloat(coin.bondingCurveProgress);
+      graduationStatus = getGraduationStatus(graduationPercentage);
+      graduationColor = getGraduationColor(graduationPercentage);
+    }
+  }
 
   // Debug log for social links - DISABLED to prevent console spam
   // if ((coin.socialLinks || coin.twitter || coin.telegram || coin.website) && Math.random() < 0.05) {
@@ -1184,6 +1219,104 @@ const CoinCard = memo(({
                 className={`nav-dot ${currentChartPage === 1 ? 'active' : ''}`}
                 onClick={() => navigateToChartPage(1)}
               ></div>
+              
+              {/* 🎓 GRADUATION PROGRESS BAR - Show for graduating tokens */}
+              {graduationPercentage !== null && (
+                <div 
+                  className="graduation-progress-bar-container"
+                  style={{
+                    flex: 1,
+                    marginLeft: '16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    minWidth: 0 // Allow flex shrink
+                  }}
+                >
+                  <div style={{
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    color: graduationColor,
+                    whiteSpace: 'nowrap',
+                    minWidth: '45px',
+                    textAlign: 'right'
+                  }}>
+                    {formatGraduationPercentage(graduationPercentage, 1)}
+                  </div>
+                  
+                  <div 
+                    className="graduation-progress-track"
+                    style={{
+                      flex: 1,
+                      height: '10px',
+                      background: 'rgba(0, 0, 0, 0.1)',
+                      borderRadius: '5px',
+                      overflow: 'hidden',
+                      position: 'relative',
+                      minWidth: '100px'
+                    }}
+                  >
+                    <div 
+                      className="graduation-progress-fill"
+                      style={{
+                        height: '100%',
+                        background: `linear-gradient(90deg, ${graduationColor}, ${graduationColor}dd)`,
+                        borderRadius: '5px',
+                        width: `${graduationPercentage}%`,
+                        transition: 'width 0.5s ease-out',
+                        boxShadow: graduationPercentage >= 95 ? `0 0 10px ${graduationColor}88` : 'none',
+                        animation: graduationPercentage >= 95 ? 'pulse 2s ease-in-out infinite' : 'none'
+                      }}
+                    />
+                  </div>
+                  
+                  {/* Graduation Info Icon */}
+                  <div 
+                    ref={graduationIconRef}
+                    className="graduation-info-icon"
+                    onClick={() => setShowGraduationInfo(!showGraduationInfo)}
+                    style={{
+                      width: '20px',
+                      height: '20px',
+                      borderRadius: '50%',
+                      border: '1.5px solid rgba(0, 0, 0, 0.4)',
+                      background: 'rgba(255, 255, 255, 0.9)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      color: 'rgba(0, 0, 0, 0.7)',
+                      transition: 'all 0.2s ease',
+                      flexShrink: 0,
+                      position: 'relative'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.6)';
+                      e.currentTarget.style.color = 'rgba(0, 0, 0, 0.9)';
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 1)';
+                      
+                      // Calculate position for portal tooltip
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      setGraduationIconPosition({
+                        top: rect.bottom + window.scrollY,
+                        right: window.innerWidth - rect.right - window.scrollX
+                      });
+                      setShowGraduationInfo(true);
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.4)';
+                      e.currentTarget.style.color = 'rgba(0, 0, 0, 0.7)';
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.9)';
+                      setShowGraduationInfo(false);
+                      setGraduationIconPosition(null);
+                    }}
+                  >
+                    ?
+                  </div>
+                </div>
+              )}
             </div>
             
             <div className="charts-horizontal-container" ref={chartsContainerRef}>
@@ -1193,6 +1326,7 @@ const CoinCard = memo(({
                   {currentChartPage === 0 ? (
                     isVisible ? (
                       <PriceHistoryChart 
+                        key={`${coin.mintAddress || coin.tokenAddress}-${coin.cleanChartData ? 'enriched' : 'basic'}`}
                         coin={coin} 
                         width="100%" 
                         height={200} 
@@ -1329,7 +1463,7 @@ const CoinCard = memo(({
                             >
                               {new Date(tx.timestamp).toLocaleTimeString()}
                               <span className="external-icon" style={{ marginLeft: '4px' }}>↗</span>
-                            </a>
+                                                       </a>
                           </div>
                         </div>
                       ))
@@ -1665,8 +1799,8 @@ const CoinCard = memo(({
         </div>
       </div>
 
-      {/* Banner Modal */}
-      {showBannerModal && (
+      {/* Banner Modal - Use Portal to render at document root */}
+      {showBannerModal && createPortal(
         <div className="banner-modal-overlay" onClick={closeBannerModal}>
           <div className="banner-modal-content" onClick={(e) => e.stopPropagation()}>
             <button className="banner-modal-close" onClick={closeBannerModal}>
@@ -1678,11 +1812,12 @@ const CoinCard = memo(({
               className="banner-modal-image"
             />
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Profile Modal */}
-      {showProfileModal && (
+      {/* Profile Modal - Use Portal to render at document root */}
+      {showProfileModal && createPortal(
         <div className="profile-modal-overlay" onClick={closeProfileModal}>
           <div className="profile-modal-content" onClick={(e) => e.stopPropagation()}>
             <button className="profile-modal-close" onClick={closeProfileModal}>
@@ -1693,12 +1828,9 @@ const CoinCard = memo(({
               alt={coin.name || 'Token profile'}
               className="profile-modal-image"
             />
-            <div className="profile-modal-info">
-              <h3 className="profile-modal-name">{coin.name || 'Unknown Token'}</h3>
-              <p className="profile-modal-symbol">{coin.symbol || coin.ticker || 'N/A'}</p>
-            </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Price Change Modal */}
@@ -1758,6 +1890,93 @@ const CoinCard = memo(({
           <div className="loading-spinner"></div>
           <div className="loading-text">Enriching data...</div>
         </div>
+      )}
+
+      {/* Graduation Info Tooltip (Portal) - Renders at document body level */}
+      {showGraduationInfo && graduationIconPosition && createPortal(
+        <div
+          className="graduation-info-tooltip"
+          style={{
+            position: 'fixed',
+            top: `${graduationIconPosition.top + 8}px`,
+            right: `${graduationIconPosition.right}px`,
+            background: 'rgba(20, 20, 30, 0.98)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            borderRadius: '12px',
+            padding: '16px',
+            width: '280px',
+            boxShadow: '0 10px 30px rgba(0, 0, 0, 0.5)',
+            zIndex: 9999999,
+            backdropFilter: 'blur(10px)',
+            pointerEvents: 'none',
+            animation: 'fadeIn 0.2s ease-out'
+          }}
+        >
+          <div style={{
+            fontSize: '13px',
+            fontWeight: 700,
+            color: '#fff',
+            marginBottom: '10px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}>
+            Pump.fun Graduation Process
+          </div>
+          
+          <div style={{
+            fontSize: '12px',
+            color: 'rgba(255, 255, 255, 0.8)',
+            lineHeight: '1.6',
+            marginBottom: '12px'
+          }}>
+            Pump.fun tokens use a bonding curve mechanism. As more SOL is deposited, the progress bar fills up.
+          </div>
+          
+          <div style={{
+            fontSize: '11px',
+            color: 'rgba(255, 255, 255, 0.7)',
+            lineHeight: '1.5',
+            marginBottom: '12px',
+            padding: '10px',
+            background: 'rgba(255, 255, 255, 0.03)',
+            borderRadius: '8px',
+            borderLeft: `3px solid ${getGraduationColor(calculateGraduationPercentage(coin))}`
+          }}>
+            <strong style={{ color: getGraduationColor(calculateGraduationPercentage(coin)) }}>At 100%:</strong> The token "graduates" to Raydium, gaining full DEX liquidity and trading capabilities.
+          </div>
+          
+          <div style={{
+            fontSize: '10px',
+            color: 'rgba(255, 255, 255, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px'
+          }}>
+            <div style={{
+              width: '4px',
+              height: '4px',
+              borderRadius: '50%',
+              background: getGraduationColor(calculateGraduationPercentage(coin))
+            }}></div>
+            Updates every 2 minutes
+          </div>
+          
+          {/* Tooltip Arrow (pointing up) */}
+          <div style={{
+            position: 'absolute',
+            top: '-6px',
+            right: '8px',
+            width: '12px',
+            height: '12px',
+            background: 'rgba(20, 20, 30, 0.98)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            borderBottom: 'none',
+            borderRight: 'none',
+            transform: 'rotate(45deg)'
+          }}></div>
+        </div>,
+        document.body
       )}
     </div>
   );

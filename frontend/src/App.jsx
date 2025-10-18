@@ -34,7 +34,7 @@ function App() {
     }
   });
   const [searchModalOpen, setSearchModalOpen] = useState(false);
-  const [filters, setFilters] = useState({ type: 'trending' });
+  const [filters, setFilters] = useState({ type: 'graduating' });
   const [advancedFilters, setAdvancedFilters] = useState(null); // For advanced filtering
   const [isAdvancedFilterActive, setIsAdvancedFilterActive] = useState(false);
   const [advancedFilterModalOpen, setAdvancedFilterModalOpen] = useState(false); // Control modal open/close
@@ -208,7 +208,7 @@ function App() {
         {/* Top tabs - only show on home screen */}
         {activeTab !== 'favorites' && activeTab !== 'coin-detail' && activeTab !== 'profile' && (
           <TopTabs 
-            activeFilter={filters.type || 'trending'} 
+            activeFilter={filters.type || 'graduating'} 
             onFilterChange={handleTopTabFilterChange}
             onActiveTabClick={handleActiveTabClick}
             showFilterButton={false}

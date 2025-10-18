@@ -7,9 +7,9 @@ const TopTabs = ({ activeFilter, onFilterChange, showFilterButton = false, onFil
   const containerRef = useRef(null);
 
   const tabs = [
+    { id: 'graduating', label: 'Graduating', icon: 'graduation-cap' },
     { id: 'trending', label: 'Trending', icon: 'fire' },
     { id: 'new', label: 'New', icon: 'sparkles' },
-    { id: 'graduating', label: 'Graduating', icon: 'graduation-cap' },
     { id: 'custom', label: 'Custom', icon: 'filter' }
   ];
 
@@ -206,9 +206,9 @@ const TopTabs = ({ activeFilter, onFilterChange, showFilterButton = false, onFil
         const currentIndex = tabs.findIndex(tab => tab.id === activeFilter);
         const targetIndex = distanceX > 0 ? currentIndex + 1 : currentIndex - 1;
         
-        // Allow swiping to trending, new, and custom tabs
+        // Allow swiping to trending, new, graduating, and custom tabs
         if (targetIndex >= 0 && targetIndex < tabs.length && 
-            (tabs[targetIndex].id === 'trending' || tabs[targetIndex].id === 'new' || tabs[targetIndex].id === 'custom')) {
+            (tabs[targetIndex].id === 'trending' || tabs[targetIndex].id === 'new' || tabs[targetIndex].id === 'graduating' || tabs[targetIndex].id === 'custom')) {
           onFilterChange({ type: tabs[targetIndex].id });
         }
       }
@@ -265,8 +265,8 @@ const TopTabs = ({ activeFilter, onFilterChange, showFilterButton = false, onFil
               onClick={(e) => {
                 e.stopPropagation(); // Prevent event bubbling
                 
-                // Allow trending and new tabs always; custom only when filters are applied
-                if (tab.id === 'trending' || tab.id === 'new' || (tab.id === 'custom' && hasCustomFilters)) {
+                // Allow trending, new, and graduating tabs always; custom only when filters are applied
+                if (tab.id === 'trending' || tab.id === 'new' || tab.id === 'graduating' || (tab.id === 'custom' && hasCustomFilters)) {
                   // If clicking on the already active tab, show the coin list modal
                   if (isActive && onActiveTabClick) {
                     onActiveTabClick(tab.id);
@@ -283,15 +283,15 @@ const TopTabs = ({ activeFilter, onFilterChange, showFilterButton = false, onFil
                 opacity: isDisabled ? 0.4 : opacity,
                 zIndex,
                 transform: `scale(${scale})`,
-                cursor: (tab.id === 'trending' || tab.id === 'new' || (tab.id === 'custom' && hasCustomFilters)) ? 'pointer' : 'not-allowed',
+                cursor: (tab.id === 'trending' || tab.id === 'new' || tab.id === 'graduating' || (tab.id === 'custom' && hasCustomFilters)) ? 'pointer' : 'not-allowed',
                 touchAction: 'none' // Prevent default touch behaviors
               }}
             >
               <span className="tab-label" style={{
-                opacity: (tab.id === 'trending' || tab.id === 'new' || (tab.id === 'custom' && hasCustomFilters))
+                opacity: (tab.id === 'trending' || tab.id === 'new' || tab.id === 'graduating' || (tab.id === 'custom' && hasCustomFilters))
                   ? (isActive ? 1 : 0.8)
                   : 0.5,
-                color: (tab.id === 'trending' || tab.id === 'new' || (tab.id === 'custom' && hasCustomFilters))
+                color: (tab.id === 'trending' || tab.id === 'new' || tab.id === 'graduating' || (tab.id === 'custom' && hasCustomFilters))
                   ? (isActive ? 'rgba(255, 255, 255, 1)' : 'rgba(255, 255, 255, 0.8)')
                   : 'rgba(255, 255, 255, 0.5)'
               }}>{tab.label}</span>

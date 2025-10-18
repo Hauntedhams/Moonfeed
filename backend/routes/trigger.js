@@ -15,6 +15,7 @@ router.post('/create-order', async (req, res) => {
   try {
     const {
       maker,
+      payer, // Add payer support
       inputMint,
       outputMint,
       makingAmount,
@@ -33,6 +34,7 @@ router.post('/create-order', async (req, res) => {
 
     const result = await jupiterTriggerService.createOrder({
       maker,
+      payer: payer || maker, // Use payer if provided, otherwise use maker
       inputMint,
       outputMint,
       makingAmount,
@@ -61,7 +63,7 @@ router.post('/create-order', async (req, res) => {
  */
 router.post('/execute', async (req, res) => {
   try {
-    const { signedTransaction } = req.body;
+    const { signedTransaction, requestId } = req.body;
 
     if (!signedTransaction) {
       return res.status(400).json({
@@ -70,7 +72,14 @@ router.post('/execute', async (req, res) => {
       });
     }
 
-    const result = await jupiterTriggerService.executeOrder(signedTransaction);
+    if (!requestId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing requestId'
+      });
+    }
+
+    const result = await jupiterTriggerService.executeOrder(signedTransaction, requestId);
 
     if (result.success) {
       res.json(result);
@@ -165,7 +174,7 @@ router.get('/orders', async (req, res) => {
 
     const result = await jupiterTriggerService.getTriggerOrders({
       wallet,
-      status,
+      orderStatus: status, // Map 'status' query param to 'orderStatus' for the service
       page: parseInt(page),
       limit: parseInt(limit)
     });

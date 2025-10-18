@@ -944,6 +944,63 @@ app.get('/api/coins/custom', async (req, res) => {
   }
 });
 
+// GRADUATING endpoint - Returns Pump.fun tokens about to graduate (from Bitquery)
+app.get('/api/coins/graduating', async (req, res) => {
+  try {
+    console.log('🎓 /api/coins/graduating endpoint called');
+    
+    const limit = req.query.limit ? Math.min(parseInt(req.query.limit), 100) : 100;
+    
+    // Import bitquery service
+    const bitqueryService = require('./bitqueryService');
+    
+    // Fetch graduating tokens from Bitquery
+    const graduatingTokens = await bitqueryService.getGraduatingTokens();
+    
+    if (graduatingTokens.length === 0) {
+      console.log('⚠️ No graduating tokens found');
+      return res.json({
+        success: true,
+        coins: [],
+        count: 0,
+        total: 0,
+        message: 'No graduating tokens available',
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    const limitedCoins = graduatingTokens.slice(0, limit);
+    
+    // Apply live Jupiter prices before returning
+    const coinsWithLivePrices = applyLivePrices(limitedCoins);
+    
+    console.log(`✅ Returning ${coinsWithLivePrices.length}/${graduatingTokens.length} graduating tokens (limit: ${limit})`);
+    console.log(`📊 Top token: ${coinsWithLivePrices[0]?.symbol} (${coinsWithLivePrices[0]?.bondingCurveProgress}% complete)`);
+    
+    res.json({
+      success: true,
+      coins: coinsWithLivePrices,
+      count: coinsWithLivePrices.length,
+      total: graduatingTokens.length,
+      timestamp: new Date().toISOString(),
+      criteria: {
+        source: 'Bitquery Pump.fun',
+        status: 'About to graduate',
+        sorting: 'Best to worst (by graduation score)',
+        updateFrequency: '2 minutes'
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error in /api/coins/graduating endpoint:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch graduating coins',
+      details: error.message
+    });
+  }
+});
+
 // ADMIN endpoint - Manually trigger trending feed refresh
 app.post('/api/admin/refresh-trending', async (req, res) => {
   try {
@@ -1215,7 +1272,8 @@ server.listen(PORT, () => {
   console.log(`📊 Health check (Render): http://localhost:${PORT}/api/health`);
   console.log(`🔥 Trending coins: http://localhost:${PORT}/api/coins/trending`);
   console.log(`🆕 New coins: http://localhost:${PORT}/api/coins/new`);
-  console.log(`🌐 WebSocket server ready for connections`);
+  console.log(`� Graduating coins: http://localhost:${PORT}/api/coins/graduating`);
+  console.log(`�🌐 WebSocket server ready for connections`);
   console.log(`💾 Server initialization complete - ready for health checks`);
   
   // Defer ALL initialization by 3 seconds to ensure health checks respond first

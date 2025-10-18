@@ -31,7 +31,16 @@ const MoonfeedInfoModal = ({ isVisible, onClose }) => {
         {/* Header */}
         <div className="moonfeed-info-header">
           <div className="moonfeed-logo-header">
-            <span className="moonfeed-logo">🌙</span>
+            {moonfeedLogo ? (
+              <img 
+                src={moonfeedLogo} 
+                alt="Moonfeed Logo" 
+                className="moonfeed-logo"
+                style={{ width: '32px', height: '32px', objectFit: 'contain' }}
+              />
+            ) : (
+              <span className="moonfeed-logo">🌙</span>
+            )}
             <h2>Moonfeed</h2>
             <div className="header-social-links">
               <a 
@@ -77,75 +86,56 @@ const MoonfeedInfoModal = ({ isVisible, onClose }) => {
         {/* Content */}
         <div className="moonfeed-info-content">
           <div className="info-section">
-            <h3>🚀 What is Moonfeed?</h3>
+            <h3>What is Moonfeed?</h3>
             <p>
-              Moonfeed is a modern meme coin discovery app that helps you find trending Solana tokens 
-              with a TikTok-style vertical scroll interface. Discover the next moonshot before it takes off!
+              MoonFeed was created to make trading more accessible, people assume you need to be an insider to make money trading on solana, but much like any industry, if you have the right tools there's money to be made.
             </p>
           </div>
 
           <div className="info-section">
-            <h3>📱 How to Use</h3>
-            <div className="feature-list">
-              <div className="feature-item">
-                <span className="feature-icon">👆</span>
-                <div>
-                  <strong>Swipe to Browse:</strong> Scroll vertically through trending tokens, just like TikTok
-                </div>
-              </div>
-              <div className="feature-item">
-                <span className="feature-icon">⭐</span>
-                <div>
-                  <strong>Add Favorites:</strong> Tap the star icon to save coins you're interested in
-                </div>
-              </div>
-              <div className="feature-item">
-                <span className="feature-icon">🔍</span>
-                <div>
-                  <strong>Advanced Filters:</strong> Use the filters button to find coins by market cap, volume, liquidity, and more
-                </div>
-              </div>
-              <div className="feature-item">
-                <span className="feature-icon">📊</span>
-                <div>
-                  <strong>Live Charts:</strong> View real-time price charts and trading data for each token
-                </div>
-              </div>
-              <div className="feature-item">
-                <span className="feature-icon">🔒</span>
-                <div>
-                  <strong>Safety Checks:</strong> Green locks indicate verified liquidity locks via Rugcheck
-                </div>
-              </div>
-              <div className="feature-item">
-                <span className="feature-icon">💱</span>
-                <div>
-                  <strong>Quick Trade:</strong> Tap the trade button to swap tokens directly through Jupiter
-                </div>
-              </div>
-            </div>
+            <h3>How it Works</h3>
+            <p>
+              Moonfeed pulls Solana coins from the blockchain with specific numeric values, these are what we've found to be strong indicators that a coin will go up, we want to show you coins going to the moon. in addition to our Trending, and New Feeds, we're adding graduating coins from Pump.fun. We encourage you to play with the filters to find coins that suit your trading style, as we intend to add more feeds in the future for different kinds of traders.
+            </p>
           </div>
 
           <div className="info-section">
-            <h3>🔥 Navigation Tabs</h3>
-            <div className="tabs-explanation">
-              <div className="tab-item">
-                <strong>Trending:</strong> Hottest tokens by volume and activity
-              </div>
-              <div className="tab-item">
-                <strong>Latest:</strong> Newest tokens just hitting the market
-              </div>
-              <div className="tab-item">
-                <strong>Custom:</strong> Your filtered results
-              </div>
-              <div className="tab-item">
-                <strong>Favorites:</strong> Your saved tokens
-              </div>
-            </div>
+            <h3>How Trading Works</h3>
+            <p>
+              Trading is all handled through Jupiter, they are the most reliable and trusted company to handle trades on the Solana network, and they send trades directly to your wallet. We never hold your funds everything is done through Jupiter, they handle the swap and it gets sent directly to your hot wallet, which can be used anywhere else online!
+            </p>
           </div>
 
           <div className="info-section">
-            <h3>⚠️ Important Notes</h3>
+            <h3>Where We Get Our Data</h3>
+            <p>
+              Moonfeed aggregates data from multiple trusted sources on the Solana blockchain. We pull real-time information from DexScreener for price charts and trading data, Pump.fun for newly graduating tokens, and use Rugcheck to verify liquidity locks and contract safety. All of this data is continuously updated to give you the most accurate view of what's happening in the market.
+            </p>
+          </div>
+
+          <div className="info-section">
+            <h3>How We Load Coins</h3>
+            <p>
+              Our backend constantly scans the Solana blockchain looking for tokens that meet specific criteria. We analyze factors like liquidity depth, trading volume, holder distribution, and price momentum. Coins that show strong indicators are automatically added to our feeds. The Trending feed shows tokens with the highest recent activity, while the New feed displays fresh launches. Our filters let you narrow down results by market cap, liquidity, and other key metrics.
+            </p>
+          </div>
+
+          <div className="info-section">
+            <h3>Understanding the Interface</h3>
+            <p>
+              Moonfeed uses a TikTok-style vertical scroll interface to make browsing tokens fast and intuitive. Each card displays essential information: current price, 24-hour change, market cap, volume, and liquidity. Tap on any wallet address to see detailed analytics including whale activity and top trader rankings. Use the star icon to save favorites, and the trade button for quick swaps through Jupiter. The chart shows real-time price action with multiple timeframes available.
+            </p>
+          </div>
+
+          <div className="info-section">
+            <h3>Safety Features</h3>
+            <p>
+              We integrate Rugcheck to automatically scan tokens for common risks. A green lock icon indicates verified liquidity locks, meaning the liquidity can't be pulled by developers. We also display holder distribution, contract verification status, and flagged risks. However, these are tools to help you research - always do your own due diligence before trading any token.
+            </p>
+          </div>
+
+          <div className="info-section">
+            <h3>Important Notes</h3>
             <div className="warning-box">
               <p>
                 <strong>Always DYOR (Do Your Own Research)!</strong> Meme coins are highly volatile and risky. 

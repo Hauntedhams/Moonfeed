@@ -156,6 +156,7 @@ const TriggerOrderModal = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           maker: walletAddress,
+          payer: walletAddress, // Add payer (same as maker for user orders)
           inputMint,
           outputMint,
           makingAmount,
@@ -172,17 +173,19 @@ const TriggerOrderModal = ({
       }
 
       console.log('📝 Order transaction created, signing...');
+      console.log('🔑 Request ID:', result.data?.requestId);
 
       // Sign the transaction with wallet
-      const signedTx = await signTransaction(result.transaction);
+      const signedTx = await signTransaction(result.data.transaction);
       console.log('✅ Transaction signed');
 
-      // Execute the order
+      // Execute the order with requestId
       const executeResponse = await fetch(getFullApiUrl('/api/trigger/execute'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          signedTransaction: signedTx
+          signedTransaction: signedTx,
+          requestId: result.data.requestId // MUST include requestId from createOrder response
         })
       });
 
@@ -192,7 +195,8 @@ const TriggerOrderModal = ({
         throw new Error(executeResult.error || 'Failed to execute order');
       }
 
-      console.log('✅ Order executed:', executeResult.orderId);
+      console.log('✅ Order executed successfully!');
+      console.log('📝 Transaction signature:', executeResult.signature);
 
       setSuccess(true);
       onOrderCreated?.({

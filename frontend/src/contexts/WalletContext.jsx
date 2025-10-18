@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { Connection, Transaction } from '@solana/web3.js';
+import { Connection, Transaction, VersionedTransaction } from '@solana/web3.js';
 
 /**
  * Wallet Context for managing Phantom/Solflare wallet connection
@@ -217,10 +217,23 @@ export const WalletProvider = ({ children }) => {
     try {
       console.log('📝 Signing transaction...');
 
-      // Parse base64 transaction
-      const transaction = Transaction.from(
-        Buffer.from(unsignedTransaction, 'base64')
-      );
+      // Parse base64 transaction (browser-compatible)
+      const binaryString = atob(unsignedTransaction);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      
+      // Try to parse as versioned transaction first (Jupiter uses v0)
+      let transaction;
+      try {
+        transaction = VersionedTransaction.deserialize(bytes);
+        console.log('🔄 Detected versioned transaction (v0)');
+      } catch (e) {
+        // Fallback to legacy transaction
+        transaction = Transaction.from(bytes);
+        console.log('🔄 Detected legacy transaction');
+      }
 
       // Sign with appropriate wallet
       let signedTx;
@@ -232,8 +245,9 @@ export const WalletProvider = ({ children }) => {
         throw new Error('No wallet available for signing');
       }
 
-      // Serialize to base64
-      const signedBase64 = signedTx.serialize().toString('base64');
+      // Serialize to base64 (browser-compatible)
+      const serialized = signedTx.serialize();
+      const signedBase64 = btoa(String.fromCharCode.apply(null, serialized));
       console.log('✅ Transaction signed');
       
       return signedBase64;
@@ -252,10 +266,23 @@ export const WalletProvider = ({ children }) => {
     try {
       console.log('📝 Signing and sending transaction...');
 
-      // Parse base64 transaction
-      const transaction = Transaction.from(
-        Buffer.from(unsignedTransaction, 'base64')
-      );
+      // Parse base64 transaction (browser-compatible)
+      const binaryString = atob(unsignedTransaction);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      
+      // Try to parse as versioned transaction first (Jupiter uses v0)
+      let transaction;
+      try {
+        transaction = VersionedTransaction.deserialize(bytes);
+        console.log('🔄 Detected versioned transaction (v0)');
+      } catch (e) {
+        // Fallback to legacy transaction
+        transaction = Transaction.from(bytes);
+        console.log('🔄 Detected legacy transaction');
+      }
 
       // Sign and send with appropriate wallet
       let signature;

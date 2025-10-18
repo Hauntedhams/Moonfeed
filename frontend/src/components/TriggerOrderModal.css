@@ -4,31 +4,49 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.8);
-  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.85); /* Match Jupiter modal */
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 10000;
-  padding: 20px;
+  padding: 16px; /* Match Jupiter modal */
+  animation: fadeIn 0.2s ease; /* Match Jupiter modal */
+}
+
+@media (min-width: 769px) {
+  .trigger-modal-overlay {
+    justify-content: flex-start;
+    align-items: flex-start;
+    padding: 40px;
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: none;
+  }
 }
 
 .trigger-modal-content {
-  background: linear-gradient(135deg, rgba(16, 23, 31, 0.98), rgba(23, 30, 39, 0.98));
-  border: 1px solid rgba(79, 195, 247, 0.2);
+  background: #0f172a; /* Match Jupiter modal */
   border-radius: 24px;
-  max-width: 500px;
   width: 100%;
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-  animation: slideUp 0.3s ease-out;
+  max-width: 450px;
+  max-height: 88vh;
+  overflow-y: auto; /* Make modal scrollable */
+  overflow-x: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  animation: slideUp 0.25s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @keyframes slideUp {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(30px);
   }
   to {
     opacity: 1;
@@ -447,5 +465,26 @@
   .expiry-btn {
     font-size: 0.85rem;
     padding: 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .trigger-modal-overlay {
+    padding: 12px;
+    align-items: flex-start;
+    padding-top: 40px;
+  }
+  .trigger-modal-content {
+    max-height: 90vh;
+    border-radius: 20px;
+  }
+}
+
+@media (max-height: 700px) {
+  .trigger-modal-overlay {
+    padding-top: 20px;
+  }
+  .trigger-modal-content {
+    max-height: 92vh;
   }
 }

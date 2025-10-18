@@ -16,6 +16,7 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [hoveredPoint, setHoveredPoint] = useState(null); // For tooltip
+  const [canvasReady, setCanvasReady] = useState(false); // Track when canvas is mounted and ready
   
   // Diagnostic timing
   const mountTimeRef = useRef(Date.now());
@@ -99,6 +100,13 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
   }, []);
 
   useEffect(() => {
+    console.log(`[PriceHistoryChart] 🔄 Effect triggered for ${coin?.symbol || 'unknown'}:`, {
+      hasCoin: !!coin,
+      hasCleanChartData: !!coin?.cleanChartData,
+      hasDataPoints: !!coin?.cleanChartData?.dataPoints,
+      pointsCount: coin?.cleanChartData?.dataPoints?.length || 0
+    });
+    
     if (DEBUG_MODE) {
       debugLog('🔍 [CHART DIAGNOSTIC] Dependency changed - coin data');
       debugLog('🔍 [CHART DIAGNOSTIC] Generating 24-hour blended chart from DexScreener price changes');
@@ -215,23 +223,35 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
       setError('No coin data available');
       setLoading(false);
     }
-  }, [coin?.mintAddress || coin?.tokenAddress, coin?.cleanChartData]);
+  }, [coin]); // Watch the entire coin object to detect enrichment updates
 
-  // Draw chart immediately when data is ready
+  // 🔥 CONSOLIDATED FIX: Draw chart when we have BOTH canvas and data ready
+  // Handles all timing scenarios: data first, canvas first, or simultaneous
   useEffect(() => {
-    debugLog('🔍 [CHART DIAGNOSTIC] Chart data effect triggered:', {
-      hasChartData: !!chartData,
-      hasDataPoints: !!(chartData?.dataPoints),
-      dataPointsLength: chartData?.dataPoints?.length || 0
-    });
-    
-    if (chartData && chartData.dataPoints && chartData.dataPoints.length > 0) {
-      drawTimeRef.current = Date.now();
-      drawChart(chartData.dataPoints);
-      const drawDuration = Date.now() - drawTimeRef.current;
-      debugLog('🔍 [CHART DIAGNOSTIC] Chart drawn in', drawDuration, 'ms');
+    // Guard: Need canvas element, chart data, and points
+    if (!canvasRef.current || !chartData || !chartData.dataPoints || chartData.dataPoints.length === 0) {
+      console.log(`[PriceHistoryChart] ⏳ Waiting... Canvas: ${!!canvasRef.current}, Data: ${!!chartData}, Points: ${chartData?.dataPoints?.length || 0}`);
+      return;
     }
-  }, [chartData]);
+
+    // Guard: Need canvas to be ready (mounted in DOM)
+    if (!canvasReady) {
+      console.log(`[PriceHistoryChart] ⏳ Canvas element exists but not ready yet for ${coin?.symbol}`);
+      return;
+    }
+
+    console.log(`[PriceHistoryChart] ✅ All conditions met, drawing chart for ${coin?.symbol} (${chartData.dataPoints.length} points)`);
+    
+    // Use requestAnimationFrame to ensure canvas is fully painted in DOM
+    requestAnimationFrame(() => {
+      if (canvasRef.current && chartData && chartData.dataPoints) {
+        drawTimeRef.current = Date.now();
+        drawChart(chartData.dataPoints);
+        const drawDuration = Date.now() - drawTimeRef.current;
+        debugLog('🔍 [CHART DIAGNOSTIC] Chart drawn in', drawDuration, 'ms');
+      }
+    });
+  }, [canvasReady, chartData]); // Watch BOTH canvas readiness AND chart data
 
   // Generate blended 24-hour chart using multiple DexScreener price change anchors
   const generateBlended24HourChart = () => {
@@ -663,7 +683,13 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
         ) : (
           <>
             <canvas 
-              ref={canvasRef} 
+              ref={(el) => {
+                canvasRef.current = el;
+                if (el && !canvasReady) {
+                  console.log(`[PriceHistoryChart] 🎨 Canvas element mounted for ${coin?.symbol}`);
+                  setCanvasReady(true);
+                }
+              }}
               className="price-canvas"
               onMouseMove={handleCanvasMouseMove}
               onMouseLeave={handleCanvasMouseLeave}
@@ -699,10 +725,30 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
 
 // 🔥 PERFORMANCE FIX: Memoize component to prevent unnecessary re-renders
 export default React.memo(PriceHistoryChart, (prevProps, nextProps) => {
-  // Only re-render if coin address, price, or cleanChartData changes
-  return prevProps.coin?.mintAddress === nextProps.coin?.mintAddress &&
-         prevProps.coin?.price === nextProps.coin?.price &&
-         prevProps.coin?.cleanChartData === nextProps.coin?.cleanChartData &&
-         prevProps.width === nextProps.width &&
-         prevProps.height === nextProps.height;
+  // Re-render if:
+  // 1. Address changed
+  // 2. Price changed
+  // 3. cleanChartData presence changed (undefined -> object or vice versa)
+  // 4. cleanChartData reference changed (enrichment completed)
+  // 5. Dimensions changed
+  
+  const mintAddressChanged = prevProps.coin?.mintAddress !== nextProps.coin?.mintAddress;
+  const priceChanged = prevProps.coin?.price !== nextProps.coin?.price;
+  const chartDataChanged = prevProps.coin?.cleanChartData !== nextProps.coin?.cleanChartData;
+  const dimensionsChanged = prevProps.width !== nextProps.width || prevProps.height !== nextProps.height;
+  
+  // Return true to SKIP re-render (props are "equal")
+  // Return false to ALLOW re-render (props are "different")
+  const shouldSkipRender = !mintAddressChanged && !priceChanged && !chartDataChanged && !dimensionsChanged;
+  
+  // Debug logging for enrichment tracking
+  if (chartDataChanged && !import.meta.env.PROD) {
+    console.log(`🔄 [PriceHistoryChart] cleanChartData changed for ${nextProps.coin?.symbol}:`, {
+      hadData: !!prevProps.coin?.cleanChartData,
+      hasData: !!nextProps.coin?.cleanChartData,
+      willRerender: !shouldSkipRender
+    });
+  }
+  
+  return shouldSkipRender;
 });
