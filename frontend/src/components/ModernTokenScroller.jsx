@@ -570,7 +570,7 @@ const ModernTokenScroller = ({
     setCoins([]);
     setEnrichedCoins(new Map());
     setCurrentIndex(0);
-    setVisibleRange({ start: 0, end: 5 });
+    // Virtual scrolling disabled - no need to set visible range
     
     // Fetch new feed data
     fetchCoins();
@@ -683,7 +683,7 @@ const ModernTokenScroller = ({
         }, 100);
       }
     }
-  }, [currentIndex, coins, enrichedCoins, enrichCoins, expandedCoin, calculateVisibleRange, getVirtualScrollStats]);
+  }, [currentIndex, coins, enrichedCoins, enrichCoins, expandedCoin]);
 
 
 
@@ -761,7 +761,7 @@ const ModernTokenScroller = ({
       if (scrollTimeout) clearTimeout(scrollTimeout);
       if (snapTimeout) clearTimeout(snapTimeout);
     };
-  }, [handleScroll, expandedCoin, currentIndex, coins.length, calculateVisibleRange, onCurrentCoinChange]);
+  }, [handleScroll, expandedCoin, currentIndex, coins.length, onCurrentCoinChange]);
   
   // Handle favorite toggle
   const handleFavoriteToggle = (coin) => {

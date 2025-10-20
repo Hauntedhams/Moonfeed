@@ -101,8 +101,8 @@
   height: 100vh;
   width: 100%;
   overflow-y: auto;
-  scroll-snap-type: none; /* Disable CSS snap, let JS handle it */
-  scroll-behavior: auto;
+  scroll-snap-type: y mandatory;
+  scroll-behavior: smooth; /* Smooth scrolling like desktop */
   -webkit-overflow-scrolling: touch;
   /* Performance optimizations */
   will-change: scroll-position;
@@ -127,7 +127,7 @@
   height: 100dvh; /* Use dynamic viewport height */
   overflow-y: auto;
   scroll-snap-type: y mandatory;
-  scroll-behavior: auto;
+  scroll-behavior: smooth; /* Smooth scrolling for all devices */
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* IE and Edge */
@@ -148,7 +148,9 @@
   flex-direction: column;
   position: relative;
   background: linear-gradient(135deg, #0b1220 0%, #0e1426 50%, #0b1220 100%);
-  /* Removed transition to prevent flash during scroll */
+  /* Scroll snap alignment - critical for smooth scrolling */
+  scroll-snap-align: start;
+  scroll-snap-stop: always; /* Force snap to stop at each slide */
   /* Mobile fix: Ensure proper positioning */
   flex-shrink: 0;
   contain: layout style paint;
