@@ -5,8 +5,10 @@
 **V2 Commit**: 5e12d7b  
 **V3 Commit**: 39c82ce (caused blank UI)  
 **V4 Commit**: 3c8792b (reverted scroll-snap CSS)  
-**V5 Commit (Final)**: 841e3cd  
-**Status**: ✅ RESOLVED (V5 - Virtual Scrolling Disabled)
+**V5 Commit**: 841e3cd (disabled virtual scrolling)  
+**V6 Commit**: 9f68b71 (removed remaining references)  
+**V7 Commit (Final)**: f4e2a37  
+**Status**: ✅ RESOLVED (V7 - Mobile Scroll Works Like Desktop)
 
 ---
 
@@ -291,6 +293,37 @@ scrollEndTimeout = setTimeout(() => {
 - ✅ Trade button loads correct coin
 - ✅ No blank screens or visual artifacts
 - ✅ Works on both mobile and desktop
+
+---
+
+## V7 - Mobile Scroll Parity Fix (Commit f4e2a37) ✅
+
+**Problem**: Mobile scrolling was slower and less responsive than desktop
+
+**Root Cause**:
+- CSS had `scroll-behavior: auto` instead of `smooth`
+- Missing `scroll-snap-align` and `scroll-snap-stop` properties on coin slides
+- Inconsistent scroll behavior between mobile and desktop
+
+**Solution**:
+1. ✅ **Changed scroll-behavior to smooth**
+   - Updated from `auto` to `smooth` for consistent UX
+   - Applied to both definitions of `.modern-scroller-container`
+
+2. ✅ **Added proper scroll-snap properties**
+   - `scroll-snap-align: start` on each `.modern-coin-slide`
+   - `scroll-snap-stop: always` to force snap at each slide
+   - Ensures perfect alignment on all devices
+
+3. ✅ **Mobile now matches desktop**
+   - Fast, responsive scrolling
+   - Smooth transitions between coins
+   - Reliable snap behavior
+
+**Result**: 
+- Mobile scrolling is now as smooth and fast as desktop
+- Perfect snap alignment on all devices
+- Consistent user experience across platforms
 
 ---
 
