@@ -28,8 +28,8 @@ const ModernTokenScroller = ({
   const [retryCount, setRetryCount] = useState(0); // Track retry attempts
   const [isBackendLoading, setIsBackendLoading] = useState(false); // Track backend loading state
   
-  // Virtual scrolling: Render only visible coins + buffer to prevent memory issues on mobile
-  const [visibleRange, setVisibleRange] = useState({ start: 0, end: 5 }); // Start with small range
+  // Virtual scrolling DISABLED - was causing blank UI issues
+  // const [visibleRange, setVisibleRange] = useState({ start: 0, end: 5 }); // Start with small range
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   
   const scrollerRef = useRef(null);
@@ -59,22 +59,16 @@ const ModernTokenScroller = ({
     return { rendered, total, percentage };
   }, [coins.length, visibleRange]);
 
-  // DISABLED: Update mobile detection on window resize
+  // Update mobile detection on window resize
   useEffect(() => {
     const handleResize = () => {
       const mobile = window.innerWidth < 768;
       setIsMobile(mobile);
-      
-      // Recalculate visible range on resize
-      if (coins.length > 0) {
-        const newRange = calculateVisibleRange(currentIndex, coins.length);
-        setVisibleRange(newRange);
-      }
     };
 
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [currentIndex, coins.length, calculateVisibleRange]);
+  }, []);
 
   // Enrich coins with DexScreener data (ON-DEMAND via backend)
   const enrichCoins = useCallback(async (mintAddresses) => {
@@ -600,18 +594,17 @@ const ModernTokenScroller = ({
     }
   }, [coins.length]); // Remove enrichCoins and getCoinsToEnrich dependencies to prevent infinite loop
 
-  // ✅ MOBILE FIX: Update visible range when coins load or index changes
+  // Virtual scrolling DISABLED - was causing blank UI
+  /* 
   useEffect(() => {
     if (coins.length > 0) {
       const newRange = calculateVisibleRange(currentIndex, coins.length);
       setVisibleRange(newRange);
       
-      // Only log on significant changes to reduce console spam
-      if (currentIndex % 10 === 0 || currentIndex === 0) {
-        console.log(`🎯 Virtual scrolling: Index ${currentIndex}, rendering ${newRange.end - newRange.start + 1} of ${coins.length} coins`);
-      }
+      console.log(`🎯 Virtual scrolling: Index ${currentIndex}, rendering ${newRange.end - newRange.start + 1} of ${coins.length} coins (start=${newRange.start}, end=${newRange.end})`);
     }
   }, [coins.length, currentIndex, calculateVisibleRange]);
+  */
 
   // Handle expand state changes for coins
   const handleCoinExpandChange = useCallback((isExpanded, coinAddress) => {
@@ -672,14 +665,9 @@ const ModernTokenScroller = ({
       const currentCoin = coins[clampedIndex];
       setCurrentIndex(clampedIndex);
       
-      // ✅ CRITICAL FIX: Update visible range for virtual scrolling
-      const newVisibleRange = calculateVisibleRange(clampedIndex, coins.length);
-      setVisibleRange(newVisibleRange);
-      
       // Log scroll progress occasionally (every 5th coin)
       if (clampedIndex % 5 === 0) {
-        const stats = getVirtualScrollStats();
-        console.log(`📜 Scrolling: Coin ${clampedIndex + 1}/${coins.length} - ${currentCoin?.symbol || 'Unknown'} | Rendering: ${stats.rendered}/${stats.total} (${stats.percentage}%)`);
+        console.log(`📜 Scrolling: Coin ${clampedIndex + 1}/${coins.length} - ${currentCoin?.symbol || 'Unknown'}`);
       }
       
       // Trigger enrichment for the currently viewed coin if not already enriched
@@ -724,11 +712,11 @@ const ModernTokenScroller = ({
         // Update state immediately
         if (targetIndex !== currentIndex && targetIndex >= 0 && targetIndex < coins.length) {
           setCurrentIndex(targetIndex);
-          const newVisibleRange = calculateVisibleRange(targetIndex, coins.length);
-          setVisibleRange(newVisibleRange);
           
           const currentCoin = coins[targetIndex];
-          onCurrentCoinChange?.(getEnrichedCoin(currentCoin), targetIndex);
+          const enriched = enrichedCoins.get(currentCoin.mintAddress);
+          const enrichedCoin = enriched ? { ...currentCoin, ...enriched } : currentCoin;
+          onCurrentCoinChange?.(enrichedCoin, targetIndex);
         }
         
         setTimeout(() => {
@@ -769,7 +757,7 @@ const ModernTokenScroller = ({
       if (scrollTimeout) clearTimeout(scrollTimeout);
       if (snapTimeout) clearTimeout(snapTimeout);
     };
-  }, [handleScroll, expandedCoin, currentIndex, coins, calculateVisibleRange, onCurrentCoinChange, getEnrichedCoin]);
+  }, [handleScroll, expandedCoin, currentIndex, coins.length, calculateVisibleRange, onCurrentCoinChange]);
   
   // Handle favorite toggle
   const handleFavoriteToggle = (coin) => {
@@ -979,35 +967,12 @@ const ModernTokenScroller = ({
         ref={scrollerRef}
         className={`modern-scroller-container ${expandedCoin ? 'scroll-locked' : ''}`}
       >
-        {/* ✅ MOBILE FIX: Render placeholders for non-visible coins to maintain scroll position */}
+        {/* ✅ MOBILE FIX V5: Simplified rendering - always render all coins to prevent blank UI */}
         {coins.length > 0 ? (
           coins.map((coin, index) => {
-            // Check if this coin is in the visible range
-            const isInVisibleRange = index >= visibleRange.start && index <= visibleRange.end;
-            
-            // Render full CoinCard only for visible coins
-            if (isInVisibleRange) {
-              return renderCoinWithChart(coin, index);
-            }
-            
-            // Render lightweight placeholder for non-visible coins (for scroll-snap to work)
-            return (
-              <div 
-                key={coin.mintAddress || coin.tokenAddress || index}
-                className="modern-coin-slide"
-                data-index={index}
-                style={{
-                  height: '100vh',
-                  scrollSnapAlign: 'start',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  background: 'transparent'
-                }}
-              >
-                {/* Empty placeholder - will load when scrolled into view */}
-              </div>
-            );
+            // Always render all coins - virtual scrolling was causing blank UI
+            // The scroll-snap and CSS will handle performance
+            return renderCoinWithChart(coin, index);
           })
         ) : (
           <div style={{ color: 'white', padding: '20px', textAlign: 'center' }}>
