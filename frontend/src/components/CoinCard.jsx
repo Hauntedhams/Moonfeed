@@ -42,6 +42,7 @@ const CoinCard = memo(({
   const [showLiveTransactions, setShowLiveTransactions] = useState(false);
   const [showTopTraders, setShowTopTraders] = useState(false);
   const [selectedWallet, setSelectedWallet] = useState(null);
+  const [showDescriptionModal, setShowDescriptionModal] = useState(false);
   const chartsContainerRef = useRef(null);
   const chartNavRef = useRef(null);
   const prevPriceRef = useRef(null);
@@ -1004,11 +1005,27 @@ const CoinCard = memo(({
                   />
                 </svg>
               </button>
+              {coin.description && (
+                <>
+                  <span className="banner-coin-description-inline">
+                    {coin.description}
+                  </span>
+                  {coin.description.length > 50 && (
+                    <button 
+                      className="read-more-button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowDescriptionModal(true);
+                      }}
+                      title="Read more"
+                    >
+                      read more
+                    </button>
+                  )}
+                </>
+              )}
             </div>
           </div>
-          {coin.description && (
-            <p className="banner-coin-description">{coin.description}</p>
-          )}
         </div>
       </div>
 
@@ -2007,7 +2024,27 @@ const CoinCard = memo(({
         </div>
       )}
 
-      {/* Graduation Info Tooltip (Portal) - Renders at document body level */}
+      {/* Description Modal - Use Portal to render at document root */}
+      {showDescriptionModal && coin.description && createPortal(
+        <div className="description-modal-overlay" onClick={() => setShowDescriptionModal(false)}>
+          <div className="description-modal-content" onClick={(e) => e.stopPropagation()}>
+            <button className="description-modal-close" onClick={() => setShowDescriptionModal(false)}>
+              ×
+            </button>
+            <div className="description-modal-header">
+              <h3 className="description-modal-title">
+                {coin.symbol || coin.ticker || coin.name}
+              </h3>
+            </div>
+            <div className="description-modal-body">
+              {coin.description}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Graduation Info Tooltip */}
       {showGraduationInfo && graduationIconPosition && createPortal(
         <div
           className="graduation-info-tooltip"

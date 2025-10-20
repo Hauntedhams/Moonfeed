@@ -203,6 +203,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .banner-coin-symbol {
@@ -265,6 +266,51 @@
   stroke-width: 1.5;
 }
 
+/* Inline description styling - single line with ellipsis */
+.banner-coin-description-inline {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.85);
+  line-height: 1.3;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  pointer-events: auto;
+  /* Single line with ellipsis */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Read more button */
+.read-more-button {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: lowercase;
+  transition: all 0.2s ease;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(4px);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.read-more-button:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.05);
+}
+
+.read-more-button:active {
+  transform: scale(0.98);
+}
+
+/* Legacy description styling (if still used elsewhere) */
 .banner-coin-description {
   font-size: 0.95rem;
   color: rgba(255, 255, 255, 0.9);
@@ -2000,17 +2046,6 @@
   }
 }
 
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
 /* Clickable price change indicator */
 .price-change.clickable {
   transition: all 0.2s ease;
@@ -2155,6 +2190,155 @@
   
   .banner-modal-image {
     border-radius: 12px;
+  }
+}
+
+/* =============================================================================
+   DESCRIPTION MODAL - Full Description Popup
+   ============================================================================= */
+
+.description-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  backdrop-filter: blur(8px);
+  animation: fadeIn 0.2s ease;
+  padding: 20px;
+}
+
+.description-modal-content {
+  position: relative;
+  background: linear-gradient(135deg, rgba(30, 30, 45, 0.98) 0%, rgba(20, 20, 35, 0.98) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  padding: 0;
+  max-width: 600px;
+  width: 90%;
+  max-height: 80vh;
+  overflow: hidden;
+  animation: slideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
+}
+
+.description-modal-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-weight: 300;
+  line-height: 1;
+  z-index: 10;
+}
+
+.description-modal-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.1) rotate(90deg);
+}
+
+.description-modal-close:active {
+  transform: scale(0.95) rotate(90deg);
+}
+
+.description-modal-header {
+  padding: 24px 24px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.description-modal-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #fff;
+  margin: 0;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.description-modal-body {
+  padding: 24px;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 1rem;
+  line-height: 1.6;
+  max-height: calc(80vh - 100px);
+  overflow-y: auto;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+/* Custom scrollbar for description modal */
+.description-modal-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.description-modal-body::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+}
+
+.description-modal-body::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+.description-modal-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Mobile adjustments for description modal */
+@media (max-width: 768px) {
+  .description-modal-content {
+    width: 95%;
+    max-height: 85vh;
+    border-radius: 16px;
+  }
+  
+  .description-modal-header {
+    padding: 20px 20px 12px;
+  }
+  
+  .description-modal-title {
+    font-size: 1.25rem;
+    padding-right: 40px;
+  }
+  
+  .description-modal-body {
+    padding: 20px;
+    font-size: 0.95rem;
+  }
+  
+  .description-modal-close {
+    width: 32px;
+    height: 32px;
+    font-size: 20px;
+    top: 12px;
+    right: 12px;
   }
 }
 

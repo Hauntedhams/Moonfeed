@@ -170,6 +170,9 @@ const SOLANA_TRACKER_BASE_URL = 'https://data.solanatracker.io';
 let currentCoins = [];
 let newCoins = []; // Separate cache for new feed
 let customCoins = []; // Cache for custom filtered coins
+let dextrendingCoins = []; // Cache for Dexscreener trending coins
+let dextrendingLastFetch = 0; // Timestamp of last fetch
+const DEXTRENDING_CACHE_TTL = 15 * 60 * 1000; // 15 minutes cache
 
 // Top traders cache to prevent duplicate API calls
 const topTradersCache = new Map();
@@ -617,6 +620,144 @@ async function fetchNewCoinBatch() {
   return coinsWithPriority;
 }
 
+// Fetch trending coins from Dexscreener trending/boosted tokens API
+// https://api.dexscreener.com/token-boosts/top/v1
+async function fetchDexscreenerTrendingBatch() {
+  try {
+    // Check cache first
+    const now = Date.now();
+    if (dextrendingCoins.length > 0 && (now - dextrendingLastFetch) < DEXTRENDING_CACHE_TTL) {
+      const cacheAge = Math.round((now - dextrendingLastFetch) / 1000 / 60);
+      console.log(`📦 Using cached Dexscreener trending data (${cacheAge} min old, ${dextrendingCoins.length} coins)`);
+      return dextrendingCoins;
+    }
+    
+    console.log('🔥 Fetching fresh Dexscreener trending coins...');
+    
+    // Step 1: Get boosted token addresses
+    const boostsResponse = await fetch('https://api.dexscreener.com/token-boosts/top/v1', {
+      headers: {
+        'User-Agent': 'Moonfeed/1.0'
+      }
+    });
+    
+    if (!boostsResponse.ok) {
+      throw new Error(`Dexscreener API error: ${boostsResponse.status} ${boostsResponse.statusText}`);
+    }
+    
+    const boostsData = await boostsResponse.json();
+    
+    // Filter for Solana tokens only
+    const solanaBoosts = boostsData.filter(item => item.chainId === 'solana');
+    console.log(`🌙 Got ${solanaBoosts.length} Solana boosted tokens (${boostsData.length} total)`);
+    
+    if (solanaBoosts.length === 0) {
+      console.log('⚠️ No Solana tokens found in boosts');
+      return [];
+    }
+    
+    // Step 2: Fetch token details from Dexscreener in batches of 30
+    const tokenAddresses = solanaBoosts.map(b => b.tokenAddress);
+    const allTokenData = [];
+    
+    // Split into batches of 30 (Dexscreener API limit)
+    for (let i = 0; i < tokenAddresses.length; i += 30) {
+      const batch = tokenAddresses.slice(i, i + 30);
+      const addressString = batch.join(',');
+      
+      console.log(`📡 Fetching details for batch ${Math.floor(i / 30) + 1} (${batch.length} tokens)...`);
+      
+      const detailsResponse = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${addressString}`, {
+        headers: {
+          'User-Agent': 'Moonfeed/1.0'
+        }
+      });
+      
+      if (detailsResponse.ok) {
+        const detailsData = await detailsResponse.json();
+        if (detailsData.pairs) {
+          allTokenData.push(...detailsData.pairs);
+        }
+      }
+      
+      // Rate limit: wait 300ms between batches
+      if (i + 30 < tokenAddresses.length) {
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
+    }
+    
+    console.log(`✅ Got details for ${allTokenData.length} token pairs`);
+    
+    // Step 3: Merge boost data with token details
+    const formattedTokens = solanaBoosts.map((boost, index) => {
+      // Find matching pair data (prefer highest liquidity pair)
+      const matchingPairs = allTokenData.filter(p => 
+        p.baseToken?.address?.toLowerCase() === boost.tokenAddress?.toLowerCase()
+      );
+      
+      const pair = matchingPairs.sort((a, b) => 
+        (parseFloat(b.liquidity?.usd) || 0) - (parseFloat(a.liquidity?.usd) || 0)
+      )[0] || {};
+      
+      const baseToken = pair.baseToken || {};
+      
+      // Parse icon hash to full URL if needed
+      let iconUrl = boost.icon;
+      if (iconUrl && !iconUrl.startsWith('http')) {
+        iconUrl = `https://dd.dexscreener.com/ds-data/tokens/solana/${boost.tokenAddress}.png`;
+      }
+      
+      return {
+        mintAddress: boost.tokenAddress,
+        name: baseToken.name || 'Unknown',
+        symbol: baseToken.symbol || 'UNKNOWN',
+        image: iconUrl || `https://via.placeholder.com/64/00d4ff/ffffff?text=${(baseToken.symbol || 'T').charAt(0)}`,
+        profileImage: iconUrl || `https://via.placeholder.com/64/00d4ff/ffffff?text=${(baseToken.symbol || 'T').charAt(0)}`,
+        logo: iconUrl || `https://via.placeholder.com/64/00d4ff/ffffff?text=${(baseToken.symbol || 'T').charAt(0)}`,
+        price_usd: parseFloat(pair.priceUsd) || 0,
+        market_cap_usd: parseFloat(pair.marketCap) || 0,
+        volume_24h_usd: parseFloat(pair.volume?.h24) || 0,
+        liquidity_usd: parseFloat(pair.liquidity?.usd) || 0,
+        price_change_24h: parseFloat(pair.priceChange?.h24) || 0,
+        description: boost.description || '',
+        
+        // Dexscreener specific fields
+        boostAmount: boost.amount || 0,
+        totalAmount: boost.totalAmount || 0,
+        dexscreenerUrl: boost.url,
+        header: boost.header,
+        links: boost.links || [],
+        
+        // Additional pair data
+        dexId: pair.dexId,
+        pairAddress: pair.pairAddress,
+        pairCreatedAt: pair.pairCreatedAt,
+        
+        // Position/priority (maintain boost order)
+        priority: index + 1,
+        source: 'dexscreener-trending'
+      };
+    });
+    
+    console.log(`✅ Formatted ${formattedTokens.length} Dexscreener trending tokens`);
+    
+    // Update cache
+    dextrendingCoins = formattedTokens;
+    dextrendingLastFetch = now;
+    
+    return formattedTokens;
+    
+  } catch (error) {
+    console.error('❌ Error fetching Dexscreener trending:', error.message);
+    // Return cached data if available, even if expired
+    if (dextrendingCoins.length > 0) {
+      console.log(`⚠️ Using stale cache (${dextrendingCoins.length} coins) due to fetch error`);
+      return dextrendingCoins;
+    }
+    return [];
+  }
+}
+
 // ========================================
 // API ROUTES
 // ========================================
@@ -801,6 +942,56 @@ app.get('/api/coins/new', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to fetch new coins',
+      details: error.message
+    });
+  }
+});
+
+// DEXTRENDING endpoint - Returns trending coins from Dexscreener
+app.get('/api/coins/dextrending', async (req, res) => {
+  try {
+    console.log('🔥 /api/coins/dextrending endpoint called');
+    
+    const limit = req.query.limit ? Math.min(parseInt(req.query.limit), 100) : 30;
+    
+    // Fetch from Dexscreener trending API
+    const dextrendingCoins = await fetchDexscreenerTrendingBatch();
+    
+    if (dextrendingCoins.length === 0) {
+      return res.json({
+        success: true,
+        coins: [],
+        count: 0,
+        total: 0,
+        message: 'No Dexscreener trending coins available',
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    // Apply live prices from Jupiter before serving
+    const coinsWithPrices = applyLivePrices(dextrendingCoins);
+    
+    const limitedCoins = coinsWithPrices.slice(0, limit);
+    
+    // 🚫 NO AUTO-ENRICHMENT for DEXtrending - only enrich on-scroll/on-expand
+    // DEXtrending already has good metadata from Dexscreener, enrichment should be user-triggered
+    // This reduces unnecessary API calls and improves overall feed performance
+    
+    console.log(`✅ Returning ${limitedCoins.length}/${dextrendingCoins.length} DEXtrending coins (limit: ${limit}, on-demand enrichment only)`);
+    
+    res.json({
+      success: true,
+      coins: limitedCoins,
+      count: limitedCoins.length,
+      total: dextrendingCoins.length,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('❌ Error in /api/coins/dextrending endpoint:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch Dexscreener trending coins',
       details: error.message
     });
   }

@@ -18,6 +18,8 @@ function CoinListModal({ visible, onClose, filterType, onCoinSelect, currentCoin
       return `${API_BASE}/new`;
     } else if (filterType === 'graduating') {
       return `${API_BASE}/graduating`;
+    } else if (filterType === 'dextrending') {
+      return `${API_BASE}/dextrending`;
     } else if (filterType === 'custom') {
       return `${API_BASE}/infinite`;
     } else {
@@ -69,6 +71,8 @@ function CoinListModal({ visible, onClose, filterType, onCoinSelect, currentCoin
         return 'New Coins';
       case 'graduating':
         return 'Graduating Coins';
+      case 'dextrending':
+        return 'DEXtrending Coins';
       case 'custom':
         return 'Custom Filter';
       default:
@@ -84,6 +88,8 @@ function CoinListModal({ visible, onClose, filterType, onCoinSelect, currentCoin
         return 'Recently launched tokens with high initial volume and recent creation timestamps. We prioritize tokens that are less than 48 hours old with strong early trading activity.';
       case 'graduating':
         return 'Pump.fun tokens that are close to graduating to Raydium. These tokens use a bonding curve mechanism - as more SOL is deposited, they progress towards 100% completion and full DEX listing.';
+      case 'dextrending':
+        return 'Top trending tokens from Dexscreener - the most boosted and actively promoted tokens across all Solana DEXes. These tokens are getting significant community attention and promotional activity.';
       case 'custom':
         return 'Custom filtered tokens based on your selected criteria.';
       default:

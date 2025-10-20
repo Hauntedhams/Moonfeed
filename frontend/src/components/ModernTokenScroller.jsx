@@ -373,6 +373,10 @@ const ModernTokenScroller = ({
         const limit = isMobile ? 50 : 100; // Limit to 50 on mobile, 100 on desktop
         endpoint = `${API_BASE}/graduating?limit=${limit}`;
         console.log(`🎓 Using GRADUATING endpoint for Pump.fun graduating tokens (limit: ${limit} for ${isMobile ? 'mobile' : 'desktop'}):`, endpoint);
+      } else if (filters.type === 'dextrending') {
+        // Use the dextrending endpoint for "dextrending" tab
+        endpoint = `${API_BASE}/dextrending`;
+        console.log(`🔥 Using DEXTRENDING endpoint for Dexscreener trending tokens:`, endpoint);
       } else {
         // For all other cases, use the trending endpoint WITHOUT limit
         // Backend will return all coins it has cached

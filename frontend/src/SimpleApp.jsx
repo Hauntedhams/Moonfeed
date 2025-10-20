@@ -7,7 +7,7 @@ import TopTabs from './components/TopTabs'
 function SimpleApp() {
   const [activeTab, setActiveTab] = useState('home');
   const [favorites, setFavorites] = useState([]);
-  const [filters, setFilters] = useState({ type: 'trending' });
+  const [filters, setFilters] = useState({ type: 'dextrending' }); // Start with DEXtrending (fastest loading)
 
   // Handle favorites change
   const handleFavoritesChange = (newFavs) => {

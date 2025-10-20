@@ -22,7 +22,9 @@ class OnDemandEnrichmentService {
       birdeye: 'https://public-api.birdeye.so'
     };
     
-    // Cache configuration
+    // 🆕 GLOBAL ENRICHMENT CACHE - Shared across all feeds to prevent redundant enrichment
+    // This cache is keyed by mintAddress and stores full enrichment data
+    // When a token appears in multiple feeds, we only enrich it once
     this.cache = new Map();
     this.cacheTTL = 10 * 60 * 1000; // 10 minutes (was 5, increased for better performance)
     
@@ -65,11 +67,11 @@ class OnDemandEnrichmentService {
       return coin;
     }
 
-    // Check cache first
+    // Check GLOBAL cache first - prevents redundant enrichment across all feeds
     if (!skipCache) {
       const cached = this.getFromCache(mintAddress);
       if (cached) {
-        console.log(`✅ Cache hit for ${coin.symbol || mintAddress}`);
+        console.log(`✅ [GLOBAL CACHE HIT] ${coin.symbol || mintAddress} - saved enrichment API calls`);
         this.stats.cacheHits++;
         return { ...coin, ...cached };
       }
@@ -202,7 +204,7 @@ class OnDemandEnrichmentService {
         console.warn(`⚠️ No valid price for ${coin.symbol}, cannot generate chart`);
       }
 
-      // Cache the enriched data
+      // Cache the enriched data in GLOBAL cache (shared across all feeds)
       this.saveToCache(mintAddress, enrichedData);
 
       // Update stats
@@ -211,7 +213,7 @@ class OnDemandEnrichmentService {
         (this.stats.averageTime * (this.stats.totalEnrichments - 1) + enrichedData.enrichmentTime) / 
         this.stats.totalEnrichments;
 
-      console.log(`✅ Enriched ${coin.symbol} in ${enrichedData.enrichmentTime}ms`);
+      console.log(`✅ Enriched ${coin.symbol} in ${enrichedData.enrichmentTime}ms [Cached globally for 10min]`);
       
       return enrichedData;
 
@@ -230,6 +232,7 @@ class OnDemandEnrichmentService {
 
   /**
    * Batch enrich multiple coins efficiently
+   * 🆕 Now benefits from GLOBAL CACHE - tokens enriched in one feed won't be re-enriched in another
    */
   async enrichCoins(coins, options = {}) {
     const { 
@@ -239,6 +242,7 @@ class OnDemandEnrichmentService {
 
     console.log(`🚀 Batch enriching ${coins.length} coins...`);
     const startTime = Date.now();
+    const initialCacheHits = this.stats.cacheHits;
 
     const results = [];
     
@@ -253,8 +257,9 @@ class OnDemandEnrichmentService {
 
     const duration = Date.now() - startTime;
     const enrichedCount = results.filter(c => c.enriched).length;
+    const cacheHitsInBatch = this.stats.cacheHits - initialCacheHits;
     
-    console.log(`✅ Batch enrichment complete: ${enrichedCount}/${coins.length} in ${duration}ms`);
+    console.log(`✅ Batch enrichment complete: ${enrichedCount}/${coins.length} enriched in ${duration}ms (${cacheHitsInBatch} cache hits saved ${(cacheHitsInBatch * 3).toFixed(1)}s)`);
     
     return results;
   }

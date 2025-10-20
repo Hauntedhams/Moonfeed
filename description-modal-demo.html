@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Description Modal Demo</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      color: white;
+      padding: 40px 20px;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      text-align: center;
+      margin-bottom: 40px;
+      font-size: 2rem;
+    }
+
+    .demo-section {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 30px;
+      margin-bottom: 30px;
+    }
+
+    .demo-section h2 {
+      margin-bottom: 20px;
+      color: #00d4ff;
+    }
+
+    /* Simulated Coin Card */
+    .coin-card {
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+
+    .coin-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .coin-symbol {
+      font-size: 1.5rem;
+      font-weight: 700;
+    }
+
+    .favorite-btn {
+      background: none;
+      border: none;
+      color: white;
+      cursor: pointer;
+      font-size: 1.2rem;
+    }
+
+    .description-container {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Single line description with ellipsis */
+    .description-inline {
+      font-size: 0.85rem;
+      color: rgba(255, 255, 255, 0.85);
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .read-more-btn {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(4px);
+      border: none;
+      color: rgba(255, 255, 255, 0.9);
+      cursor: pointer;
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .read-more-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+      transform: translateY(-1px);
+    }
+
+    /* Modal Styles */
+    .description-modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(8px);
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+      animation: fadeIn 0.2s ease;
+      padding: 20px;
+    }
+
+    .description-modal-overlay.show {
+      display: flex;
+    }
+
+    .description-modal-content {
+      position: relative;
+      background: linear-gradient(135deg, rgba(30, 30, 45, 0.98) 0%, rgba(20, 20, 35, 0.98) 100%);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 20px;
+      max-width: 600px;
+      width: 90%;
+      max-height: 80vh;
+      overflow: hidden;
+      animation: slideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
+    }
+
+    .description-modal-close {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      border-radius: 50%;
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      color: #fff;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-weight: 300;
+      line-height: 1;
+    }
+
+    .description-modal-close:hover {
+      background: rgba(255, 255, 255, 0.2);
+      transform: scale(1.1) rotate(90deg);
+    }
+
+    .description-modal-header {
+      padding: 24px 24px 16px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .description-modal-title {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #fff;
+      margin: 0;
+    }
+
+    .description-modal-body {
+      padding: 24px;
+      color: rgba(255, 255, 255, 0.9);
+      font-size: 1rem;
+      line-height: 1.6;
+      max-height: calc(80vh - 100px);
+      overflow-y: auto;
+    }
+
+    .description-modal-body::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    .description-modal-body::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 4px;
+    }
+
+    .description-modal-body::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 4px;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .info-box {
+      background: rgba(0, 212, 255, 0.1);
+      border: 1px solid rgba(0, 212, 255, 0.3);
+      border-radius: 8px;
+      padding: 16px;
+      margin-top: 20px;
+    }
+
+    .info-box h3 {
+      color: #00d4ff;
+      margin-bottom: 8px;
+      font-size: 1rem;
+    }
+
+    .info-box ul {
+      list-style: none;
+      padding-left: 0;
+    }
+
+    .info-box li {
+      margin-bottom: 8px;
+      color: rgba(255, 255, 255, 0.8);
+    }
+
+    .info-box li::before {
+      content: "✓ ";
+      color: #00d4ff;
+      font-weight: bold;
+      margin-right: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎨 Description Modal Demo</h1>
+
+    <div class="demo-section">
+      <h2>Interactive Demo</h2>
+      <p style="margin-bottom: 20px; color: rgba(255, 255, 255, 0.7);">
+        Click the "read more" buttons below to see the modal in action!
+      </p>
+
+      <!-- Example 1: Short description -->
+      <div class="coin-card">
+        <div class="coin-header">
+          <span class="coin-symbol">$SHORT</span>
+          <button class="favorite-btn">⭐</button>
+        </div>
+        <div class="description-container">
+          <span class="description-inline">
+            This is a short description that fits on one line easily.
+          </span>
+        </div>
+      </div>
+
+      <!-- Example 2: Long description -->
+      <div class="coin-card">
+        <div class="coin-header">
+          <span class="coin-symbol">$MEME</span>
+          <button class="favorite-btn">⭐</button>
+        </div>
+        <div class="description-container">
+          <span class="description-inline">
+            This is a much longer description that would normally span multiple lines and make the card taller, but now it's truncated with an ellipsis to keep everything clean and consistent!
+          </span>
+          <button class="read-more-btn" onclick="showModal('modal1')">
+            read more
+          </button>
+        </div>
+      </div>
+
+      <!-- Example 3: Very long description -->
+      <div class="coin-card">
+        <div class="coin-header">
+          <span class="coin-symbol">$DOGE</span>
+          <button class="favorite-btn">⭐</button>
+        </div>
+        <div class="description-container">
+          <span class="description-inline">
+            Dogecoin started as a joke cryptocurrency but has become one of the most popular meme coins in the crypto space, with a vibrant community and widespread adoption. The token features the iconic Shiba Inu dog from the "Doge" meme and has been endorsed by various celebrities and public figures.
+          </span>
+          <button class="read-more-btn" onclick="showModal('modal2')">
+            read more
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="demo-section">
+      <h2>Key Features</h2>
+      <div class="info-box">
+        <h3>✨ What's New</h3>
+        <ul>
+          <li>Descriptions always show as single line with ellipsis</li>
+          <li>"Read more" button appears for descriptions over 50 characters</li>
+          <li>Modal popup displays full description with smooth animations</li>
+          <li>Click outside or X button to close modal</li>
+          <li>Consistent card heights across entire feed</li>
+          <li>Mobile-responsive design</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 1 -->
+  <div class="description-modal-overlay" id="modal1" onclick="closeModal('modal1')">
+    <div class="description-modal-content" onclick="event.stopPropagation()">
+      <button class="description-modal-close" onclick="closeModal('modal1')">×</button>
+      <div class="description-modal-header">
+        <h3 class="description-modal-title">$MEME</h3>
+      </div>
+      <div class="description-modal-body">
+        This is a much longer description that would normally span multiple lines and make the card taller, but now it's truncated with an ellipsis to keep everything clean and consistent! When you click "read more", this modal appears with the full text, providing a focused reading experience without cluttering the main feed. Pretty cool, right?
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 2 -->
+  <div class="description-modal-overlay" id="modal2" onclick="closeModal('modal2')">
+    <div class="description-modal-content" onclick="event.stopPropagation()">
+      <button class="description-modal-close" onclick="closeModal('modal2')">×</button>
+      <div class="description-modal-header">
+        <h3 class="description-modal-title">$DOGE</h3>
+      </div>
+      <div class="description-modal-body">
+        <p>Dogecoin started as a joke cryptocurrency but has become one of the most popular meme coins in the crypto space, with a vibrant community and widespread adoption. The token features the iconic Shiba Inu dog from the "Doge" meme and has been endorsed by various celebrities and public figures.</p>
+        
+        <p style="margin-top: 16px;">The community is known for its charitable activities and fun-loving spirit. Despite its humorous origins, Dogecoin has proven to be a resilient cryptocurrency with real-world use cases and a dedicated following.</p>
+        
+        <p style="margin-top: 16px;">With features like fast transaction times and low fees, Dogecoin continues to be a popular choice for tipping, donations, and everyday transactions. The coin's mascot, the Shiba Inu, has become one of the most recognizable symbols in cryptocurrency.</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function showModal(modalId) {
+      document.getElementById(modalId).classList.add('show');
+    }
+
+    function closeModal(modalId) {
+      document.getElementById(modalId).classList.remove('show');
+    }
+
+    // Close modal on Escape key
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        document.querySelectorAll('.description-modal-overlay.show').forEach(modal => {
+          modal.classList.remove('show');
+        });
+      }
+    });
+  </script>
+</body>
+</html>

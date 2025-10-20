@@ -35,7 +35,7 @@ function App() {
     }
   });
   const [searchModalOpen, setSearchModalOpen] = useState(false);
-  const [filters, setFilters] = useState({ type: 'trending' });
+  const [filters, setFilters] = useState({ type: 'dextrending' }); // Start with DEXtrending (fastest loading)
   const [advancedFilters, setAdvancedFilters] = useState(null); // For advanced filtering
   const [isAdvancedFilterActive, setIsAdvancedFilterActive] = useState(false);
   const [advancedFilterModalOpen, setAdvancedFilterModalOpen] = useState(false); // Control modal open/close
