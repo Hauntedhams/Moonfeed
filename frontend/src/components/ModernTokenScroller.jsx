@@ -39,7 +39,8 @@ const ModernTokenScroller = ({
   // API base configuration
   const API_BASE = API_CONFIG.COINS_API;
 
-  // PERFORMANCE FIX: Calculate visible range for virtual scrolling
+  // Virtual scrolling DISABLED - rendering all coins now
+  /*
   const calculateVisibleRange = useCallback((index, totalCoins) => {
     const isMobile = window.innerWidth < 768;
     const buffer = isMobile ? 2 : 3; // Smaller buffer on mobile to save memory
@@ -50,14 +51,17 @@ const ModernTokenScroller = ({
     console.log(`📊 Virtual scrolling: Index ${index}, rendering ${start}-${end} (${end - start + 1} cards)`);
     return { start, end };
   }, []);
+  */
 
-  // PERFORMANCE FIX: Get virtual scrolling stats for debugging
+  // Virtual scrolling stats DISABLED - not using virtual scrolling anymore
+  /*
   const getVirtualScrollStats = useCallback(() => {
     const rendered = visibleRange.end - visibleRange.start + 1;
     const total = coins.length;
     const percentage = total > 0 ? ((rendered / total) * 100).toFixed(1) : 0;
     return { rendered, total, percentage };
   }, [coins.length, visibleRange]);
+  */
 
   // Update mobile detection on window resize
   useEffect(() => {
