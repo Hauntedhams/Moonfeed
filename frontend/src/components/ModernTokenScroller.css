@@ -486,11 +486,14 @@
     touch-action: pan-y;
   }
   
-  /* Mobile-specific scroll improvements for smoother swiping */
+  /* Mobile-specific scroll improvements for smoother, easier swiping */
   .modern-scroller-container {
+    /* KEY FIX: Use 'proximity' instead of 'mandatory' for gentler snap */
+    /* This allows free scrolling and only snaps when close to a snap point */
+    scroll-snap-type: y proximity;
     /* Allow momentum scrolling on iOS for smoother experience */
     -webkit-overflow-scrolling: touch;
-    /* Reduce scroll snap strictness slightly for easier swiping */
+    /* Reduce scroll snap strictness for easier swiping */
     scroll-padding-top: 0;
     scroll-padding-bottom: 0;
   }
