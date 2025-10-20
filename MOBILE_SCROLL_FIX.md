@@ -3,8 +3,10 @@
 **Date**: January 2025  
 **Initial Commit**: be21b18  
 **V2 Commit**: 5e12d7b  
-**V3 Commit (Final)**: 39c82ce  
-**Status**: ✅ DEPLOYED (V3 - COMPLETE)
+**V3 Commit**: 39c82ce (caused blank UI)  
+**V4 Commit**: 3c8792b (reverted scroll-snap CSS)  
+**V5 Commit (Final)**: 841e3cd  
+**Status**: ✅ RESOLVED (V5 - Virtual Scrolling Disabled)
 
 ---
 
@@ -221,6 +223,74 @@ scrollEndTimeout = setTimeout(() => {
 - Originally reported: Mobile scroll positioning bug
 - Related to: Touch event handling, scroll-snap CSS
 - Impacts: Trade button functionality, UX consistency
+
+---
+
+## V4 - Emergency Revert (Commit 3c8792b)
+
+**Problem**: After V3 fix, UI became completely blank - no coins/cards visible
+
+**Analysis**: 
+- Virtual scrolling with aggressive visible range calculation
+- When combined with `scroll-snap-type: none`, coins weren't rendering at all
+- The visible range calculation was creating an empty range or incorrect boundaries
+
+**Quick Fix**:
+- Reverted `scroll-snap-type` back to `y mandatory`
+- This restored basic CSS scroll-snap to ensure coins render
+- Confirmed backend was returning coins correctly
+- Issue was purely frontend rendering logic
+
+---
+
+## V5 - FINAL FIX (Commit 841e3cd) ✅
+
+**Problem**: UI still blank after V4 CSS revert
+
+**Root Cause Identified**: 
+1. **Virtual scrolling logic was too aggressive** - Only rendering coins in visible range
+2. **Circular dependency** - `getEnrichedCoin` in useEffect dependencies causing render issues
+3. **Race condition** - Visible range calculation happening before coins were properly set
+4. **Complex state management** - Multiple interdependent effects causing rendering to fail
+
+**Complete Solution**:
+1. ✅ **Disabled virtual scrolling completely**
+   - Removed `visibleRange` state
+   - Removed `calculateVisibleRange` function
+   - Now rendering ALL coins directly (simpler, more reliable)
+   
+2. ✅ **Fixed circular dependencies**
+   - Removed `getEnrichedCoin` from useEffect dependencies
+   - Changed to use `coins.length` instead of `coins` array reference
+   - Inlined enriched coin logic where needed
+   
+3. ✅ **Simplified rendering logic**
+   - Changed from: Render visible range OR first 10 coins
+   - Changed to: Render ALL coins
+   - CSS scroll-snap handles performance (works fine for 30-100 coins)
+   
+4. ✅ **Cleaned up unused code**
+   - Commented out virtual scrolling effects
+   - Removed virtual scrolling stats logging
+   - Simplified mobile detection useEffect
+
+**Why This Works**:
+- React can handle rendering 30-100 coin cards efficiently
+- CSS `scroll-snap-type: y mandatory` provides smooth native scrolling
+- No complex state calculations = no race conditions
+- Simpler code = easier to debug and maintain
+
+**Performance Impact**:
+- Minimal - React's virtual DOM efficiently updates only changed coins
+- CSS scroll-snap is hardware accelerated on mobile
+- No noticeable lag or jank on modern mobile devices
+
+**Testing**:
+- ✅ Coins render immediately on load
+- ✅ Scroll snap works correctly
+- ✅ Trade button loads correct coin
+- ✅ No blank screens or visual artifacts
+- ✅ Works on both mobile and desktop
 
 ---
 
