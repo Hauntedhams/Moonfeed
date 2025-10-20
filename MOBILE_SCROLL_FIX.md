@@ -1,8 +1,9 @@
 # 🐛 Mobile Scroll Snap Position Fix
 
 **Date**: January 2025  
-**Commit**: be21b18  
-**Status**: ✅ DEPLOYED
+**Initial Commit**: be21b18  
+**Improved Fix**: 5e12d7b  
+**Status**: ✅ DEPLOYED (V2)
 
 ---
 
@@ -35,7 +36,19 @@ This simple rounding approach had problems:
 
 ## Solution Implemented
 
-### 1. **Threshold-Based Index Calculation**
+### V2 Improvements (Commit 5e12d7b):
+After testing, the threshold approach wasn't aggressive enough. The improved solution:
+
+1. **Simplified Index Calculation**: Back to simple `Math.round()` for consistency
+2. **Instant Snap Correction**: No smooth behavior, immediate position correction
+3. **1px Precision**: Snaps if off by even 1px (down from 5px)
+4. **Faster Response**: 100ms delay (down from 150ms)
+5. **Stricter CSS**: `scroll-behavior: auto` and `scroll-snap-stop: always`
+6. **Immediate State Sync**: Updates index and notifies parent immediately after snap
+
+### V1 (Initial Attempt - Partially Effective):
+
+#### 1. **Threshold-Based Index Calculation**
 ```javascript
 const rawIndex = scrollTop / cardHeight;
 const threshold = 0.4; // Must be at least 40% into the next card
