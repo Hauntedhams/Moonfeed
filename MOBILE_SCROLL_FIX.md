@@ -7,8 +7,9 @@
 **V4 Commit**: 3c8792b (reverted scroll-snap CSS)  
 **V5 Commit**: 841e3cd (disabled virtual scrolling)  
 **V6 Commit**: 9f68b71 (removed remaining references)  
-**V7 Commit (Final)**: f4e2a37  
-**Status**: ✅ RESOLVED (V7 - Mobile Scroll Works Like Desktop)
+**V7 Commit**: f4e2a37 (cards render, scroll works)
+**V8 Commit (Final)**: ee29437  
+**Status**: ✅ RESOLVED (V8 - Smooth Mobile Scrolling Like Desktop)
 
 ---
 
@@ -312,7 +313,7 @@ scrollEndTimeout = setTimeout(() => {
 
 2. ✅ **Added proper scroll-snap properties**
    - `scroll-snap-align: start` on each `.modern-coin-slide`
-   - `scroll-snap-stop: always` to force snap at each slide
+   - `scroll-snap-stop: always` to force snap at each slide (V7: REMOVED for smoother swiping)
    - Ensures perfect alignment on all devices
 
 3. ✅ **Mobile now matches desktop**
@@ -320,11 +321,32 @@ scrollEndTimeout = setTimeout(() => {
    - Smooth transitions between coins
    - Reliable snap behavior
 
+### V8 - SMOOTHER MOBILE SCROLLING (Commit ee29437):
+
+**Issue**: Scrolling was "sticky" - hard to swipe to the next coin due to aggressive snap behavior.
+
+**Changes**:
+1. ✅ **Removed scroll-snap-stop: always**
+   - This property was forcing scroll to stop at each slide during swipe
+   - Removal allows smoother swiping through multiple coins
+   - Scroll still snaps properly when stopped
+
+2. ✅ **Consolidated duplicate CSS**
+   - Merged two `.modern-scroller-container` declarations
+   - Cleaner, more maintainable code
+
+3. ✅ **Added mobile-specific improvements**
+   - Enhanced `-webkit-overflow-scrolling: touch` for iOS momentum
+   - Added `touch-action: pan-y pinch-zoom` for better touch response
+   - Proper scroll margins and padding for smooth alignment
+
 **Result**: 
 - Mobile scrolling is now as smooth and fast as desktop
-- Perfect snap alignment on all devices
+- Perfect snap alignment when scroll stops
+- Easy, fluid swiping between coins
+- No more "sticky" feeling when trying to scroll
 - Consistent user experience across platforms
 
 ---
 
-_This fix ensures perfect scroll alignment on mobile devices, eliminating the confusion between viewed coin and trade button selection._
+_This fix ensures perfect scroll alignment on mobile devices with smooth, easy swiping between coins, eliminating both the misalignment bug and the sticky scroll behavior._
