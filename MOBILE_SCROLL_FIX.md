@@ -9,8 +9,9 @@
 **V6 Commit**: 9f68b71 (removed remaining references)  
 **V7 Commit**: f4e2a37 (cards render, scroll works)
 **V8 Commit**: ee29437 (removed scroll-snap-stop)
-**V9 Commit (Final)**: 9a57129  
-**Status**: ✅ RESOLVED (V9 - Smooth Mobile Scrolling with Proximity Snap)
+**V9 Commit**: 9a57129 (proximity snap)
+**V10 Commit (Final)**: 1cf0e53  
+**Status**: ✅ RESOLVED (V10 - Responsive Touch Gestures)
 
 ---
 
@@ -373,6 +374,39 @@ scrollEndTimeout = setTimeout(() => {
 - `mandatory` = Always snaps (good for desktop, too aggressive for mobile touch)
 - `proximity` = Only snaps when close (perfect for mobile swipe gestures)
 
+### V10 - VELOCITY-BASED TOUCH GESTURES (Commit 1cf0e53):
+
+**Issue**: Swiping required slow dragging across entire screen to change coins.
+
+**Root Cause**: No touch gesture detection - relied entirely on CSS scroll-snap behavior.
+
+**Solution - Intelligent Swipe Detection**:
+1. ✅ **Added velocity-based gesture recognition**
+   - Calculates swipe velocity (pixels per millisecond)
+   - Fast swipe (>0.5 px/ms) with 50px+ distance = instant navigation
+   - Detects swipe direction (up/down) for next/prev coin
+
+2. ✅ **OR significant scroll distance**
+   - If scroll distance >30% of card height = navigation
+   - Combines velocity + distance for smart detection
+
+3. ✅ **Smooth scroll to target**
+   - Uses `scrollTo({ behavior: 'smooth' })` for animation
+   - Updates state immediately for instant feedback
+   - No lag or delay
+
+4. ✅ **Mobile-only implementation**
+   - Only activates on mobile devices (< 768px)
+   - Desktop retains original behavior
+   - No performance impact on desktop
+
+**Result - TikTok-Like Experience**:
+- 🚀 Quick flick/swipe gestures now work perfectly
+- ⚡ No need to drag slowly across entire screen
+- 🎯 Smart detection: fast swipe OR significant scroll
+- 💨 Immediate response and smooth animation
+- 📱 Natural mobile swipe feel
+
 ---
 
-_This fix ensures perfect scroll alignment on mobile devices with smooth, easy swiping between coins using CSS scroll-snap proximity mode for a natural, TikTok-like mobile experience._
+_This complete fix ensures perfect scroll alignment on mobile devices with smooth, easy swiping between coins using CSS scroll-snap proximity mode and velocity-based touch gestures for a natural, responsive TikTok-like mobile experience._
