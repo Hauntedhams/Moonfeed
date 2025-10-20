@@ -660,35 +660,26 @@ const ModernTokenScroller = ({
     const cardHeight = container.clientHeight;
     const scrollTop = container.scrollTop;
     
-    // 🐛 MOBILE FIX: More precise index calculation to prevent off-by-one errors
-    // Add a threshold to account for partial scrolls and ensure we're closer to the target
-    const rawIndex = scrollTop / cardHeight;
-    const threshold = 0.4; // Must be at least 40% into the next card to count as scrolled
-    let newIndex;
-    
-    // If we're within threshold of the previous card, snap back
-    if (rawIndex - Math.floor(rawIndex) < threshold) {
-      newIndex = Math.floor(rawIndex);
-    } else {
-      newIndex = Math.ceil(rawIndex);
-    }
+    // 🐛 MOBILE FIX V2: Use simple rounding but rely on snap correction
+    // The scroll-end handler will fix any misalignment
+    const newIndex = Math.round(scrollTop / cardHeight);
     
     // Clamp to valid range
-    newIndex = Math.max(0, Math.min(newIndex, coins.length - 1));
+    const clampedIndex = Math.max(0, Math.min(newIndex, coins.length - 1));
     
     // Only update if index actually changed and is valid
-    if (newIndex !== currentIndex && newIndex >= 0 && newIndex < coins.length) {
-      const currentCoin = coins[newIndex];
-      setCurrentIndex(newIndex);
+    if (clampedIndex !== currentIndex && clampedIndex >= 0 && clampedIndex < coins.length) {
+      const currentCoin = coins[clampedIndex];
+      setCurrentIndex(clampedIndex);
       
       // ✅ CRITICAL FIX: Update visible range for virtual scrolling
-      const newVisibleRange = calculateVisibleRange(newIndex, coins.length);
+      const newVisibleRange = calculateVisibleRange(clampedIndex, coins.length);
       setVisibleRange(newVisibleRange);
       
       // Log scroll progress occasionally (every 5th coin)
-      if (newIndex % 5 === 0) {
+      if (clampedIndex % 5 === 0) {
         const stats = getVirtualScrollStats();
-        console.log(`📜 Scrolling: Coin ${newIndex + 1}/${coins.length} - ${currentCoin?.symbol || 'Unknown'} | Rendering: ${stats.rendered}/${stats.total} (${stats.percentage}%)`);
+        console.log(`📜 Scrolling: Coin ${clampedIndex + 1}/${coins.length} - ${currentCoin?.symbol || 'Unknown'} | Rendering: ${stats.rendered}/${stats.total} (${stats.percentage}%)`);
       }
       
       // Trigger enrichment for the currently viewed coin if not already enriched
@@ -725,7 +716,7 @@ const ModernTokenScroller = ({
         handleScroll();
       }, 50); // 50ms throttle for smoother performance
       
-      // 🐛 MOBILE FIX: Snap to correct position after scrolling stops
+      // 🐛 MOBILE FIX V2: Aggressive snap correction after scrolling stops
       if (scrollEndTimeout) {
         clearTimeout(scrollEndTimeout);
       }
@@ -738,15 +729,25 @@ const ModernTokenScroller = ({
         const targetIndex = Math.round(scrollTop / cardHeight);
         const targetScrollTop = targetIndex * cardHeight;
         
-        // Only snap if we're off by more than 5px
-        if (Math.abs(scrollTop - targetScrollTop) > 5) {
-          console.log(`📍 Snap correction: ${scrollTop}px → ${targetScrollTop}px (index ${targetIndex})`);
-          container.scrollTo({
-            top: targetScrollTop,
-            behavior: 'smooth'
-          });
+        // Snap if we're off by ANY amount (even 1px)
+        if (Math.abs(scrollTop - targetScrollTop) > 1) {
+          console.log(`📍 Snap correction: ${Math.round(scrollTop)}px → ${targetScrollTop}px (coin ${targetIndex + 1}/${coins.length})`);
+          
+          // Force immediate snap with no smooth behavior for precision
+          container.scrollTop = targetScrollTop;
+          
+          // Update index immediately to match the snapped position
+          if (targetIndex !== currentIndex && targetIndex >= 0 && targetIndex < coins.length) {
+            setCurrentIndex(targetIndex);
+            const newVisibleRange = calculateVisibleRange(targetIndex, coins.length);
+            setVisibleRange(newVisibleRange);
+            
+            // Notify parent of the correct coin
+            const currentCoin = coins[targetIndex];
+            onCurrentCoinChange?.(getEnrichedCoin(currentCoin), targetIndex);
+          }
         }
-      }, 150); // Wait 150ms after scrolling stops to snap
+      }, 100); // Reduced to 100ms for faster correction
     };
     
     container.addEventListener('scroll', throttledHandleScroll, { passive: true });
@@ -760,7 +761,7 @@ const ModernTokenScroller = ({
         clearTimeout(scrollEndTimeout);
       }
     };
-  }, [handleScroll, expandedCoin]);
+  }, [handleScroll, expandedCoin, currentIndex, coins, calculateVisibleRange, onCurrentCoinChange, getEnrichedCoin]);
   
   // Handle favorite toggle
   const handleFavoriteToggle = (coin) => {
