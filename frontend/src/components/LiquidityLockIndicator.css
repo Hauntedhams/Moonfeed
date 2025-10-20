@@ -146,3 +146,25 @@
   border-top-color: rgba(0, 0, 0, 0.9);
   z-index: 1000;
 }
+
+/* Dark mode support */
+.dark-mode .liquidity-lock-indicator .lock-icon {
+  color: #ffffff !important;
+}
+
+.dark-mode .liquidity-lock-indicator:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.dark-mode .lock-text {
+  text-shadow: 0 0 4px rgba(255, 255, 255, 0.5);
+}
+
+.dark-mode .liquidity-lock-indicator[title]:hover::after {
+  background: rgba(255, 255, 255, 0.95);
+  color: #000;
+}
+
+.dark-mode .liquidity-lock-indicator[title]:hover::before {
+  border-top-color: rgba(255, 255, 255, 0.95);
+}
