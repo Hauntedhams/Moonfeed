@@ -692,6 +692,85 @@ const ModernTokenScroller = ({
   // Snapping state to prevent concurrent snaps
   const isSnapping = useRef(false);
 
+  // Touch gesture detection for responsive mobile swiping
+  useEffect(() => {
+    const container = scrollerRef.current;
+    if (!container || !isMobile) return;
+    
+    let touchStartY = 0;
+    let touchStartTime = 0;
+    let touchStartScrollTop = 0;
+    
+    const handleTouchStart = (e) => {
+      if (isScrollLocked.current || expandedCoin) return;
+      
+      touchStartY = e.touches[0].clientY;
+      touchStartTime = Date.now();
+      touchStartScrollTop = container.scrollTop;
+    };
+    
+    const handleTouchEnd = (e) => {
+      if (isScrollLocked.current || expandedCoin) return;
+      
+      const touchEndY = e.changedTouches[0].clientY;
+      const touchEndTime = Date.now();
+      const touchEndScrollTop = container.scrollTop;
+      
+      // Calculate swipe metrics
+      const distance = touchStartY - touchEndY; // Positive = swipe up, negative = swipe down
+      const duration = touchEndTime - touchStartTime;
+      const velocity = Math.abs(distance) / duration; // pixels per ms
+      
+      const cardHeight = container.clientHeight;
+      const scrollDistance = Math.abs(touchEndScrollTop - touchStartScrollTop);
+      
+      // Responsive swipe detection:
+      // - Fast swipe (velocity > 0.5 px/ms) with at least 50px distance
+      // - OR scroll distance > 30% of card height
+      const isFastSwipe = velocity > 0.5 && Math.abs(distance) > 50;
+      const isSignificantScroll = scrollDistance > cardHeight * 0.3;
+      
+      if (isFastSwipe || isSignificantScroll) {
+        // Determine direction and snap to next/prev card
+        const currentScrollIndex = Math.round(touchStartScrollTop / cardHeight);
+        let targetIndex;
+        
+        if (distance > 0) {
+          // Swipe up - go to next coin
+          targetIndex = Math.min(currentScrollIndex + 1, coins.length - 1);
+        } else {
+          // Swipe down - go to previous coin
+          targetIndex = Math.max(currentScrollIndex - 1, 0);
+        }
+        
+        // Smooth scroll to target
+        const targetScrollTop = targetIndex * cardHeight;
+        container.scrollTo({
+          top: targetScrollTop,
+          behavior: 'smooth'
+        });
+        
+        // Update state
+        if (targetIndex !== currentIndex) {
+          setCurrentIndex(targetIndex);
+          
+          const currentCoin = coins[targetIndex];
+          const enriched = enrichedCoins.get(currentCoin.mintAddress);
+          const enrichedCoin = enriched ? { ...currentCoin, ...enriched } : currentCoin;
+          onCurrentCoinChange?.(enrichedCoin, targetIndex);
+        }
+      }
+    };
+    
+    container.addEventListener('touchstart', handleTouchStart, { passive: true });
+    container.addEventListener('touchend', handleTouchEnd, { passive: true });
+    
+    return () => {
+      container.removeEventListener('touchstart', handleTouchStart);
+      container.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [isMobile, expandedCoin, currentIndex, coins, enrichedCoins, onCurrentCoinChange]);
+
   // Simple scroll listener - optimized for performance
   useEffect(() => {
     const container = scrollerRef.current;
