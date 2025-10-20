@@ -1024,6 +1024,16 @@
   transform: translateY(-1px);
 }
 
+/* Section title styling - matches header metrics */
+.section-title {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: rgba(0, 0, 0, 0.6);
+  margin-bottom: 12px;
+}
+
 /* Charts Section with Horizontal Snap Scrolling */
 .charts-section {
   margin: 0 0 12px 0; /* Reduced bottom margin from 16px to 12px */
@@ -1268,8 +1278,10 @@
 
 /* Section header with icon and title */
 .transactions-section-header {
-  font-size: 1.1rem;
-  font-weight: 700;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
   color: #667eea;
   padding: 16px;
   border-bottom: 1px solid rgba(79, 195, 247, 0.2);
@@ -1627,8 +1639,10 @@
 
 /* Section header with icon and title */
 .top-traders-section-header {
-  font-size: 1.1rem;
-  font-weight: 700;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
   color: #667eea;
   padding: 16px;
   border-bottom: 1px solid rgba(79, 195, 247, 0.2);
@@ -1715,9 +1729,10 @@
 }
 
 .info-card-header {
-  font-size: 0.95rem;
-  font-weight: 700;
-  font-family: 'Monaco', 'Courier New', monospace;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
   color: #667eea;
   margin-bottom: 12px;
   padding-bottom: 8px;
@@ -1737,21 +1752,20 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   line-height: 1.4;
-  font-family: 'Monaco', 'Courier New', monospace;
 }
 
 .info-label {
-  color: rgba(0, 0, 0, 0.7);
-  font-weight: 700;
-  font-family: 'Monaco', 'Courier New', monospace;
+  color: rgba(0, 0, 0, 0.6);
+  font-weight: 600;
+  font-size: 0.85rem;
 }
 
 .info-value {
   color: rgba(0, 0, 0, 0.9);
-  font-weight: 500;
-  font-family: 'Monaco', 'Courier New', monospace;
+  font-weight: 700;
+  font-size: 0.85rem;
   text-align: right;
 }
 
