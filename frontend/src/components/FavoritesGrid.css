@@ -1,6 +1,6 @@
 /* Favorites List Container */
 .favorites-list-container {
-  padding: 80px 20px 100px 20px; /* Top padding for header, bottom for nav */
+  padding: 40px 20px 100px 20px; /* Top padding for header, bottom for nav */
   background: #ffffff;
   min-height: 100vh;
   width: 100%;
@@ -530,4 +530,60 @@
   font-size: 16px;
   line-height: 1.5;
   margin: 0;
+}
+
+/* ================================
+   DARK MODE OVERRIDES
+   ================================ */
+
+.dark-mode .favorites-list-container {
+  background: var(--bg-primary);
+}
+
+.dark-mode .favorites-header h1,
+.dark-mode .empty-state h2 {
+  color: var(--text-primary);
+}
+
+.dark-mode .favorites-header p,
+.dark-mode .empty-state p {
+  color: var(--text-secondary);
+}
+
+.dark-mode .favorite-card {
+  background: var(--bg-secondary);
+  border-color: var(--border-color);
+}
+
+.dark-mode .favorite-card:hover {
+  border-color: var(--border-hover);
+  box-shadow: 0 8px 24px var(--shadow-md);
+}
+
+.dark-mode .favorite-remove-btn {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border-color: var(--border-color);
+}
+
+.dark-mode .favorite-remove-btn:hover {
+  background: #fee2e2;
+  color: #dc2626;
+  border-color: #fecaca;
+}
+
+.dark-mode .coin-name {
+  color: var(--text-primary);
+}
+
+.dark-mode .coin-ticker {
+  color: var(--text-secondary);
+}
+
+.dark-mode .favorites-empty {
+  background: var(--bg-primary);
+}
+
+.dark-mode .empty-icon {
+  opacity: 0.4;
 }

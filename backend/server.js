@@ -109,6 +109,29 @@ app.post('/api/coins/enrich-single', async (req, res) => {
       timeout: 3000 // 3 second timeout for fast response
     });
 
+    // 🔍 DEBUG: Log specific coin data
+    if (targetAddress === 'BwbZ992sMqabbBYnEj4tfNBmtdYtjRkSqgAGCyCRpump') {
+      console.log('🔍 DEBUG - Backend Enriched Data for BwbZ992s...:', {
+        symbol: enrichedCoin.symbol,
+        name: enrichedCoin.name,
+        mintAddress: enrichedCoin.mintAddress,
+        holders_data: {
+          holders: enrichedCoin.holders,
+          holderCount: enrichedCoin.holderCount,
+          holder_count: enrichedCoin.holder_count,
+          'dexscreener.holders': enrichedCoin.dexscreener?.holders
+        },
+        age_data: {
+          age: enrichedCoin.age,
+          ageHours: enrichedCoin.ageHours,
+          created_timestamp: enrichedCoin.created_timestamp,
+          createdAt: enrichedCoin.createdAt,
+          'dexscreener.pairCreatedAt': enrichedCoin.dexscreener?.pairCreatedAt
+        },
+        full_enriched_coin: enrichedCoin
+      });
+    }
+
     console.log(`✅ Fast enrichment complete for ${enrichedCoin.symbol} in ${enrichedCoin.enrichmentTime}ms`);
 
     res.json({
@@ -439,6 +462,17 @@ async function fetchFreshCoinBatch() {
   const tokens = response.data;
   console.log(`🌙 Got ${tokens.length} tokens in this batch`);
 
+  // 🐛 DEBUG: Log first token to see all available fields
+  if (tokens.length > 0) {
+    console.log('🔍 Sample token from Solana Tracker API:', {
+      mint: tokens[0].mint,
+      symbol: tokens[0].symbol,
+      holders: tokens[0].holders,
+      holderCount: tokens[0].holderCount,
+      availableFields: Object.keys(tokens[0])
+    });
+  }
+
   // Format tokens for frontend
   const formattedTokens = tokens.map((token, index) => ({
     mintAddress: token.mint,
@@ -453,6 +487,8 @@ async function fetchFreshCoinBatch() {
     liquidity: token.liquidity || 0,
     liquidity_usd: token.liquidityUsd || token.liquidity || 0,
     created_timestamp: token.createdAt ? new Date(token.createdAt).getTime() : Date.now(),
+    holders: token.holders || token.holderCount, // 🆕 Add holder count
+    holderCount: token.holderCount || token.holders, // 🆕 Alternative field name
     description: token.description || '',
     // Additional fields for compatibility
     buys_24h: token.buys_24h || 0,
@@ -517,6 +553,17 @@ async function fetchNewCoinBatch() {
   const tokens = response.data;
   console.log(`🆕 Got ${tokens.length} NEW tokens (0-96 hours old)`);
 
+  // 🐛 DEBUG: Log first token to see all available fields  
+  if (tokens.length > 0) {
+    console.log('🔍 Sample NEW token from Solana Tracker API:', {
+      mint: tokens[0].mint,
+      symbol: tokens[0].symbol,
+      holders: tokens[0].holders,
+      holderCount: tokens[0].holderCount,
+      availableFields: Object.keys(tokens[0])
+    });
+  }
+
   // Format tokens for frontend with all available data
   const formattedTokens = tokens.map((token, index) => {
     const createdAt = token.createdAt || Date.now();
@@ -541,6 +588,8 @@ async function fetchNewCoinBatch() {
       created_timestamp: createdAt,
       age: ageHours,  // Age in hours - important for NEW feed filtering
       ageHours: ageHours,
+      holders: token.holders || token.holderCount, // 🆕 Add holder count
+      holderCount: token.holderCount || token.holders, // 🆕 Alternative field name
       description: token.description || '',
       hasSocials: token.hasSocials || false,
       lpBurn: token.lpBurn || 0,
@@ -709,6 +758,24 @@ app.get('/api/coins/new', async (req, res) => {
     
     const limitedCoins = newCoins.slice(0, limit);
     
+    // 🆕 AUTO-ENRICH: Enrich top 20 new coins in the background for Age/Holders
+    const TOP_COINS_TO_ENRICH = 20; // Increased from 10 for better UX
+    if (limitedCoins.length > 0) {
+      onDemandEnrichment.enrichCoins(
+        limitedCoins.slice(0, TOP_COINS_TO_ENRICH),
+        { maxConcurrent: 3, timeout: 2000 }
+      ).then(enrichedCoins => {
+        enrichedCoins.forEach((enriched, index) => {
+          if (enriched.enriched && newCoins[index]) {
+            Object.assign(newCoins[index], enriched);
+          }
+        });
+        console.log(`✅ Auto-enriched top ${enrichedCoins.filter(c => c.enriched).length} new coins`);
+      }).catch(err => {
+        console.warn('⚠️ Background enrichment failed:', err.message);
+      });
+    }
+    
     // Apply live Jupiter prices before returning
     const coinsWithLivePrices = applyLivePrices(limitedCoins);
     
@@ -761,6 +828,27 @@ app.get('/api/coins/trending', async (req, res) => {
     trendingCoins = applyLivePrices(trendingCoins);
     
     const limitedCoins = trendingCoins.slice(0, limit);
+    
+    // 🆕 AUTO-ENRICH: Enrich top 20 coins in the background for Age/Holders
+    // This ensures holder data, age, and other enriched fields are available
+    const TOP_COINS_TO_ENRICH = 20; // Increased from 10 for better UX
+    if (limitedCoins.length > 0) {
+      // Don't await - enrich in background to not block response
+      onDemandEnrichment.enrichCoins(
+        limitedCoins.slice(0, TOP_COINS_TO_ENRICH),
+        { maxConcurrent: 3, timeout: 2000 }
+      ).then(enrichedCoins => {
+        // Update the cache with enriched data
+        enrichedCoins.forEach((enriched, index) => {
+          if (enriched.enriched && currentCoins[index]) {
+            Object.assign(currentCoins[index], enriched);
+          }
+        });
+        console.log(`✅ Auto-enriched top ${enrichedCoins.filter(c => c.enriched).length} trending coins`);
+      }).catch(err => {
+        console.warn('⚠️ Background enrichment failed:', err.message);
+      });
+    }
     
     // Apply live Jupiter prices before returning
     const coinsWithLivePrices = applyLivePrices(limitedCoins);
@@ -970,6 +1058,24 @@ app.get('/api/coins/graduating', async (req, res) => {
     }
     
     const limitedCoins = graduatingTokens.slice(0, limit);
+    
+    // 🆕 AUTO-ENRICH: Enrich top 20 graduating coins in the background for Age/Holders
+    const TOP_COINS_TO_ENRICH = 20;
+    if (limitedCoins.length > 0) {
+      onDemandEnrichment.enrichCoins(
+        limitedCoins.slice(0, TOP_COINS_TO_ENRICH),
+        { maxConcurrent: 3, timeout: 2000 }
+      ).then(enrichedCoins => {
+        enrichedCoins.forEach((enriched, index) => {
+          if (enriched.enriched && graduatingTokens[index]) {
+            Object.assign(graduatingTokens[index], enriched);
+          }
+        });
+        console.log(`✅ Auto-enriched top ${enrichedCoins.filter(c => c.enriched).length} graduating coins`);
+      }).catch(err => {
+        console.warn('⚠️ Background enrichment failed:', err.message);
+      });
+    }
     
     // Apply live Jupiter prices before returning
     const coinsWithLivePrices = applyLivePrices(limitedCoins);

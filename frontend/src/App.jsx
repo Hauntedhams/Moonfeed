@@ -12,6 +12,7 @@ import JupiterTradeModal from './components/JupiterTradeModal'
 import AdvancedFilter from './components/AdvancedFilter'
 import { WalletProvider } from './contexts/WalletContext'
 import { TrackedWalletsProvider } from './contexts/TrackedWalletsContext'
+import { DarkModeProvider } from './contexts/DarkModeContext'
 
 function App() {
   // Build timestamp - only log once on initial load
@@ -202,9 +203,10 @@ function App() {
   };
 
   return (
-    <TrackedWalletsProvider>
-      <WalletProvider>
-        <div style={{ minHeight: '100vh', position: 'relative', paddingBottom: 72 }}>
+    <DarkModeProvider>
+      <TrackedWalletsProvider>
+        <WalletProvider>
+          <div style={{ minHeight: '100vh', position: 'relative', paddingBottom: 72 }}>
         {/* Top tabs - only show on home screen */}
         {activeTab !== 'favorites' && activeTab !== 'coin-detail' && activeTab !== 'profile' && (
           <TopTabs 
@@ -339,6 +341,7 @@ function App() {
         </div>
       </WalletProvider>
     </TrackedWalletsProvider>
+    </DarkModeProvider>
   )
 }
 

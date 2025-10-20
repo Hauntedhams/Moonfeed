@@ -447,3 +447,95 @@
     font-size: 11px;
   }
 }
+
+/* =============================================================================
+   DARK MODE STYLES
+   ============================================================================= */
+
+.dark-mode .top-traders-header {
+  border-bottom-color: var(--border-color);
+}
+
+.dark-mode .top-traders-header h3 {
+  color: var(--text-secondary);
+}
+
+.dark-mode .refresh-traders-btn {
+  color: var(--text-tertiary);
+}
+
+.dark-mode .refresh-traders-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+}
+
+.dark-mode .table-header {
+  border-bottom-color: var(--border-color);
+  color: var(--text-tertiary);
+}
+
+.dark-mode .traders-scroll-window::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+.dark-mode .traders-scroll-window::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+}
+
+.dark-mode .traders-scroll-window::-webkit-scrollbar-thumb:hover {
+  background: var(--border-hover);
+}
+
+.dark-mode .table-row {
+  border-bottom-color: var(--border-color);
+}
+
+.dark-mode .table-row:hover {
+  background: var(--bg-secondary);
+}
+
+.dark-mode .col-rank {
+  color: var(--text-tertiary);
+}
+
+.dark-mode .col-wallet {
+  color: var(--text-primary);
+}
+
+.dark-mode .col-wallet.clickable {
+  color: #8b9bff;
+}
+
+.dark-mode .col-wallet.clickable:hover {
+  color: #a5b3ff;
+  background: rgba(139, 155, 255, 0.1);
+}
+
+.dark-mode .traders-loading {
+  color: var(--text-secondary);
+}
+
+.dark-mode .loading-spinner {
+  border-color: var(--border-color);
+  border-top-color: #8b9bff;
+}
+
+.dark-mode .traders-error {
+  color: #ef4444;
+}
+
+.dark-mode .no-traders {
+  color: var(--text-secondary);
+}
+
+.dark-mode .traders-table-container::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+.dark-mode .traders-table-container::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+}
+
+.dark-mode .traders-table-container::-webkit-scrollbar-thumb:hover {
+  background: var(--border-hover);
+}

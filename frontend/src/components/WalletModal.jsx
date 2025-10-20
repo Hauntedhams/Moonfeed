@@ -9,6 +9,7 @@ const WalletModal = ({ walletAddress, traderData, onClose }) => {
 
   useEffect(() => {
     if (walletAddress) {
+      // Always fetch Helius data when wallet modal opens
       fetchWalletData();
     }
   }, [walletAddress]);
@@ -35,6 +36,7 @@ const WalletModal = ({ walletAddress, traderData, onClose }) => {
         console.log(`💰 SOL activity:`, result.solActivity);
         console.log(`🪙 Tokens traded:`, result.tokens?.length || 0);
         
+        // Calculate win rate from token data
         const winRate = calculateWinRate(result.tokens || []);
         const totalProfit = calculateTotalProfit(result.solActivity);
         
@@ -50,6 +52,7 @@ const WalletModal = ({ walletAddress, traderData, onClose }) => {
     } catch (err) {
       console.error('❌ Error fetching wallet data:', err);
       setError(`Unable to fetch wallet data: ${err.message}`);
+      // Even if API fails, keep trader data if we have it
       if (traderData) {
         setWalletData({ ...traderData, isTraderData: true });
       }
@@ -58,17 +61,27 @@ const WalletModal = ({ walletAddress, traderData, onClose }) => {
     }
   };
 
+  // Calculate win rate from closed positions
   const calculateWinRate = (tokens) => {
     if (!tokens || tokens.length === 0) return 0;
+    
+    // Find closed positions (netAmount ≈ 0)
     const closedPositions = tokens.filter(t => Math.abs(t.netAmount) < 0.001 && t.sells > 0);
+    
     if (closedPositions.length === 0) return 0;
+    
+    // Approximate "wins" as positions where they sold more than they bought
+    // (indicating profit-taking, though not 100% accurate without price data)
     const wins = closedPositions.filter(t => t.sells >= t.buys).length;
+    
     return Math.round((wins / closedPositions.length) * 100);
   };
 
+  // Calculate total profit from SOL activity
   const calculateTotalProfit = (solActivity) => {
     if (!solActivity) return 0;
     const netChange = parseFloat(solActivity.netChange);
+    // Assume SOL price of $150 for rough USD estimate
     const solPrice = 150;
     return Math.round(netChange * solPrice);
   };
@@ -93,21 +106,42 @@ const WalletModal = ({ walletAddress, traderData, onClose }) => {
     return num.toLocaleString();
   };
 
+  const formatPercentage = (percent) => {
+    if (percent === null || percent === undefined) return '-';
+    return `${percent >= 0 ? '+' : ''}${percent.toFixed(2)}%`;
+  };
+
   const formatDate = (timestamp) => {
     if (!timestamp) return '-';
-    const date = new Date(timestamp * 1000);
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    try {
+      return new Date(timestamp).toLocaleString();
+    } catch {
+      return '-';
+    }
+  };
+
+  // Handle click outside modal
+  const handleBackdropClick = (e) => {
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
   };
 
   return (
-    <div className="wallet-modal-overlay" onClick={onClose}>
-      <div className="wallet-modal-content" onClick={(e) => e.stopPropagation()}>
-        <button className="wallet-modal-close" onClick={onClose}>×</button>
-        
-        <div className="wallet-modal-body">
+    <div className="wallet-modal-backdrop" onClick={handleBackdropClick}>
+      <div className="wallet-modal">
+        <div className="wallet-modal-header">
+          <h2>
+            <span style={{ fontSize: '1.4rem' }}>👛</span>
+            Wallet Tracker
+          </h2>
+          <button className="close-btn" onClick={onClose}>×</button>
+        </div>
+
+        <div className="wallet-modal-content">
           {loading && (
             <div className="wallet-loading">
-              <div className="spinner"></div>
+              <div className="loading-spinner" />
               <p>Loading wallet data...</p>
             </div>
           )}
@@ -123,106 +157,41 @@ const WalletModal = ({ walletAddress, traderData, onClose }) => {
 
           {!loading && walletData && (
             <>
-              {/* Profile Header with Robot Icon & Address */}
+              {/* Wallet Address */}
               <div className="wallet-section">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '20px' }}>
-                  <div style={{ 
-                    width: '60px', 
-                    height: '60px', 
-                    borderRadius: '50%', 
-                    background: 'linear-gradient(135deg, rgba(79, 195, 247, 0.3), rgba(103, 126, 234, 0.3))',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '32px',
-                    flexShrink: 0
-                  }}>
-                    🤖
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: '13px', opacity: 0.7, marginBottom: '4px' }}>Wallet Address</div>
-                    <a 
-                      href={`https://solscan.io/account/${walletAddress}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="wallet-link"
-                      style={{ fontSize: '14px', wordBreak: 'break-all' }}
-                    >
-                      {walletAddress}
-                      <span className="external-icon">↗</span>
-                    </a>
-                  </div>
+                <h3>Wallet Address</h3>
+                <div className="wallet-address-display">
+                  <a 
+                    href={`https://solscan.io/account/${walletAddress}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="wallet-link"
+                  >
+                    {walletAddress}
+                    <span className="external-icon">↗</span>
+                  </a>
                 </div>
-
-                {/* Main Stats: Win Rate & Total Profit */}
-                {walletData.isHeliusData && (
-                  <div className="wallet-stats-grid" style={{ marginBottom: '20px' }}>
-                    <div className="stat-card">
-                      <div className="stat-label">Total Profit</div>
-                      <div className={`stat-value ${walletData.totalProfit >= 0 ? 'positive' : 'negative'}`}>
-                        {walletData.totalProfit >= 0 ? '+' : ''}{formatCurrency(walletData.totalProfit)}
-                      </div>
-                      <div style={{ fontSize: '11px', opacity: 0.6, marginTop: '4px' }}>
-                        Based on SOL activity
-                      </div>
-                    </div>
-                    <div className="stat-card">
-                      <div className="stat-label">Win Rate</div>
-                      <div className={`stat-value ${walletData.winRate >= 50 ? 'positive' : ''}`}>
-                        {walletData.winRate}%
-                      </div>
-                      <div style={{ fontSize: '11px', opacity: 0.6, marginTop: '4px' }}>
-                        Closed positions
-                      </div>
-                    </div>
+                {walletData.isTraderData && (
+                  <div className="wallet-info-message" style={{ marginTop: '12px' }}>
+                    💡 Showing trading data for this token only (from Top Traders)
                   </div>
                 )}
-
-                {/* Action Buttons */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '24px' }}>
-                  <button className="track-btn" style={{
-                    padding: '12px',
-                    background: 'rgba(79, 195, 247, 0.2)',
-                    border: '1px solid rgba(79, 195, 247, 0.3)',
-                    borderRadius: '8px',
-                    color: '#4FC3F7',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s'
-                  }}>
-                    Track Wallet
-                  </button>
-                  <button className="copy-trade-btn" style={{
-                    padding: '12px',
-                    background: 'rgba(103, 126, 234, 0.2)',
-                    border: '1px solid rgba(103, 126, 234, 0.3)',
-                    borderRadius: '8px',
-                    color: '#677EEA',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s'
-                  }}>
-                    Copy Trade
-                  </button>
-                </div>
-
-                {/* Info Messages */}
                 {walletData.isHeliusData && walletData.hasData && (
-                  <div className="wallet-info-message">
-                    📊 Showing comprehensive trading analytics (last 100 transactions)
+                  <div className="wallet-info-message" style={{ marginTop: '12px' }}>
+                    � Showing comprehensive trading analytics (last 100 transactions)
                   </div>
                 )}
                 {walletData.isHeliusData && !walletData.hasData && (
-                  <div className="wallet-info-message" style={{ background: 'rgba(255, 193, 7, 0.1)', borderColor: 'rgba(255, 193, 7, 0.3)' }}>
+                  <div className="wallet-info-message" style={{ marginTop: '12px', background: 'rgba(255, 193, 7, 0.1)', borderColor: 'rgba(255, 193, 7, 0.3)' }}>
                     ℹ️ No transaction history found for this wallet
                   </div>
                 )}
               </div>
 
-              {/* Consolidated Trading Overview */}
+              {/* Trading Activity Overview (from Helius) */}
               {walletData.isHeliusData && walletData.trading && (
                 <div className="wallet-section">
-                  <h3>📈 Trading Overview</h3>
+                  <h3>Trading Activity</h3>
                   <div className="wallet-stats-grid">
                     <div className="stat-card">
                       <div className="stat-label">Total Trades</div>
@@ -241,30 +210,34 @@ const WalletModal = ({ walletAddress, traderData, onClose }) => {
                       <div className="stat-value">{walletData.trading.avgTradesPerDay}</div>
                     </div>
                   </div>
-                  
-                  {walletData.trading.firstTradeDate && (
-                    <div className="wallet-stats-grid" style={{ marginTop: '12px' }}>
-                      <div className="stat-card">
-                        <div className="stat-label">First Trade</div>
-                        <div className="stat-value" style={{ fontSize: '12px' }}>
-                          {formatDate(walletData.trading.firstTradeDate)}
-                        </div>
-                      </div>
-                      <div className="stat-card">
-                        <div className="stat-label">Last Trade</div>
-                        <div className="stat-value" style={{ fontSize: '12px' }}>
-                          {formatDate(walletData.trading.lastTradeDate)}
-                        </div>
-                      </div>
-                    </div>
-                  )}
                 </div>
               )}
 
-              {/* SOL Activity */}
+              {/* Trading History Dates (from Helius) */}
+              {walletData.isHeliusData && walletData.trading && walletData.trading.firstTradeDate && (
+                <div className="wallet-section">
+                  <h3>Trading History</h3>
+                  <div className="wallet-stats-grid">
+                    <div className="stat-card">
+                      <div className="stat-label">First Trade</div>
+                      <div className="stat-value" style={{ fontSize: '13px' }}>
+                        {formatDate(walletData.trading.firstTradeDate)}
+                      </div>
+                    </div>
+                    <div className="stat-card">
+                      <div className="stat-label">Last Trade</div>
+                      <div className="stat-value" style={{ fontSize: '13px' }}>
+                        {formatDate(walletData.trading.lastTradeDate)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* SOL Activity (from Helius) */}
               {walletData.isHeliusData && walletData.solActivity && (
                 <div className="wallet-section">
-                  <h3>💰 SOL Activity</h3>
+                  <h3>SOL Activity</h3>
                   <div className="wallet-stats-grid">
                     <div className="stat-card">
                       <div className="stat-label">Total Spent</div>
@@ -288,10 +261,10 @@ const WalletModal = ({ walletAddress, traderData, onClose }) => {
                 </div>
               )}
 
-              {/* Top Traded Tokens */}
+              {/* Top Traded Tokens (from Helius) */}
               {walletData.isHeliusData && walletData.tokens && walletData.tokens.length > 0 && (
                 <div className="wallet-section">
-                  <h3>🪙 Top Traded Tokens</h3>
+                  <h3>Top Traded Tokens</h3>
                   <div className="token-holdings-list">
                     {walletData.tokens.slice(0, 10).map((token, index) => (
                       <div key={index} className="token-holding-item">
@@ -328,25 +301,82 @@ const WalletModal = ({ walletAddress, traderData, onClose }) => {
                   </div>
                 </div>
               )}
-            </>
-          )}
 
-          {!loading && !walletData && (
-            <div className="wallet-section">
-              <div className="no-data">
-                <p>ℹ️ No data available for this wallet</p>
-                <p style={{ fontSize: '0.9rem', opacity: 0.7, marginTop: '8px' }}>
-                  Try viewing this wallet's activity on{' '}
-                  <a 
-                    href={`https://solscan.io/account/${walletAddress}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Solscan ↗
-                  </a>
-                </p>
-              </div>
-            </div>
+              {/* Trading Performance (from Top Traders data only) */}
+              {walletData.isTraderData && (walletData.total_invested !== undefined || walletData.realized !== undefined || walletData.total !== undefined) && (
+                <div className="wallet-section">
+                  <h3>Performance on This Token</h3>
+                  <div className="wallet-stats-grid">
+                    {walletData.total_invested !== undefined && walletData.total_invested !== 0 && (
+                      <div className="stat-card">
+                        <div className="stat-label">Total Bought</div>
+                        <div className="stat-value positive">{formatCurrency(walletData.total_invested)}</div>
+                      </div>
+                    )}
+                    {walletData.realized !== undefined && walletData.realized !== 0 && (
+                      <div className="stat-card">
+                        <div className="stat-label">Total Sold</div>
+                        <div className="stat-value">{formatCurrency(walletData.realized)}</div>
+                      </div>
+                    )}
+                    {walletData.total !== undefined && !walletData.isPortfolioData && (
+                      <div className="stat-card">
+                        <div className="stat-label">Profit/Loss</div>
+                        <div className={`stat-value ${walletData.total >= 0 ? 'positive' : 'negative'}`}>
+                          {walletData.total >= 0 ? '+' : ''}{formatCurrency(walletData.total)}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Transaction Activity (from Top Traders only) */}
+              {walletData.isTraderData && (walletData.total_trades !== undefined || walletData.buy_count !== undefined || walletData.sell_count !== undefined) && (
+                <div className="wallet-section">
+                  <h3>Transaction Activity</h3>
+                  <div className="wallet-stats-grid">
+                    {walletData.total_trades !== undefined && (
+                      <div className="stat-card">
+                        <div className="stat-label">Total Trades</div>
+                        <div className="stat-value">{formatNumber(walletData.total_trades)}</div>
+                      </div>
+                    )}
+                    {walletData.buy_count !== undefined && (
+                      <div className="stat-card">
+                        <div className="stat-label">Buys</div>
+                        <div className="stat-value positive">{formatNumber(walletData.buy_count)}</div>
+                      </div>
+                    )}
+                    {walletData.sell_count !== undefined && (
+                      <div className="stat-card">
+                        <div className="stat-label">Sells</div>
+                        <div className="stat-value negative">{formatNumber(walletData.sell_count)}</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* No data message */}
+              {!walletData.isTraderData && !walletData.isPortfolioData && (
+                <div className="wallet-section">
+                  <div className="no-data">
+                    <p>ℹ️ No data available for this wallet</p>
+                    <p style={{ fontSize: '0.9rem', opacity: 0.7, marginTop: '8px' }}>
+                      Try viewing this wallet's activity on{' '}
+                      <a 
+                        href={`https://solscan.io/account/${walletAddress}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Solscan ↗
+                      </a>
+                    </p>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

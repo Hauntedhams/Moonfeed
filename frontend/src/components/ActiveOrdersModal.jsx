@@ -86,6 +86,17 @@ const ActiveOrdersModal = ({ isOpen, onClose }) => {
 
       console.log('✅ Order cancelled');
       
+      // Store cancel signature in localStorage
+      if (executeResult.signature && orderId) {
+        const { storeOrderSignature } = await import('../utils/orderStorage.js');
+        storeOrderSignature({
+          orderId,
+          signature: executeResult.signature,
+          maker: walletAddress,
+          orderType: 'cancel'
+        });
+      }
+      
       // Refresh orders
       fetchOrders();
     } catch (err) {

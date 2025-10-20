@@ -84,7 +84,7 @@
   border: 1px solid rgba(255, 255, 255, 0.15);
   width: 100%;
   max-width: 500px;
-  max-height: 85vh;
+  max-height: 75vh;
   overflow: hidden;
   animation: slideUp 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: 0 25px 50px rgba(0, 0, 0, 0.6);
@@ -132,6 +132,32 @@
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+}
+
+/* Interactive Mode Button */
+.interactive-mode-button {
+  margin-left: 12px;
+  padding: 6px 12px;
+  background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
+  border: 1px solid rgba(74, 144, 226, 0.3);
+  border-radius: 8px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.interactive-mode-button:hover {
+  background: linear-gradient(135deg, #357abd 0%, #2868a3 100%);
+  border-color: rgba(74, 144, 226, 0.5);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(74, 144, 226, 0.3);
+}
+
+.interactive-mode-button:active {
+  transform: translateY(0);
 }
 
 /* Header Social Icons */
@@ -215,7 +241,7 @@
 /* Modal Content */
 .moonfeed-info-content {
   padding: 24px;
-  max-height: 60vh;
+  max-height: 45vh;
   overflow-y: auto;
   pointer-events: auto;
   scrollbar-width: thin;
@@ -244,9 +270,21 @@
   background: rgba(255, 255, 255, 0.5);
 }
 
+/* Remove any unwanted backgrounds from text elements */
+.info-section p,
+.info-section h3 {
+  background: none !important;
+  background-color: transparent !important;
+}
+
 /* Info Sections */
 .info-section {
   margin-bottom: 28px;
+  background: none;
+  background-color: transparent;
+  padding: 0;
+  border: none;
+  box-shadow: none;
 }
 
 .info-section:last-child {
@@ -265,7 +303,7 @@
 
 .info-section p {
   margin: 0 0 12px 0;
-  color: rgba(255, 255, 255, 0.8);
+  color: #fff;
   font-size: 14px;
   line-height: 1.6;
 }
@@ -399,6 +437,33 @@
 
 .got-it-button:active {
   transform: translateY(0);
+}
+
+/* Header Social Section */
+.moonfeed-social-section {
+  padding: 16px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.moonfeed-social-section .header-social-links {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: 0;
+}
+
+/* Custom text selection color */
+.moonfeed-info-modal ::selection {
+  background: rgba(74, 144, 226, 0.3);
+  color: #fff;
+}
+
+.moonfeed-info-modal ::-moz-selection {
+  background: rgba(74, 144, 226, 0.3);
+  color: #fff;
 }
 
 /* Responsive Design */

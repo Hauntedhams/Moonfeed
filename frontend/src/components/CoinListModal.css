@@ -1,3 +1,82 @@
+/* Info Banner - How we get these coins */
+.coin-list-info-banner {
+  position: relative;
+  padding: 12px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.info-banner-trigger {
+  display: inline-flex;
+  align-items: center;
+  color: #4fc3f7;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: rgba(79, 195, 247, 0.1);
+  border: 1px solid rgba(79, 195, 247, 0.2);
+}
+
+.info-banner-trigger:hover {
+  background: rgba(79, 195, 247, 0.15);
+  border-color: rgba(79, 195, 247, 0.3);
+  transform: translateY(-1px);
+}
+
+.info-text {
+  user-select: none;
+}
+
+.info-banner-tooltip {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 24px;
+  right: 24px;
+  background: rgba(30, 30, 40, 0.98);
+  border: 1px solid rgba(79, 195, 247, 0.3);
+  border-radius: 12px;
+  padding: 16px;
+  z-index: 10000;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  animation: tooltipSlideIn 0.2s ease-out;
+  backdrop-filter: blur(10px);
+}
+
+.info-tooltip-arrow {
+  position: absolute;
+  top: -6px;
+  left: 32px;
+  width: 12px;
+  height: 12px;
+  background: rgba(30, 30, 40, 0.98);
+  border-left: 1px solid rgba(79, 195, 247, 0.3);
+  border-top: 1px solid rgba(79, 195, 247, 0.3);
+  transform: rotate(45deg);
+}
+
+.info-banner-tooltip p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 13px;
+  line-height: 1.6;
+  position: relative;
+  z-index: 1;
+}
+
+@keyframes tooltipSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* Coin List Modal Styles */
 .coin-list-modal-backdrop {
   position: fixed;
@@ -267,6 +346,29 @@
     font-size: 18px;
   }
   
+  .coin-list-info-banner {
+    padding: 10px 20px;
+  }
+  
+  .info-banner-trigger {
+    font-size: 12px;
+    padding: 5px 10px;
+  }
+  
+  .info-banner-tooltip {
+    left: 12px;
+    right: 12px;
+    padding: 12px;
+  }
+  
+  .info-tooltip-arrow {
+    left: 24px;
+  }
+  
+  .info-banner-tooltip p {
+    font-size: 12px;
+  }
+  
   .coin-list-grid {
     grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
     gap: 12px;
@@ -291,6 +393,17 @@
 }
 
 @media (max-width: 480px) {
+  .info-banner-tooltip {
+    left: 8px;
+    right: 8px;
+    padding: 10px;
+    font-size: 11px;
+  }
+  
+  .info-tooltip-arrow {
+    left: 20px;
+  }
+  
   .coin-list-grid {
     grid-template-columns: 1fr;
     gap: 10px;

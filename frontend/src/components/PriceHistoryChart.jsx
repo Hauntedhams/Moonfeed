@@ -1,11 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useDarkMode } from '../contexts/DarkModeContext';
 import './PriceHistoryChart.css';
 
 // DEBUG MODE - Set to false to disable all diagnostic logging (massive performance boost)
 const DEBUG_MODE = false;
-const debugLog = (...args) => { if (DEBUG_MODE) debugLog(...args); };
+const debugLog = (...args) => { if (DEBUG_MODE) console.log(...args); };
 
 const PriceHistoryChart = ({ coin, width, height = 200 }) => {
+  const { isDarkMode } = useDarkMode();
   // Detect mobile devices
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
   
@@ -251,7 +253,7 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
         debugLog('🔍 [CHART DIAGNOSTIC] Chart drawn in', drawDuration, 'ms');
       }
     });
-  }, [canvasReady, chartData]); // Watch BOTH canvas readiness AND chart data
+  }, [canvasReady, chartData, isDarkMode]); // Watch BOTH canvas readiness AND chart data AND dark mode
 
   // Generate blended 24-hour chart using multiple DexScreener price change anchors
   const generateBlended24HourChart = () => {
@@ -514,8 +516,8 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
       devicePixelRatio: dpr
     });
 
-    // Clear canvas with white background
-    ctx.fillStyle = '#ffffff';
+    // Clear canvas with background based on theme
+    ctx.fillStyle = isDarkMode ? '#0f0f0f' : '#ffffff';
     ctx.fillRect(0, 0, containerWidth, containerHeight);
 
     // Calculate dimensions - Add padding for axis labels
@@ -539,8 +541,8 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
     const isPositive = prices[prices.length - 1] > prices[0];
     const lineColor = isPositive ? '#22c55e' : '#ef4444';
 
-    // Draw X and Y axes
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+    // Draw X and Y axes with theme-aware colors
+    ctx.strokeStyle = isDarkMode ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.2)';
     ctx.lineWidth = 1.5;
     
     // Y-axis (left side)
@@ -555,8 +557,8 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
     ctx.lineTo(containerWidth - padding.right, containerHeight - padding.bottom);
     ctx.stroke();
     
-    // Y-axis labels (price values)
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    // Y-axis labels (price values) with theme-aware colors
+    ctx.fillStyle = isDarkMode ? 'rgba(255, 255, 255, 0.6)' : 'rgba(0, 0, 0, 0.6)';
     ctx.font = '10px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';

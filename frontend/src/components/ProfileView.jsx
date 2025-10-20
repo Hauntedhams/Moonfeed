@@ -3,12 +3,14 @@ import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { getFullApiUrl } from '../config/api';
 import { useTrackedWallets } from '../contexts/TrackedWalletsContext';
+import { useDarkMode } from '../contexts/DarkModeContext';
 import WalletPopup from './WalletPopup';
 import './ProfileView.css';
 
 const ProfileView = () => {
   const { publicKey, connected, disconnect, signTransaction } = useWallet();
   const { connection } = useConnection();
+  const { isDarkMode, toggleDarkMode } = useDarkMode();
   const [balance, setBalance] = useState(null);
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
   const [profilePicture, setProfilePicture] = useState(null);
@@ -23,15 +25,23 @@ const ProfileView = () => {
 
   // Fetch SOL balance when wallet connects
   useEffect(() => {
-    if (connected && publicKey) {
-      fetchBalance();
-      fetchOrders();
-      loadProfilePicture();
-    } else {
-      setBalance(null);
-      setOrders([]);
-      setProfilePicture(null);
-    }
+    const setupWallet = async () => {
+      if (connected && publicKey) {
+        fetchBalance();
+        fetchOrders();
+        loadProfilePicture();
+      } else {
+        setBalance(null);
+        setOrders([]);
+        setProfilePicture(null);
+        
+        // Clear order caches on disconnect
+        const { clearAllOrderCaches } = await import('../utils/orderCache.js');
+        clearAllOrderCaches();
+      }
+    };
+    
+    setupWallet();
   }, [connected, publicKey, connection]);
 
   // Refresh orders when filter changes
@@ -71,15 +81,69 @@ const ProfileView = () => {
     }
   };
 
+  // Helper function to check if an order is expired
+  const isOrderExpired = (order) => {
+    if (!order.expiresAt) return false;
+    
+    try {
+      const expiresAtDate = new Date(order.expiresAt);
+      if (isNaN(expiresAtDate.getTime())) return false;
+      
+      const now = new Date();
+      return now > expiresAtDate;
+    } catch (err) {
+      console.error('Error checking order expiration:', err);
+      return false;
+    }
+  };
+
   // Fetch active orders
   const fetchOrders = async () => {
     if (!publicKey) return;
     
+    const walletAddress = publicKey.toString();
+    
+    // Check cache first
+    const { getCachedOrders, setCachedOrders } = await import('../utils/orderCache.js');
+    const cachedOrders = getCachedOrders(walletAddress, statusFilter);
+    
+    if (cachedOrders) {
+      // Use cached data
+      if (statusFilter === 'active') {
+        const activeOrders = [];
+        const expiredOrders = [];
+        
+        cachedOrders.forEach(order => {
+          if (isOrderExpired(order)) {
+            expiredOrders.push(order);
+          } else {
+            activeOrders.push(order);
+          }
+        });
+        
+        if (expiredOrders.length > 0) {
+          console.warn(`[Profile] Found ${expiredOrders.length} expired order(s) in cached active orders`);
+        }
+        
+        setOrders(activeOrders);
+      } else {
+        const enrichedCached = cachedOrders.map(order => ({
+          ...order,
+          isExpired: isOrderExpired(order)
+        }));
+        setOrders(enrichedCached);
+      }
+      
+      setLoadingOrders(false);
+      setOrdersError(null);
+      return; // Exit early, using cache
+    }
+    
+    // No cache, fetch from backend
     setLoadingOrders(true);
     setOrdersError(null);
 
     try {
-      const walletAddress = publicKey.toString();
       const url = getFullApiUrl(`/api/trigger/orders?wallet=${walletAddress}&status=${statusFilter}`);
       const response = await fetch(url);
       
@@ -90,8 +154,46 @@ const ProfileView = () => {
       const result = await response.json();
       
       if (result.success) {
-        // Orders are now fully enriched by backend with all data
-        setOrders(result.orders || []);
+        let fetchedOrders = result.orders || [];
+        
+        // ENRICH ORDERS WITH STORED SIGNATURES FROM LOCALSTORAGE
+        const { enrichOrderWithStoredSignatures } = await import('../utils/orderStorage.js');
+        fetchedOrders = fetchedOrders.map(order => enrichOrderWithStoredSignatures(order));
+        
+        // Cache the fetched orders
+        setCachedOrders(walletAddress, statusFilter, fetchedOrders);
+        
+        // CLIENT-SIDE EXPIRATION FILTERING:
+        // If viewing "active" orders, filter out expired ones
+        if (statusFilter === 'active') {
+          const activeOrders = [];
+          const expiredOrders = [];
+          
+          fetchedOrders.forEach(order => {
+            if (isOrderExpired(order)) {
+              expiredOrders.push(order);
+            } else {
+              activeOrders.push(order);
+            }
+          });
+          
+          // Log expired orders for debugging
+          if (expiredOrders.length > 0) {
+            console.warn(`[Profile] Found ${expiredOrders.length} expired order(s) in active orders:`, 
+              expiredOrders.map(o => ({ orderId: o.orderId, expiresAt: o.expiresAt })));
+          }
+          
+          // Only show non-expired orders in active tab
+          setOrders(activeOrders);
+        } else {
+          // For history tab, mark expired orders with a flag
+          fetchedOrders = fetchedOrders.map(order => ({
+            ...order,
+            isExpired: isOrderExpired(order)
+          }));
+          
+          setOrders(fetchedOrders);
+        }
       } else {
         throw new Error(result.error || 'Unknown error');
       }
@@ -138,9 +240,14 @@ const ProfileView = () => {
       }
 
       console.log('[Cancel Order] Step 2: Transaction received, requesting wallet signature...');
+      console.log('[Cancel Order] Transaction data:', {
+        hasTransaction: !!result.transaction,
+        transactionLength: result.transaction?.length,
+        requestId: result.requestId
+      });
 
       // Step 2: Import required Solana libraries and decode transaction
-      const { Transaction, VersionedTransaction, Connection } = await import('@solana/web3.js');
+      const { Transaction, VersionedTransaction } = await import('@solana/web3.js');
       
       // Decode the transaction - try both formats
       let transaction;
@@ -149,34 +256,33 @@ const ProfileView = () => {
       try {
         // First, try to decode as versioned transaction (v0)
         const transactionBuffer = Buffer.from(result.transaction, 'base64');
+        console.log('[Cancel Order] Attempting versioned transaction decode...');
         transaction = VersionedTransaction.deserialize(transactionBuffer);
         isVersioned = true;
-        console.log('[Cancel Order] Decoded as versioned transaction');
+        console.log('[Cancel Order] ✅ Decoded as versioned transaction');
       } catch (versionedError) {
-        console.log('[Cancel Order] Not a versioned transaction, trying legacy format...');
+        console.log('[Cancel Order] ❌ Versioned decode failed:', versionedError.message);
+        console.log('[Cancel Order] Attempting legacy transaction decode...');
         
         // Fallback to legacy transaction
         try {
           const transactionBuffer = Buffer.from(result.transaction, 'base64');
           transaction = Transaction.from(transactionBuffer);
-          console.log('[Cancel Order] Decoded as legacy transaction');
+          console.log('[Cancel Order] ✅ Decoded as legacy transaction');
         } catch (legacyError) {
-          console.error('[Cancel Order] Failed to decode as both versioned and legacy:', {
+          console.error('[Cancel Order] ❌ Both decode methods failed:', {
             versionedError: versionedError.message,
-            legacyError: legacyError.message
+            legacyError: legacyError.message,
+            transactionPreview: result.transaction?.substring(0, 100)
           });
-          throw new Error('Failed to decode transaction. The order may need to be cancelled directly on Jupiter.ag/limit');
-        }
-      }
-      
-      // For versioned transactions, we need to populate recent blockhash
-      if (isVersioned) {
-        try {
-          const recentBlockhash = await connection.getLatestBlockhash();
-          transaction.message.recentBlockhash = recentBlockhash.blockhash;
-          console.log('[Cancel Order] Updated versioned transaction with recent blockhash');
-        } catch (blockHashError) {
-          console.warn('[Cancel Order] Could not update blockhash:', blockHashError.message);
+          
+          // Provide detailed error with Jupiter link
+          const jupiterUrl = `https://jup.ag/limit/${publicKey.toString()}`;
+          throw new Error(
+            `Failed to decode transaction. This may be a Jupiter API issue.\n\n` +
+            `You can cancel this order directly on Jupiter:\n${jupiterUrl}\n\n` +
+            `Error details:\n- Versioned: ${versionedError.message}\n- Legacy: ${legacyError.message}`
+          );
         }
       }
 
@@ -208,6 +314,21 @@ const ProfileView = () => {
 
       console.log('[Cancel Order] ✅ Order cancelled successfully!', executeResult.signature);
       
+      // Store cancel signature in localStorage
+      if (executeResult.signature && orderId) {
+        const { storeOrderSignature } = await import('../utils/orderStorage.js');
+        storeOrderSignature({
+          orderId,
+          signature: executeResult.signature,
+          maker: publicKey.toString(),
+          orderType: 'cancel'
+        });
+      }
+      
+      // Invalidate order cache since we cancelled an order
+      const { invalidateOrderCache } = await import('../utils/orderCache.js');
+      invalidateOrderCache(publicKey.toString());
+      
       // Show success message with transaction link
       const signature = executeResult.signature;
       if (confirm(`Order cancelled successfully!\n\nTransaction: ${signature}\n\nClick OK to view on Solscan`)) {
@@ -219,16 +340,37 @@ const ProfileView = () => {
     } catch (err) {
       console.error('[Cancel Order] ❌ Error:', err);
       
+      // Generate Jupiter link for manual cancellation
+      const jupiterUrl = `https://jup.ag/limit/${publicKey.toString()}`;
+      
       // More detailed error message
       let errorMessage = 'Failed to cancel order: ' + err.message;
+      let showJupiterOption = true;
       
       if (err.message.includes('User rejected')) {
         errorMessage = 'Order cancellation was rejected. Please approve the transaction in your wallet to cancel the order.';
+        showJupiterOption = false;
       } else if (err.message.includes('Wallet does not support')) {
-        errorMessage = 'Your wallet does not support transaction signing. Please use a compatible wallet.';
+        errorMessage = 'Your wallet does not support transaction signing. Please use a compatible wallet or cancel on Jupiter.';
+      } else if (err.message.includes('decode')) {
+        errorMessage = 'Failed to decode the cancellation transaction. This may be a temporary Jupiter API issue.\n\n' +
+                      'You can cancel this order directly on Jupiter instead.';
       }
       
-      alert(errorMessage);
+      // Show error with option to open Jupiter
+      if (showJupiterOption) {
+        const openJupiter = confirm(
+          errorMessage + '\n\n' +
+          'Would you like to open Jupiter to cancel this order manually?\n\n' +
+          'Click OK to open Jupiter, or Cancel to try again later.'
+        );
+        
+        if (openJupiter) {
+          window.open(jupiterUrl, '_blank');
+        }
+      } else {
+        alert(errorMessage);
+      }
     } finally {
       setCancellingOrder(null);
     }
@@ -314,6 +456,31 @@ const ProfileView = () => {
     return (
       <div className="profile-view">
         <div className="profile-container">
+          {/* Dark Mode Toggle Switch - Top Left */}
+          <div className="dark-mode-toggle-container" title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}>
+            <div className="toggle-switch">
+              <input 
+                type="checkbox" 
+                id="darkModeToggle" 
+                checked={isDarkMode}
+                onChange={toggleDarkMode}
+              />
+              <label htmlFor="darkModeToggle" className="toggle-slider">
+                <span className="toggle-icon sun">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                  </svg>
+                </span>
+                <span className="toggle-icon moon">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </span>
+              </label>
+            </div>
+          </div>
+
           {/* Header */}
           <div className="profile-header">
             <div className="profile-icon">
@@ -329,7 +496,6 @@ const ProfileView = () => {
           {/* Wallet Connection Section */}
           <div className="wallet-connection-section">
             <div className="connection-card">
-              <div className="connection-icon">🔗</div>
               <h3>Connect Wallet</h3>
               <p>Connect your Solana wallet to view transaction history, manage favorites, and access advanced features.</p>
               <div className="wallet-button-container">
@@ -343,42 +509,36 @@ const ProfileView = () => {
             <h3>What you'll get access to:</h3>
             <div className="feature-grid">
               <div className="feature-item">
-                <div className="feature-icon">📊</div>
                 <div className="feature-content">
                   <h4>Transaction History</h4>
                   <p>View your complete Solana trading history</p>
                 </div>
               </div>
               <div className="feature-item">
-                <div className="feature-icon">⭐</div>
                 <div className="feature-content">
                   <h4>Synced Favorites</h4>
                   <p>Your favorites synced across devices</p>
                 </div>
               </div>
               <div className="feature-item">
-                <div className="feature-icon">🎯</div>
                 <div className="feature-content">
                   <h4>Portfolio Tracking</h4>
                   <p>Track your meme coin portfolio performance</p>
                 </div>
               </div>
               <div className="feature-item">
-                <div className="feature-icon">🔔</div>
                 <div className="feature-content">
                   <h4>Price Alerts</h4>
                   <p>Get notified when your coins hit target prices</p>
                 </div>
               </div>
               <div className="feature-item">
-                <div className="feature-icon">⚡</div>
                 <div className="feature-content">
                   <h4>Quick Trading</h4>
                   <p>One-click trading with Jupiter integration</p>
                 </div>
               </div>
               <div className="feature-item">
-                <div className="feature-icon">📈</div>
                 <div className="feature-content">
                   <h4>Advanced Analytics</h4>
                   <p>Detailed insights into your trading patterns</p>
@@ -394,6 +554,31 @@ const ProfileView = () => {
   return (
     <div className="profile-view">
       <div className="profile-container">
+        {/* Dark Mode Toggle Switch - Top Left */}
+        <div className="dark-mode-toggle-container" title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}>
+          <div className="toggle-switch">
+            <input 
+              type="checkbox" 
+              id="darkModeToggleConnected" 
+              checked={isDarkMode}
+              onChange={toggleDarkMode}
+            />
+            <label htmlFor="darkModeToggleConnected" className="toggle-slider">
+              <span className="toggle-icon sun">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                  <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+              </span>
+              <span className="toggle-icon moon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </span>
+            </label>
+          </div>
+        </div>
+
         {/* Profile Picture at Top Center */}
         <div className="profile-picture-section">
           <div 
@@ -481,38 +666,77 @@ const ProfileView = () => {
                   const currentPrice = order.currentPrice || triggerPrice;
                   const amount = order.amount || 0;
                   
-                  // Safe timestamp handling
+                  // Safe timestamp handling with improved validation
                   let createdAt = order.createdAt;
                   let expiresAt = order.expiresAt;
+                  let expiresAtRaw = order.expiresAt; // Keep raw value for debugging
                   
                   // Validate createdAt
                   try {
-                    const testDate = new Date(createdAt);
-                    if (isNaN(testDate.getTime())) {
-                      console.warn('Invalid createdAt timestamp:', createdAt);
+                    if (!createdAt) {
+                      console.warn('[Order] No createdAt provided, using current time');
                       createdAt = new Date().toISOString();
+                    } else {
+                      const testDate = new Date(createdAt);
+                      if (isNaN(testDate.getTime())) {
+                        console.warn('[Order] Invalid createdAt timestamp:', createdAt, 'using current time');
+                        createdAt = new Date().toISOString();
+                      } else {
+                        // Valid date - ensure ISO format
+                        createdAt = testDate.toISOString();
+                      }
                     }
                   } catch (err) {
-                    console.error('Error parsing createdAt:', err);
+                    console.error('[Order] Error parsing createdAt:', err, 'raw value:', createdAt);
                     createdAt = new Date().toISOString();
                   }
                   
-                  // Validate expiresAt
+                  // Validate expiresAt with more lenient parsing
                   if (expiresAt) {
                     try {
-                      const testDate = new Date(expiresAt);
-                      if (isNaN(testDate.getTime())) {
-                        console.warn('Invalid expiresAt timestamp:', expiresAt);
-                        expiresAt = null;
+                      // Handle different timestamp formats
+                      let parsedDate;
+                      
+                      // Try parsing as-is (ISO string or timestamp)
+                      parsedDate = new Date(expiresAt);
+                      
+                      // If that failed, try parsing as Unix timestamp (seconds)
+                      if (isNaN(parsedDate.getTime()) && typeof expiresAt === 'number') {
+                        parsedDate = new Date(expiresAt * 1000);
+                      }
+                      
+                      // If still invalid, try parsing as Unix timestamp (milliseconds)
+                      if (isNaN(parsedDate.getTime()) && typeof expiresAt === 'number') {
+                        parsedDate = new Date(expiresAt);
+                      }
+                      
+                      // Validate the parsed date
+                      if (isNaN(parsedDate.getTime())) {
+                        console.warn('[Order] Could not parse expiresAt:', expiresAtRaw, 'type:', typeof expiresAt);
+                        // DON'T set to null - keep the raw value for debugging
+                        expiresAt = expiresAtRaw;
+                      } else {
+                        // Valid date - normalize to ISO format
+                        expiresAt = parsedDate.toISOString();
+                        if (!import.meta.env.PROD) {
+                          console.log('[Order] ✅ Parsed expiry:', expiresAtRaw, '→', expiresAt);
+                        }
                       }
                     } catch (err) {
-                      console.error('Error parsing expiresAt:', err);
-                      expiresAt = null;
+                      console.error('[Order] Error parsing expiresAt:', err, 'raw value:', expiresAtRaw);
+                      // DON'T set to null - keep the raw value
+                      expiresAt = expiresAtRaw;
                     }
                   }
                   
-                  const estimatedValue = order.estimatedValue || 0;
+                  // Extract order ID and value EARLY (before any usage)
                   const orderId = order.orderId || order.id || 'unknown';
+                  const estimatedValue = order.estimatedValue || 0;
+                  
+                  // Log if no expiry is set (now orderId is defined)
+                  if (!expiresAt && !import.meta.env.PROD) {
+                    console.log('[Order] No expiry set for order:', orderId);
+                  }
                   
                   // Calculate percentage difference between current and trigger price
                   const priceDiffPercent = triggerPrice > 0 
@@ -528,14 +752,74 @@ const ProfileView = () => {
                   const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
                   const timeAgo = hours > 0 ? `${hours}h ${minutes}m ago` : `${minutes}m ago`;
                   
-                  // Calculate expiration time if available
-                  const expiresAtDate = expiresAt ? new Date(expiresAt) : null;
-                  const timeUntilExpiry = expiresAtDate && expiresAtDate > now ? expiresAtDate - now : null;
+                  // Calculate expiration time if available with better error handling
+                  let expiresAtDate = null;
+                  let expiryParseError = false;
+                  
+                  if (expiresAt) {
+                    try {
+                      expiresAtDate = new Date(expiresAt);
+                      
+                      // Final validation check
+                      if (isNaN(expiresAtDate.getTime())) {
+                        console.warn('[Order] Expiry date is invalid after parsing:', expiresAt);
+                        expiryParseError = true;
+                        expiresAtDate = null;
+                      } else {
+                        // Sanity check: expiry should be in the future or recent past (not decades ago/ahead)
+                        const yearsDiff = Math.abs(expiresAtDate.getFullYear() - now.getFullYear());
+                        if (yearsDiff > 10) {
+                          console.warn('[Order] Expiry date seems unrealistic:', expiresAtDate, '(years diff:', yearsDiff, ')');
+                          expiryParseError = true;
+                          expiresAtDate = null;
+                        }
+                      }
+                    } catch (err) {
+                      console.error('[Order] Exception parsing expiresAt for display:', err);
+                      expiryParseError = true;
+                      expiresAtDate = null;
+                    }
+                  }
+                  
+                  const isExpired = order.isExpired || isOrderExpired(order);
+                  const timeUntilExpiry = expiresAtDate && expiresAtDate > now && !isExpired ? expiresAtDate - now : null;
                   const hoursUntilExpiry = timeUntilExpiry ? Math.floor(timeUntilExpiry / (1000 * 60 * 60)) : null;
                   const minutesUntilExpiry = timeUntilExpiry ? Math.floor((timeUntilExpiry % (1000 * 60 * 60)) / (1000 * 60)) : null;
-                  const expiryText = hoursUntilExpiry !== null 
-                    ? (hoursUntilExpiry > 0 ? `${hoursUntilExpiry}h ${minutesUntilExpiry}m` : `${minutesUntilExpiry}m`)
-                    : 'No expiry';
+                  
+                  // Calculate days if expiry is far in the future
+                  const daysUntilExpiry = timeUntilExpiry ? Math.floor(timeUntilExpiry / (1000 * 60 * 60 * 24)) : null;
+                  
+                  let expiryText = 'No expiry';
+                  let expiryWarning = false;
+                  
+                  if (expiryParseError && expiresAtRaw) {
+                    // Show that we received expiry data but couldn't parse it
+                    expiryText = '⚠️ Invalid format';
+                    expiryWarning = true;
+                  } else if (isExpired) {
+                    expiryText = '⚠️ EXPIRED';
+                    expiryWarning = true;
+                  } else if (daysUntilExpiry !== null && daysUntilExpiry > 0) {
+                    // Show days for expiry > 24 hours
+                    const remainingHours = hoursUntilExpiry % 24;
+                    expiryText = remainingHours > 0 
+                      ? `${daysUntilExpiry}d ${remainingHours}h` 
+                      : `${daysUntilExpiry}d`;
+                    // Warning if less than 1 day remaining
+                    expiryWarning = daysUntilExpiry === 0;
+                  } else if (hoursUntilExpiry !== null) {
+                    // Show hours/minutes for expiry < 24 hours
+                    expiryText = hoursUntilExpiry > 0 
+                      ? `${hoursUntilExpiry}h ${minutesUntilExpiry}m` 
+                      : `${minutesUntilExpiry}m`;
+                    // Warning if less than 1 hour remaining
+                    expiryWarning = hoursUntilExpiry === 0 && minutesUntilExpiry < 60;
+                  } else if (expiresAt && !expiresAtDate) {
+                    // We have expiry data but couldn't parse it
+                    expiryText = '⚠️ Parse error';
+                    expiryWarning = true;
+                  }
+                  // else: expiryText stays as 'No expiry' (genuinely no expiry set)
                   
                   return (
                     <div key={orderId} className={`order-card ${status === 'active' ? 'active-order' : ''}`}>
@@ -555,12 +839,247 @@ const ProfileView = () => {
                       {/* Detailed Active Order Info */}
                       {status === 'active' && (
                         <>
+                          {/* EXPIRED ORDER WARNING - Show prominently if order is expired */}
+                          {isExpired && (
+                            <div className="expired-order-warning" style={{
+                              background: 'linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%)',
+                              border: '2px solid #ff4757',
+                              borderRadius: '12px',
+                              padding: '16px',
+                              marginBottom: '16px',
+                              color: 'white',
+                              boxShadow: '0 4px 15px rgba(255, 107, 107, 0.3)'
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
+                                <span style={{ fontSize: '24px', marginRight: '10px' }}>⚠️</span>
+                                <strong style={{ fontSize: '16px' }}>ORDER EXPIRED - FUNDS LOCKED IN ESCROW</strong>
+                              </div>
+                              <p style={{ margin: '0 0 12px 0', fontSize: '14px', lineHeight: '1.4' }}>
+                                This order expired on <strong>{formatDate(expiresAt)}</strong>. Your <strong>{estimatedValue > 0 ? `${estimatedValue.toFixed(4)} SOL` : 'funds'}</strong> are currently held in Jupiter's escrow program and will NOT be returned automatically.
+                              </p>
+                              <div style={{ 
+                                background: 'rgba(0,0,0,0.2)', 
+                                padding: '10px', 
+                                borderRadius: '8px',
+                                marginBottom: '12px',
+                                fontSize: '13px',
+                                fontFamily: 'monospace'
+                              }}>
+                                <div style={{ marginBottom: '6px' }}>
+                                  <strong>🔒 Escrow Program:</strong>
+                                  <br />
+                                  <a 
+                                    href="https://solscan.io/account/jupoNjAxXgZ4rjzxzPMP4oxduvQsQtZzyknqvzYNrNu"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    style={{ color: '#4FC3F7', textDecoration: 'underline' }}
+                                  >
+                                    jupoNjAx...Nrnu ↗
+                                  </a>
+                                </div>
+                                {orderId && orderId !== 'unknown' && (
+                                  <div>
+                                    <strong>📦 Order Account:</strong>
+                                    <br />
+                                    <a 
+                                      href={`https://solscan.io/account/${orderId}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      style={{ color: '#4FC3F7', textDecoration: 'underline' }}
+                                    >
+                                      {orderId.slice(0, 8)}...{orderId.slice(-6)} ↗
+                                    </a>
+                                  </div>
+                                )}
+                              </div>
+                              <div style={{
+                                marginTop: '12px',
+                                padding: '12px',
+                                background: 'rgba(0, 0, 0, 0.15)',
+                                borderRadius: '8px',
+                                fontSize: '13px'
+                              }}>
+                                <div style={{ fontWeight: '700', marginBottom: '8px' }}>
+                                  🔧 TO RECOVER YOUR FUNDS:
+                                </div>
+                                <div style={{ marginBottom: '10px', lineHeight: '1.5' }}>
+                                  <strong>Option 1:</strong> Click the "Cancel Order" button below
+                                </div>
+                                <div style={{ lineHeight: '1.5' }}>
+                                  <strong>Option 2:</strong> Visit Jupiter's interface
+                                  <div style={{ marginTop: '6px' }}>
+                                    <a 
+                                      href="https://jup.ag/limit"
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      style={{ 
+                                        color: '#ffffff', 
+                                        background: 'rgba(255, 255, 255, 0.2)',
+                                        textDecoration: 'none',
+                                        padding: '6px 12px',
+                                        borderRadius: '6px',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        fontWeight: '600',
+                                        fontSize: '12px',
+                                        border: '1px solid rgba(255, 255, 255, 0.3)'
+                                      }}
+                                    >
+                                      🔗 Open Jupiter Limit Orders ↗
+                                    </a>
+                                  </div>
+                                </div>
+                              </div>
+                              <p style={{ margin: '12px 0 0 0', fontSize: '14px', fontWeight: '700', lineHeight: '1.4', textAlign: 'center' }}>
+                                ⚡ Your {estimatedValue > 0 ? `${estimatedValue.toFixed(4)} SOL` : 'funds'} won't be returned automatically - you must cancel manually!
+                              </p>
+                            </div>
+                          )}
+
+                          {/* ESCROW INFO BADGE - Show for all active orders */}
+                          {!isExpired && (
+                            <div className="escrow-info-badge" style={{
+                              background: 'linear-gradient(135deg, rgba(66, 153, 225, 0.15) 0%, rgba(49, 130, 206, 0.15) 100%)',
+                              border: '2px solid rgba(66, 153, 225, 0.3)',
+                              borderRadius: '12px',
+                              padding: '14px',
+                              marginBottom: '16px',
+                              display: 'flex',
+                              alignItems: 'flex-start',
+                              gap: '12px'
+                            }}>
+                              <div style={{ fontSize: '24px', flexShrink: 0 }}>🔒</div>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ 
+                                  fontSize: '14px', 
+                                  fontWeight: '600', 
+                                  marginBottom: '8px',
+                                  color: '#2D3748'
+                                }}>
+                                  Funds Held in Jupiter Escrow
+                                </div>
+                                <div style={{ 
+                                  fontSize: '13px', 
+                                  lineHeight: '1.5',
+                                  color: '#4A5568',
+                                  marginBottom: '8px'
+                                }}>
+                                  Your <strong>{estimatedValue > 0 ? `${estimatedValue.toFixed(4)} SOL` : 'funds'}</strong> are securely held in a Program Derived Address (PDA) until the order executes or you cancel it.
+                                </div>
+                                <div style={{
+                                  display: 'flex',
+                                  flexWrap: 'wrap',
+                                  gap: '8px',
+                                  fontSize: '12px'
+                                }}>
+                                  <a 
+                                    href="https://solscan.io/account/jupoNjAxXgZ4rjzxzPMP4oxduvQsQtZzyknqvzYNrNu"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    style={{ 
+                                      color: '#4FC3F7', 
+                                      textDecoration: 'none',
+                                      padding: '4px 8px',
+                                      background: 'rgba(79, 195, 247, 0.1)',
+                                      borderRadius: '6px',
+                                      fontWeight: '500'
+                                    }}
+                                  >
+                                    📋 View Escrow Program ↗
+                                  </a>
+                                  {orderId && orderId !== 'unknown' && (
+                                    <a 
+                                      href={`https://solscan.io/account/${orderId}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      style={{ 
+                                        color: '#4FC3F7', 
+                                        textDecoration: 'none',
+                                        padding: '4px 8px',
+                                        background: 'rgba(79, 195, 247, 0.1)',
+                                        borderRadius: '6px',
+                                        fontWeight: '500'
+                                      }}
+                                    >
+                                      📦 View Order Account ↗
+                                    </a>
+                                  )}
+                                </div>
+                                <div style={{
+                                  marginTop: '10px',
+                                  padding: '10px',
+                                  background: 'rgba(237, 242, 247, 0.8)',
+                                  borderRadius: '6px',
+                                  fontSize: '12px',
+                                  color: '#2D3748',
+                                  lineHeight: '1.6'
+                                }}>
+                                  <div style={{ marginBottom: '6px' }}>
+                                    <strong>ℹ️ Important:</strong> If this order expires, your funds will remain in escrow. You must manually cancel the order to retrieve them.
+                                  </div>
+                                  <div style={{ 
+                                    display: 'flex', 
+                                    gap: '8px', 
+                                    alignItems: 'center',
+                                    marginTop: '8px'
+                                  }}>
+                                    <span style={{ fontSize: '11px', color: '#718096' }}>
+                                      Cancel below or via
+                                    </span>
+                                    <a 
+                                      href="https://jup.ag/limit"
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      style={{ 
+                                        color: '#3182ce', 
+                                        textDecoration: 'none',
+                                        fontWeight: '600',
+                                        fontSize: '11px',
+                                        padding: '3px 8px',
+                                        background: 'rgba(49, 130, 206, 0.1)',
+                                        borderRadius: '4px',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px'
+                                      }}
+                                    >
+                                      🔗 Jupiter Interface ↗
+                                    </a>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                          
                           {/* Price Progress Section */}
                           <div className="order-price-progress">
                             <div className="price-comparison">
                               <div className="price-box current-price">
                                 <div className="price-label">Current Price</div>
-                                <div className="price-amount">${formatPrice(currentPrice)}</div>
+                                <div className="price-amount" title={`Price in SOL per token${order.currentPriceSource ? `\nSource: ${order.currentPriceSource}` : ''}`}>
+                                  {formatPrice(currentPrice)} SOL
+                                </div>
+                                {order.currentPriceSource && order.currentPriceSource !== 'fallback-trigger' && (
+                                  <div style={{ 
+                                    fontSize: '10px', 
+                                    color: '#10b981', 
+                                    marginTop: '2px',
+                                    fontWeight: '600'
+                                  }}>
+                                    ✓ Live Price
+                                  </div>
+                                )}
+                                {order.currentPriceSource === 'fallback-trigger' && (
+                                  <div style={{ 
+                                    fontSize: '10px', 
+                                    color: '#f59e0b', 
+                                    marginTop: '2px',
+                                    fontWeight: '600'
+                                  }} title="Price API unavailable - showing trigger price">
+                                    ⚠️ Using Trigger
+                                  </div>
+                                )}
                               </div>
                               <div className="price-arrow">
                                 {order.type === 'buy' ? (
@@ -571,7 +1090,9 @@ const ProfileView = () => {
                               </div>
                               <div className="price-box trigger-price">
                                 <div className="price-label">Trigger Price</div>
-                                <div className="price-amount">${formatPrice(triggerPrice)}</div>
+                                <div className="price-amount" title="Price in SOL per token at which order will execute">
+                                  {formatPrice(triggerPrice)} SOL
+                                </div>
                               </div>
                             </div>
                             
@@ -616,7 +1137,12 @@ const ProfileView = () => {
                               <div className="detail-icon">⏰</div>
                               <div className="detail-content">
                                 <div className="detail-label">Expires In</div>
-                                <div className="detail-value-large">{expiryText}</div>
+                                <div className={`detail-value-large ${expiryWarning ? 'expiry-warning' : ''}`} style={{
+                                  color: expiryWarning ? '#ff4757' : 'inherit',
+                                  fontWeight: expiryWarning ? '700' : 'inherit'
+                                }}>
+                                  {expiryText}
+                                </div>
                               </div>
                             </div>
                             
@@ -683,12 +1209,55 @@ const ProfileView = () => {
                           {/* Cancel Button */}
                           <div className="order-actions">
                             <button
-                              className="cancel-order-btn"
+                              className={`cancel-order-btn ${isExpired ? 'expired-urgent' : ''}`}
                               onClick={() => handleCancelOrder(orderId)}
                               disabled={cancellingOrder === orderId}
+                              style={isExpired ? {
+                                background: 'linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%)',
+                                color: 'white',
+                                fontWeight: '700',
+                                fontSize: '16px',
+                                padding: '14px 24px',
+                                boxShadow: '0 4px 15px rgba(255, 107, 107, 0.4)',
+                                border: '2px solid #ff4757',
+                                animation: 'pulse 2s infinite'
+                              } : {}}
                             >
-                              {cancellingOrder === orderId ? '⏳ Cancelling...' : '🗑️ Cancel Order'}
+                              {cancellingOrder === orderId 
+                                ? '⏳ Cancelling...' 
+                                : isExpired 
+                                  ? '⚡ CANCEL & RETRIEVE FUNDS' 
+                                  : '🗑️ Cancel Order'}
                             </button>
+                            
+                            {/* Always show Jupiter link as backup option */}
+                            <p style={{
+                              margin: '8px 0 0 0',
+                              fontSize: '12px',
+                              color: isExpired ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.5)',
+                              textAlign: 'center'
+                            }}>
+                              {isExpired ? (
+                                <>
+                                  Click to return your funds from escrow<br/>
+                                  or{' '}
+                                </>
+                              ) : (
+                                <>Having issues? Try{' '}</>
+                              )}
+                              <a
+                                href={`https://jup.ag/limit/${publicKey?.toString() || ''}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{
+                                  color: '#4FC3F7',
+                                  textDecoration: 'underline',
+                                  fontWeight: '600'
+                                }}
+                              >
+                                {isExpired ? 'manage on Jupiter ↗' : 'canceling on Jupiter ↗'}
+                              </a>
+                            </p>
                           </div>
                         </>
                       )}
@@ -696,6 +1265,99 @@ const ProfileView = () => {
                       {/* Simplified History Order Info */}
                       {status !== 'active' && (
                         <div className="order-details">
+                          {/* EXPIRED BADGE for history orders with action buttons */}
+                          {isExpired && order.status !== 'cancelled' && order.status !== 'executed' && (
+                            <div className="expired-badge-enhanced" style={{
+                              background: 'linear-gradient(135deg, #ff6b6b 0%, #ff5252 100%)',
+                              color: 'white',
+                              padding: '14px',
+                              borderRadius: '12px',
+                              marginBottom: '12px',
+                              fontSize: '13px',
+                              fontWeight: '600',
+                              border: '2px solid #ff5252',
+                              boxShadow: '0 4px 12px rgba(255, 107, 107, 0.3)'
+                            }}>
+                              <div style={{ marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                                <span style={{ fontSize: '16px' }}>⚠️</span>
+                                <span>This order expired - Retrieve your funds now!</span>
+                              </div>
+                              <div style={{ fontSize: '11px', opacity: 0.9, marginBottom: '12px', lineHeight: '1.4' }}>
+                                Your funds are held in Jupiter's escrow. You must cancel this order to get them back.
+                              </div>
+                              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                                <button
+                                  onClick={() => handleCancelOrder(orderId)}
+                                  disabled={cancellingOrder === orderId}
+                                  className="retrieve-funds-btn-primary"
+                                  style={{
+                                    background: 'white',
+                                    color: '#ff6b6b',
+                                    border: 'none',
+                                    padding: '8px 16px',
+                                    borderRadius: '8px',
+                                    fontSize: '13px',
+                                    fontWeight: '700',
+                                    cursor: cancellingOrder === orderId ? 'not-allowed' : 'pointer',
+                                    opacity: cancellingOrder === orderId ? 0.6 : 1,
+                                    transition: 'all 0.2s ease',
+                                    boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                                    flex: '1 1 auto',
+                                    minWidth: '140px',
+                                    maxWidth: '200px'
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    if (cancellingOrder !== orderId) {
+                                      e.target.style.transform = 'translateY(-2px)';
+                                      e.target.style.boxShadow = '0 4px 12px rgba(0,0,0,0.2)';
+                                    }
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.target.style.transform = 'translateY(0)';
+                                    e.target.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
+                                  }}
+                                >
+                                  {cancellingOrder === orderId ? '⏳ Cancelling...' : '💰 Cancel & Retrieve'}
+                                </button>
+                                <a
+                                  href={`https://jup.ag/limit/${publicKey?.toString() || ''}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="retrieve-funds-btn-secondary"
+                                  style={{
+                                    background: 'rgba(255, 255, 255, 0.15)',
+                                    color: 'white',
+                                    border: '1px solid rgba(255, 255, 255, 0.4)',
+                                    padding: '8px 16px',
+                                    borderRadius: '8px',
+                                    fontSize: '13px',
+                                    fontWeight: '600',
+                                    cursor: 'pointer',
+                                    textDecoration: 'none',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    transition: 'all 0.2s ease',
+                                    flex: '1 1 auto',
+                                    minWidth: '140px',
+                                    maxWidth: '200px',
+                                    justifyContent: 'center'
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.target.style.background = 'rgba(255, 255, 255, 0.25)';
+                                    e.target.style.borderColor = 'rgba(255, 255, 255, 0.6)';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.target.style.background = 'rgba(255, 255, 255, 0.15)';
+                                    e.target.style.borderColor = 'rgba(255, 255, 255, 0.4)';
+                                  }}
+                                >
+                                  <span>Or use Jupiter</span>
+                                  <span>↗</span>
+                                </a>
+                              </div>
+                            </div>
+                          )}
                           <div className="order-detail-row">
                             <span className="detail-label">Trigger Price:</span>
                             <span className="detail-value">${formatPrice(triggerPrice)}</span>
@@ -786,7 +1448,7 @@ const ProfileView = () => {
           <div className="wallet-info-section">
             <div className="wallet-info-card">
               <div className="wallet-header">
-                <h3>💼 Wallet Information</h3>
+                <h3>Wallet Information</h3>
                 <button 
                   className="disconnect-btn"
                   onClick={disconnect}
@@ -806,7 +1468,10 @@ const ProfileView = () => {
                       onClick={() => copyToClipboard(publicKey?.toString())}
                       title="Copy full address"
                     >
-                      📋
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" strokeWidth="2"/>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" strokeWidth="2"/>
+                      </svg>
                     </button>
                   </div>
                 </div>
@@ -827,7 +1492,10 @@ const ProfileView = () => {
                       disabled={isLoadingBalance}
                       title="Refresh balance"
                     >
-                      🔄
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M1 4v6h6M23 20v-6h-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
                     </button>
                   </div>
                 </div>
@@ -837,7 +1505,7 @@ const ProfileView = () => {
 
           {/* Tracked Wallets Section */}
           <div className="feature-section">
-            <h3>👀 Tracked Wallets ({trackedWallets.length})</h3>
+            <h3>Tracked Wallets ({trackedWallets.length})</h3>
             {trackedWallets.length === 0 ? (
               <div className="empty-state">
                 <p>No tracked wallets yet</p>
@@ -853,7 +1521,13 @@ const ProfileView = () => {
                         onClick={() => setSelectedWallet(wallet.address)}
                         title="Click to view analytics"
                       >
-                        <span className="wallet-icon">👛</span>
+                        <span className="wallet-icon">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h7" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                            <circle cx="17" cy="17" r="4" stroke="currentColor" strokeWidth="2"/>
+                            <path d="M19 17h-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                          </svg>
+                        </span>
                         <span className="wallet-addr">{wallet.address.slice(0, 4)}...{wallet.address.slice(-4)}</span>
                       </div>
                       <div className="tracked-wallet-meta">
@@ -867,7 +1541,10 @@ const ProfileView = () => {
                         onClick={() => setSelectedWallet(wallet.address)}
                         title="View analytics"
                       >
-                        📊
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M3 3v18h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="m19 9-5 5-4-4-5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
                       </button>
                       <button
                         className="untrack-wallet-btn"
@@ -884,7 +1561,7 @@ const ProfileView = () => {
           </div>
 
           <div className="feature-section">
-            <h3>🎯 Portfolio Tracking</h3>
+            <h3>Portfolio Tracking</h3>
             <div className="coming-soon-feature">
               <p>Track your meme coin portfolio performance and P&L.</p>
               <span className="coming-soon-badge">Coming Soon</span>
@@ -892,7 +1569,7 @@ const ProfileView = () => {
           </div>
 
           <div className="feature-section">
-            <h3>⚙️ Settings</h3>
+            <h3>Settings</h3>
             <div className="settings-grid">
               <div className="setting-item">
                 <span>Network:</span>

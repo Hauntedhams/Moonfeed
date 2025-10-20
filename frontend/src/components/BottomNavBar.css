@@ -162,3 +162,63 @@
     margin: 0 4px;
   }
 }
+
+/* =============================================================================
+   DARK MODE STYLES
+   ============================================================================= */
+
+.dark-mode .bottom-nav {
+  background: rgba(0, 0, 0, 0.95) !important;
+  border-top-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 -4px 32px 0 rgba(0, 0, 0, 0.5);
+}
+
+.dark-mode .nav-btn {
+  color: rgba(255, 255, 255, 0.6) !important;
+}
+
+.dark-mode .nav-btn:hover {
+  color: rgba(255, 255, 255, 0.9) !important;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.dark-mode .nav-btn.active {
+  color: #fff !important;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.dark-mode .nav-btn:active,
+.dark-mode .nav-btn:focus {
+  color: #fff !important;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* Ensure nav labels and icons inherit color */
+.dark-mode .nav-label {
+  color: inherit;
+}
+
+.dark-mode .nav-icon {
+  color: inherit;
+}
+
+.dark-mode .nav-icon svg {
+  color: inherit;
+}
+
+/* Trade button stays the same in dark mode (gradient) */
+.dark-mode .nav-btn-trade {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  color: #fff !important;
+  box-shadow: 0 4px 16px rgba(102, 126, 234, 0.4);
+}
+
+.dark-mode .nav-btn-trade:hover {
+  background: linear-gradient(135deg, #5a6fd8 0%, #6b4190 100%) !important;
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+}
+
+.dark-mode .nav-btn-trade.active {
+  background: linear-gradient(135deg, #5a6fd8 0%, #6b4190 100%) !important;
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+}

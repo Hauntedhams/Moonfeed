@@ -58,6 +58,19 @@ const CoinCard = memo(({
     (coin.rugcheck && Object.keys(coin.rugcheck).length > 0)
   );
 
+  // 🐛 DEBUG: Log Age and Holders data for debugging
+  useEffect(() => {
+    console.log(`🐛 [CoinCard] ${coin.symbol || coin.name} Age/Holders debug:`, {
+      age: coin.age,
+      ageHours: coin.ageHours,
+      created_timestamp: coin.created_timestamp,
+      createdTimestamp: coin.createdTimestamp,
+      holders: coin.holders,
+      holderCount: coin.holderCount,
+      allCoinProps: Object.keys(coin).filter(k => k.toLowerCase().includes('age') || k.toLowerCase().includes('holder') || k.toLowerCase().includes('created'))
+    });
+  }, [coin]);
+
   // 🔥 MOBILE PERFORMANCE FIX: Detect mobile and disable live data
   const isMobile = useRef(/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)).current;
 
@@ -75,6 +88,16 @@ const CoinCard = memo(({
 
   // 🆕 ON-VIEW ENRICHMENT: Trigger enrichment when coin becomes visible
   const [enrichmentRequested, setEnrichmentRequested] = useState(false);
+  const [enrichmentCompleted, setEnrichmentCompleted] = useState(false); // Track when enrichment finishes
+  
+  // 🆕 CRITICAL FIX: If coin is already enriched on load, mark enrichmentCompleted as true
+  // This MUST come AFTER enrichmentCompleted state is declared
+  useEffect(() => {
+    if (isEnriched && !enrichmentCompleted) {
+      console.log(`📦 Coin ${coin.symbol} is pre-enriched, enabling chart auto-load`);
+      setEnrichmentCompleted(true);
+    }
+  }, [isEnriched, enrichmentCompleted, coin.symbol]);
   
   useEffect(() => {
     // Only enrich if:
@@ -112,6 +135,9 @@ const CoinCard = memo(({
                 hasRugcheck: !!data.coin.rugcheckScore || !!data.coin.liquidityLocked,
                 hasBanner: !!data.coin.banner
               });
+              
+              // 🆕 Mark enrichment as completed to trigger chart auto-load
+              setEnrichmentCompleted(true);
               
               // Notify parent component of enrichment completion
               if (onEnrichmentComplete && typeof onEnrichmentComplete === 'function') {
@@ -590,108 +616,140 @@ const CoinCard = memo(({
     return () => container.removeEventListener('scroll', handleChartScroll);
   }, []);
 
+  // 🎉 No more custom touch/mouse handlers needed!
+  // The nav dots are now inside the scroll container as an overlay with pointer-events:none,
+  // so native browser scrolling works perfectly everywhere - just swipe/drag and the browser handles it!
+
   // Handle touch/swipe on nav dots area to control chart navigation
+  // � INSTANT RESPONSE: Zero thresholds, zero detection, just pure scroll
   useEffect(() => {
     const navContainer = chartNavRef.current;
     const chartsContainer = chartsContainerRef.current;
+    
     if (!navContainer || !chartsContainer) return;
 
-    let lastX = 0;
-    let lastY = 0;
-    let isDragging = false;
-    let isHorizontalSwipe = false;
+    // Helper function for snap-to-page behavior
+    const snapToNearestPage = () => {
+      const chartWidth = chartsContainer.clientWidth;
+      const currentScroll = chartsContainer.scrollLeft;
+      const currentPage = Math.round(currentScroll / chartWidth);
+      const targetScroll = currentPage * chartWidth;
+      
+      chartsContainer.scrollTo({
+        left: targetScroll,
+        behavior: 'smooth'
+      });
+    };
+
+    // Touch handling
+    let touchStartX = 0;
+    let touchStartScrollLeft = 0;
+    let isTouch = false;
 
     const handleTouchStart = (e) => {
-      // Only start tracking if touch is directly on the nav dots container
-      lastX = e.touches[0].clientX;
-      lastY = e.touches[0].clientY;
-      isDragging = true;
-      isHorizontalSwipe = false;
+      isTouch = true;
+      touchStartX = e.touches[0].clientX;
+      touchStartScrollLeft = chartsContainer.scrollLeft;
     };
 
     const handleTouchMove = (e) => {
+      if (!isTouch) return;
+      
+      const deltaX = touchStartX - e.touches[0].clientX;
+      const maxScrollLeft = chartsContainer.scrollWidth - chartsContainer.clientWidth;
+      
+      chartsContainer.scrollLeft = Math.max(0, Math.min(
+        touchStartScrollLeft + deltaX,
+        maxScrollLeft
+      ));
+      
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    const handleTouchEnd = () => {
+      if (!isTouch) return;
+      isTouch = false;
+      snapToNearestPage();
+    };
+
+    // Mouse drag handling
+    let isDragging = false;
+    let dragStartX = 0;
+    let dragStartScrollLeft = 0;
+
+    const handleMouseDown = (e) => {
+      isDragging = true;
+      dragStartX = e.clientX;
+      dragStartScrollLeft = chartsContainer.scrollLeft;
+      navContainer.style.cursor = 'grabbing';
+      e.preventDefault();
+    };
+
+    const handleMouseMove = (e) => {
       if (!isDragging) return;
       
-      const currentX = e.touches[0].clientX;
-      const currentY = e.touches[0].clientY;
-      const deltaX = Math.abs(currentX - lastX);
-      const deltaY = Math.abs(currentY - lastY);
+      const deltaX = dragStartX - e.clientX;
+      const maxScrollLeft = chartsContainer.scrollWidth - chartsContainer.clientWidth;
       
-      // Only enable horizontal swipe if horizontal movement is dominant
-      if (!isHorizontalSwipe && deltaX > 10 && deltaX > (deltaY * 2)) {
-        isHorizontalSwipe = true;
+      chartsContainer.scrollLeft = Math.max(0, Math.min(
+        dragStartScrollLeft + deltaX,
+        maxScrollLeft
+      ));
+      
+      e.preventDefault();
+    };
+
+    const handleMouseUp = () => {
+      if (!isDragging) return;
+      isDragging = false;
+      navContainer.style.cursor = 'grab';
+      snapToNearestPage();
+    };
+
+    // Wheel/trackpad handling - clean and fast
+    const handleWheel = (e) => {
+      // Horizontal scroll (trackpad two-finger swipe left/right)
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && Math.abs(e.deltaX) > 1) {
+        const maxScroll = chartsContainer.scrollWidth - chartsContainer.clientWidth;
+        chartsContainer.scrollLeft = Math.max(0, Math.min(
+          chartsContainer.scrollLeft + e.deltaX, 
+          maxScroll
+        ));
+        e.preventDefault();
+        e.stopPropagation();
       }
-      
-      // If it's a horizontal swipe, handle chart scrolling
-      if (isHorizontalSwipe) {
-        const scrollDelta = lastX - currentX;
-        const newScroll = chartsContainer.scrollLeft + (scrollDelta * 1.5);
-        chartsContainer.scrollLeft = newScroll;
-        
-        lastX = currentX;
-        
-        // Prevent default only for horizontal swipes
+      // Shift+wheel for horizontal scroll
+      else if (e.shiftKey && Math.abs(e.deltaY) > 1) {
+        const maxScroll = chartsContainer.scrollWidth - chartsContainer.clientWidth;
+        chartsContainer.scrollLeft = Math.max(0, Math.min(
+          chartsContainer.scrollLeft + e.deltaY, 
+          maxScroll
+        ));
         e.preventDefault();
         e.stopPropagation();
       }
     };
 
-    const handleTouchEnd = () => {
-      isDragging = false;
-      isHorizontalSwipe = false;
-    };
-
-    // Mouse events for desktop
-    let isDown = false;
-    let mouseLastX = 0;
-
-    const handleMouseDown = (e) => {
-      isDown = true;
-      navContainer.style.cursor = 'grabbing';
-      mouseLastX = e.clientX;
-      e.preventDefault();
-    };
-
-    const handleMouseMove = (e) => {
-      if (!isDown) return;
-      
-      const currentX = e.clientX;
-      const deltaX = mouseLastX - currentX;
-      
-      const newScroll = chartsContainer.scrollLeft + (deltaX * 1.5);
-      chartsContainer.scrollLeft = newScroll;
-      
-      mouseLastX = currentX;
-      e.preventDefault();
-    };
-
-    const handleMouseUp = () => {
-      isDown = false;
-      navContainer.style.cursor = 'grab';
-    };
-
-    const handleMouseLeave = () => {
-      isDown = false;
-      navContainer.style.cursor = 'grab';
-    };
-
-    // Add event listeners with capture phase for touch events
-    navContainer.addEventListener('touchstart', handleTouchStart, { passive: false, capture: true });
-    navContainer.addEventListener('touchmove', handleTouchMove, { passive: false, capture: true });
-    navContainer.addEventListener('touchend', handleTouchEnd, { passive: true, capture: true });
+    // Attach listeners - touchstart MUST be non-passive for preventDefault to work
+    navContainer.addEventListener('touchstart', handleTouchStart, { passive: false });
+    navContainer.addEventListener('touchmove', handleTouchMove, { passive: false });
+    navContainer.addEventListener('touchend', handleTouchEnd, { passive: true });
     navContainer.addEventListener('mousedown', handleMouseDown);
-    navContainer.addEventListener('mousemove', handleMouseMove);
-    navContainer.addEventListener('mouseup', handleMouseUp);
-    navContainer.addEventListener('mouseleave', handleMouseLeave);
+    navContainer.addEventListener('wheel', handleWheel, { passive: false });
+    
+    // Mouse move/up on document for reliable tracking
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
 
     return () => {
-      navContainer.removeEventListener('touchstart', handleTouchStart, true);
-      navContainer.removeEventListener('touchmove', handleTouchMove, true);
-      navContainer.removeEventListener('touchend', handleTouchEnd, true);
+      navContainer.removeEventListener('touchstart', handleTouchStart);
+      navContainer.removeEventListener('touchmove', handleTouchMove);
+      navContainer.removeEventListener('touchend', handleTouchEnd);
       navContainer.removeEventListener('mousedown', handleMouseDown);
-      navContainer.removeEventListener('mousemove', handleMouseMove);
-      navContainer.removeEventListener('mouseup', handleMouseUp);
-      navContainer.removeEventListener('mouseleave', handleMouseLeave);
+      navContainer.removeEventListener('wheel', handleWheel);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
     };
   }, []);
 
@@ -776,7 +834,34 @@ const CoinCard = memo(({
   const marketCap = liveData?.marketCap ?? coin.market_cap_usd ?? coin.market_cap ?? coin.marketCap ?? 0;
   const volume24h = liveData?.volume24h ?? coin.volume_24h_usd ?? coin.volume_24h ?? coin.volume24h ?? 0;
   const liquidity = liveData?.liquidity ?? coin.liquidity_usd ?? coin.liquidity ?? coin.liquidityUsd ?? 0;
-  const holders = liveData?.holders ?? coin.holders ?? 0;
+  const holders = liveData?.holders ?? coin.holders ?? coin.holderCount ?? coin.holder_count ?? coin.dexscreener?.holders ?? 0;
+  
+  // 🔍 DEBUG: Log data for specific coin
+  if (coin.mintAddress === 'BwbZ992sMqabbBYnEj4tfNBmtdYtjRkSqgAGCyCRpump') {
+    console.log('🔍 DEBUG - Coin Data for BwbZ992s...:', {
+      symbol: coin.symbol,
+      name: coin.name,
+      mintAddress: coin.mintAddress,
+      holders_data: {
+        'liveData.holders': liveData?.holders,
+        'coin.holders': coin.holders,
+        'coin.holderCount': coin.holderCount,
+        'coin.holder_count': coin.holder_count,
+        'coin.dexscreener.holders': coin.dexscreener?.holders,
+        'FINAL holders': holders
+      },
+      age_data: {
+        'liveData.ageHours': liveData?.ageHours,
+        'coin.ageHours': coin.ageHours,
+        'coin.age': coin.age,
+        'coin.created_timestamp': coin.created_timestamp,
+        'coin.createdAt': coin.createdAt,
+        'coin.dexscreener.pairCreatedAt': coin.dexscreener?.pairCreatedAt
+      },
+      full_coin_object: coin,
+      full_liveData: liveData
+    });
+  }
   
   // Enhanced metrics from DexScreener with live data fallback
   const fdv = liveData?.fdv ?? coin.fdv ?? coin.fullyDilutedValuation ?? 0;
@@ -785,7 +870,21 @@ const CoinCard = memo(({
   const buys24h = liveData?.buys24h ?? coin.buys24h ?? coin.dexscreener?.transactions?.buys24h ?? 0;
   const sells24h = liveData?.sells24h ?? coin.sells24h ?? coin.dexscreener?.transactions?.sells24h ?? 0;
   const totalTxns24h = liveData?.totalTransactions ?? coin.totalTransactions ?? (buys24h + sells24h) ?? 0;
-  const ageHours = liveData?.ageHours ?? coin.ageHours ?? coin.dexscreener?.poolInfo?.ageHours ?? 0;
+  
+  // Calculate age from created_timestamp if available
+  const calculateAgeHours = () => {
+    if (liveData?.ageHours) return liveData.ageHours;
+    if (coin.ageHours) return coin.ageHours;
+    if (coin.age) return coin.age;
+    if (coin.created_timestamp) {
+      const ageMs = Date.now() - coin.created_timestamp;
+      return Math.floor(ageMs / (1000 * 60 * 60)); // Convert to hours
+    }
+    if (coin.dexscreener?.poolInfo?.ageHours) return coin.dexscreener.poolInfo.ageHours;
+    return 0;
+  };
+  
+  const ageHours = calculateAgeHours();
   const boosts = liveData?.boosts ?? coin.boosts ?? coin.dexscreener?.boosts ?? 0;
 
   // 🎓 GRADUATING TOKENS: Calculate live graduation percentage
@@ -1206,119 +1305,73 @@ const CoinCard = memo(({
         <div className="info-layer-content">
           {/* Price Charts - Horizontal Scrollable with Snap */}
           <div className="charts-section">
-            {/* Navigation Dots Above Chart - Swipe area to control charts */}
+            {/* 🔥 HOT SWIPE AREA - Full-width container for natural scroll/drag */}
             <div 
-              className="chart-nav-dots-top" 
+              className="chart-nav-hot-area" 
               ref={chartNavRef}
             >
-              <div 
-                className={`nav-dot ${currentChartPage === 0 ? 'active' : ''}`}
-                onClick={() => navigateToChartPage(0)}
-              ></div>
-              <div 
-                className={`nav-dot ${currentChartPage === 1 ? 'active' : ''}`}
-                onClick={() => navigateToChartPage(1)}
-              ></div>
-              
-              {/* 🎓 GRADUATION PROGRESS BAR - Show for graduating tokens */}
-              {graduationPercentage !== null && (
+              {/* Visual nav elements inside the hot area */}
+              <div className="chart-nav-content">
                 <div 
-                  className="graduation-progress-bar-container"
-                  style={{
-                    flex: 1,
-                    marginLeft: '16px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    minWidth: 0 // Allow flex shrink
-                  }}
-                >
-                  <div style={{
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    color: graduationColor,
-                    whiteSpace: 'nowrap',
-                    minWidth: '45px',
-                    textAlign: 'right'
-                  }}>
-                    {formatGraduationPercentage(graduationPercentage, 1)}
-                  </div>
+                  className={`nav-dot ${currentChartPage === 0 ? 'active' : ''}`}
+                  onClick={() => navigateToChartPage(0)}
+                ></div>
+                <div 
+                  className={`nav-dot ${currentChartPage === 1 ? 'active' : ''}`}
+                  onClick={() => navigateToChartPage(1)}
+                  ></div>
                   
-                  <div 
-                    className="graduation-progress-track"
-                    style={{
-                      flex: 1,
-                      height: '10px',
-                      background: 'rgba(0, 0, 0, 0.1)',
-                      borderRadius: '5px',
-                      overflow: 'hidden',
-                      position: 'relative',
-                      minWidth: '100px'
-                    }}
-                  >
-                    <div 
-                      className="graduation-progress-fill"
-                      style={{
-                        height: '100%',
-                        background: `linear-gradient(90deg, ${graduationColor}, ${graduationColor}dd)`,
-                        borderRadius: '5px',
-                        width: `${graduationPercentage}%`,
-                        transition: 'width 0.5s ease-out',
-                        boxShadow: graduationPercentage >= 95 ? `0 0 10px ${graduationColor}88` : 'none',
-                        animation: graduationPercentage >= 95 ? 'pulse 2s ease-in-out infinite' : 'none'
-                      }}
-                    />
-                  </div>
-                  
-                  {/* Graduation Info Icon */}
-                  <div 
-                    ref={graduationIconRef}
-                    className="graduation-info-icon"
-                    onClick={() => setShowGraduationInfo(!showGraduationInfo)}
-                    style={{
-                      width: '20px',
-                      height: '20px',
-                      borderRadius: '50%',
-                      border: '1.5px solid rgba(0, 0, 0, 0.4)',
-                      background: 'rgba(255, 255, 255, 0.9)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      cursor: 'pointer',
-                      fontSize: '11px',
-                      fontWeight: 700,
-                      color: 'rgba(0, 0, 0, 0.7)',
-                      transition: 'all 0.2s ease',
-                      flexShrink: 0,
-                      position: 'relative'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.6)';
-                      e.currentTarget.style.color = 'rgba(0, 0, 0, 0.9)';
-                      e.currentTarget.style.background = 'rgba(255, 255, 255, 1)';
+                  {/* 🎓 GRADUATION PROGRESS BAR - Show for graduating tokens */}
+                  {graduationPercentage !== null && (
+                    <div className="graduation-progress-bar-container">
+                      <div className="graduation-percentage-text" style={{
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        color: graduationColor,
+                        whiteSpace: 'nowrap',
+                        minWidth: '45px',
+                        textAlign: 'right'
+                      }}>
+                        {formatGraduationPercentage(graduationPercentage, 1)}
+                      </div>
                       
-                      // Calculate position for portal tooltip
-                      const rect = e.currentTarget.getBoundingClientRect();
-                      setGraduationIconPosition({
-                        top: rect.bottom + window.scrollY,
-                        right: window.innerWidth - rect.right - window.scrollX
-                      });
-                      setShowGraduationInfo(true);
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.4)';
-                      e.currentTarget.style.color = 'rgba(0, 0, 0, 0.7)';
-                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.9)';
-                      setShowGraduationInfo(false);
-                      setGraduationIconPosition(null);
-                    }}
-                  >
-                    ?
-                  </div>
-                </div>
-              )}
+                      <div className="graduation-progress-track">
+                        <div 
+                          className="graduation-progress-fill"
+                          style={{
+                            background: `linear-gradient(90deg, ${graduationColor}, ${graduationColor}dd)`,
+                            width: `${graduationPercentage}%`,
+                            boxShadow: graduationPercentage >= 95 ? `0 0 10px ${graduationColor}88` : 'none',
+                            animation: graduationPercentage >= 95 ? 'pulse 2s ease-in-out infinite' : 'none'
+                          }}
+                        />
+                      </div>
+                      
+                      {/* Graduation Info Icon */}
+                      <div 
+                        ref={graduationIconRef}
+                        className="graduation-info-icon"
+                        onClick={() => setShowGraduationInfo(!showGraduationInfo)}
+                        onMouseEnter={(e) => {
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          setGraduationIconPosition({
+                            top: rect.bottom + window.scrollY,
+                            right: window.innerWidth - rect.right - window.scrollX
+                          });
+                          setShowGraduationInfo(true);
+                        }}
+                        onMouseLeave={() => {
+                          setShowGraduationInfo(false);
+                          setGraduationIconPosition(null);
+                        }}
+                      >
+                        ?
+                      </div>
+                    </div>
+                  )}
+              </div>
             </div>
-            
+
             <div className="charts-horizontal-container" ref={chartsContainerRef}>
               {/* Graph Page */}
               <div className="chart-page">
@@ -1372,6 +1425,7 @@ const CoinCard = memo(({
                           symbol: coin.symbol || coin.baseToken?.symbol
                         }} 
                         isPreview={false}
+                        autoLoad={enrichmentCompleted} // 🆕 Auto-load chart after enrichment
                       />
                     ) : chartComponent ? (
                       chartComponent
@@ -1393,7 +1447,7 @@ const CoinCard = memo(({
                 </div>
               </div>
             </div>
-          </div>
+          </div> {/* Close charts-section */}
 
           {/* Live Transactions Section */}
           <div className="transactions-section">
@@ -1425,7 +1479,7 @@ const CoinCard = memo(({
                       </div>
                     ) : (
                       transactions.map((tx, index) => (
-                        <div key={tx.signature} className="transaction-item" style={{
+                        <div key={`${tx.signature}-${index}`} className="transaction-item" style={{
                           animation: index === 0 ? 'slideIn 0.3s ease-out' : 'none'
                         }}>
                           <div className="tx-wallet">
@@ -1470,7 +1524,7 @@ const CoinCard = memo(({
                     )}
                   </div>
                 </div>
-              )}
+            )}
           </div>
 
           {/* Top Traders Section - Separate from Transactions */}
@@ -1560,6 +1614,26 @@ const CoinCard = memo(({
                         <span className="info-value">{(coin.volume_24h_usd / coin.liquidity_usd).toFixed(2)}x</span>
                       </div>
                     )}
+                    {(coin.holders || coin.holderCount) && (
+                      <div className="info-row">
+                        <span className="info-label">Holders:</span>
+                        <span className="info-value">{formatCompact(coin.holders || coin.holderCount)}</span>
+                      </div>
+                    )}
+                    {(coin.age || coin.ageHours) && (
+                      <div className="info-row">
+                        <span className="info-label">Age:</span>
+                        <span className="info-value">
+                          {(() => {
+                            const hours = coin.age || coin.ageHours || 0;
+                            if (hours < 24) return `${hours}h`;
+                            const days = Math.floor(hours / 24);
+                            const remainingHours = hours % 24;
+                            return `${days}d ${remainingHours}h`;
+                          })()}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1638,9 +1712,9 @@ const CoinCard = memo(({
 
           {/* Token Details */}
           <div className="token-details-section">
-            <h3 className="section-title" style={{color: 'rgba(0,0,0,0.9)'}}>Token Details</h3>
+            <h3 className="section-title token-details-title">Token Details</h3>
             <div className="section-content">
-              <div style={{fontSize: '0.9rem', lineHeight: '1.6', color: 'rgba(0,0,0,0.9)'}}>
+              <div className="token-details-content">
                 <div style={{marginBottom: '8px'}}>
                   <strong>Contract:</strong> <span style={{fontFamily: 'monospace', fontSize: '0.85rem'}}>{coin.mintAddress || coin.contract_address || coin.mint || coin.tokenAddress || 'N/A'}</span>
                 </div>
@@ -1683,58 +1757,111 @@ const CoinCard = memo(({
                     ))}
                   </div>
                 )}
-                {coin.enrichmentSource && (
-                  <div style={{marginTop: '12px', fontSize: '0.8rem', color: 'rgba(0,0,0,0.6)'}}>
-                    Data source: {coin.enrichmentSource}
-                    {coin.enriched && <span style={{marginLeft: '8px', color: '#22c55e'}}>✓ Enriched</span>}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Price Changes */}
-          <div className="price-changes-section">
-            <h3 className="section-title">Price Changes</h3>
-            <div className="section-content">
-              {coin.dexscreener?.priceChanges ? (
-                <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(80px, 1fr))', gap: '12px', textAlign: 'center'}}>
-                  <div>
-                    <div style={{fontSize: '0.8rem', color: 'rgba(0,0,0,0.6)', marginBottom: '4px'}}>5m</div>
-                    <div className={`price-change ${coin.dexscreener.priceChanges.change5m >= 0 ? 'positive' : 'negative'}`} style={{fontSize: '0.9rem', padding: '2px 6px', borderRadius: '6px'}}>
-                      {formatPercent(coin.dexscreener.priceChanges.change5m)}
+                {/* Detailed Data Sources Section */}
+                <div className="data-sources-detailed">
+                  <div className="sources-title">Data Sources:</div>
+                  <div className="sources-list">
+                    {/* DexScreener - Always show since we use it for charts and trading data */}
+                    <div className="source-item">
+                      <span className="source-name">DexScreener:</span>
+                      <span className="source-info">
+                        {coin.dexscreener ? (
+                          [
+                            coin.marketCap && 'Market Cap',
+                            coin.liquidity?.usd && 'Liquidity',
+                            coin.volume?.h24 && '24h Volume',
+                            coin.priceChange && 'Price Changes',
+                            coin.dexscreener.pairAddress && 'Pair Data',
+                            coin.dexscreener.poolInfo && 'Pool Info',
+                            'Charts & Trading Data'
+                          ].filter(Boolean).join(', ')
+                        ) : (
+                          'Charts & Trading Data'
+                        )}
+                      </span>
                     </div>
-                  </div>
-                  <div>
-                    <div style={{fontSize: '0.8rem', color: 'rgba(0,0,0,0.6)', marginBottom: '4px'}}>1h</div>
-                    <div className={`price-change ${coin.dexscreener.priceChanges.change1h >= 0 ? 'positive' : 'negative'}`} style={{fontSize: '0.9rem', padding: '2px 6px', borderRadius: '6px'}}>
-                      {formatPercent(coin.dexscreener.priceChanges.change1h)}
+                    
+                    {/* Jupiter */}
+                    {(coin.price_usd || coin.priceUsd) && (
+                      <div className="source-item">
+                        <span className="source-name">Jupiter:</span>
+                        <span className="source-info">Live Price{coin.holderCount ? ', Holder Count' : ''}</span>
+                      </div>
+                    )}
+                    
+                    {/* Solana Tracker - For holder and token data */}
+                    {(coin.holderCount || coin.mintAuthority !== undefined) && (
+                      <div className="source-item">
+                        <span className="source-name">Solana Tracker:</span>
+                        <span className="source-info">
+                          {[
+                            coin.holderCount && 'Holder Analytics',
+                            coin.mintAuthority !== undefined && 'Token Authority Data'
+                          ].filter(Boolean).join(', ')}
+                        </span>
+                      </div>
+                    )}
+                    
+                    {/* Rugcheck */}
+                    {coin.rugcheckVerified !== undefined && (
+                      <div className="source-item">
+                        <span className="source-name">Rugcheck:</span>
+                        <span className="source-info">
+                          {[
+                            'Risk Analysis',
+                            coin.liquidityLocked !== undefined && 'Liquidity Lock',
+                            coin.burnPercentage !== undefined && 'Burn %',
+                            coin.freezeAuthority !== undefined && 'Authority Checks',
+                            coin.rugcheckScore !== undefined && 'Safety Score'
+                          ].filter(Boolean).join(', ')}
+                        </span>
+                      </div>
+                    )}
+                    
+                    {/* Helius - For RPC and transaction data */}
+                    <div className="source-item">
+                      <span className="source-name">Helius:</span>
+                      <span className="source-info">
+                        {coin.recentTransactions ? 
+                          'Live Transactions, RPC Data' : 
+                          'RPC & Blockchain Data'
+                        }
+                      </span>
                     </div>
+                    
+                    {/* Pump.fun */}
+                    {coin.descriptionSource === 'pump.fun' && (
+                      <div className="source-item">
+                        <span className="source-name">Pump.fun:</span>
+                        <span className="source-info">Token Description</span>
+                      </div>
+                    )}
+                    
+                    {/* Birdeye */}
+                    {coin.birdeyeData && (
+                      <div className="source-item">
+                        <span className="source-name">Birdeye:</span>
+                        <span className="source-info">
+                          {[
+                            coin.birdeyeData.historicalPrice && 'Historical Price',
+                            coin.birdeyeData.tradingMetrics && 'Trading Metrics'
+                          ].filter(Boolean).join(', ')}
+                        </span>
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    <div style={{fontSize: '0.8rem', color: 'rgba(0,0,0,0.6)', marginBottom: '4px'}}>6h</div>
-                    <div className={`price-change ${coin.dexscreener.priceChanges.change6h >= 0 ? 'positive' : 'negative'}`} style={{fontSize: '0.9rem', padding: '2px 6px', borderRadius: '6px'}}>
-                      {formatPercent(coin.dexscreener.priceChanges.change6h)}
+                  {coin.enriched && (
+                    <div className="enrichment-status">
+                      <span className="enriched-badge">✓ Enriched</span>
+                      {coin.enrichedAt && (
+                        <span className="enriched-time">
+                          {new Date(coin.enrichedAt).toLocaleTimeString()}
+                        </span>
+                      )}
                     </div>
-                  </div>
-                  <div>
-                    <div style={{fontSize: '0.8rem', color: 'rgba(0,0,0,0.6)', marginBottom: '4px'}}>24h</div>
-                    <div className={`price-change ${coin.dexscreener.priceChanges.change24h >= 0 ? 'positive' : 'negative'}`} style={{fontSize: '0.9rem', padding: '2px 6px', borderRadius: '6px'}}>
-                      {formatPercent(coin.dexscreener.priceChanges.change24h)}
-                    </div>
-                  </div>
+                  )}
                 </div>
-              ) : (
-                <div className="content-placeholder">Price change data will appear when available</div>
-              )}
-            </div>
-          </div>
-
-          {/* Activity */}
-          <div className="activity-section">
-            <h3 className="section-title">Activity</h3>
-            <div className="section-content">
-              <div className="content-placeholder">Activity feed coming soon</div>
+              </div>
             </div>
           </div>
 

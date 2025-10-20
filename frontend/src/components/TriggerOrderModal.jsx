@@ -179,13 +179,24 @@ const TriggerOrderModal = ({
       const signedTx = await signTransaction(result.data.transaction);
       console.log('✅ Transaction signed');
 
-      // Execute the order with requestId
+      // Prepare order metadata for storage
+      const orderMetadata = {
+        maker: walletAddress,
+        inputMint,
+        outputMint,
+        side,
+        orderType,
+        expiredAt
+      };
+
+      // Execute the order with requestId and metadata
       const executeResponse = await fetch(getFullApiUrl('/api/trigger/execute'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           signedTransaction: signedTx,
-          requestId: result.data.requestId // MUST include requestId from createOrder response
+          requestId: result.data.requestId, // MUST include requestId from createOrder response
+          orderMetadata // Include metadata for potential storage
         })
       });
 
@@ -197,6 +208,17 @@ const TriggerOrderModal = ({
 
       console.log('✅ Order executed successfully!');
       console.log('📝 Transaction signature:', executeResult.signature);
+
+      // Store signature in localStorage for future reference
+      if (executeResult.signature && executeResult.orderId) {
+        const { storeOrderSignature } = await import('../utils/orderStorage.js');
+        storeOrderSignature({
+          orderId: executeResult.orderId,
+          signature: executeResult.signature,
+          maker: walletAddress,
+          orderType: 'create'
+        });
+      }
 
       setSuccess(true);
       onOrderCreated?.({

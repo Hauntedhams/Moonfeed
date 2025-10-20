@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { getFullApiUrl } from '../config/api';
 import { useTrackedWallets } from '../contexts/TrackedWalletsContext';
+import { useDarkMode } from '../contexts/DarkModeContext';
 import './WalletPopup.css';
 
 const WalletPopup = ({ walletAddress, traderData, onClose }) => {
@@ -9,6 +10,7 @@ const WalletPopup = ({ walletAddress, traderData, onClose }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const { trackWallet, untrackWallet, isTracked } = useTrackedWallets();
+  const { isDarkMode } = useDarkMode();
   const [tracked, setTracked] = useState(false);
 
   // Check if wallet is already tracked
@@ -135,7 +137,7 @@ const WalletPopup = ({ walletAddress, traderData, onClose }) => {
 
   const popupContent = (
     <div className="wallet-popup-backdrop" onClick={handleBackdropClick}>
-      <div className="wallet-popup" onClick={(e) => e.stopPropagation()}>
+      <div className={`wallet-popup ${isDarkMode ? 'dark-mode' : ''}`} onClick={(e) => e.stopPropagation()}>
         {/* Close button */}
         <button className="wallet-popup-close" onClick={onClose} title="Close">
           ×

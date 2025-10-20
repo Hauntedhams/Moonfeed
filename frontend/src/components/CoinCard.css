@@ -245,15 +245,20 @@
 }
 
 .info-layer-header {
-  padding: 16px 20px 8px;
+  padding: 16px 20px 4px;
   background: rgba(255, 255, 255, 0.98);
   position: sticky;
   top: 0;
   z-index: 60; /* Increased z-index to ensure header stays on top */
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  /* Ensure pointer events work */
+  gap: 8px;
+  /* 🔥 CRITICAL: Don't block events from nav area below */
+  pointer-events: none;
+}
+
+/* 🔥 Re-enable pointer events for interactive children */
+.info-layer-header > * {
   pointer-events: auto;
 }
 
@@ -578,9 +583,10 @@
   transition: all 0.2s ease;
   color: rgba(0, 0, 0, 0.6);
   text-decoration: none;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.03);
+  border-radius: 0;
+  background: transparent;
   border: none;
+  outline: none;
 }
 
 .header-social-icon svg {
@@ -591,7 +597,7 @@
 }
 
 .header-social-icon:hover {
-  background: rgba(0, 0, 0, 0.06);
+  background: transparent;
   transform: translateY(-1px);
 }
 
@@ -602,7 +608,7 @@
 
 .header-social-icon.twitter-icon:hover {
   color: #000000;
-  background: rgba(0, 0, 0, 0.08);
+  background: transparent;
 }
 
 .header-social-icon.telegram-icon {
@@ -611,7 +617,7 @@
 
 .header-social-icon.telegram-icon:hover {
   color: #0088cc;
-  background: rgba(0, 136, 204, 0.1);
+  background: transparent;
 }
 
 .header-social-icon.discord-icon {
@@ -620,7 +626,7 @@
 
 .header-social-icon.discord-icon:hover {
   color: #5865F2;
-  background: rgba(88, 101, 242, 0.1);
+  background: transparent;
 }
 
 .header-social-icon.tiktok-icon {
@@ -629,7 +635,7 @@
 
 .header-social-icon.tiktok-icon:hover {
   color: #000000;
-  background: rgba(0, 0, 0, 0.08);
+  background: transparent;
 }
 
 .header-social-icon.website-icon {
@@ -638,7 +644,7 @@
 
 .header-social-icon.website-icon:hover {
   color: rgba(0, 0, 0, 0.9);
-  background: rgba(0, 0, 0, 0.06);
+  background: transparent;
 }
 
 .info-layer-profile-image {
@@ -804,7 +810,7 @@
 }
 
 .info-layer-content {
-  padding: 0 20px 20px;
+  padding: 0 20px 100px; /* Increased bottom padding to clear the bottom nav bar */
   overflow-y: auto;
   height: calc(100% - 80px);
   opacity: 1; /* Changed from 0.7 to 1 - no graying out */
@@ -825,6 +831,26 @@
   overflow-y: auto;
   height: calc(100% - 80px); /* Allow scrolling through all content */
   opacity: 1;
+}
+
+/* Scrollbar styling for info-layer-content */
+.info-layer-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.info-layer-content::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 4px;
+}
+
+.info-layer-content::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+
+.info-layer-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.25);
 }
 
 /* =============================================================================
@@ -882,7 +908,7 @@
 
 /* Charts Section with Horizontal Snap Scrolling */
 .charts-section {
-  margin: 8px 0 16px 0;
+  margin: 0 0 16px 0;
   position: relative;
   /* Break out of parent padding to allow full-width charts */
   margin-left: -20px;
@@ -890,31 +916,57 @@
   width: calc(100% + 40px);
 }
 
-/* Navigation Dots Above Chart */
-/* Navigation Dots Above Chart */
-.chart-nav-dots-top {
-  display: flex;
-  justify-content: flex-start; /* Changed from center to flex-start for left alignment */
-  align-items: center; /* Ensure vertical centering for progress bar */
-  gap: 8px;
-  margin-bottom: 8px;
-  /* Add padding back since we removed it from charts-section */
-  padding: 12px 20px;
-  /* Make it a swipeable area but don't scroll */
+/* 🔥 HOT SWIPE AREA - Full-width, fixed-height container for natural scroll/drag */
+.chart-nav-hot-area {
+  position: relative;
+  z-index: 10;
+  width: 100%;
+  min-height: 60px;
+  margin: 0 0 8px 0;
   cursor: grab;
   user-select: none;
   -webkit-user-select: none;
-  touch-action: none; /* Prevent all default touch behaviors including back/forward */
-  position: relative;
-  /* Add visual hint that it's interactive */
-  background: rgba(255, 255, 255, 0.02);
-  border-radius: 12px;
-  margin-left: 20px;
-  margin-right: 20px;
-  transition: background 0.2s ease;
+  pointer-events: auto;
 }
 
-/* 🎓 GRADUATION PROGRESS BAR */
+.chart-nav-hot-area:active {
+  cursor: grabbing;
+}
+
+/* Visual content inside the hot area */
+.chart-nav-content {
+  position: relative;
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  margin: 0 20px;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.02);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-radius: 12px;
+  transition: background 0.2s ease;
+  pointer-events: auto;
+}
+
+.chart-nav-hot-area:hover .chart-nav-content {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.chart-nav-hot-area:active .chart-nav-content {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* Clickable elements */
+.chart-nav-content .nav-dot,
+.chart-nav-content .graduation-info-icon {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+/* Progress bar - visual only, events pass through */
 .graduation-progress-bar-container {
   flex: 1;
   display: flex;
@@ -922,6 +974,7 @@
   gap: 8px;
   margin-left: 12px;
   min-width: 0;
+  pointer-events: none;
 }
 
 .graduation-progress-track {
@@ -932,6 +985,7 @@
   border-radius: 4px;
   overflow: hidden;
   min-width: 60px;
+  pointer-events: none;
 }
 
 .graduation-progress-fill {
@@ -939,6 +993,7 @@
   border-radius: 4px;
   transition: width 0.5s ease-out, box-shadow 0.3s ease;
   position: relative;
+  pointer-events: none;
 }
 
 .graduation-progress-fill::after {
@@ -957,33 +1012,11 @@
   100% { transform: translateX(100%); }
 }
 
-.chart-nav-dots-top:hover {
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.chart-nav-dots-top:active {
-  cursor: grabbing;
-  background: rgba(255, 255, 255, 0.06);
-}
-
-/* Remove the nav-dots-wrapper since we don't need it anymore */
-.nav-dots-wrapper {
-  display: none;
-}
-
-.chart-nav-dots-top:active {
-  cursor: grabbing;
-}
-
-.chart-nav-dots-top::-webkit-scrollbar {
-  display: none; /* WebKit */
-}
-
 .charts-horizontal-container {
   display: flex;
   overflow-x: auto;
   scroll-snap-type: x mandatory;
-  scroll-behavior: smooth;
+  scroll-behavior: auto; /* Changed from smooth - let snap handle it */
   -webkit-overflow-scrolling: touch;
   gap: 0;
   padding: 0;
@@ -1001,7 +1034,7 @@
 .chart-page {
   flex: 0 0 100%;
   scroll-snap-align: start;
-  padding: 0; /* Removed horizontal padding to allow full width */
+  padding: 0; /* 🔥 No padding needed - nav is above, not overlapping */
   box-sizing: border-box;
   min-height: 280px;
   overflow: visible; /* Allow chart to expand beyond container */
@@ -1012,7 +1045,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 8px;
   padding: 0 4px;
 }
 
@@ -2157,3 +2190,413 @@
     height: 280px;
   }
 }
+
+/* Graduation percentage text */
+.graduation-percentage-text {
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  min-width: 45px;
+  text-align: right;
+  pointer-events: none;
+}
+
+/* Graduation info icon */
+.graduation-info-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(0, 0, 0, 0.4);
+  background: rgba(255, 255, 255, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(0, 0, 0, 0.7);
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  position: relative;
+  pointer-events: auto;
+}
+
+.graduation-info-icon:hover {
+  border-color: rgba(0, 0, 0, 0.6);
+  color: rgba(0, 0, 0, 0.9);
+  background: rgba(255, 255, 255, 1);
+}
+
+/* Token Details Section Styling */
+.token-details-title {
+  color: rgba(0, 0, 0, 0.9);
+}
+
+.token-details-content {
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: rgba(0, 0, 0, 0.9);
+}
+
+.data-source-text {
+  margin-top: 12px;
+  font-size: 0.8rem;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.enriched-badge {
+  margin-left: 8px;
+  color: #22c55e;
+}
+
+/* Detailed Data Sources Section */
+.data-sources-detailed {
+  margin-top: 16px;
+  padding: 14px;
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.sources-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: rgba(0, 0, 0, 0.8);
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.sources-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.source-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.source-name {
+  font-weight: 700;
+  color: rgba(0, 0, 0, 0.9);
+  flex-shrink: 0;
+  min-width: 90px;
+}
+
+.source-info {
+  color: rgba(0, 0, 0, 0.7);
+  flex: 1;
+}
+
+.enrichment-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  font-size: 0.75rem;
+}
+
+.enriched-time {
+  color: rgba(0, 0, 0, 0.5);
+  font-style: italic;
+}
+
+/* ================================
+   DARK MODE OVERRIDES
+   ================================ */
+
+.dark-mode .coin-info-layer {
+  background: var(--bg-primary);
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.6);
+}
+
+.dark-mode .info-layer-header {
+  background: var(--bg-primary);
+}
+
+.dark-mode .coin-name,
+.dark-mode .coin-symbol,
+.dark-mode .coin-price,
+.dark-mode .stats-label,
+.dark-mode .stats-value,
+.dark-mode .section-title,
+.dark-mode .info-item-label,
+.dark-mode .info-item-value,
+.dark-mode .token-details h3,
+.dark-mode .token-details-item-value,
+.dark-mode .coin-header-symbol,
+.dark-mode .price-display,
+.dark-mode .stats-grid-label,
+.dark-mode .stats-grid-value {
+  color: var(--text-primary);
+}
+
+.dark-mode .coin-ticker,
+.dark-mode .token-details-item-label,
+.dark-mode .stats-label,
+.dark-mode .coin-header-ticker {
+  color: var(--text-secondary);
+}
+
+.dark-mode .stats-item,
+.dark-mode .info-item,
+.dark-mode .token-details-item,
+.dark-mode .stats-grid-item {
+  background: var(--bg-secondary);
+  border-color: var(--border-color);
+}
+
+.dark-mode .graduation-info-icon {
+  background: var(--bg-secondary);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.dark-mode .graduation-info-icon:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--border-hover);
+}
+
+/* Dark mode for chart navigation dots */
+.dark-mode .nav-dot {
+  background: var(--bg-tertiary);
+  border-color: var(--border-color);
+}
+
+.dark-mode .nav-dot.active {
+  background: #667eea;
+  border-color: #667eea;
+}
+
+.dark-mode .chart-nav-dots-top {
+  background: var(--bg-secondary);
+}
+
+/* Dark mode styling for info layer expand arrow */
+.dark-mode .expand-handle::before {
+  border-bottom-color: rgba(255, 255, 255, 0.8);
+  border-right-color: rgba(255, 255, 255, 0.8);
+}
+
+.dark-mode .expand-handle:hover::before {
+  border-bottom-color: rgba(255, 255, 255, 1);
+  border-right-color: rgba(255, 255, 255, 1);
+}
+
+.dark-mode .expand-handle:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.dark-mode .expand-handle:active {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* Dark mode for Token Details section */
+.dark-mode .token-details-title,
+.dark-mode .token-details-content {
+  color: var(--text-primary);
+}
+
+.dark-mode .data-source-text {
+  color: var(--text-secondary);
+}
+
+.dark-mode .enriched-badge {
+  color: #86efac;
+}
+
+/* Dark mode for Detailed Data Sources */
+.dark-mode .data-sources-detailed {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--border-color);
+}
+
+.dark-mode .sources-title {
+  color: var(--text-primary);
+}
+
+.dark-mode .source-name {
+  color: var(--text-primary);
+}
+
+.dark-mode .source-info {
+  color: var(--text-secondary);
+}
+
+.dark-mode .enrichment-status {
+  border-top-color: var(--border-color);
+}
+
+.dark-mode .enriched-time {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+/* Dark mode for info sections */
+.dark-mode .info-section {
+  background: var(--bg-primary);
+}
+
+.dark-mode .info-content {
+  background: var(--bg-secondary);
+}
+
+/* Dark mode for profile pic area */
+.dark-mode .coin-profile-pic {
+  border-color: var(--border-color);
+  background: var(--bg-secondary);
+}
+
+/* Dark mode for liquidity label */
+.dark-mode .liquidity-label {
+  color: var(--text-secondary);
+}
+
+/* Dark mode for header metrics */
+.dark-mode .header-metric-label {
+  color: var(--text-tertiary);
+}
+
+.dark-mode .header-metric-value,
+.dark-mode .header-metric-value-with-icon,
+.dark-mode .tooltip-title {
+  color: var(--text-primary);
+}
+
+.dark-mode .tooltip-description {
+  color: var(--text-secondary);
+}
+
+.dark-mode .tooltip-example {
+  color: var(--text-tertiary);
+}
+
+.dark-mode .metric-tooltip {
+  background: var(--bg-secondary);
+  border-color: var(--border-color);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+}
+
+.dark-mode .header-metric {
+  border-right-color: var(--border-color);
+}
+
+.dark-mode .header-metric:hover {
+  background: var(--bg-tertiary);
+}
+
+/* Dark mode for social icons */
+.dark-mode .header-social-icon {
+  color: var(--text-secondary);
+  background: transparent;
+}
+
+.dark-mode .header-social-icon:hover {
+  background: transparent;
+}
+
+.dark-mode .header-social-icon.twitter-icon:hover {
+  color: #1da1f2;
+  background: transparent;
+}
+
+.dark-mode .header-social-icon.telegram-icon:hover {
+  color: #0088cc;
+  background: transparent;
+}
+
+.dark-mode .header-social-icon.discord-icon:hover {
+  color: #5865F2;
+  background: transparent;
+}
+
+.dark-mode .header-social-icon.tiktok-icon:hover {
+  color: #ffffff;
+  background: transparent;
+}
+
+.dark-mode .header-social-icon.website-icon:hover {
+  color: var(--text-primary);
+  background: transparent;
+}
+
+/* Dark mode for profile image */
+.dark-mode .info-layer-profile-image {
+  border-color: var(--border-color);
+  background: var(--bg-tertiary);
+}
+
+.dark-mode .info-layer-profile-image:hover {
+  border-color: var(--border-hover);
+  background: var(--border-color);
+}
+
+.dark-mode .info-layer-profile-placeholder {
+  color: var(--text-secondary);
+}
+
+/* Dark mode for price display */
+.dark-mode .coin-price {
+  color: var(--text-primary);
+}
+
+/* Dark mode for info labels and values */
+.dark-mode .info-label {
+  color: var(--text-secondary);
+}
+
+.dark-mode .info-value {
+  color: var(--text-primary);
+}
+
+/* Dark mode for info cards */
+.dark-mode .info-card {
+  background: var(--bg-tertiary);
+  border-color: var(--border-color);
+}
+
+.dark-mode .info-card:hover {
+  border-color: var(--border-hover);
+  box-shadow: 0 4px 12px rgba(255, 255, 255, 0.05);
+}
+
+.dark-mode .info-card-header {
+  color: var(--text-primary);
+  border-bottom-color: var(--border-color);
+}
+
+/* Dark mode for transactions section */
+.dark-mode .transactions-section {
+  background: var(--bg-tertiary);
+  border-color: var(--border-color);
+}
+
+.dark-mode .transactions-section:hover {
+  border-color: var(--border-hover);
+  box-shadow: 0 4px 12px rgba(255, 255, 255, 0.05);
+}
+
+.dark-mode .transactions-section-header {
+  color: var(--text-primary);
+  border-bottom-color: var(--border-color);
+}
+
+/* Dark mode scrollbar for info-layer-content */
+.dark-mode .info-layer-content::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.dark-mode .info-layer-content::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.dark-mode .info-layer-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+

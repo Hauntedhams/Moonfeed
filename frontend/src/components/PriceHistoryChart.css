@@ -218,3 +218,54 @@
   color: rgba(0, 0, 0, 0.6);
   font-weight: 500;
 }
+
+/* ================================
+   DARK MODE OVERRIDES
+   ================================ */
+
+.dark-mode .price-history-chart {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.dark-mode .timeframe-selector {
+  background: var(--bg-primary);
+}
+
+.dark-mode .timeframe-btn {
+  background: var(--bg-secondary);
+  border-color: var(--border-color);
+  color: var(--text-secondary);
+}
+
+.dark-mode .timeframe-btn:hover:not(:disabled) {
+  background: var(--bg-tertiary);
+  border-color: var(--border-hover);
+  color: var(--text-primary);
+}
+
+.dark-mode .error-text h3 {
+  color: var(--text-primary);
+}
+
+.dark-mode .error-text p {
+  color: var(--text-secondary);
+}
+
+.dark-mode .chart-timeframe {
+  color: var(--text-secondary);
+}
+
+.dark-mode .loading-container {
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+}
+
+.dark-mode .chart-disclaimer {
+  background: var(--bg-secondary);
+  border-top-color: var(--border-color);
+}
+
+.dark-mode .disclaimer-text {
+  color: var(--text-secondary);
+}

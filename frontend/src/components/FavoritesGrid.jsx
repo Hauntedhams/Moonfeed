@@ -33,7 +33,7 @@ function FavoritesGrid({ favorites = [], onCoinClick, onFavoritesChange }) {
   return (
     <div className="favorites-list-container">
       <div className="favorites-header">
-        <h1>⭐ Your Favorites</h1>
+        <h1>Your Favorites</h1>
         <p>{filteredFavorites.length} coin{filteredFavorites.length !== 1 ? 's' : ''} saved</p>
       </div>
       

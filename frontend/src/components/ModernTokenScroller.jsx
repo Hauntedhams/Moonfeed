@@ -28,8 +28,8 @@ const ModernTokenScroller = ({
   const [retryCount, setRetryCount] = useState(0); // Track retry attempts
   const [isBackendLoading, setIsBackendLoading] = useState(false); // Track backend loading state
   
-  // Virtual scrolling DISABLED - with WebSocket singleton, we can render all cards safely
-  const [visibleRange, setVisibleRange] = useState({ start: 0, end: 999 }); // Not used anymore
+  // Virtual scrolling: Render only visible coins + buffer to prevent memory issues on mobile
+  const [visibleRange, setVisibleRange] = useState({ start: 0, end: 5 }); // Start with small range
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   
   const scrollerRef = useRef(null);
@@ -39,26 +39,42 @@ const ModernTokenScroller = ({
   // API base configuration
   const API_BASE = API_CONFIG.COINS_API;
 
-  // DISABLED: Virtual scrolling calculation (now render all cards on both mobile and desktop)
+  // PERFORMANCE FIX: Calculate visible range for virtual scrolling
   const calculateVisibleRange = useCallback((index, totalCoins) => {
-    return { start: 0, end: totalCoins - 1 }; // Always render all coins
+    const isMobile = window.innerWidth < 768;
+    const buffer = isMobile ? 2 : 3; // Smaller buffer on mobile to save memory
+    
+    const start = Math.max(0, index - buffer);
+    const end = Math.min(totalCoins - 1, index + buffer);
+    
+    console.log(`📊 Virtual scrolling: Index ${index}, rendering ${start}-${end} (${end - start + 1} cards)`);
+    return { start, end };
   }, []);
 
-  // DISABLED: Virtual scrolling stats (now always 100%)
+  // PERFORMANCE FIX: Get virtual scrolling stats for debugging
   const getVirtualScrollStats = useCallback(() => {
-    return { rendered: coins.length, total: coins.length, percentage: 100 };
-  }, [coins.length]);
+    const rendered = visibleRange.end - visibleRange.start + 1;
+    const total = coins.length;
+    const percentage = total > 0 ? ((rendered / total) * 100).toFixed(1) : 0;
+    return { rendered, total, percentage };
+  }, [coins.length, visibleRange]);
 
-  // DISABLED: Update mobile detection on window resize (no longer need different rendering)
+  // DISABLED: Update mobile detection on window resize
   useEffect(() => {
     const handleResize = () => {
       const mobile = window.innerWidth < 768;
       setIsMobile(mobile);
+      
+      // Recalculate visible range on resize
+      if (coins.length > 0) {
+        const newRange = calculateVisibleRange(currentIndex, coins.length);
+        setVisibleRange(newRange);
+      }
     };
 
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  }, [currentIndex, coins.length, calculateVisibleRange]);
 
   // Enrich coins with DexScreener data (ON-DEMAND via backend)
   const enrichCoins = useCallback(async (mintAddresses) => {
@@ -124,8 +140,24 @@ const ModernTokenScroller = ({
       enriched: enrichedData.enriched
     });
     
-    // Update the enrichedCoins cache
-    setEnrichedCoins(prev => new Map(prev).set(mintAddress, enrichedData));
+    // PERFORMANCE FIX: Limit enrichment cache to prevent memory leaks
+    const MAX_ENRICHMENT_CACHE = 50;
+    
+    // Update the enrichedCoins cache with size limit
+    setEnrichedCoins(prev => {
+      const newCache = new Map(prev);
+      
+      // If cache is full, remove oldest entry (first in Map)
+      if (newCache.size >= MAX_ENRICHMENT_CACHE) {
+        const firstKey = newCache.keys().next().value;
+        newCache.delete(firstKey);
+        console.log(`🗑️ Enrichment cache full, removed oldest entry: ${firstKey.slice(0, 8)}...`);
+      }
+      
+      newCache.set(mintAddress, enrichedData);
+      console.log(`📊 Enrichment cache size: ${newCache.size}/${MAX_ENRICHMENT_CACHE}`);
+      return newCache;
+    });
     
     // 🔥 CRITICAL FIX: Also update the coins array so React re-renders with the enriched data
     // This ensures banner, clean chart, AND rugcheck data load together immediately
@@ -524,12 +556,21 @@ const ModernTokenScroller = ({
 
   // Initial load and refetch when dependencies change
   useEffect(() => {
-    console.log('🔄 ModernTokenScroller: Dependencies changed, calling fetchCoins');
+    console.log('🔄 ModernTokenScroller: Feed changed, clearing state and fetching new data');
     console.log('🔄 Dependencies:', { 
       filterType: filters.type, 
       hasAdvancedFilters: !!advancedFilters,
       onlyFavorites 
     });
+    
+    // PERFORMANCE FIX: Clear all state before loading new feed to prevent memory leaks
+    console.log('🗑️ Clearing previous feed data...');
+    setCoins([]);
+    setEnrichedCoins(new Map());
+    setCurrentIndex(0);
+    setVisibleRange({ start: 0, end: 5 });
+    
+    // Fetch new feed data
     fetchCoins();
   }, [filters.type, onlyFavorites, JSON.stringify(advancedFilters)]); // Use specific dependencies instead of fetchCoins
 
@@ -555,13 +596,18 @@ const ModernTokenScroller = ({
     }
   }, [coins.length]); // Remove enrichCoins and getCoinsToEnrich dependencies to prevent infinite loop
 
-  // DISABLED: Update visible range for virtual scrolling (now always render all)
+  // ✅ MOBILE FIX: Update visible range when coins load or index changes
   useEffect(() => {
-    // Always render all coins on both mobile and desktop
-    if (coins.length > 0 && visibleRange.end !== coins.length - 1) {
-      setVisibleRange({ start: 0, end: coins.length - 1 });
+    if (coins.length > 0) {
+      const newRange = calculateVisibleRange(currentIndex, coins.length);
+      setVisibleRange(newRange);
+      
+      // Only log on significant changes to reduce console spam
+      if (currentIndex % 10 === 0 || currentIndex === 0) {
+        console.log(`🎯 Virtual scrolling: Index ${currentIndex}, rendering ${newRange.end - newRange.start + 1} of ${coins.length} coins`);
+      }
     }
-  }, [coins.length]);
+  }, [coins.length, currentIndex, calculateVisibleRange]);
 
   // Handle expand state changes for coins
   const handleCoinExpandChange = useCallback((isExpanded, coinAddress) => {
@@ -616,21 +662,26 @@ const ModernTokenScroller = ({
       const currentCoin = coins[newIndex];
       setCurrentIndex(newIndex);
       
+      // ✅ CRITICAL FIX: Update visible range for virtual scrolling
+      const newVisibleRange = calculateVisibleRange(newIndex, coins.length);
+      setVisibleRange(newVisibleRange);
+      
       // Log scroll progress occasionally (every 5th coin)
       if (newIndex % 5 === 0) {
-        console.log(`📜 Scrolling: Coin ${newIndex + 1}/${coins.length} - ${currentCoin?.symbol || 'Unknown'}`);
+        const stats = getVirtualScrollStats();
+        console.log(`📜 Scrolling: Coin ${newIndex + 1}/${coins.length} - ${currentCoin?.symbol || 'Unknown'} | Rendering: ${stats.rendered}/${stats.total} (${stats.percentage}%)`);
       }
       
       // Trigger enrichment for the currently viewed coin if not already enriched
       // Use setTimeout to prevent blocking the scroll
-      // Disable enrichment on mobile for better performance
-      if (currentCoin && !enrichedCoins.has(currentCoin.mintAddress) && window.innerWidth >= 768) {
+      // ✅ UNIFORM ENRICHMENT: Enable on all devices for consistent Age/Holders display
+      if (currentCoin && !enrichedCoins.has(currentCoin.mintAddress)) {
         setTimeout(() => {
           enrichCoins([currentCoin.mintAddress]);
         }, 100);
       }
     }
-  }, [currentIndex, coins, enrichedCoins, enrichCoins, expandedCoin]);
+  }, [currentIndex, coins, enrichedCoins, enrichCoins, expandedCoin, calculateVisibleRange, getVirtualScrollStats]);
 
 
 
@@ -873,9 +924,36 @@ const ModernTokenScroller = ({
         ref={scrollerRef}
         className={`modern-scroller-container ${expandedCoin ? 'scroll-locked' : ''}`}
       >
-        {/* Render all coins - no virtual scrolling */}
+        {/* ✅ MOBILE FIX: Render placeholders for non-visible coins to maintain scroll position */}
         {coins.length > 0 ? (
-          coins.map((coin, index) => renderCoinWithChart(coin, index))
+          coins.map((coin, index) => {
+            // Check if this coin is in the visible range
+            const isInVisibleRange = index >= visibleRange.start && index <= visibleRange.end;
+            
+            // Render full CoinCard only for visible coins
+            if (isInVisibleRange) {
+              return renderCoinWithChart(coin, index);
+            }
+            
+            // Render lightweight placeholder for non-visible coins (for scroll-snap to work)
+            return (
+              <div 
+                key={coin.mintAddress || coin.tokenAddress || index}
+                className="modern-coin-slide"
+                data-index={index}
+                style={{
+                  height: '100vh',
+                  scrollSnapAlign: 'start',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'transparent'
+                }}
+              >
+                {/* Empty placeholder - will load when scrolled into view */}
+              </div>
+            );
+          })
         ) : (
           <div style={{ color: 'white', padding: '20px', textAlign: 'center' }}>
             {loading ? 'Loading coins...' : 'No coins available'}

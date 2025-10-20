@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-const DexScreenerChart = ({ coin, isPreview = false }) => {
+const DexScreenerChart = ({ coin, isPreview = false, autoLoad = false }) => {
   // 🔥 MOBILE PERFORMANCE FIX: Detect mobile device
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
   
@@ -9,12 +9,22 @@ const DexScreenerChart = ({ coin, isPreview = false }) => {
   const [hasError, setHasError] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [isExpanded, setIsExpanded] = useState(false);
-  const [showIframe, setShowIframe] = useState(!isMobile); // Mobile: start hidden, Desktop: start visible
+  // 🆕 AUTO-LOAD FIX: On mobile, auto-load if autoLoad=true (triggered by enrichment)
+  const [showIframe, setShowIframe] = useState(!isMobile || autoLoad); 
   const iframeRef = useRef(null);
   const timeoutRef = useRef(null);
 
   // Optimize the URL for faster loading with full chart visibility
   const chartUrl = `https://dexscreener.com/${coin.chainId}/${coin.pairAddress || coin.tokenAddress}?embed=1&theme=dark&trades=0&info=0&interval=5m&chart=1&header=0&utm_source=moonfeed&utm_medium=embed&layout=base`;
+
+  // 🆕 AUTO-LOAD EFFECT: When autoLoad becomes true, trigger iframe loading
+  useEffect(() => {
+    if (autoLoad && isMobile && !showIframe) {
+      console.log(`📊 Auto-loading DexScreener chart for ${coin.symbol} after enrichment`);
+      setShowIframe(true);
+      setIsLoading(true);
+    }
+  }, [autoLoad, isMobile, showIframe, coin.symbol]);
 
   // EFFECT 1: Preload and timeout
   useEffect(() => {

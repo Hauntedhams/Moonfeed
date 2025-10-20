@@ -63,7 +63,7 @@ router.post('/create-order', async (req, res) => {
  */
 router.post('/execute', async (req, res) => {
   try {
-    const { signedTransaction, requestId } = req.body;
+    const { signedTransaction, requestId, orderMetadata } = req.body;
 
     if (!signedTransaction) {
       return res.status(400).json({
@@ -82,7 +82,11 @@ router.post('/execute', async (req, res) => {
     const result = await jupiterTriggerService.executeOrder(signedTransaction, requestId);
 
     if (result.success) {
-      res.json(result);
+      // Include order metadata in response for localStorage storage
+      res.json({
+        ...result,
+        orderMetadata: orderMetadata || null
+      });
     } else {
       res.status(500).json(result);
     }

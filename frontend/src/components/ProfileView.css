@@ -1,12 +1,29 @@
 /* ProfileView.css */
 .profile-view {
   height: 100dvh;
-  background: #ffffff !important;
-  color: #000000;
+  background: var(--bg-primary) !important;
+  color: var(--text-primary);
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Pulse animation for expired order buttons */
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 4px 15px rgba(255, 107, 107, 0.4);
+  }
+  50% {
+    transform: scale(1.02);
+    box-shadow: 0 6px 20px rgba(255, 107, 107, 0.6);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 4px 15px rgba(255, 107, 107, 0.4);
+  }
 }
 
 .profile-container {
@@ -14,7 +31,130 @@
   margin: 0 auto;
   padding: 30px 20px;
   padding-bottom: 100px; /* Space for bottom nav */
+  background: var(--bg-primary);
+  position: relative; /* For absolute positioning of dark mode toggle */
+  transition: background-color 0.3s ease;
+}
+
+/* Dark Mode Toggle Switch */
+.dark-mode-toggle-container {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  z-index: 10;
+}
+
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 60px;
+  height: 32px;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 100%);
+  border: 2px solid #e0e0e0;
+  border-radius: 32px;
+  transition: all 0.4s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 6px;
+}
+
+.toggle-slider::before {
+  content: "";
+  position: absolute;
+  height: 24px;
+  width: 24px;
+  left: 4px;
+  bottom: 2px;
   background: #ffffff;
+  border-radius: 50%;
+  transition: all 0.4s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.toggle-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.toggle-icon svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  transition: all 0.3s ease;
+}
+
+.toggle-icon.sun {
+  opacity: 1;
+  color: #f59e0b;
+}
+
+.toggle-icon.moon {
+  opacity: 0.4;
+  color: #94a3b8;
+}
+
+/* Hover effect */
+.toggle-slider:hover {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-color: #667eea;
+  transform: scale(1.05);
+  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.3);
+}
+
+.toggle-slider:hover::before {
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+/* Checked state (when functional) */
+.toggle-switch input:checked + .toggle-slider {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-color: #667eea;
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+  transform: translateX(28px);
+}
+
+.toggle-switch input:checked + .toggle-slider .sun {
+  opacity: 0.4;
+  color: #94a3b8;
+}
+
+.toggle-switch input:checked + .toggle-slider .moon {
+  opacity: 1;
+  color: #e0e7ff;
+}
+
+/* Disabled state (current) */
+.toggle-switch input:disabled + .toggle-slider {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Active/Click effect */
+.toggle-slider:active::before {
+  width: 28px;
 }
 
 /* Profile Picture Section - Top Center */
@@ -84,9 +224,9 @@
   text-align: center;
   margin-bottom: 40px;
   padding: 30px 20px;
-  background: rgba(255, 255, 255, 0.05);
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.08) 0%, rgba(118, 75, 162, 0.08) 100%);
   border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(102, 126, 234, 0.2);
   backdrop-filter: blur(20px);
 }
 
@@ -97,22 +237,23 @@
   justify-content: center;
   width: 80px;
   height: 80px;
-  background: rgba(255, 255, 255, 0.1);
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   border-radius: 50%;
-  color: rgba(255, 255, 255, 0.8);
+  color: #ffffff;
   margin-bottom: 20px;
-  border: 2px solid rgba(255, 255, 255, 0.2);
+  border: 2px solid rgba(102, 126, 234, 0.3);
+  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.3);
 }
 
 .profile-header h1 {
-  color: #fff;
+  color: #111827;
   font-size: 28px;
   font-weight: 700;
   margin: 0 0 10px 0;
 }
 
 .profile-subtitle {
-  color: rgba(255, 255, 255, 0.7);
+  color: #6b7280;
   font-size: 16px;
   margin: 0;
   line-height: 1.5;
@@ -124,11 +265,11 @@
 }
 
 .connection-card {
-  background: rgba(255, 255, 255, 0.05);
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
   border-radius: 20px;
   padding: 40px 30px;
   text-align: center;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(102, 126, 234, 0.2);
   backdrop-filter: blur(20px);
 }
 
@@ -139,14 +280,14 @@
 }
 
 .connection-card h3 {
-  color: #fff;
+  color: #111827;
   font-size: 24px;
   font-weight: 600;
   margin: 0 0 15px 0;
 }
 
 .connection-card p {
-  color: rgba(255, 255, 255, 0.7);
+  color: #6b7280;
   font-size: 16px;
   line-height: 1.6;
   margin: 0 0 30px 0;
@@ -186,7 +327,7 @@
 }
 
 .features-preview h3 {
-  color: #fff;
+  color: #111827;
   font-size: 20px;
   font-weight: 600;
   margin: 0 0 25px 0;
@@ -200,18 +341,19 @@
 }
 
 .feature-item {
-  background: rgba(255, 255, 255, 0.05);
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.03) 0%, rgba(118, 75, 162, 0.03) 100%);
   border-radius: 16px;
   padding: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(102, 126, 234, 0.15);
   transition: all 0.3s ease;
   backdrop-filter: blur(20px);
 }
 
 .feature-item:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.08) 0%, rgba(118, 75, 162, 0.08) 100%);
   transform: translateY(-2px);
-  border-color: rgba(255, 255, 255, 0.2);
+  border-color: rgba(102, 126, 234, 0.3);
+  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.15);
 }
 
 .feature-icon {
@@ -221,14 +363,14 @@
 }
 
 .feature-content h4 {
-  color: #fff;
+  color: #111827;
   font-size: 16px;
   font-weight: 600;
   margin: 0 0 8px 0;
 }
 
 .feature-content p {
-  color: rgba(255, 255, 255, 0.7);
+  color: #6b7280;
   font-size: 14px;
   margin: 0;
   line-height: 1.4;
@@ -345,12 +487,28 @@
   font-size: 14px;
   cursor: pointer;
   transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.copy-btn svg,
+.refresh-btn svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  color: #6b7280;
 }
 
 .copy-btn:hover,
 .refresh-btn:hover {
   background: #e5e7eb;
   border-color: #d1d5db;
+}
+
+.copy-btn:hover svg,
+.refresh-btn:hover svg {
+  color: #111827;
 }
 
 .refresh-btn:disabled {
@@ -876,4 +1034,252 @@
 .executed-date {
   color: #047857;
   font-size: 12px;
+}
+
+/* ========================================
+   ESCROW INFO BADGES - Fund Transparency
+   ======================================== */
+
+/* Escrow info badge for active (non-expired) orders */
+.escrow-info-badge {
+  animation: fadeInSlide 0.4s ease;
+}
+
+@keyframes fadeInSlide {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.escrow-info-badge a {
+  transition: all 0.2s ease;
+}
+
+.escrow-info-badge a:hover {
+  background: rgba(79, 195, 247, 0.2) !important;
+  transform: translateY(-1px);
+}
+
+/* Expired order warning enhanced styles */
+.expired-order-warning {
+  animation: pulseGlow 2s ease-in-out infinite;
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
+  }
+  50% {
+    box-shadow: 0 6px 25px rgba(255, 107, 107, 0.5);
+  }
+}
+
+.expired-order-warning a {
+  transition: all 0.2s ease;
+}
+
+.expired-order-warning a:hover {
+  text-decoration: underline !important;
+  opacity: 0.9;
+}
+
+/* Responsive adjustments for escrow badges */
+@media (max-width: 480px) {
+  .escrow-info-badge,
+  .expired-order-warning {
+    padding: 12px;
+    font-size: 13px;
+  }
+  
+  .escrow-info-badge > div:first-child,
+  .expired-order-warning > div:first-child span {
+    font-size: 20px;
+  }
+}
+
+/* Tracked Wallets Styling */
+.wallet-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 8px;
+}
+
+.wallet-icon svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  color: #667eea;
+}
+
+.view-wallet-btn,
+.untrack-wallet-btn {
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
+.view-wallet-btn svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  color: #6b7280;
+}
+
+.view-wallet-btn:hover {
+  background: #e5e7eb;
+  border-color: #d1d5db;
+}
+
+.view-wallet-btn:hover svg {
+  color: #667eea;
+}
+
+.untrack-wallet-btn {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+.untrack-wallet-btn:hover {
+  background: #fee2e2;
+  border-color: #fecaca;
+}
+
+/* ================================
+   DARK MODE OVERRIDES
+   ================================ */
+
+.dark-mode .profile-header h1,
+.dark-mode .connection-card h3,
+.dark-mode .feature-section h3,
+.dark-mode .wallet-header h3,
+.dark-mode .orders-header h3,
+.dark-mode .feature-item h4,
+.dark-mode .order-type,
+.dark-mode .order-symbol,
+.dark-mode .address,
+.dark-mode .balance {
+  color: var(--text-primary);
+}
+
+.dark-mode .profile-subtitle,
+.dark-mode .connection-card p,
+.dark-mode .feature-item p,
+.dark-mode .label,
+.dark-mode .empty-state p,
+.dark-mode .empty-state-hint,
+.dark-mode .wallet-addr,
+.dark-mode .wallet-label,
+.dark-mode .wallet-date,
+.dark-mode .setting-item span {
+  color: var(--text-secondary);
+}
+
+.dark-mode .profile-header,
+.dark-mode .connection-card,
+.dark-mode .feature-section,
+.dark-mode .wallet-info-card,
+.dark-mode .order-item,
+.dark-mode .tracked-wallet-item,
+.dark-mode .coming-soon-feature {
+  background: var(--bg-secondary);
+  border-color: var(--border-color);
+}
+
+.dark-mode .profile-picture-placeholder,
+.dark-mode .profile-picture,
+.dark-mode .connected-badge {
+  border-color: var(--bg-secondary);
+}
+
+.dark-mode .wallet-address-row,
+.dark-mode .balance-row,
+.dark-mode .setting-item {
+  border-bottom-color: var(--border-color);
+}
+
+.dark-mode .copy-btn,
+.dark-mode .refresh-btn,
+.dark-mode .view-wallet-btn,
+.dark-mode .untrack-wallet-btn,
+.dark-mode .filter-btn {
+  background: var(--bg-tertiary);
+  border-color: var(--border-color);
+  color: var(--text-secondary);
+}
+
+.dark-mode .copy-btn:hover,
+.dark-mode .refresh-btn:hover,
+.dark-mode .view-wallet-btn:hover {
+  background: var(--border-color);
+  border-color: var(--border-hover);
+}
+
+.dark-mode .copy-btn svg,
+.dark-mode .refresh-btn svg,
+.dark-mode .view-wallet-btn svg {
+  color: var(--text-secondary);
+}
+
+.dark-mode .copy-btn:hover svg,
+.dark-mode .refresh-btn:hover svg,
+.dark-mode .view-wallet-btn:hover svg {
+  color: var(--text-primary);
+}
+
+.dark-mode .setting-value {
+  color: var(--text-primary);
+}
+
+.dark-mode .filter-btn.active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #ffffff;
+  border-color: #667eea;
+}
+
+.dark-mode .orders-empty,
+.dark-mode .orders-loading {
+  color: var(--text-secondary);
+}
+
+.dark-mode .empty-icon {
+  opacity: 0.6;
+}
+
+/* Dark mode styling for price arrow between current and trigger price */
+.dark-mode .price-arrow {
+  color: #ffffff;
+  background: var(--bg-tertiary);
+  border-color: var(--border-color);
+}
+
+/* Dark mode scrollbar styling */
+.dark-mode .profile-view::-webkit-scrollbar {
+  width: 12px;
+}
+
+.dark-mode .profile-view::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+
+.dark-mode .profile-view::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  border: 2px solid var(--bg-primary);
+}
+
+.dark-mode .profile-view::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
 }

@@ -225,12 +225,6 @@ function CoinSearchModal({ visible, onClose, onCoinSelect }) {
         </div>
         
         <div className="search-modal-body">
-          {/* Enhanced banner */}
-          <div className="search-coming-soon-banner" role="note" aria-label="Search enhancements">
-            <span className="coming-dot" />
-            <span className="coming-text">✨ Powered by Jupiter Ultra - Search by name, symbol, or address!</span>
-          </div>
-
           {/* Search input */}
           <div className="search-input-container">
             <input
@@ -410,12 +404,13 @@ function CoinSearchModal({ visible, onClose, onCoinSelect }) {
           {!searchQuery && !searchResults.length && (
             <div className="search-help">
               <h4>Search any Solana token:</h4>
+              <p className="powered-by-text">Powered by Jupiter Ultra - Search by name, symbol, or address!</p>
               <ul>
-                <li>🔤 By name (e.g., "Dogwifhat")</li>
-                <li>💱 By symbol (e.g., "SOL", "BONK")</li>
-                <li>📋 By mint address</li>
-                <li>🎯 Results include price, market cap, liquidity & safety indicators</li>
-                <li>🔍 Use filters to refine your search</li>
+                <li>By name (e.g., "Dogwifhat")</li>
+                <li>By symbol (e.g., "SOL", "BONK")</li>
+                <li>By mint address</li>
+                <li>Results include price, market cap, liquidity & safety indicators</li>
+                <li>Use filters to refine your search</li>
               </ul>
             </div>
           )}

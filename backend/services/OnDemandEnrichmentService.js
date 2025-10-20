@@ -80,13 +80,21 @@ class OnDemandEnrichmentService {
 
     console.log(`🔄 Enriching ${coin.symbol || mintAddress} on-demand...`);
 
+    // 🐛 DEBUG: Check if coin already has holder data before enrichment
+    console.log(`🔍 Pre-enrichment holder data for ${coin.symbol}:`, {
+      holders: coin.holders,
+      holderCount: coin.holderCount,
+      holder_count: coin.holder_count
+    });
+
     try {
       // Run ONLY essential enrichment APIs in parallel for maximum speed
-      // REMOVED: Birdeye (redundant - we already have price from Jupiter Ultra + DexScreener)
+      // ✅ ADDED: Jupiter Ultra for holderCount (same API used in search)
       const enrichmentPromises = {
         dex: this.fetchDexScreener(mintAddress),
         rug: this.fetchRugcheck(mintAddress),
-        pumpfun: this.fetchPumpFunDescription(mintAddress)
+        pumpfun: this.fetchPumpFunDescription(mintAddress),
+        jupiter: this.fetchJupiterUltra(mintAddress) // 🆕 Get holderCount from Jupiter
       };
 
       // Wait for all APIs with timeout
@@ -98,7 +106,7 @@ class OnDemandEnrichmentService {
       ]);
 
       // Process results
-      const [dexResult, rugResult, pumpfunResult] = results;
+      const [dexResult, rugResult, pumpfunResult, jupiterResult] = results;
       
       const enrichedData = {
         ...coin,
@@ -126,13 +134,35 @@ class OnDemandEnrichmentService {
           rugcheckScore: rugcheckData.rugcheckScore,
           rugcheckVerified: rugcheckData.rugcheckVerified,
           freezeAuthority: rugcheckData.freezeAuthority,
-          mintAuthority: rugcheckData.mintAuthority
+          mintAuthority: rugcheckData.mintAuthority,
+          holders: rugcheckData.holders // 🆕 Log holder data
         });
       } else {
         console.warn(`⚠️ Rugcheck data not available for ${coin.symbol}:`, 
           rugResult.status === 'rejected' ? rugResult.reason?.message : 'No data returned');
         // Set rugcheckVerified to false when rugcheck fails
         enrichedData.rugcheckVerified = false;
+      }
+
+      // ✅ Apply Jupiter Ultra data for holderCount (same as search)
+      if (jupiterResult.status === 'fulfilled' && jupiterResult.value) {
+        enrichedData.holderCount = jupiterResult.value.holderCount;
+        enrichedData.holders = jupiterResult.value.holderCount; // Both field names
+        console.log(`🪙 Jupiter Ultra holder count for ${coin.symbol}: ${jupiterResult.value.holderCount}`);
+      } else {
+        console.warn(`⚠️ Jupiter Ultra data not available for ${coin.symbol}:`,
+          jupiterResult.status === 'rejected' ? jupiterResult.reason?.message : 'No data returned');
+      }
+
+      // 🆕 Preserve original holder data if enrichment didn't provide it
+      if (!enrichedData.holders && !enrichedData.holderCount) {
+        if (coin.holders) {
+          enrichedData.holders = coin.holders;
+          console.log(`✅ Preserved original holder count: ${coin.holders}`);
+        } else if (coin.holderCount) {
+          enrichedData.holderCount = coin.holderCount;
+          console.log(`✅ Preserved original holderCount: ${coin.holderCount}`);
+        }
       }
 
       // Apply Pump.fun description (if available, replaces generic description)
@@ -247,11 +277,21 @@ class OnDemandEnrichmentService {
       
       // Find best pair (highest liquidity)
       if (data.pairs && data.pairs.length > 0) {
-        return data.pairs.reduce((best, current) => {
+        const bestPair = data.pairs.reduce((best, current) => {
           const currentLiq = parseFloat(current.liquidity?.usd || '0');
           const bestLiq = parseFloat(best.liquidity?.usd || '0');
           return currentLiq > bestLiq ? current : best;
         });
+        
+        // 🐛 DEBUG: Log available fields to check for holder data
+        console.log(`🔍 DexScreener data for ${mintAddress}:`, {
+          hasHolders: !!bestPair.holders,
+          hasHolderCount: !!bestPair.holderCount,
+          hasTokenSupply: !!bestPair.tokenSupply,
+          availableFields: Object.keys(bestPair).filter(k => k.toLowerCase().includes('hold'))
+        });
+        
+        return bestPair;
       }
 
       return null;
@@ -336,6 +376,40 @@ class OnDemandEnrichmentService {
   }
 
   /**
+   * Fetch Jupiter Ultra data for holderCount
+   * Same API used in search - provides accurate holder count
+   */
+  async fetchJupiterUltra(mintAddress) {
+    try {
+      const response = await fetch(
+        `https://lite-api.jup.ag/ultra/v1/search?query=${mintAddress}`,
+        {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 3000
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Jupiter Ultra API returned ${response.status}`);
+      }
+
+      const results = await response.json();
+      
+      // Find exact match by mint address
+      if (results && results.length > 0) {
+        const exactMatch = results.find(t => t.id === mintAddress);
+        return exactMatch || results[0]; // Return exact match or first result
+      }
+
+      return null;
+    } catch (error) {
+      console.warn(`⚠️ Jupiter Ultra failed for ${mintAddress}:`, error.message);
+      return null;
+    }
+  }
+
+  /**
    * Process DexScreener data into enrichment fields
    */
   processDexScreenerData(pair, coin) {
@@ -376,6 +450,16 @@ class OnDemandEnrichmentService {
       });
     }
 
+    // 🆕 Calculate age from pairCreatedAt timestamp
+    let ageHours = null;
+    if (pair.pairCreatedAt) {
+      const createdTime = new Date(pair.pairCreatedAt).getTime();
+      const now = Date.now();
+      const ageMs = now - createdTime;
+      ageHours = Math.floor(ageMs / (1000 * 60 * 60)); // Convert to hours
+      console.log(`⏰ Calculated age for ${coin.symbol}: ${ageHours}h from ${pair.pairCreatedAt}`);
+    }
+
     return {
       // Visual assets
       banner,
@@ -401,6 +485,10 @@ class OnDemandEnrichmentService {
       // Transaction data
       buys24h: pair.txns?.h24?.buys || 0,
       sells24h: pair.txns?.h24?.sells || 0,
+      
+      // 🆕 Age data
+      ageHours,
+      created_timestamp: pair.pairCreatedAt,
       
       // Social links
       socialLinks: socials,
@@ -434,6 +522,14 @@ class OnDemandEnrichmentService {
       burnPercentage = Math.max(burnPercentage, burnedPct);
     }
 
+    // 🐛 DEBUG: Check for holder data in Rugcheck response
+    console.log(`🔍 Rugcheck data fields:`, {
+      hasHolders: !!data.holders,
+      hasHolderCount: !!data.holderCount,
+      topHoldersLength: data.topHolders?.length || 0,
+      availableFields: Object.keys(data).filter(k => k.toLowerCase().includes('hold'))
+    });
+
     return {
       liquidityLocked,
       lockPercentage: Math.round(lockPercentage),
@@ -443,6 +539,7 @@ class OnDemandEnrichmentService {
       freezeAuthority: data.tokenMeta?.freezeAuthority !== null,
       mintAuthority: data.tokenMeta?.mintAuthority !== null,
       topHolderPercent: data.topHolders?.[0]?.pct || 0,
+      holders: data.holders || data.holderCount, // 🆕 Add holder count if available
       isHoneypot: data.risks?.includes('honeypot') || false,
       rugcheckVerified: true, // Mark that rugcheck data is available
       rugcheckProcessedAt: new Date().toISOString()

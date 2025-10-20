@@ -8,6 +8,7 @@ function CoinListModal({ visible, onClose, filterType, onCoinSelect, currentCoin
   const [coins, setCoins] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [showInfo, setShowInfo] = useState(false);
 
   // Helper to get correct endpoint based on filter type
   const getApiUrl = () => {
@@ -75,6 +76,21 @@ function CoinListModal({ visible, onClose, filterType, onCoinSelect, currentCoin
     }
   };
 
+  const getFilterDescription = () => {
+    switch (filterType) {
+      case 'trending':
+        return 'Tokens with strong metrics including high volume, growing holder count, positive price momentum, and active trading activity. These coins are gaining significant market attention.';
+      case 'new':
+        return 'Recently launched tokens with high initial volume and recent creation timestamps. We prioritize tokens that are less than 48 hours old with strong early trading activity.';
+      case 'graduating':
+        return 'Pump.fun tokens that are close to graduating to Raydium. These tokens use a bonding curve mechanism - as more SOL is deposited, they progress towards 100% completion and full DEX listing.';
+      case 'custom':
+        return 'Custom filtered tokens based on your selected criteria.';
+      default:
+        return 'A comprehensive list of all available tokens from multiple data sources.';
+    }
+  };
+
   if (!visible) return null;
 
   return (
@@ -93,6 +109,24 @@ function CoinListModal({ visible, onClose, filterType, onCoinSelect, currentCoin
           <button className="coin-list-modal-close" onClick={onClose}>
             ✕
           </button>
+        </div>
+
+        {/* Info Banner - How we get these coins */}
+        <div className="coin-list-info-banner">
+          <div 
+            className="info-banner-trigger"
+            onMouseEnter={() => setShowInfo(true)}
+            onMouseLeave={() => setShowInfo(false)}
+            onClick={() => setShowInfo(!showInfo)}
+          >
+            <span className="info-text">How do we get these coins?</span>
+          </div>
+          {showInfo && (
+            <div className="info-banner-tooltip">
+              <div className="info-tooltip-arrow"></div>
+              <p>{getFilterDescription()}</p>
+            </div>
+          )}
         </div>
 
         {/* Content */}

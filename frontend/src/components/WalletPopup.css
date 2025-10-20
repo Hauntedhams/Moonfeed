@@ -659,3 +659,166 @@
     font-size: 20px;
   }
 }
+
+/* ================================
+   DARK MODE OVERRIDES
+   ================================ */
+
+.wallet-popup.dark-mode {
+  background: rgba(30, 30, 35, 0.98);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #ffffff !important;
+}
+
+.wallet-popup.dark-mode * {
+  color: inherit;
+}
+
+.wallet-popup.dark-mode h3,
+.wallet-popup.dark-mode p,
+.wallet-popup.dark-mode span,
+.wallet-popup.dark-mode div {
+  color: #ffffff;
+}
+
+.wallet-popup.dark-mode .wallet-popup-close {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.wallet-popup.dark-mode .wallet-popup-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+}
+
+.wallet-popup.dark-mode .wallet-popup-title {
+  color: #ffffff;
+}
+
+.wallet-popup.dark-mode .wallet-address {
+  background: rgba(255, 255, 255, 0.05);
+  color: #ffffff !important;
+}
+
+.wallet-popup.dark-mode .copy-address-btn {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.wallet-popup.dark-mode .copy-address-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.wallet-popup.dark-mode .wallet-stat-item {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.wallet-popup.dark-mode .wallet-stat-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.wallet-popup.dark-mode .stat-label {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.wallet-popup.dark-mode .stat-value {
+  color: #ffffff !important;
+}
+
+.wallet-popup.dark-mode .stat-row .stat-label {
+  color: rgba(255, 255, 255, 0.6) !important;
+}
+
+.wallet-popup.dark-mode .stat-row .stat-value {
+  color: #ffffff !important;
+}
+
+.wallet-popup.dark-mode .wallet-token-item {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.wallet-popup.dark-mode .wallet-token-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.wallet-popup.dark-mode .token-symbol {
+  color: #ffffff !important;
+}
+
+.wallet-popup.dark-mode .token-trades {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.wallet-popup.dark-mode .activity-item {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.wallet-popup.dark-mode .activity-amount {
+  color: #ffffff !important;
+}
+
+.wallet-popup.dark-mode .activity-time {
+  color: rgba(255, 255, 255, 0.5) !important;
+}
+
+.wallet-popup.dark-mode .wallet-popup-loading p {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.wallet-popup.dark-mode .wallet-popup-error {
+  background: rgba(239, 68, 68, 0.15);
+}
+
+.wallet-popup.dark-mode .wallet-popup-error p {
+  color: #f87171 !important;
+}
+
+.wallet-popup.dark-mode .data-source {
+  color: rgba(255, 255, 255, 0.5) !important;
+}
+
+.wallet-popup.dark-mode .avg-rank-display {
+  background: rgba(245, 158, 11, 0.15);
+  color: #ffffff !important;
+}
+
+.wallet-popup.dark-mode .avg-rank-display strong {
+  color: #fbbf24 !important;
+}
+
+.wallet-popup.dark-mode .track-wallet-btn {
+  background: rgba(79, 70, 229, 0.2);
+  border-color: rgba(79, 70, 229, 0.3);
+  color: #a5b4fc;
+}
+
+.wallet-popup.dark-mode .track-wallet-btn:hover {
+  background: rgba(79, 70, 229, 0.3);
+  border-color: rgba(79, 70, 229, 0.5);
+  color: #c7d2fe;
+}
+
+.wallet-popup.dark-mode .track-wallet-btn.tracked {
+  background: rgba(34, 197, 94, 0.2);
+  border-color: rgba(34, 197, 94, 0.3);
+  color: #86efac;
+}
+
+.wallet-popup.dark-mode .track-wallet-btn.tracked:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+}
+
+/* Dark mode scrollbar */
+.wallet-popup.dark-mode::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.wallet-popup.dark-mode::-webkit-scrollbar-thumb {
+  background: rgba(167, 139, 250, 0.3);
+}
+
+.wallet-popup.dark-mode::-webkit-scrollbar-thumb:hover {
+  background: rgba(167, 139, 250, 0.5);
+}
