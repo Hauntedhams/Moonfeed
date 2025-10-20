@@ -8,8 +8,9 @@
 **V5 Commit**: 841e3cd (disabled virtual scrolling)  
 **V6 Commit**: 9f68b71 (removed remaining references)  
 **V7 Commit**: f4e2a37 (cards render, scroll works)
-**V8 Commit (Final)**: ee29437  
-**Status**: ✅ RESOLVED (V8 - Smooth Mobile Scrolling Like Desktop)
+**V8 Commit**: ee29437 (removed scroll-snap-stop)
+**V9 Commit (Final)**: 9a57129  
+**Status**: ✅ RESOLVED (V9 - Smooth Mobile Scrolling with Proximity Snap)
 
 ---
 
@@ -347,6 +348,31 @@ scrollEndTimeout = setTimeout(() => {
 - No more "sticky" feeling when trying to scroll
 - Consistent user experience across platforms
 
+### V9 - PROXIMITY SNAP FOR MOBILE (Commit 9a57129):
+
+**Issue**: Still too aggressive - scroll kept snapping back to current coin, hard to swipe.
+
+**Root Cause**: `scroll-snap-type: y mandatory` forces snap at ALL times, even during active scrolling.
+
+**Solution - Mobile-Only Fix**:
+1. ✅ **Changed to `scroll-snap-type: y proximity` for mobile**
+   - Only snaps when user is CLOSE to a snap point
+   - Allows free, fluid scrolling without constant snap-back
+   - Much more natural TikTok-like feel
+
+2. ✅ **Desktop keeps `mandatory` snap**
+   - Desktop users expect precise, strong snap behavior
+   - Mobile-only media query ensures no impact on desktop
+
+3. ✅ **Result - Perfect Balance**
+   - Mobile: Free scrolling with gentle snap when stopped
+   - Desktop: Strong, precise snap behavior
+   - Both platforms optimized for their use case
+
+**Key Learning**: 
+- `mandatory` = Always snaps (good for desktop, too aggressive for mobile touch)
+- `proximity` = Only snaps when close (perfect for mobile swipe gestures)
+
 ---
 
-_This fix ensures perfect scroll alignment on mobile devices with smooth, easy swiping between coins, eliminating both the misalignment bug and the sticky scroll behavior._
+_This fix ensures perfect scroll alignment on mobile devices with smooth, easy swiping between coins using CSS scroll-snap proximity mode for a natural, TikTok-like mobile experience._
