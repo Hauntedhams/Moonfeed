@@ -131,6 +131,9 @@
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* IE and Edge */
+  /* Mobile fix: Ensure scroll snap is enforced */
+  scroll-padding: 0;
+  scroll-snap-align: start;
 }
 
 .modern-scroller-container::-webkit-scrollbar {
@@ -148,6 +151,9 @@
   position: relative;
   background: linear-gradient(135deg, #0b1220 0%, #0e1426 50%, #0b1220 100%);
   /* Removed transition to prevent flash during scroll */
+  /* Mobile fix: Ensure proper positioning */
+  flex-shrink: 0;
+  contain: layout style paint;
 }
 
 .modern-coin-slide.active {

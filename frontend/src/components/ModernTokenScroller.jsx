@@ -659,7 +659,22 @@ const ModernTokenScroller = ({
     const container = scrollerRef.current;
     const cardHeight = container.clientHeight;
     const scrollTop = container.scrollTop;
-    const newIndex = Math.round(scrollTop / cardHeight);
+    
+    // 🐛 MOBILE FIX: More precise index calculation to prevent off-by-one errors
+    // Add a threshold to account for partial scrolls and ensure we're closer to the target
+    const rawIndex = scrollTop / cardHeight;
+    const threshold = 0.4; // Must be at least 40% into the next card to count as scrolled
+    let newIndex;
+    
+    // If we're within threshold of the previous card, snap back
+    if (rawIndex - Math.floor(rawIndex) < threshold) {
+      newIndex = Math.floor(rawIndex);
+    } else {
+      newIndex = Math.ceil(rawIndex);
+    }
+    
+    // Clamp to valid range
+    newIndex = Math.max(0, Math.min(newIndex, coins.length - 1));
     
     // Only update if index actually changed and is valid
     if (newIndex !== currentIndex && newIndex >= 0 && newIndex < coins.length) {
@@ -697,6 +712,7 @@ const ModernTokenScroller = ({
     if (!container) return;
     
     let scrollTimeout;
+    let scrollEndTimeout;
     
     const throttledHandleScroll = () => {
       // Clear previous timeout
@@ -708,6 +724,29 @@ const ModernTokenScroller = ({
       scrollTimeout = setTimeout(() => {
         handleScroll();
       }, 50); // 50ms throttle for smoother performance
+      
+      // 🐛 MOBILE FIX: Snap to correct position after scrolling stops
+      if (scrollEndTimeout) {
+        clearTimeout(scrollEndTimeout);
+      }
+      
+      scrollEndTimeout = setTimeout(() => {
+        if (isScrollLocked.current || expandedCoin) return;
+        
+        const cardHeight = container.clientHeight;
+        const scrollTop = container.scrollTop;
+        const targetIndex = Math.round(scrollTop / cardHeight);
+        const targetScrollTop = targetIndex * cardHeight;
+        
+        // Only snap if we're off by more than 5px
+        if (Math.abs(scrollTop - targetScrollTop) > 5) {
+          console.log(`📍 Snap correction: ${scrollTop}px → ${targetScrollTop}px (index ${targetIndex})`);
+          container.scrollTo({
+            top: targetScrollTop,
+            behavior: 'smooth'
+          });
+        }
+      }, 150); // Wait 150ms after scrolling stops to snap
     };
     
     container.addEventListener('scroll', throttledHandleScroll, { passive: true });
@@ -717,8 +756,11 @@ const ModernTokenScroller = ({
       if (scrollTimeout) {
         clearTimeout(scrollTimeout);
       }
+      if (scrollEndTimeout) {
+        clearTimeout(scrollEndTimeout);
+      }
     };
-  }, [handleScroll]);
+  }, [handleScroll, expandedCoin]);
   
   // Handle favorite toggle
   const handleFavoriteToggle = (coin) => {
