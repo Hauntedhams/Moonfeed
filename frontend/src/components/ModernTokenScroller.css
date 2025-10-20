@@ -98,18 +98,23 @@
 
 /* Scrollable container with performance optimizations */
 .modern-scroller-container {
-  height: 100vh;
+  height: 100dvh; /* Use dynamic viewport height */
   width: 100%;
   overflow-y: auto;
+  /* Smoother snap behavior - mandatory but without aggressive stops */
   scroll-snap-type: y mandatory;
-  scroll-behavior: smooth; /* Smooth scrolling like desktop */
+  scroll-behavior: smooth; /* Smooth scrolling for all devices */
   -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
   /* Performance optimizations */
   will-change: scroll-position;
   contain: layout style paint;
   transform: translateZ(0); /* Force hardware acceleration */
   /* Prevent bounce/overscroll on iOS */
   overscroll-behavior: none;
+  /* Mobile fix: Proper scroll padding */
+  scroll-padding: 0;
 }
 
 .modern-scroller-container.scroll-locked {
@@ -121,19 +126,6 @@
 /* Ensure coin cards can still receive interactions when scroll is locked */
 .modern-scroller-container.scroll-locked .modern-coin-slide {
   pointer-events: auto;
-}
-
-.modern-scroller-container {
-  height: 100dvh; /* Use dynamic viewport height */
-  overflow-y: auto;
-  scroll-snap-type: y mandatory;
-  scroll-behavior: smooth; /* Smooth scrolling for all devices */
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none; /* IE and Edge */
-  /* Mobile fix: Ensure scroll snap is enforced */
-  scroll-padding: 0;
-  scroll-snap-align: start;
 }
 
 .modern-scroller-container::-webkit-scrollbar {
@@ -150,7 +142,7 @@
   background: linear-gradient(135deg, #0b1220 0%, #0e1426 50%, #0b1220 100%);
   /* Scroll snap alignment - critical for smooth scrolling */
   scroll-snap-align: start;
-  scroll-snap-stop: always; /* Force snap to stop at each slide */
+  /* Removed scroll-snap-stop: always to allow smoother swiping */
   /* Mobile fix: Ensure proper positioning */
   flex-shrink: 0;
   contain: layout style paint;
@@ -492,5 +484,21 @@
   .virtual-spacer-bottom {
     /* Ensure spacers don't interfere with scrolling on mobile */
     touch-action: pan-y;
+  }
+  
+  /* Mobile-specific scroll improvements for smoother swiping */
+  .modern-scroller-container {
+    /* Allow momentum scrolling on iOS for smoother experience */
+    -webkit-overflow-scrolling: touch;
+    /* Reduce scroll snap strictness slightly for easier swiping */
+    scroll-padding-top: 0;
+    scroll-padding-bottom: 0;
+  }
+  
+  .modern-coin-slide {
+    /* Ensure slides are properly positioned for smooth snapping */
+    scroll-margin-top: 0;
+    /* Allow touch actions */
+    touch-action: pan-y pinch-zoom;
   }
 }
