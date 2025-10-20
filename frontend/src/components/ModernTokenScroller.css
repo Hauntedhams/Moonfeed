@@ -101,8 +101,8 @@
   height: 100vh;
   width: 100%;
   overflow-y: auto;
-  scroll-snap-type: y mandatory;
-  scroll-behavior: auto; /* Changed from smooth for better snap precision */
+  scroll-snap-type: none; /* Disable CSS snap, let JS handle it */
+  scroll-behavior: auto;
   -webkit-overflow-scrolling: touch;
   /* Performance optimizations */
   will-change: scroll-position;
@@ -110,9 +110,6 @@
   transform: translateZ(0); /* Force hardware acceleration */
   /* Prevent bounce/overscroll on iOS */
   overscroll-behavior: none;
-  /* Mobile fix: Stricter scroll snap */
-  scroll-padding: 0;
-  scroll-snap-stop: always;
 }
 
 .modern-scroller-container.scroll-locked {
@@ -147,8 +144,6 @@
 .modern-coin-slide {
   height: 100dvh; /* Use dynamic viewport height */
   width: 100%;
-  scroll-snap-align: start;
-  scroll-snap-stop: always;
   display: flex;
   flex-direction: column;
   position: relative;

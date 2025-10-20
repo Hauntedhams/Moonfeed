@@ -697,69 +697,77 @@ const ModernTokenScroller = ({
 
 
 
+  // Snapping state to prevent concurrent snaps
+  const isSnapping = useRef(false);
+
   // Simple scroll listener - optimized for performance
   useEffect(() => {
     const container = scrollerRef.current;
     if (!container) return;
     
     let scrollTimeout;
-    let scrollEndTimeout;
+    let snapTimeout;
+    
+    const performSnap = () => {
+      if (isScrollLocked.current || expandedCoin || isSnapping.current) return;
+      
+      const cardHeight = container.clientHeight;
+      const scrollTop = container.scrollTop;
+      const targetIndex = Math.round(scrollTop / cardHeight);
+      const targetScrollTop = targetIndex * cardHeight;
+      
+      // Always snap to exact position
+      if (Math.abs(scrollTop - targetScrollTop) > 0.5) {
+        isSnapping.current = true;
+        container.scrollTop = targetScrollTop;
+        
+        // Update state immediately
+        if (targetIndex !== currentIndex && targetIndex >= 0 && targetIndex < coins.length) {
+          setCurrentIndex(targetIndex);
+          const newVisibleRange = calculateVisibleRange(targetIndex, coins.length);
+          setVisibleRange(newVisibleRange);
+          
+          const currentCoin = coins[targetIndex];
+          onCurrentCoinChange?.(getEnrichedCoin(currentCoin), targetIndex);
+        }
+        
+        setTimeout(() => {
+          isSnapping.current = false;
+        }, 50);
+      }
+    };
     
     const throttledHandleScroll = () => {
-      // Clear previous timeout
-      if (scrollTimeout) {
-        clearTimeout(scrollTimeout);
-      }
+      // Don't process if we're currently snapping
+      if (isSnapping.current) return;
       
-      // Throttle scroll handling to prevent performance issues
+      // Clear previous timeouts
+      if (scrollTimeout) clearTimeout(scrollTimeout);
+      if (snapTimeout) clearTimeout(snapTimeout);
+      
+      // Update index during scroll
       scrollTimeout = setTimeout(() => {
         handleScroll();
-      }, 50); // 50ms throttle for smoother performance
+      }, 50);
       
-      // 🐛 MOBILE FIX V2: Aggressive snap correction after scrolling stops
-      if (scrollEndTimeout) {
-        clearTimeout(scrollEndTimeout);
-      }
-      
-      scrollEndTimeout = setTimeout(() => {
-        if (isScrollLocked.current || expandedCoin) return;
-        
-        const cardHeight = container.clientHeight;
-        const scrollTop = container.scrollTop;
-        const targetIndex = Math.round(scrollTop / cardHeight);
-        const targetScrollTop = targetIndex * cardHeight;
-        
-        // Snap if we're off by ANY amount (even 1px)
-        if (Math.abs(scrollTop - targetScrollTop) > 1) {
-          console.log(`📍 Snap correction: ${Math.round(scrollTop)}px → ${targetScrollTop}px (coin ${targetIndex + 1}/${coins.length})`);
-          
-          // Force immediate snap with no smooth behavior for precision
-          container.scrollTop = targetScrollTop;
-          
-          // Update index immediately to match the snapped position
-          if (targetIndex !== currentIndex && targetIndex >= 0 && targetIndex < coins.length) {
-            setCurrentIndex(targetIndex);
-            const newVisibleRange = calculateVisibleRange(targetIndex, coins.length);
-            setVisibleRange(newVisibleRange);
-            
-            // Notify parent of the correct coin
-            const currentCoin = coins[targetIndex];
-            onCurrentCoinChange?.(getEnrichedCoin(currentCoin), targetIndex);
-          }
-        }
-      }, 100); // Reduced to 100ms for faster correction
+      // Snap when scrolling stops (faster response)
+      snapTimeout = setTimeout(performSnap, 50);
     };
     
     container.addEventListener('scroll', throttledHandleScroll, { passive: true });
     
+    // Also snap on touchend for immediate response
+    const handleTouchEnd = () => {
+      setTimeout(performSnap, 10);
+    };
+    
+    container.addEventListener('touchend', handleTouchEnd, { passive: true });
+    
     return () => {
       container.removeEventListener('scroll', throttledHandleScroll);
-      if (scrollTimeout) {
-        clearTimeout(scrollTimeout);
-      }
-      if (scrollEndTimeout) {
-        clearTimeout(scrollEndTimeout);
-      }
+      container.removeEventListener('touchend', handleTouchEnd);
+      if (scrollTimeout) clearTimeout(scrollTimeout);
+      if (snapTimeout) clearTimeout(snapTimeout);
     };
   }, [handleScroll, expandedCoin, currentIndex, coins, calculateVisibleRange, onCurrentCoinChange, getEnrichedCoin]);
   
