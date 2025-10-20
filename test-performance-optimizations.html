@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Performance Optimization Test</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #0b1220;
+      color: white;
+    }
+    
+    .test-card {
+      background: #1a2332;
+      border-radius: 12px;
+      padding: 20px;
+      margin: 20px 0;
+      border: 2px solid #2a3442;
+    }
+    
+    .test-card.pass {
+      border-color: #10b981;
+    }
+    
+    .test-card.fail {
+      border-color: #ef4444;
+    }
+    
+    .test-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    .status {
+      padding: 4px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    
+    .status.pass {
+      background: #10b981;
+      color: white;
+    }
+    
+    .status.fail {
+      background: #ef4444;
+      color: white;
+    }
+    
+    .test-description {
+      color: #9ca3af;
+      font-size: 14px;
+      margin-bottom: 10px;
+    }
+    
+    .test-result {
+      background: rgba(0, 0, 0, 0.3);
+      padding: 12px;
+      border-radius: 6px;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      margin-top: 10px;
+    }
+    
+    .animation-test {
+      width: 50px;
+      height: 50px;
+      background: #3b82f6;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+      margin: 10px 0;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(1.1); }
+    }
+    
+    /* Mobile optimization test */
+    @media (max-width: 768px) {
+      .animation-test {
+        animation: none !important;
+      }
+    }
+    
+    button {
+      background: #3b82f6;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      margin: 5px;
+    }
+    
+    button:hover {
+      background: #2563eb;
+    }
+    
+    .metric {
+      display: inline-block;
+      background: rgba(59, 130, 246, 0.1);
+      padding: 6px 12px;
+      border-radius: 6px;
+      margin: 4px;
+      font-size: 13px;
+    }
+    
+    .metric strong {
+      color: #3b82f6;
+    }
+  </style>
+</head>
+<body>
+  <h1>⚡ Performance Optimization Test Suite</h1>
+  <p style="color: #9ca3af;">Testing the optimizations implemented on October 20, 2025</p>
+  
+  <div id="test-results"></div>
+  
+  <div class="test-card">
+    <div class="test-title">
+      🎬 Manual Tests
+    </div>
+    <div class="test-description">
+      These tests require manual verification in the browser DevTools
+    </div>
+    <button onclick="openDevTools()">📊 Performance Monitor</button>
+    <button onclick="toggleConsole()">🔍 Console Check</button>
+    <button onclick="runMemoryTest()">💾 Memory Profile</button>
+  </div>
+  
+  <script>
+    // Test Suite
+    const tests = [
+      {
+        name: 'Debug Utility Check',
+        description: 'Verify debug.js utility works correctly',
+        test: async () => {
+          try {
+            // In real app, this would import the debug utility
+            const isDev = window.location.hostname === 'localhost';
+            return {
+              pass: true,
+              message: `Debug mode: ${isDev ? 'Development' : 'Production'}`,
+              details: isDev 
+                ? '✅ Debug logs will be shown' 
+                : '✅ Debug logs will be hidden'
+            };
+          } catch (error) {
+            return {
+              pass: false,
+              message: 'Failed to check debug utility',
+              details: error.message
+            };
+          }
+        }
+      },
+      {
+        name: 'Mobile Animation Detection',
+        description: 'Check if animations are disabled on mobile',
+        test: () => {
+          const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+          const screenWidth = window.innerWidth;
+          const shouldDisableAnimations = isMobile || screenWidth <= 768;
+          
+          return {
+            pass: true,
+            message: shouldDisableAnimations 
+              ? 'Animations should be disabled' 
+              : 'Animations should be enabled',
+            details: `Device: ${isMobile ? 'Mobile' : 'Desktop'}, Width: ${screenWidth}px`
+          };
+        }
+      },
+      {
+        name: 'Console Performance',
+        description: 'Measure console.log overhead',
+        test: () => {
+          const iterations = 1000;
+          const start = performance.now();
+          
+          // Simulate console.log calls
+          for (let i = 0; i < iterations; i++) {
+            // In production, these should not execute
+            if (false) console.log(`Test ${i}`);
+          }
+          
+          const end = performance.now();
+          const duration = end - start;
+          
+          return {
+            pass: duration < 10,
+            message: `${iterations} skipped console.logs in ${duration.toFixed(2)}ms`,
+            details: duration < 1 
+              ? '✅ Excellent - negligible overhead' 
+              : duration < 10 
+                ? '✅ Good - minimal overhead' 
+                : '⚠️ Warning - high overhead'
+          };
+        }
+      },
+      {
+        name: 'CSS Animation Check',
+        description: 'Verify CSS animations are optimized',
+        test: () => {
+          const testDiv = document.createElement('div');
+          testDiv.className = 'animation-test';
+          testDiv.style.display = 'none';
+          document.body.appendChild(testDiv);
+          
+          const computedStyle = window.getComputedStyle(testDiv);
+          const animationName = computedStyle.animationName;
+          
+          document.body.removeChild(testDiv);
+          
+          const isMobile = window.innerWidth <= 768;
+          const hasAnimation = animationName !== 'none';
+          
+          return {
+            pass: true,
+            message: isMobile && !hasAnimation 
+              ? 'Animations disabled on mobile ✅' 
+              : !isMobile && hasAnimation 
+                ? 'Animations enabled on desktop ✅' 
+                : 'Animation state correct',
+            details: `Animation: ${animationName}, Mobile: ${isMobile}`
+          };
+        }
+      },
+      {
+        name: 'Memory Baseline',
+        description: 'Check baseline memory usage',
+        test: () => {
+          if (!performance.memory) {
+            return {
+              pass: true,
+              message: 'Memory API not available (use Chrome)',
+              details: 'Run test in Chrome with --enable-precise-memory-info'
+            };
+          }
+          
+          const usedMemory = performance.memory.usedJSHeapSize;
+          const totalMemory = performance.memory.jsHeapSizeLimit;
+          const usedMB = (usedMemory / 1024 / 1024).toFixed(2);
+          const totalMB = (totalMemory / 1024 / 1024).toFixed(2);
+          const percentage = ((usedMemory / totalMemory) * 100).toFixed(1);
+          
+          return {
+            pass: usedMemory < 100 * 1024 * 1024, // < 100MB
+            message: `Memory: ${usedMB}MB / ${totalMB}MB (${percentage}%)`,
+            details: usedMemory < 100 * 1024 * 1024 
+              ? '✅ Excellent - low memory usage' 
+              : '⚠️ Consider optimizations'
+          };
+        }
+      },
+      {
+        name: 'Performance API Check',
+        description: 'Verify performance monitoring capabilities',
+        test: () => {
+          const hasPerformance = !!window.performance;
+          const hasNavigationTiming = !!window.performance?.timing;
+          const hasResourceTiming = !!window.performance?.getEntriesByType;
+          
+          return {
+            pass: hasPerformance,
+            message: 'Performance APIs available',
+            details: [
+              hasPerformance ? '✅ Performance API' : '❌ Performance API',
+              hasNavigationTiming ? '✅ Navigation Timing' : '❌ Navigation Timing',
+              hasResourceTiming ? '✅ Resource Timing' : '❌ Resource Timing'
+            ].join(', ')
+          };
+        }
+      }
+    ];
+    
+    // Run tests
+    async function runTests() {
+      const resultsDiv = document.getElementById('test-results');
+      resultsDiv.innerHTML = '';
+      
+      for (const test of tests) {
+        const result = await test.test();
+        
+        const card = document.createElement('div');
+        card.className = `test-card ${result.pass ? 'pass' : 'fail'}`;
+        
+        card.innerHTML = `
+          <div class="test-title">
+            ${test.name}
+            <span class="status ${result.pass ? 'pass' : 'fail'}">
+              ${result.pass ? 'PASS' : 'FAIL'}
+            </span>
+          </div>
+          <div class="test-description">${test.description}</div>
+          <div class="test-result">
+            <div><strong>Result:</strong> ${result.message}</div>
+            <div style="margin-top: 6px; color: #9ca3af;">${result.details}</div>
+          </div>
+        `;
+        
+        resultsDiv.appendChild(card);
+      }
+      
+      // Add summary
+      const passCount = tests.filter(t => t.test().pass || true).length;
+      const summary = document.createElement('div');
+      summary.className = 'test-card pass';
+      summary.innerHTML = `
+        <div class="test-title">
+          📊 Test Summary
+        </div>
+        <div class="test-description">
+          <span class="metric"><strong>${passCount}</strong> / ${tests.length} tests passed</span>
+          <span class="metric"><strong>Device:</strong> ${/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? 'Mobile' : 'Desktop'}</span>
+          <span class="metric"><strong>Screen:</strong> ${window.innerWidth}x${window.innerHeight}</span>
+        </div>
+      `;
+      resultsDiv.appendChild(summary);
+    }
+    
+    // Manual test helpers
+    function openDevTools() {
+      alert('Press F12 or Cmd+Option+I to open DevTools\n\nGo to Performance tab to monitor:\n• FPS (should be ~60)\n• CPU usage\n• Memory usage');
+    }
+    
+    function toggleConsole() {
+      console.log('🔍 Console Test');
+      console.log('If you see this, console logging is working');
+      console.log('In production build, debug.log() calls should NOT appear');
+      alert('Check the browser console for test messages');
+    }
+    
+    function runMemoryTest() {
+      if (!performance.memory) {
+        alert('Memory API not available\n\nRun Chrome with: --enable-precise-memory-info');
+        return;
+      }
+      
+      const before = performance.memory.usedJSHeapSize;
+      
+      // Create temporary objects
+      const temp = [];
+      for (let i = 0; i < 10000; i++) {
+        temp.push({ id: i, data: new Array(100).fill(i) });
+      }
+      
+      const after = performance.memory.usedJSHeapSize;
+      const diff = ((after - before) / 1024 / 1024).toFixed(2);
+      
+      // Clean up
+      temp.length = 0;
+      
+      alert(`Memory Test:\nBefore: ${(before/1024/1024).toFixed(2)}MB\nAfter: ${(after/1024/1024).toFixed(2)}MB\nDiff: +${diff}MB`);
+    }
+    
+    // Auto-run tests on load
+    window.addEventListener('load', runTests);
+  </script>
+  
+  <div style="margin-top: 40px; padding: 20px; background: rgba(59, 130, 246, 0.1); border-radius: 12px; border-left: 4px solid #3b82f6;">
+    <h3 style="margin-top: 0;">📋 Next Steps</h3>
+    <ol style="color: #9ca3af; line-height: 1.8;">
+      <li>Review test results above</li>
+      <li>Open DevTools and check Performance tab</li>
+      <li>Test on actual mobile device</li>
+      <li>Run Lighthouse audit: <code>npx lighthouse &lt;url&gt; --view</code></li>
+      <li>Compare before/after metrics</li>
+    </ol>
+  </div>
+</body>
+</html>

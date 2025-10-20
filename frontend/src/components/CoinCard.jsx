@@ -15,6 +15,7 @@ import {
   getGraduationStatus,
   getGraduationColor 
 } from '../utils/graduationCalculator.js';
+import debug from '../utils/debug.js';
 
 const CoinCard = memo(({ 
   coin, 
@@ -58,18 +59,8 @@ const CoinCard = memo(({
     (coin.rugcheck && Object.keys(coin.rugcheck).length > 0)
   );
 
-  // 🐛 DEBUG: Log Age and Holders data for debugging
-  useEffect(() => {
-    console.log(`🐛 [CoinCard] ${coin.symbol || coin.name} Age/Holders debug:`, {
-      age: coin.age,
-      ageHours: coin.ageHours,
-      created_timestamp: coin.created_timestamp,
-      createdTimestamp: coin.createdTimestamp,
-      holders: coin.holders,
-      holderCount: coin.holderCount,
-      allCoinProps: Object.keys(coin).filter(k => k.toLowerCase().includes('age') || k.toLowerCase().includes('holder') || k.toLowerCase().includes('created'))
-    });
-  }, [coin]);
+  // Removed: Debug-only useEffect for Age/Holders logging
+  // This was causing unnecessary re-renders and console spam
 
   // 🔥 MOBILE PERFORMANCE FIX: Detect mobile and disable live data
   const isMobile = useRef(/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)).current;
@@ -94,7 +85,7 @@ const CoinCard = memo(({
   // This MUST come AFTER enrichmentCompleted state is declared
   useEffect(() => {
     if (isEnriched && !enrichmentCompleted) {
-      console.log(`📦 Coin ${coin.symbol} is pre-enriched, enabling chart auto-load`);
+      debug.log(`📦 Coin ${coin.symbol} is pre-enriched, enabling chart auto-load`);
       setEnrichmentCompleted(true);
     }
   }, [isEnriched, enrichmentCompleted, coin.symbol]);
@@ -105,17 +96,14 @@ const CoinCard = memo(({
     // 2. Coin is NOT already enriched
     // 3. We haven't already requested enrichment for this coin
     if (isVisible && !isEnriched && !enrichmentRequested && mintAddress) {
-      // Reduced logging for production
-      if (!import.meta.env.PROD) {
-        console.log(`🎯 On-view enrichment triggered for ${coin.symbol || coin.name}`);
-      }
+      debug.log(`🎯 On-view enrichment triggered for ${coin.symbol || coin.name}`);
       setEnrichmentRequested(true);
       
       // Call backend enrichment API
       const enrichCoin = async () => {
         try {
           const apiUrl = `${API_CONFIG.COINS_API}/enrich-single`;
-          console.log(`🔄 Enriching ${coin.symbol} via ${apiUrl}`);
+          debug.log(`🔄 Enriching ${coin.symbol} via ${apiUrl}`);
           
           const response = await fetch(apiUrl, {
             method: 'POST',
@@ -129,8 +117,8 @@ const CoinCard = memo(({
           if (response.ok) {
             const data = await response.json();
             if (data.success && data.coin) {
-              console.log(`✅ On-view enrichment complete for ${coin.symbol} in ${data.enrichmentTime}ms`);
-              console.log(`📊 Enriched coin data:`, {
+              debug.log(`✅ On-view enrichment complete for ${coin.symbol} in ${data.enrichmentTime}ms`);
+              debug.log(`📊 Enriched coin data:`, {
                 hasCleanChartData: !!data.coin.cleanChartData,
                 hasRugcheck: !!data.coin.rugcheckScore || !!data.coin.liquidityLocked,
                 hasBanner: !!data.coin.banner
@@ -144,7 +132,7 @@ const CoinCard = memo(({
                 onEnrichmentComplete(mintAddress, data.coin);
               }
             } else {
-              console.warn(`⚠️ Enrichment returned success:false for ${coin.symbol}:`, data);
+              debug.warn(`⚠️ Enrichment returned success:false for ${coin.symbol}:`, data);
             }
           } else {
             const errorData = await response.json().catch(() => ({ error: response.statusText }));
@@ -166,12 +154,12 @@ const CoinCard = memo(({
   // Auto-show transactions UI when autoLoadTransactions is true
   useEffect(() => {
     if (autoLoadTransactions && !showLiveTransactions) {
-      console.log(`🔄 Auto-loading transactions for coin: ${coin.symbol || coin.name}`);
+      debug.log(`🔄 Auto-loading transactions for coin: ${coin.symbol || coin.name}`);
       setShowLiveTransactions(true);
     }
     // Clean up when no longer auto-loading
     if (!autoLoadTransactions && showLiveTransactions) {
-      console.log(`🛑 Stopping auto-loaded transactions for coin: ${coin.symbol || coin.name}`);
+      debug.log(`🛑 Stopping auto-loaded transactions for coin: ${coin.symbol || coin.name}`);
       setShowLiveTransactions(false);
       clearTransactions();
     }
@@ -282,7 +270,7 @@ const CoinCard = memo(({
         }
         
         // Debug logging to understand the data structure
-        console.log(`📊 Volume tooltip for ${coin.symbol}:`, {
+        debug.log(`📊 Volume tooltip for ${coin.symbol}:`, {
           hasChanges: !!changes,
           changes: changes,
           rawPriceChange: rawPriceChange,
@@ -836,9 +824,9 @@ const CoinCard = memo(({
   const liquidity = liveData?.liquidity ?? coin.liquidity_usd ?? coin.liquidity ?? coin.liquidityUsd ?? 0;
   const holders = liveData?.holders ?? coin.holders ?? coin.holderCount ?? coin.holder_count ?? coin.dexscreener?.holders ?? 0;
   
-  // 🔍 DEBUG: Log data for specific coin
-  if (coin.mintAddress === 'BwbZ992sMqabbBYnEj4tfNBmtdYtjRkSqgAGCyCRpump') {
-    console.log('🔍 DEBUG - Coin Data for BwbZ992s...:', {
+  // 🔍 DEBUG: Specific coin debugging (disabled in production)
+  if (import.meta.env.DEV && coin.mintAddress === 'BwbZ992sMqabbBYnEj4tfNBmtdYtjRkSqgAGCyCRpump') {
+    debug.log('🔍 DEBUG - Coin Data for BwbZ992s...:', {
       symbol: coin.symbol,
       name: coin.name,
       mintAddress: coin.mintAddress,
@@ -967,22 +955,20 @@ const CoinCard = memo(({
             loading="lazy"
             decoding="async"
             onError={(e) => { 
-              // Reduce image error logging to prevent spam
-              if (Math.random() < 0.1) {
-                console.log(`Banner image failed to load for ${coin.symbol}:`, e.currentTarget.src);
-              }
+              // Image error logging (dev only)
+              debug.log(`Banner image failed to load for ${coin.symbol}:`, e.currentTarget.src);
               e.currentTarget.style.display = 'none'; 
             }}
             onLoad={() => {
-              // Reduce successful load logging
-              if (Math.random() < 0.05) {
-                console.log(`✅ Banner loaded successfully for ${coin.symbol}`);
-              }
+              // Image load logging (dev only)
+              debug.log(`✅ Banner loaded successfully for ${coin.symbol}`);
             }}
           />
         ) : (
           <div className="banner-placeholder">
-            {coin.name ? `${coin.name} meme coin` : 'Meme coin discovery'}
+            <div className="banner-placeholder-text">
+              {coin.name || 'Meme coin discovery'}
+            </div>
           </div>
         )}
         
@@ -996,27 +982,29 @@ const CoinCard = memo(({
             >
               {coin.name || 'Unknown Token'}
             </h2>
-            <p className="banner-coin-symbol">
-              ${coin.symbol || coin.ticker || 'N/A'}
-            </p>
-            <button 
-              className={`banner-favorites-button ${isFavorite ? 'favorited' : ''}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                onFavoriteToggle?.();
-              }}
-              title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-            >
-              <svg width="18" height="18" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path 
-                  d="M10 3L12.4721 7.94454L17.9445 8.52786L13.9722 12.0555L15.2361 17.4721L10 14.5L4.76393 17.4721L6.02778 12.0555L2.05548 8.52786L7.52786 7.94454L10 3Z" 
-                  stroke="currentColor" 
-                  strokeWidth="1.5" 
-                  strokeLinejoin="round"
-                  fill={isFavorite ? 'currentColor' : 'none'}
-                />
-              </svg>
-            </button>
+            <div className="banner-symbol-row">
+              <p className="banner-coin-symbol">
+                ${coin.symbol || coin.ticker || 'N/A'}
+              </p>
+              <button 
+                className={`banner-favorites-button ${isFavorite ? 'favorited' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onFavoriteToggle?.();
+                }}
+                title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+              >
+                <svg width="18" height="18" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path 
+                    d="M10 3L12.4721 7.94454L17.9445 8.52786L13.9722 12.0555L15.2361 17.4721L10 14.5L4.76393 17.4721L6.02778 12.0555L2.05548 8.52786L7.52786 7.94454L10 3Z" 
+                    stroke="currentColor" 
+                    strokeWidth="1.5" 
+                    strokeLinejoin="round"
+                    fill={isFavorite ? 'currentColor' : 'none'}
+                  />
+                </svg>
+              </button>
+            </div>
           </div>
           {coin.description && (
             <p className="banner-coin-description">{coin.description}</p>

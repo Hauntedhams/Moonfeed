@@ -2,6 +2,45 @@
    COIN CARD - Streamlined Two-Layer TikTok-style Component (CLEAN STYLES)
    ============================================================================= */
 
+/* ⚡ MOBILE PERFORMANCE OPTIMIZATIONS - Disable animations on mobile devices */
+@media (max-width: 768px), (hover: none) {
+  /* Disable all animations on mobile for better performance */
+  .enrichment-status-badge,
+  .enrichment-status-badge span,
+  .loading-spinner,
+  .price-flash-green,
+  .price-flash-red,
+  .graduation-progress-glow,
+  .shimmer-gradient {
+    animation: none !important;
+  }
+  
+  /* Reduce transition durations on mobile */
+  * {
+    transition-duration: 0.1s !important;
+  }
+  
+  /* Disable hover effects on touch devices */
+  .coin-banner:hover,
+  .info-layer-profile-image:hover,
+  .header-metric:hover,
+  .header-social-icon:hover {
+    transform: none !important;
+  }
+}
+
+/* Alternative: Use prefers-reduced-motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* Enrichment status badge animations */
 @keyframes pulse {
   0%, 100% { opacity: 1; }
@@ -77,16 +116,43 @@
 }
 
 .banner-placeholder {
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 1.05rem;
-  z-index: 2;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
   position: relative;
-  padding: 8px 10px;
+  z-index: 2;
+  overflow: hidden;
+}
+
+/* Decorative pattern overlay */
+.banner-placeholder::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: 
+    repeating-linear-gradient(45deg, transparent, transparent 35px, rgba(255, 255, 255, 0.05) 35px, rgba(255, 255, 255, 0.05) 70px),
+    repeating-linear-gradient(-45deg, transparent, transparent 35px, rgba(255, 255, 255, 0.03) 35px, rgba(255, 255, 255, 0.03) 70px);
+  pointer-events: none;
+}
+
+.banner-placeholder-text {
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 1.1rem;
+  font-weight: 600;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  text-align: center;
+  padding: 0 20px;
+  line-height: 1.4;
+  position: relative;
+  z-index: 1;
 }
 
 .banner-text-overlay {
   position: absolute;
-  bottom: 0;
+  bottom: -12px;
   left: 0;
   right: 0;
   background: linear-gradient(transparent, rgba(0, 0, 0, 0.6));
@@ -101,10 +167,9 @@
 
 .banner-coin-info {
   display: flex;
-  align-items: baseline;
-  gap: 12px;
+  flex-direction: column;
+  gap: 6px;
   margin-bottom: 8px;
-  flex-wrap: wrap;
   /* Re-enable pointer events for interactive elements */
   pointer-events: auto;
 }
@@ -134,15 +199,18 @@
   transform: translateY(0);
 }
 
+.banner-symbol-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .banner-coin-symbol {
   font-size: 0.9rem;
   color: rgba(255, 255, 255, 0.85);
   font-weight: 600;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
   margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
 }
 
 .banner-lock-indicator {
@@ -163,7 +231,7 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  margin-left: -2px;
+  flex-shrink: 0;
 }
 
 .banner-favorites-button:hover {
@@ -255,6 +323,8 @@
   gap: 8px;
   /* 🔥 CRITICAL: Don't block events from nav area below */
   pointer-events: none;
+  border-bottom: none;
+  box-shadow: none;
 }
 
 /* 🔥 Re-enable pointer events for interactive children */
@@ -420,13 +490,14 @@
   gap: 16px;
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 0 4px 8px 4px;
+  padding: 0 4px 4px 4px;
   scroll-behavior: smooth;
   flex: 1;
   width: 100%;
   position: relative;
   -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent; /* Firefox dark mode */
 }
 
 .header-metrics-grid::-webkit-scrollbar {
@@ -434,17 +505,17 @@
 }
 
 .header-metrics-grid::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.05);
+  background: rgba(255, 255, 255, 0.05);
   border-radius: 2px;
 }
 
 .header-metrics-grid::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.15);
+  background: rgba(255, 255, 255, 0.2);
   border-radius: 2px;
 }
 
 .header-metrics-grid::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.25);
+  background: rgba(255, 255, 255, 0.3);
 }
 
 .header-metric {
@@ -811,6 +882,7 @@
 
 .info-layer-content {
   padding: 0 20px 100px; /* Increased bottom padding to clear the bottom nav bar */
+  padding-top: 0; /* Remove top padding to move charts up */
   overflow-y: auto;
   height: calc(100% - 80px);
   opacity: 1; /* Changed from 0.7 to 1 - no graying out */
@@ -908,7 +980,8 @@
 
 /* Charts Section with Horizontal Snap Scrolling */
 .charts-section {
-  margin: 0 0 16px 0;
+  margin: 0 0 12px 0; /* Reduced bottom margin from 16px to 12px */
+  margin-top: 0; /* Reset margin - keep nav area in normal position */
   position: relative;
   /* Break out of parent padding to allow full-width charts */
   margin-left: -20px;
@@ -922,7 +995,7 @@
   z-index: 10;
   width: 100%;
   min-height: 60px;
-  margin: 0 0 8px 0;
+  margin: 0 0 4px 0; /* Reduced bottom margin from 8px to 4px to bring charts closer */
   cursor: grab;
   user-select: none;
   -webkit-user-select: none;
@@ -943,20 +1016,18 @@
   padding: 12px 20px;
   margin: 0 20px;
   height: 100%;
-  background: rgba(255, 255, 255, 0.02);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: transparent;
   border-radius: 12px;
   transition: background 0.2s ease;
   pointer-events: auto;
 }
 
 .chart-nav-hot-area:hover .chart-nav-content {
-  background: rgba(255, 255, 255, 0.04);
+  background: transparent;
 }
 
 .chart-nav-hot-area:active .chart-nav-content {
-  background: rgba(255, 255, 255, 0.06);
+  background: transparent;
 }
 
 /* Clickable elements */
@@ -1074,6 +1145,7 @@
   min-height: 220px;
   width: 100%; /* Ensure full width */
   margin: 0; /* Remove any margins */
+  margin-top: -8px; /* Pull charts up closer to nav area */
   padding: 0; /* Remove any padding */
   overflow: hidden; /* Prevent content overflow */
   position: relative; /* Establish stacking context */
