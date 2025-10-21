@@ -16,6 +16,7 @@ const RugcheckAutoProcessor = require('./rugcheckAutoProcessor');
 const dexscreenerAutoEnricher = require('./dexscreenerAutoEnricher');
 const trendingAutoRefresher = require('./trendingAutoRefresher');
 const newFeedAutoRefresher = require('./newFeedAutoRefresher');
+const dextrendingAutoRefresher = require('./dextrendingAutoRefresher');
 const JupiterTokenService = require('./jupiterTokenService');
 const JupiterDataService = require('./jupiterDataService');
 const TokenMetadataService = require('./tokenMetadataService');
@@ -243,6 +244,7 @@ function initializeWithLatestBatch() {
     // startRugcheckAutoProcessor();
     startTrendingAutoRefresher();     // Start 24-hour auto-refresh for trending coins
     startNewFeedAutoRefresher();      // Start 30-minute auto-refresh for new coins
+    startDextrendingAutoRefresher();  // Start 1-hour auto-refresh for Dexscreener trending coins
     
   } else {
     console.log('📭 No saved batches found, using sample data');
@@ -1358,6 +1360,32 @@ app.post('/api/admin/refresh-new', async (req, res) => {
   }
 });
 
+// Admin endpoint: Check Dextrending auto-refresher status
+app.get('/api/admin/dextrending-refresher-status', (req, res) => {
+  try {
+    const status = dextrendingAutoRefresher.getStatus();
+    res.json(status);
+  } catch (error) {
+    res.status(500).json({
+      error: error.message,
+      isRunning: false
+    });
+  }
+});
+
+// Admin endpoint: Manually trigger Dextrending refresh
+app.post('/api/admin/dextrending-refresh-trigger', async (req, res) => {
+  try {
+    const result = await dextrendingAutoRefresher.triggerRefresh();
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
 // Health check endpoints (both /health and /api/health for Render compatibility)
 // CRITICAL: These must respond immediately without any dependencies or slow operations
 app.get('/health', (req, res) => {
@@ -1552,40 +1580,33 @@ function startNewFeedAutoRefresher() {
   );
 }
 
-// ========================================
-// SERVER INITIALIZATION
-// ========================================
+// Start Dextrending auto-refresher (refreshes Dexscreener trending coins every hour)
+function startDextrendingAutoRefresher() {
+  dextrendingAutoRefresher.start(
+    // Function to fetch fresh DEXTRENDING coins
+    fetchDexscreenerTrendingBatch,
+    // Callback when refresh completes - update cache (NO enrichment)
+    async (freshDextrendingBatch) => {
+      console.log(`🔄 Updating DEXTRENDING feed cache with ${freshDextrendingBatch.length} fresh coins`);
+      
+      // Update cache
+      dextrendingCoins = freshDextrendingBatch;
+      dextrendingLastFetch = Date.now();
+      
+      console.log('✅ DEXTRENDING feed cache updated (on-demand enrichment only)');
+    }
+  );
+}
 
-// Create HTTP server
-const server = http.createServer(app);
+// ═══════════════════════════════════════════════════════════════
+// SERVER STARTUP
+// ═══════════════════════════════════════════════════════════════
 
-// Initialize WebSocket server
-const wsServer = new WebSocketServer(server);
-
-// Start server FIRST (critical for Render health checks)
-server.listen(PORT, () => {
+app.listen(PORT, () => {
+  console.log('\n🚀 ═══════════════════════════════════════════════════════════════');
   console.log(`🚀 MoonFeed Backend Server running on port ${PORT}`);
-  console.log(`📊 Health check: http://localhost:${PORT}/health`);
-  console.log(`📊 Health check (Render): http://localhost:${PORT}/api/health`);
-  console.log(`🔥 Trending coins: http://localhost:${PORT}/api/coins/trending`);
-  console.log(`🆕 New coins: http://localhost:${PORT}/api/coins/new`);
-  console.log(`� Graduating coins: http://localhost:${PORT}/api/coins/graduating`);
-  console.log(`�🌐 WebSocket server ready for connections`);
-  console.log(`💾 Server initialization complete - ready for health checks`);
+  console.log('🚀 ═══════════════════════════════════════════════════════════════\n');
   
-  // Defer ALL initialization by 3 seconds to ensure health checks respond first
-  // This gives Render time to verify the server is up before any heavy operations
-  console.log('⏳ Will initialize coin data in 3 seconds...');
-  setTimeout(() => {
-    console.log('🔄 Starting background initialization...');
-    initializeWithLatestBatch();
-    console.log(`✅ Background initialization complete: ${currentCoins.length} coins cached`);
-    
-    // Start Jupiter Live Price Service for real-time price updates
-    console.log('🪐 Starting Jupiter Live Price Service...');
-    jupiterLivePriceService.start(currentCoins);
-    console.log('✅ Jupiter Live Price Service started');
-  }, 3000);
+  // Initialize feeds and start auto-refreshers
+  initializeWithLatestBatch();
 });
-
-module.exports = app;

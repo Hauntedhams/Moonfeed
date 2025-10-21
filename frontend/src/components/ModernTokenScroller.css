@@ -117,6 +117,16 @@
   scroll-padding: 0;
 }
 
+/* Mobile-specific scroll behavior */
+@media (max-width: 768px) {
+  .modern-scroller-container {
+    /* Auto scroll-behavior on mobile for more responsive touch gestures */
+    scroll-behavior: auto;
+    /* Proximity snap on mobile for smoother feel */
+    scroll-snap-type: y proximity;
+  }
+}
+
 .modern-scroller-container.scroll-locked {
   overflow: hidden;
   pointer-events: none;
@@ -142,10 +152,21 @@
   background: linear-gradient(135deg, #0b1220 0%, #0e1426 50%, #0b1220 100%);
   /* Scroll snap alignment - critical for smooth scrolling */
   scroll-snap-align: start;
-  /* Removed scroll-snap-stop: always to allow smoother swiping */
+  scroll-snap-stop: normal; /* Allow smooth continuous scrolling */
   /* Mobile fix: Ensure proper positioning */
   flex-shrink: 0;
   contain: layout style paint;
+}
+
+/* Placeholder coins - must match real coins exactly for consistent scroll-snap */
+.modern-coin-placeholder {
+  height: 100dvh;
+  min-height: 100dvh;
+  width: 100%;
+  scroll-snap-align: start;
+  scroll-snap-stop: normal;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, #0b1220 0%, #0e1426 50%, #0b1220 100%);
 }
 
 .modern-coin-slide.active {

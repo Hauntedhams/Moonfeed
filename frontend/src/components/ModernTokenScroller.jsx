@@ -808,8 +808,12 @@ const ModernTokenScroller = ({
       const targetIndex = Math.round(scrollTop / cardHeight);
       const targetScrollTop = targetIndex * cardHeight;
       
-      // Always snap to exact position
-      if (Math.abs(scrollTop - targetScrollTop) > 0.5) {
+      // Snap threshold: more lenient on mobile for smoother feel
+      const isMobileDevice = window.innerWidth < 768 || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      const snapThreshold = isMobileDevice ? 2 : 0.5;
+      
+      // Always snap to exact position if off by more than threshold
+      if (Math.abs(scrollTop - targetScrollTop) > snapThreshold) {
         isSnapping.current = true;
         container.scrollTop = targetScrollTop;
         
@@ -842,15 +846,20 @@ const ModernTokenScroller = ({
         handleScroll();
       }, 50);
       
-      // Snap when scrolling stops (faster response)
-      snapTimeout = setTimeout(performSnap, 50);
+      // Snap when scrolling stops - slightly delayed for mobile to allow native snap
+      const isMobileDevice = window.innerWidth < 768 || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      const snapDelay = isMobileDevice ? 150 : 50;
+      snapTimeout = setTimeout(performSnap, snapDelay);
     };
     
     container.addEventListener('scroll', throttledHandleScroll, { passive: true });
     
-    // Also snap on touchend for immediate response
+    // Also snap on touchend for immediate response (mobile only)
     const handleTouchEnd = () => {
-      setTimeout(performSnap, 10);
+      const isMobileDevice = window.innerWidth < 768 || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      if (isMobileDevice) {
+        setTimeout(performSnap, 100);
+      }
     };
     
     container.addEventListener('touchend', handleTouchEnd, { passive: true });
@@ -861,7 +870,7 @@ const ModernTokenScroller = ({
       if (scrollTimeout) clearTimeout(scrollTimeout);
       if (snapTimeout) clearTimeout(snapTimeout);
     };
-  }, [handleScroll, expandedCoin, currentIndex, coins.length, onCurrentCoinChange]);
+  }, [handleScroll, expandedCoin, currentIndex, coins.length, onCurrentCoinChange, enrichedCoins]);
   
   // Handle favorite toggle
   const handleFavoriteToggle = (coin) => {
@@ -1091,13 +1100,6 @@ const ModernTokenScroller = ({
                   key={coin.mintAddress || coin.tokenAddress || index}
                   className="modern-coin-slide modern-coin-placeholder"
                   data-index={index}
-                  style={{ 
-                    height: '100vh',
-                    minHeight: '100vh',
-                    width: '100%',
-                    scrollSnapAlign: 'start',
-                    flexShrink: 0
-                  }}
                 >
                   {/* Empty placeholder - maintains scroll snap points without content */}
                 </div>
