@@ -710,7 +710,7 @@ const ModernTokenScroller = ({
 
 
 
-  // Hybrid scroll handler - CSS snap + mobile touch assist with aggressive drift correction
+  // Hybrid scroll handler - USE ACTUAL DOM POSITIONS, NOT MATH (fixes cumulative drift)
   useEffect(() => {
     const container = scrollerRef.current;
     if (!container) return;
@@ -723,13 +723,39 @@ const ModernTokenScroller = ({
     let lastScrollTop = 0;
     let scrollStopCheckCount = 0;
     
+    // 🎯 KEY FIX: Get actual DOM element position instead of calculating with math
+    const getCardElement = (index) => {
+      const cards = container.querySelectorAll('.modern-coin-slide');
+      return cards[index];
+    };
+    
+    const getCardOffsetTop = (index) => {
+      const card = getCardElement(index);
+      return card ? card.offsetTop : index * container.clientHeight; // Fallback to math
+    };
+    
+    const findNearestCardIndex = () => {
+      const scrollTop = container.scrollTop;
+      const cards = container.querySelectorAll('.modern-coin-slide');
+      
+      let nearestIndex = 0;
+      let minDistance = Infinity;
+      
+      cards.forEach((card, index) => {
+        const distance = Math.abs(card.offsetTop - scrollTop);
+        if (distance < minDistance) {
+          minDistance = distance;
+          nearestIndex = index;
+        }
+      });
+      
+      return nearestIndex;
+    };
+    
     const updateCurrentIndex = () => {
       if (isScrollLocked.current || expandedCoin) return;
       
-      const cardHeight = container.clientHeight;
-      const scrollTop = container.scrollTop;
-      const calculatedIndex = Math.round(scrollTop / cardHeight);
-      const newIndex = Math.max(0, Math.min(calculatedIndex, coins.length - 1));
+      const newIndex = findNearestCardIndex();
       
       // Only update if index changed
       if (newIndex !== currentIndex && newIndex >= 0 && newIndex < coins.length) {
@@ -748,8 +774,8 @@ const ModernTokenScroller = ({
     };
     
     const scrollToIndex = (index, instant = false) => {
-      const cardHeight = container.clientHeight;
-      const targetScroll = index * cardHeight;
+      // 🎯 USE ACTUAL ELEMENT POSITION - no more cumulative math errors!
+      const targetScroll = getCardOffsetTop(index);
       
       if (instant) {
         // Instant snap - no animation, prevents drift
@@ -767,15 +793,13 @@ const ModernTokenScroller = ({
     const snapToNearestCard = () => {
       if (isScrollLocked.current || expandedCoin) return;
       
-      const cardHeight = container.clientHeight;
-      const scrollTop = container.scrollTop;
-      const nearestIndex = Math.round(scrollTop / cardHeight);
-      const targetScroll = nearestIndex * cardHeight;
-      const drift = Math.abs(scrollTop - targetScroll);
+      const nearestIndex = findNearestCardIndex();
+      const targetScroll = getCardOffsetTop(nearestIndex);
+      const drift = Math.abs(container.scrollTop - targetScroll);
       
       // ALWAYS snap if any drift detected (even 1px)
       if (drift > 0.5) {
-        console.log(`🎯 Snap correction: drift=${drift.toFixed(1)}px, snapping to card ${nearestIndex + 1}`);
+        console.log(`🎯 Snap correction: drift=${drift.toFixed(1)}px, snapping to card ${nearestIndex + 1} (offsetTop=${targetScroll})`);
         scrollToIndex(nearestIndex, true); // Instant snap
         updateCurrentIndex(); // Update index immediately after snap
       }
@@ -835,9 +859,7 @@ const ModernTokenScroller = ({
       
       // Detect intentional swipe (moved >50px OR fast swipe >0.5px/ms)
       if (Math.abs(swipeDistance) > 50 || swipeSpeed > 0.5) {
-        const cardHeight = container.clientHeight;
-        const currentScroll = container.scrollTop;
-        const currentPage = Math.round(currentScroll / cardHeight);
+        const currentPage = findNearestCardIndex();
         
         let targetPage = currentPage;
         
