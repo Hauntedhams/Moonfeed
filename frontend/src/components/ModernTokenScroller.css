@@ -100,24 +100,19 @@
 .modern-scroller-container {
   height: 100dvh; /* Use dynamic viewport height */
   width: 100%;
-  overflow-y: scroll; /* Force scrollbar for better snap behavior */
-  /* Mandatory snap - let CSS try first, JS corrects if needed */
+  overflow-y: auto; /* Auto like desktop, not forced scroll */
+  /* CSS scroll-snap - same as desktop */
   scroll-snap-type: y mandatory;
-  scroll-behavior: smooth; /* Smooth for both native snap and JS corrections */
-  -webkit-overflow-scrolling: touch;
+  -webkit-overflow-scrolling: touch; /* Smooth momentum on iOS */
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* IE and Edge */
   /* Performance optimizations */
   will-change: scroll-position;
   contain: layout style paint;
   transform: translateZ(0); /* Force hardware acceleration */
-  /* Prevent bounce/overscroll on iOS */
-  overscroll-behavior: contain; /* Contain instead of none for better snap */
+  /* Prevent bounce/overscroll */
+  overscroll-behavior-y: contain;
   scroll-padding: 0;
-  /* iOS-specific fixes for scroll snap */
-  -webkit-scroll-snap-type: y mandatory;
-  /* Ensure smooth scrolling on iOS */
-  -webkit-scroll-behavior: smooth;
 }
 
 .modern-scroller-container.scroll-locked {
@@ -135,7 +130,7 @@
   display: none; /* Chrome, Safari, Opera */
 }
 
-/* Individual coin slides - optimized to prevent white flash */
+/* Individual coin slides - exactly like desktop */
 .modern-coin-slide {
   height: 100dvh; /* Use dynamic viewport height */
   width: 100%;
@@ -143,17 +138,14 @@
   flex-direction: column;
   position: relative;
   background: linear-gradient(135deg, #0b1220 0%, #0e1426 50%, #0b1220 100%);
-  /* Scroll snap alignment - start is most reliable */
+  /* Scroll snap - same as desktop */
   scroll-snap-align: start;
-  scroll-snap-stop: normal; /* Allow momentum, JS will handle corrections */
+  scroll-snap-stop: normal;
   flex-shrink: 0;
   contain: layout style paint;
   /* Ensure exact height for perfect snap points */
   min-height: 100dvh;
   max-height: 100dvh;
-  /* iOS-specific fixes */
-  -webkit-scroll-snap-align: start;
-  -webkit-scroll-snap-stop: normal;
 }
 
 /* Placeholder coins - must match real coins exactly for consistent scroll-snap */
