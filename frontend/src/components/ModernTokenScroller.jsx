@@ -710,112 +710,61 @@ const ModernTokenScroller = ({
 
 
 
-  // Snapping state to prevent concurrent snaps
-  const isSnapping = useRef(false);
-
-  // Single unified scroll handler - detects scroll stop and forces perfect snap
+  // Lightweight scroll handler - let CSS scroll-snap do the heavy lifting
   useEffect(() => {
     const container = scrollerRef.current;
     if (!container) return;
     
-    let scrollTimeout;
-    let lastScrollTop = container.scrollTop;
-    let stagnantCount = 0;
+    let scrollEndTimer;
+    let rafId;
     
-    const forceSnap = () => {
-      if (isScrollLocked.current || expandedCoin || isSnapping.current) return;
+    const updateCurrentIndex = () => {
+      if (isScrollLocked.current || expandedCoin) return;
       
-      isSnapping.current = true;
       const cardHeight = container.clientHeight;
       const scrollTop = container.scrollTop;
-      const targetIndex = Math.round(scrollTop / cardHeight);
-      const targetScrollTop = targetIndex * cardHeight;
-      const offset = Math.abs(scrollTop - targetScrollTop);
+      const calculatedIndex = Math.round(scrollTop / cardHeight);
+      const newIndex = Math.max(0, Math.min(calculatedIndex, coins.length - 1));
       
-      // If misaligned by ANY amount, snap immediately (no animation)
-      if (offset > 0.5) {
-        container.scrollTop = targetScrollTop; // Direct assignment = instant snap
-        console.log(`📍 Snapped coin ${targetIndex + 1}/${coins.length} (was off by ${offset.toFixed(1)}px)`);
-      }
-      
-      // Update current index
-      if (targetIndex !== currentIndex && targetIndex >= 0 && targetIndex < coins.length) {
-        setCurrentIndex(targetIndex);
-        const currentCoin = coins[targetIndex];
+      // Only update if index changed
+      if (newIndex !== currentIndex && newIndex >= 0 && newIndex < coins.length) {
+        setCurrentIndex(newIndex);
+        
+        const currentCoin = coins[newIndex];
         const enriched = enrichedCoins.get(currentCoin.mintAddress);
         const enrichedCoin = enriched ? { ...currentCoin, ...enriched } : currentCoin;
-        onCurrentCoinChange?.(enrichedCoin, targetIndex);
-      }
-      
-      setTimeout(() => {
-        isSnapping.current = false;
-      }, 50);
-    };
-    
-    const checkIfStagnant = () => {
-      const currentScrollTop = container.scrollTop;
-      const moved = Math.abs(currentScrollTop - lastScrollTop);
-      
-      if (moved < 0.5) {
-        // Scroll position hasn't changed
-        stagnantCount++;
-        if (stagnantCount >= 3) {
-          // Stagnant for 3 checks = scrolling has stopped
-          forceSnap();
-          stagnantCount = 0;
+        onCurrentCoinChange?.(enrichedCoin, newIndex);
+        
+        // Log occasionally
+        if (newIndex % 5 === 0) {
+          console.log(`📜 Viewing coin ${newIndex + 1}/${coins.length} - ${currentCoin?.symbol || 'Unknown'}`);
         }
-      } else {
-        // Still scrolling
-        stagnantCount = 0;
       }
-      
-      lastScrollTop = currentScrollTop;
     };
     
     const handleScrollEvent = () => {
-      handleScroll(); // Update enrichment
+      // Update enrichment during scroll
+      handleScroll();
       
-      // Clear previous timeout
-      if (scrollTimeout) clearTimeout(scrollTimeout);
+      // Debounce index update using RAF for smoothness
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(updateCurrentIndex);
       
-      // Start checking if scroll has stopped
-      scrollTimeout = setTimeout(() => {
-        const checkInterval = setInterval(() => {
-          checkIfStagnant();
-          if (stagnantCount >= 3) {
-            clearInterval(checkInterval);
-          }
-        }, 50);
-        
-        // Safety: stop after 1 second
-        setTimeout(() => {
-          clearInterval(checkInterval);
-          forceSnap(); // Final snap to be sure
-        }, 1000);
-      }, 100);
-    };
-    
-    // Also snap on touchend (user lifted finger)
-    const handleTouchEnd = () => {
-      setTimeout(forceSnap, 150);
-    };
-    
-    // Modern browsers: scrollend event
-    const handleScrollEnd = () => {
-      forceSnap();
+      // Clear previous timer
+      if (scrollEndTimer) clearTimeout(scrollEndTimer);
+      
+      // Wait for scroll to fully stop before final index update
+      scrollEndTimer = setTimeout(updateCurrentIndex, 150);
     };
     
     container.addEventListener('scroll', handleScrollEvent, { passive: true });
-    container.addEventListener('touchend', handleTouchEnd, { passive: true });
-    container.addEventListener('scrollend', handleScrollEnd, { passive: true });
     
     return () => {
       container.removeEventListener('scroll', handleScrollEvent);
-      container.removeEventListener('touchend', handleTouchEnd);
-      container.removeEventListener('scrollend', handleScrollEnd);
-      if (scrollTimeout) clearTimeout(scrollTimeout);
+      if (scrollEndTimer) clearTimeout(scrollEndTimer);
+      if (rafId) cancelAnimationFrame(rafId);
     };
-  }, [handleScroll, expandedCoin, currentIndex, coins.length, onCurrentCoinChange, enrichedCoins]);
+  }, [handleScroll, expandedCoin, currentIndex, coins, enrichedCoins, onCurrentCoinChange]);
   
   // Handle favorite toggle
   const handleFavoriteToggle = (coin) => {

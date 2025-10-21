@@ -101,9 +101,9 @@
   height: 100dvh; /* Use dynamic viewport height */
   width: 100%;
   overflow-y: auto;
-  /* Mandatory snap - same on desktop and mobile */
+  /* Mandatory snap with proximity for smoother mobile experience */
   scroll-snap-type: y mandatory;
-  scroll-behavior: smooth;
+  scroll-behavior: auto; /* Let native physics handle it, no animation interference */
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* IE and Edge */
@@ -139,17 +139,21 @@
   flex-direction: column;
   position: relative;
   background: linear-gradient(135deg, #0b1220 0%, #0e1426 50%, #0b1220 100%);
-  /* Scroll snap alignment - same on desktop and mobile */
+  /* Scroll snap alignment - start is most reliable */
   scroll-snap-align: start;
   scroll-snap-stop: normal; /* Allow smooth continuous scrolling */
   flex-shrink: 0;
   contain: layout style paint;
+  /* Ensure exact height for perfect snap points */
+  min-height: 100dvh;
+  max-height: 100dvh;
 }
 
 /* Placeholder coins - must match real coins exactly for consistent scroll-snap */
 .modern-coin-placeholder {
   height: 100dvh;
   min-height: 100dvh;
+  max-height: 100dvh;
   width: 100%;
   scroll-snap-align: start;
   scroll-snap-stop: normal; /* Same as real coins */
