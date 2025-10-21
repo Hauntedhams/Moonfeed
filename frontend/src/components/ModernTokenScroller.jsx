@@ -710,13 +710,14 @@ const ModernTokenScroller = ({
 
 
 
-  // Hybrid scroll handler - CSS snap + mobile touch assist
+  // Hybrid scroll handler - CSS snap + mobile touch assist with drift correction
   useEffect(() => {
     const container = scrollerRef.current;
     if (!container) return;
     
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     let scrollEndTimer;
+    let snapCorrectionTimer;
     let touchStartY = 0;
     let touchStartTime = 0;
     let isSwiping = false;
@@ -745,24 +746,54 @@ const ModernTokenScroller = ({
       }
     };
     
-    const scrollToIndex = (index) => {
+    const scrollToIndex = (index, instant = false) => {
       const cardHeight = container.clientHeight;
       const targetScroll = index * cardHeight;
-      container.scrollTo({
-        top: targetScroll,
-        behavior: 'smooth'
-      });
+      
+      if (instant) {
+        // Instant snap - no animation, prevents drift
+        container.scrollTop = targetScroll;
+      } else {
+        // Smooth scroll for user swipes
+        container.scrollTo({
+          top: targetScroll,
+          behavior: 'smooth'
+        });
+      }
+    };
+    
+    // Snap correction: ensure we're always aligned to a full card
+    const snapToNearestCard = () => {
+      if (isScrollLocked.current || expandedCoin) return;
+      
+      const cardHeight = container.clientHeight;
+      const scrollTop = container.scrollTop;
+      const nearestIndex = Math.round(scrollTop / cardHeight);
+      const targetScroll = nearestIndex * cardHeight;
+      const drift = Math.abs(scrollTop - targetScroll);
+      
+      // If we're off by more than 2px, snap instantly to correct
+      if (drift > 2) {
+        console.log(`🎯 Snap correction: drift=${drift.toFixed(1)}px, snapping to card ${nearestIndex + 1}`);
+        scrollToIndex(nearestIndex, true); // Instant snap
+      }
     };
     
     const handleScrollEvent = () => {
       // Update enrichment during scroll
       handleScroll();
       
-      // Clear previous timer
+      // Clear previous timers
       if (scrollEndTimer) clearTimeout(scrollEndTimer);
+      if (snapCorrectionTimer) clearTimeout(snapCorrectionTimer);
       
       // Update index after scroll settles
       scrollEndTimer = setTimeout(updateCurrentIndex, 150);
+      
+      // On mobile, apply snap correction after scroll completely stops
+      if (isMobile) {
+        snapCorrectionTimer = setTimeout(snapToNearestCard, 300);
+      }
     };
     
     // Mobile: swipe-based navigation
@@ -799,7 +830,7 @@ const ModernTokenScroller = ({
         
         if (targetPage !== currentPage) {
           console.log(`👆 Swipe detected: going to coin ${targetPage + 1}`);
-          scrollToIndex(targetPage);
+          scrollToIndex(targetPage, false); // Smooth scroll for swipes
         }
       }
       
@@ -820,6 +851,7 @@ const ModernTokenScroller = ({
         container.removeEventListener('touchend', handleTouchEnd);
       }
       if (scrollEndTimer) clearTimeout(scrollEndTimer);
+      if (snapCorrectionTimer) clearTimeout(snapCorrectionTimer);
     };
   }, [handleScroll, expandedCoin, currentIndex, coins, enrichedCoins, onCurrentCoinChange]);
   
