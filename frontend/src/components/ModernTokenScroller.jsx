@@ -437,8 +437,18 @@ const ModernTokenScroller = ({
       
       console.log(`✅ TRENDING LOAD: Successfully loaded ${data.coins.length} trending coins`);
       
+      // 🔥 MOBILE PERFORMANCE: Limit total coins on mobile to prevent memory crashes
+      const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768;
+      const maxCoins = isMobileDevice ? 20 : 50; // Mobile: 20 coins max, Desktop: 50 coins max
+      
       // Use trending coins directly (they're already sorted by trending score)
       let sortedCoins = [...data.coins];
+      
+      // Limit coins on mobile
+      if (isMobileDevice && sortedCoins.length > maxCoins) {
+        console.log(`📱 MOBILE LIMIT: Reducing from ${sortedCoins.length} to ${maxCoins} coins to prevent crashes`);
+        sortedCoins = sortedCoins.slice(0, maxCoins);
+      }
       
       setCoins(sortedCoins);
       onTotalCoinsChange?.(sortedCoins.length); // Notify parent of total coins
@@ -446,6 +456,7 @@ const ModernTokenScroller = ({
       // DISABLE background enrichment on mobile completely to prevent crashes
       // Desktop users get enrichment, mobile users get lightweight experience
       console.log('📱 Mobile optimization: Background enrichment DISABLED for performance');
+      console.log(`📊 Loaded ${sortedCoins.length} coins (${isMobileDevice ? 'mobile' : 'desktop'} mode)`);
       
     } catch (err) {
       console.error('❌ Error fetching coins:', err);
@@ -1065,11 +1076,28 @@ const ModernTokenScroller = ({
         ref={scrollerRef}
         className={`modern-scroller-container ${expandedCoin ? 'scroll-locked' : ''}`}
       >
-        {/* ✅ MOBILE FIX V5: Simplified rendering - always render all coins to prevent blank UI */}
+        {/* 🔥 MOBILE PERFORMANCE V6: Virtual scrolling - only render visible coins */}
         {coins.length > 0 ? (
           coins.map((coin, index) => {
-            // Always render all coins - virtual scrolling was causing blank UI
-            // The scroll-snap and CSS will handle performance
+            // 🔥 CRITICAL: Only render coins within render distance to save memory
+            const isMobileDevice = window.innerWidth < 768 || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+            const renderDistance = isMobileDevice ? 2 : 3; // Mobile: current ± 2, Desktop: current ± 3
+            const shouldRender = Math.abs(index - currentIndex) <= renderDistance;
+            
+            // Don't render coins outside the visible range
+            if (!shouldRender) {
+              // Render placeholder div to maintain scroll position
+              return (
+                <div 
+                  key={coin.mintAddress || coin.tokenAddress || index}
+                  className="modern-coin-slide"
+                  data-index={index}
+                  style={{ height: '100vh', background: 'transparent' }}
+                />
+              );
+            }
+            
+            // Render actual coin card for visible coins
             return renderCoinWithChart(coin, index);
           })
         ) : (

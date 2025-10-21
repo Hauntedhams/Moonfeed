@@ -158,13 +158,15 @@ const CoinCard = memo(({
       debug.log(`🔄 Auto-loading transactions for coin: ${coin.symbol || coin.name}`);
       setShowLiveTransactions(true);
     }
-    // Clean up when no longer auto-loading
-    if (!autoLoadTransactions && showLiveTransactions) {
-      debug.log(`🛑 Stopping auto-loaded transactions for coin: ${coin.symbol || coin.name}`);
+    // Clean up when no longer auto-loading OR when coin becomes invisible
+    if ((!autoLoadTransactions && showLiveTransactions) || (!isVisible && showLiveTransactions)) {
+      debug.log(`🛑 Stopping transactions for coin: ${coin.symbol || coin.name} (${!isVisible ? 'not visible' : 'no longer auto-loading'})`);
       setShowLiveTransactions(false);
-      clearTransactions();
+      if (clearTransactions) {
+        clearTransactions();
+      }
     }
-  }, [autoLoadTransactions, coin.symbol, coin.name]);
+  }, [autoLoadTransactions, isVisible, coin.symbol, coin.name]);
 
   // Handle price flash animation (COMPLETELY DISABLED on mobile for performance)
   useEffect(() => {
@@ -750,15 +752,32 @@ const CoinCard = memo(({
   // Component cleanup on unmount
   useEffect(() => {
     return () => {
+      // 🔥 MOBILE PERFORMANCE: Aggressive cleanup on unmount
       // Clear any remaining refs
       if (prevPriceRef.current !== null) {
         prevPriceRef.current = null;
       }
       
-      // Reset any state to prevent memory leaks
+      // Reset ALL state to free memory
       setPriceFlash('');
       setShowBannerModal(false);
       setShowProfileModal(false);
+      setShowPriceChangeModal(false);
+      setShowLiveTransactions(false);
+      setShowTopTraders(false);
+      setSelectedWallet(null);
+      setShowDescriptionModal(false);
+      setIsExpanded(false);
+      
+      // Clear transactions
+      if (clearTransactions) {
+        clearTransactions();
+      }
+      
+      // Log cleanup for debugging
+      if (import.meta.env.DEV) {
+        debug.log(`🗑️ CoinCard unmounted and cleaned up: ${coin.symbol}`);
+      }
     };
   }, []);
 
