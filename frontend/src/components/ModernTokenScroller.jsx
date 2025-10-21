@@ -710,17 +710,18 @@ const ModernTokenScroller = ({
 
 
 
-  // Hybrid scroll handler - CSS snap + mobile touch assist with drift correction
+  // Hybrid scroll handler - CSS snap + mobile touch assist with aggressive drift correction
   useEffect(() => {
     const container = scrollerRef.current;
     if (!container) return;
     
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     let scrollEndTimer;
-    let snapCorrectionTimer;
     let touchStartY = 0;
     let touchStartTime = 0;
     let isSwiping = false;
+    let lastScrollTop = 0;
+    let scrollStopCheckCount = 0;
     
     const updateCurrentIndex = () => {
       if (isScrollLocked.current || expandedCoin) return;
@@ -762,7 +763,7 @@ const ModernTokenScroller = ({
       }
     };
     
-    // Snap correction: ensure we're always aligned to a full card
+    // Aggressive snap correction: ensure pixel-perfect alignment on EVERY scroll stop
     const snapToNearestCard = () => {
       if (isScrollLocked.current || expandedCoin) return;
       
@@ -772,10 +773,34 @@ const ModernTokenScroller = ({
       const targetScroll = nearestIndex * cardHeight;
       const drift = Math.abs(scrollTop - targetScroll);
       
-      // If we're off by more than 2px, snap instantly to correct
-      if (drift > 2) {
+      // ALWAYS snap if any drift detected (even 1px)
+      if (drift > 0.5) {
         console.log(`🎯 Snap correction: drift=${drift.toFixed(1)}px, snapping to card ${nearestIndex + 1}`);
         scrollToIndex(nearestIndex, true); // Instant snap
+        updateCurrentIndex(); // Update index immediately after snap
+      }
+    };
+    
+    // Check if scroll has truly stopped
+    const checkScrollStopped = () => {
+      const currentScrollTop = container.scrollTop;
+      
+      if (Math.abs(currentScrollTop - lastScrollTop) < 0.5) {
+        // Scroll has stopped, apply snap correction
+        scrollStopCheckCount++;
+        if (scrollStopCheckCount >= 2) {
+          // Confirmed stopped for 2 checks (100ms), snap now
+          snapToNearestCard();
+          scrollStopCheckCount = 0;
+        } else {
+          // Check again in 50ms
+          scrollEndTimer = setTimeout(checkScrollStopped, 50);
+        }
+      } else {
+        // Still scrolling, reset and check again
+        lastScrollTop = currentScrollTop;
+        scrollStopCheckCount = 0;
+        scrollEndTimer = setTimeout(checkScrollStopped, 50);
       }
     };
     
@@ -783,17 +808,13 @@ const ModernTokenScroller = ({
       // Update enrichment during scroll
       handleScroll();
       
-      // Clear previous timers
+      // Clear previous timer
       if (scrollEndTimer) clearTimeout(scrollEndTimer);
-      if (snapCorrectionTimer) clearTimeout(snapCorrectionTimer);
       
-      // Update index after scroll settles
-      scrollEndTimer = setTimeout(updateCurrentIndex, 150);
-      
-      // On mobile, apply snap correction after scroll completely stops
-      if (isMobile) {
-        snapCorrectionTimer = setTimeout(snapToNearestCard, 300);
-      }
+      // Start checking if scroll has stopped
+      lastScrollTop = container.scrollTop;
+      scrollStopCheckCount = 0;
+      scrollEndTimer = setTimeout(checkScrollStopped, 50);
     };
     
     // Mobile: swipe-based navigation
@@ -851,7 +872,6 @@ const ModernTokenScroller = ({
         container.removeEventListener('touchend', handleTouchEnd);
       }
       if (scrollEndTimer) clearTimeout(scrollEndTimer);
-      if (snapCorrectionTimer) clearTimeout(snapCorrectionTimer);
     };
   }, [handleScroll, expandedCoin, currentIndex, coins, enrichedCoins, onCurrentCoinChange]);
   
