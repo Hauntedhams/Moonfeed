@@ -153,6 +153,21 @@
   box-shadow: inset 0 0 0 2px rgba(0, 212, 255, 0.3);
 }
 
+/* 🔥 MOBILE PERFORMANCE: Virtual scrolling placeholder */
+.modern-coin-placeholder {
+  /* Ensure placeholders maintain scroll snap points */
+  scroll-snap-align: start !important;
+  flex-shrink: 0 !important;
+  height: 100vh !important;
+  min-height: 100vh !important;
+  width: 100% !important;
+  /* Invisible but maintains layout */
+  background: transparent !important;
+  /* Performance optimization */
+  contain: strict;
+  content-visibility: auto;
+}
+
 /* Loading States */
 .modern-scroller-loading {
   height: 100dvh;

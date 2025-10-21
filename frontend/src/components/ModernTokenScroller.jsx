@@ -1076,7 +1076,7 @@ const ModernTokenScroller = ({
         ref={scrollerRef}
         className={`modern-scroller-container ${expandedCoin ? 'scroll-locked' : ''}`}
       >
-        {/* 🔥 MOBILE PERFORMANCE V6: Virtual scrolling - only render visible coins */}
+        {/* 🔥 MOBILE PERFORMANCE V6: Virtual scrolling with proper snap points */}
         {coins.length > 0 ? (
           coins.map((coin, index) => {
             // 🔥 CRITICAL: Only render coins within render distance to save memory
@@ -1084,16 +1084,23 @@ const ModernTokenScroller = ({
             const renderDistance = isMobileDevice ? 2 : 3; // Mobile: current ± 2, Desktop: current ± 3
             const shouldRender = Math.abs(index - currentIndex) <= renderDistance;
             
-            // Don't render coins outside the visible range
+            // For non-rendered coins, return a lightweight placeholder with proper snap-align
             if (!shouldRender) {
-              // Render placeholder div to maintain scroll position
               return (
                 <div 
                   key={coin.mintAddress || coin.tokenAddress || index}
-                  className="modern-coin-slide"
+                  className="modern-coin-slide modern-coin-placeholder"
                   data-index={index}
-                  style={{ height: '100vh', background: 'transparent' }}
-                />
+                  style={{ 
+                    height: '100vh',
+                    minHeight: '100vh',
+                    width: '100%',
+                    scrollSnapAlign: 'start',
+                    flexShrink: 0
+                  }}
+                >
+                  {/* Empty placeholder - maintains scroll snap points without content */}
+                </div>
               );
             }
             
