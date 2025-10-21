@@ -710,12 +710,16 @@ const ModernTokenScroller = ({
 
 
 
-  // Simple scroll handler - just update index, let CSS handle snapping
+  // Hybrid scroll handler - CSS snap + mobile touch assist
   useEffect(() => {
     const container = scrollerRef.current;
     if (!container) return;
     
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     let scrollEndTimer;
+    let touchStartY = 0;
+    let touchStartTime = 0;
+    let isSwiping = false;
     
     const updateCurrentIndex = () => {
       if (isScrollLocked.current || expandedCoin) return;
@@ -741,6 +745,15 @@ const ModernTokenScroller = ({
       }
     };
     
+    const scrollToIndex = (index) => {
+      const cardHeight = container.clientHeight;
+      const targetScroll = index * cardHeight;
+      container.scrollTo({
+        top: targetScroll,
+        behavior: 'smooth'
+      });
+    };
+    
     const handleScrollEvent = () => {
       // Update enrichment during scroll
       handleScroll();
@@ -752,10 +765,60 @@ const ModernTokenScroller = ({
       scrollEndTimer = setTimeout(updateCurrentIndex, 150);
     };
     
+    // Mobile: swipe-based navigation
+    const handleTouchStart = (e) => {
+      if (!isMobile || isScrollLocked.current || expandedCoin) return;
+      touchStartY = e.touches[0].clientY;
+      touchStartTime = Date.now();
+      isSwiping = true;
+    };
+    
+    const handleTouchEnd = (e) => {
+      if (!isMobile || !isSwiping || isScrollLocked.current || expandedCoin) return;
+      
+      const touchEndY = e.changedTouches[0].clientY;
+      const touchDuration = Date.now() - touchStartTime;
+      const swipeDistance = touchStartY - touchEndY;
+      const swipeSpeed = Math.abs(swipeDistance) / touchDuration;
+      
+      // Detect intentional swipe (moved >50px OR fast swipe >0.5px/ms)
+      if (Math.abs(swipeDistance) > 50 || swipeSpeed > 0.5) {
+        const cardHeight = container.clientHeight;
+        const currentScroll = container.scrollTop;
+        const currentPage = Math.round(currentScroll / cardHeight);
+        
+        let targetPage = currentPage;
+        
+        if (swipeDistance > 30) {
+          // Swipe up = next coin
+          targetPage = Math.min(currentPage + 1, coins.length - 1);
+        } else if (swipeDistance < -30) {
+          // Swipe down = previous coin
+          targetPage = Math.max(currentPage - 1, 0);
+        }
+        
+        if (targetPage !== currentPage) {
+          console.log(`👆 Swipe detected: going to coin ${targetPage + 1}`);
+          scrollToIndex(targetPage);
+        }
+      }
+      
+      isSwiping = false;
+    };
+    
     container.addEventListener('scroll', handleScrollEvent, { passive: true });
+    
+    if (isMobile) {
+      container.addEventListener('touchstart', handleTouchStart, { passive: true });
+      container.addEventListener('touchend', handleTouchEnd, { passive: true });
+    }
     
     return () => {
       container.removeEventListener('scroll', handleScrollEvent);
+      if (isMobile) {
+        container.removeEventListener('touchstart', handleTouchStart);
+        container.removeEventListener('touchend', handleTouchEnd);
+      }
       if (scrollEndTimer) clearTimeout(scrollEndTimer);
     };
   }, [handleScroll, expandedCoin, currentIndex, coins, enrichedCoins, onCurrentCoinChange]);
