@@ -66,10 +66,10 @@ const CoinCard = memo(({
   // 🔥 MOBILE PERFORMANCE FIX: Detect mobile and disable live data
   const isMobile = useRef(/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)).current;
 
-  // Get live data from WebSocket (disabled on mobile for performance)
+  // Get live data from WebSocket (COMPLETELY disabled on mobile for performance)
   const { getCoin, getChart, connected, connectionStatus } = useLiveData();
-  const liveData = isMobile ? null : getCoin(coin.mintAddress || coin.address);
-  const chartData = isMobile ? null : getChart(coin.mintAddress || coin.address);
+  const liveData = isMobile ? null : (isVisible ? getCoin(coin.mintAddress || coin.address) : null);
+  const chartData = isMobile ? null : (isVisible ? getChart(coin.mintAddress || coin.address) : null);
 
   // Helius live transactions - auto-load when autoLoadTransactions is true
   const mintAddress = coin.mintAddress || coin.mint || coin.address || coin.contract_address || coin.contractAddress || coin.tokenAddress;
@@ -166,10 +166,10 @@ const CoinCard = memo(({
     }
   }, [autoLoadTransactions, coin.symbol, coin.name]);
 
-  // Handle price flash animation (disabled on mobile for performance)
+  // Handle price flash animation (COMPLETELY DISABLED on mobile for performance)
   useEffect(() => {
-    // 🔥 MOBILE PERFORMANCE FIX: Skip animations on mobile
-    if (isMobile) return;
+    // 🔥 MOBILE PERFORMANCE FIX: Completely skip on mobile AND when not visible
+    if (isMobile || !isVisible) return;
     
     const currentPrice = liveData?.price || coin.price_usd || coin.priceUsd || coin.price || 0;
     const prevPrice = prevPriceRef.current;
@@ -195,7 +195,7 @@ const CoinCard = memo(({
         clearTimeout(timer);
       }
     };
-  }, [liveData?.price, coin.price_usd, coin.priceUsd, coin.price]);
+  }, [liveData?.price, coin.price_usd, coin.priceUsd, coin.price, isVisible, isMobile]);
 
   // Helpers
   const formatCompact = (num) => {
@@ -596,14 +596,16 @@ const CoinCard = memo(({
     setCurrentChartPage(pageIndex);
   };
 
-  // Add scroll listener for chart navigation
+  // Add scroll listener for chart navigation (disabled when card not visible)
   useEffect(() => {
+    if (!isVisible) return; // Don't attach listeners if card not visible
+    
     const container = chartsContainerRef.current;
     if (!container) return;
 
-    container.addEventListener('scroll', handleChartScroll);
+    container.addEventListener('scroll', handleChartScroll, { passive: true });
     return () => container.removeEventListener('scroll', handleChartScroll);
-  }, []);
+  }, [isVisible]);
 
   // 🎉 No more custom touch/mouse handlers needed!
   // The nav dots are now inside the scroll container as an overlay with pointer-events:none,
@@ -612,6 +614,9 @@ const CoinCard = memo(({
   // Handle touch/swipe on nav dots area to control chart navigation
   // � INSTANT RESPONSE: Zero thresholds, zero detection, just pure scroll
   useEffect(() => {
+    // 🔥 MOBILE PERFORMANCE: Only attach heavy event listeners when card is visible AND expanded
+    if (!isVisible || !isExpanded) return;
+    
     const navContainer = chartNavRef.current;
     const chartsContainer = chartsContainerRef.current;
     
@@ -740,7 +745,7 @@ const CoinCard = memo(({
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, []);
+  }, [isVisible, isExpanded]);
 
   // Component cleanup on unmount
   useEffect(() => {

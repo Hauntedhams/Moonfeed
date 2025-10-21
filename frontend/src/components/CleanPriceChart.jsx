@@ -166,18 +166,23 @@ const CleanPriceChart = memo(({ coin, width, height = 220 }) => {
         clearInterval(liveUpdateIntervalRef.current);
       }
       
+      // 🔥 MOBILE PERFORMANCE: Detect mobile and use slower update rate
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768;
+      const updateInterval = isMobile ? 5000 : 1000; // 5 seconds on mobile, 1 second on desktop
+      
       // Fetch initial Jupiter price
       const initialPrice = await fetchJupiterPrice(tokenAddress);
       if (!initialPrice) {
         throw new Error('Failed to fetch initial Jupiter price');
       }
       
-      // Initialize with 60 seconds of data, starting with the current price
+      // Initialize with historical data points
       const now = Date.now();
       const initialData = [];
-      for (let i = 59; i >= 0; i--) {
+      const dataPoints = isMobile ? 30 : 60; // Fewer points on mobile
+      for (let i = dataPoints - 1; i >= 0; i--) {
         initialData.push({
-          time: now - (i * 1000), // 1 second intervals
+          time: now - (i * updateInterval), // Interval-based spacing
           price: initialPrice * (1 + (Math.random() - 0.5) * 0.001) // Small random variation for historical points
         });
       }
@@ -187,15 +192,15 @@ const CleanPriceChart = memo(({ coin, width, height = 220 }) => {
       setIsLiveMode(true);
       setLoading(false);
       
-      console.log(`[CleanChart] ✅ Jupiter live mode initialized with ${initialData.length} data points`);
+      console.log(`[CleanChart] ✅ Jupiter live mode initialized with ${initialData.length} data points (${isMobile ? 'mobile' : 'desktop'} mode: ${updateInterval}ms updates)`);
       
-      // Start 1-second price updates
+      // Start price updates at appropriate interval
       liveUpdateIntervalRef.current = setInterval(async () => {
         const newPrice = await fetchJupiterPrice(tokenAddress);
         if (newPrice) {
-          updateLivePriceData(newPrice);
+          updateLivePriceData(newPrice, updateInterval, dataPoints);
         }
-      }, 1000);
+      }, updateInterval);
       
     } catch (error) {
       console.error('[CleanChart] ❌ Error initializing Jupiter live mode:', error.message);
@@ -243,16 +248,16 @@ const CleanPriceChart = memo(({ coin, width, height = 220 }) => {
   };
 
   // Update live price data with new Jupiter price
-  const updateLivePriceData = (newPrice) => {
+  const updateLivePriceData = (newPrice, updateInterval = 1000, maxPoints = 60) => {
     setPriceData(prevData => {
       const now = Date.now();
       const newPoint = { time: now, price: newPrice };
       
-      // Add new point and keep only last 60 seconds
+      // Add new point and keep only recent data
       const updatedData = [...prevData, newPoint];
-      const cutoffTime = now - (60 * 1000); // 60 seconds ago
+      const cutoffTime = now - (maxPoints * updateInterval); // Keep data for maxPoints * interval
       
-      // Filter to keep only last 60 seconds of data
+      // Filter to keep only recent data
       const filteredData = updatedData.filter(point => point.time >= cutoffTime);
       
       console.log(`[CleanChart] 📈 Live price update: $${newPrice.toFixed(8)} (${filteredData.length} points)`);

@@ -4,28 +4,50 @@
 
 /* ⚡ MOBILE PERFORMANCE OPTIMIZATIONS - Disable animations on mobile devices */
 @media (max-width: 768px), (hover: none) {
-  /* Disable all animations on mobile for better performance */
+  /* COMPLETELY disable all animations on mobile for maximum performance */
   .enrichment-status-badge,
   .enrichment-status-badge span,
   .loading-spinner,
   .price-flash-green,
   .price-flash-red,
   .graduation-progress-glow,
-  .shimmer-gradient {
+  .shimmer-gradient,
+  *[class*="animate"],
+  *[class*="pulse"],
+  *[class*="spin"],
+  *[class*="bounce"] {
     animation: none !important;
+    animation-duration: 0s !important;
+    animation-iteration-count: 0 !important;
   }
   
-  /* Reduce transition durations on mobile */
-  * {
-    transition-duration: 0.1s !important;
+  /* Disable ALL transitions on mobile for instant interactions */
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    transition-duration: 0s !important;
   }
   
   /* Disable hover effects on touch devices */
   .coin-banner:hover,
   .info-layer-profile-image:hover,
   .header-metric:hover,
-  .header-social-icon:hover {
+  .header-social-icon:hover,
+  *:hover {
     transform: none !important;
+    opacity: 1 !important;
+  }
+  
+  /* Reduce box-shadows for better performance */
+  * {
+    box-shadow: none !important;
+  }
+  
+  /* Disable backdrop filters on mobile (very expensive) */
+  * {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
   }
 }
 

@@ -138,18 +138,22 @@ const ModernTokenScroller = ({
       enriched: enrichedData.enriched
     });
     
-    // PERFORMANCE FIX: Limit enrichment cache to prevent memory leaks
-    const MAX_ENRICHMENT_CACHE = 50;
+    // 🔥 MOBILE PERFORMANCE FIX: Limit enrichment cache aggressively on mobile
+    const isMobileDevice = window.innerWidth < 768 || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const MAX_ENRICHMENT_CACHE = isMobileDevice ? 10 : 30; // 10 on mobile, 30 on desktop (reduced from 50)
     
     // Update the enrichedCoins cache with size limit
     setEnrichedCoins(prev => {
       const newCache = new Map(prev);
       
-      // If cache is full, remove oldest entry (first in Map)
+      // If cache is full, remove oldest entries (keep only most recent)
       if (newCache.size >= MAX_ENRICHMENT_CACHE) {
-        const firstKey = newCache.keys().next().value;
-        newCache.delete(firstKey);
-        console.log(`🗑️ Enrichment cache full, removed oldest entry: ${firstKey.slice(0, 8)}...`);
+        const entriesToRemove = newCache.size - MAX_ENRICHMENT_CACHE + 1;
+        const keys = Array.from(newCache.keys());
+        for (let i = 0; i < entriesToRemove; i++) {
+          newCache.delete(keys[i]);
+          console.log(`🗑️ Enrichment cache full, removed entry: ${keys[i].slice(0, 8)}...`);
+        }
       }
       
       newCache.set(mintAddress, enrichedData);
@@ -565,12 +569,18 @@ const ModernTokenScroller = ({
       onlyFavorites 
     });
     
-    // PERFORMANCE FIX: Clear all state before loading new feed to prevent memory leaks
-    console.log('🗑️ Clearing previous feed data...');
+    // 🔥 MOBILE PERFORMANCE FIX: Aggressively clear all state before loading new feed
+    console.log('🗑️ Clearing previous feed data and freeing memory...');
     setCoins([]);
-    setEnrichedCoins(new Map());
+    setEnrichedCoins(new Map()); // Clear enrichment cache
     setCurrentIndex(0);
-    // Virtual scrolling disabled - no need to set visible range
+    setExpandedCoin(null); // Close any expanded cards
+    
+    // Force garbage collection hint (not guaranteed, but helps)
+    if (window.gc) {
+      console.log('🗑️ Running manual garbage collection...');
+      window.gc();
+    }
     
     // Fetch new feed data
     fetchCoins();
@@ -878,17 +888,22 @@ const ModernTokenScroller = ({
   // Get DexScreener chart for current and nearby coins
   const renderCoinWithChart = (coin, index) => {
     const isCurrentCoin = index === currentIndex;
-    const shouldShowChart = Math.abs(index - currentIndex) <= 2; // Show chart for current and 2 adjacent
+    
+    // 🔥 MOBILE PERFORMANCE: Only render charts for visible coins (current ± 1)
+    const isMobileDevice = window.innerWidth < 768 || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const chartRenderDistance = isMobileDevice ? 1 : 2; // Render fewer charts on mobile
+    const shouldShowChart = Math.abs(index - currentIndex) <= chartRenderDistance;
     const isVisible = Math.abs(index - currentIndex) <= 1; // Coin is visible if it's current or adjacent
     
-    // Auto-load transactions for current coin and 2 ahead (3 total)
-    // This gives users a preview of recent transaction activity
-    const shouldAutoLoadTransactions = index >= currentIndex && index <= currentIndex + 2;
+    // Auto-load transactions for current coin only on mobile, current + 2 on desktop
+    const shouldAutoLoadTransactions = isMobileDevice 
+      ? index === currentIndex // Only current coin on mobile
+      : (index >= currentIndex && index <= currentIndex + 2); // Current + 2 ahead on desktop
     
     // Use enriched coin data if available
     const enrichedCoin = getEnrichedCoin(coin);
     
-    // Get chart component from DexScreener manager
+    // Get chart component from DexScreener manager (only for visible coins)
     let chartComponent = null;
     if (shouldShowChart && dexManagerRef.current) {
       chartComponent = dexManagerRef.current.getChartForCoin(enrichedCoin, index);
