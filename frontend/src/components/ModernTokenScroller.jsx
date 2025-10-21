@@ -717,13 +717,14 @@ const ModernTokenScroller = ({
   // The CSS scroll-snap-type: y mandatory + scroll-snap-stop: always on mobile
   // provides better, more reliable snapping without custom JS interference
 
-  // Simple scroll listener - optimized for performance
+  // Aggressive scroll-snap enforcement - especially for mobile
   useEffect(() => {
     const container = scrollerRef.current;
     if (!container) return;
     
     let scrollTimeout;
     let snapTimeout;
+    let lastScrollTop = container.scrollTop;
     
     const performSnap = () => {
       if (isScrollLocked.current || expandedCoin || isSnapping.current) return;
@@ -733,10 +734,25 @@ const ModernTokenScroller = ({
       const targetIndex = Math.round(scrollTop / cardHeight);
       const targetScrollTop = targetIndex * cardHeight;
       
-      // Always snap to exact position if off by more than 1px
-      if (Math.abs(scrollTop - targetScrollTop) > 1) {
+      // CRITICAL: Always force snap if not perfectly aligned
+      const isAligned = Math.abs(scrollTop - targetScrollTop) < 1;
+      
+      if (!isAligned) {
         isSnapping.current = true;
-        container.scrollTop = targetScrollTop;
+        
+        // Force immediate snap with no animation on mobile for reliability
+        const isMobileDevice = window.innerWidth < 768 || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        
+        if (isMobileDevice) {
+          // Direct assignment for instant snap on mobile
+          container.scrollTop = targetScrollTop;
+        } else {
+          // Smooth scroll on desktop
+          container.scrollTo({
+            top: targetScrollTop,
+            behavior: 'smooth'
+          });
+        }
         
         // Update state immediately
         if (targetIndex !== currentIndex && targetIndex >= 0 && targetIndex < coins.length) {
@@ -758,6 +774,16 @@ const ModernTokenScroller = ({
       // Don't process if we're currently snapping
       if (isSnapping.current) return;
       
+      const currentScrollTop = container.scrollTop;
+      
+      // Detect if scrolling has stopped (scroll position hasn't changed)
+      if (Math.abs(currentScrollTop - lastScrollTop) < 1) {
+        // Scrolling stopped, force snap
+        performSnap();
+      }
+      
+      lastScrollTop = currentScrollTop;
+      
       // Clear previous timeouts
       if (scrollTimeout) clearTimeout(scrollTimeout);
       if (snapTimeout) clearTimeout(snapTimeout);
@@ -767,22 +793,30 @@ const ModernTokenScroller = ({
         handleScroll();
       }, 50);
       
-      // Snap when scrolling stops
-      snapTimeout = setTimeout(performSnap, 100);
+      // Force snap after scrolling stops
+      snapTimeout = setTimeout(performSnap, 150);
     };
     
     container.addEventListener('scroll', throttledHandleScroll, { passive: true });
     
-    // Also snap on touchend for immediate response
+    // CRITICAL: Force snap on touchend for mobile
     const handleTouchEnd = () => {
+      // Immediate snap on touch release
       setTimeout(performSnap, 50);
     };
     
+    // CRITICAL: Force snap on scrollend event (modern browsers)
+    const handleScrollEnd = () => {
+      performSnap();
+    };
+    
     container.addEventListener('touchend', handleTouchEnd, { passive: true });
+    container.addEventListener('scrollend', handleScrollEnd, { passive: true });
     
     return () => {
       container.removeEventListener('scroll', throttledHandleScroll);
       container.removeEventListener('touchend', handleTouchEnd);
+      container.removeEventListener('scrollend', handleScrollEnd);
       if (scrollTimeout) clearTimeout(scrollTimeout);
       if (snapTimeout) clearTimeout(snapTimeout);
     };
