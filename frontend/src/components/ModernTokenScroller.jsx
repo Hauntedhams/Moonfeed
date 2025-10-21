@@ -710,7 +710,7 @@ const ModernTokenScroller = ({
 
 
 
-  // Lightweight scroll handler with mobile snap correction
+  // Aggressive mobile snap correction - ensures perfect alignment
   useEffect(() => {
     const container = scrollerRef.current;
     if (!container) return;
@@ -718,6 +718,7 @@ const ModernTokenScroller = ({
     let scrollEndTimer;
     let rafId;
     let touchEndTimer;
+    let isSnapping = false;
     
     const updateCurrentIndex = () => {
       if (isScrollLocked.current || expandedCoin) return;
@@ -744,16 +745,17 @@ const ModernTokenScroller = ({
     };
     
     const snapToNearest = () => {
-      if (isScrollLocked.current || expandedCoin) return;
+      if (isScrollLocked.current || expandedCoin || isSnapping) return;
       
+      isSnapping = true;
       const cardHeight = container.clientHeight;
       const scrollTop = container.scrollTop;
       const targetIndex = Math.round(scrollTop / cardHeight);
       const targetScroll = targetIndex * cardHeight;
       const offset = Math.abs(scrollTop - targetScroll);
       
-      // If misaligned by more than 5px, snap to correct position
-      if (offset > 5) {
+      // ALWAYS snap if not perfectly aligned (even 1px off)
+      if (offset > 1) {
         console.log(`📍 Snap correction: ${offset.toFixed(0)}px offset, snapping to coin ${targetIndex + 1}`);
         container.scrollTo({
           top: targetScroll,
@@ -762,6 +764,11 @@ const ModernTokenScroller = ({
       }
       
       updateCurrentIndex();
+      
+      // Allow next snap after animation completes
+      setTimeout(() => {
+        isSnapping = false;
+      }, 300);
     };
     
     const handleScrollEvent = () => {
@@ -775,22 +782,31 @@ const ModernTokenScroller = ({
       // Clear previous timer
       if (scrollEndTimer) clearTimeout(scrollEndTimer);
       
-      // Wait for scroll to fully stop before snap correction
-      scrollEndTimer = setTimeout(snapToNearest, 100);
+      // Quick snap check after scroll stops (50ms for immediate response)
+      scrollEndTimer = setTimeout(snapToNearest, 50);
     };
     
-    // Mobile-specific: snap when user lifts finger
+    // Mobile-specific: immediate snap when user lifts finger
     const handleTouchEnd = () => {
       if (touchEndTimer) clearTimeout(touchEndTimer);
-      touchEndTimer = setTimeout(snapToNearest, 150);
+      // Immediate snap on touch end (50ms to let momentum settle)
+      touchEndTimer = setTimeout(snapToNearest, 50);
+    };
+    
+    // Also handle mouseup for desktop testing
+    const handleMouseUp = () => {
+      if (touchEndTimer) clearTimeout(touchEndTimer);
+      touchEndTimer = setTimeout(snapToNearest, 50);
     };
     
     container.addEventListener('scroll', handleScrollEvent, { passive: true });
     container.addEventListener('touchend', handleTouchEnd, { passive: true });
+    container.addEventListener('mouseup', handleMouseUp, { passive: true });
     
     return () => {
       container.removeEventListener('scroll', handleScrollEvent);
       container.removeEventListener('touchend', handleTouchEnd);
+      container.removeEventListener('mouseup', handleMouseUp);
       if (scrollEndTimer) clearTimeout(scrollEndTimer);
       if (touchEndTimer) clearTimeout(touchEndTimer);
       if (rafId) cancelAnimationFrame(rafId);
