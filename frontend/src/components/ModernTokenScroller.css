@@ -101,7 +101,7 @@
   height: 100dvh; /* Use dynamic viewport height */
   width: 100%;
   overflow-y: auto;
-  /* Smoother snap behavior - mandatory but without aggressive stops */
+  /* CRITICAL: Mandatory snap to prevent getting stuck between coins */
   scroll-snap-type: y mandatory;
   scroll-behavior: smooth; /* Smooth scrolling for all devices */
   -webkit-overflow-scrolling: touch;
@@ -120,10 +120,10 @@
 /* Mobile-specific scroll behavior */
 @media (max-width: 768px) {
   .modern-scroller-container {
-    /* Auto scroll-behavior on mobile for more responsive touch gestures */
-    scroll-behavior: auto;
-    /* Proximity snap on mobile for smoother feel */
-    scroll-snap-type: y proximity;
+    /* CRITICAL: Keep mandatory snap on mobile to prevent stuck-between-coins issue */
+    scroll-snap-type: y mandatory;
+    /* Smooth scroll on mobile for better snap feel */
+    scroll-behavior: smooth;
   }
 }
 
@@ -152,10 +152,21 @@
   background: linear-gradient(135deg, #0b1220 0%, #0e1426 50%, #0b1220 100%);
   /* Scroll snap alignment - critical for smooth scrolling */
   scroll-snap-align: start;
-  scroll-snap-stop: normal; /* Allow smooth continuous scrolling */
+  scroll-snap-stop: normal; /* Allow smooth continuous scrolling on desktop */
   /* Mobile fix: Ensure proper positioning */
   flex-shrink: 0;
   contain: layout style paint;
+}
+
+/* MOBILE: Force snap-stop on each coin to prevent getting stuck between */
+@media (max-width: 768px) {
+  .modern-coin-slide {
+    scroll-snap-stop: always;
+  }
+  
+  .modern-coin-placeholder {
+    scroll-snap-stop: always;
+  }
 }
 
 /* Placeholder coins - must match real coins exactly for consistent scroll-snap */
