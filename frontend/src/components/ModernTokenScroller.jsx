@@ -710,13 +710,14 @@ const ModernTokenScroller = ({
 
 
 
-  // Lightweight scroll handler - let CSS scroll-snap do the heavy lifting
+  // Lightweight scroll handler with mobile snap correction
   useEffect(() => {
     const container = scrollerRef.current;
     if (!container) return;
     
     let scrollEndTimer;
     let rafId;
+    let touchEndTimer;
     
     const updateCurrentIndex = () => {
       if (isScrollLocked.current || expandedCoin) return;
@@ -742,6 +743,27 @@ const ModernTokenScroller = ({
       }
     };
     
+    const snapToNearest = () => {
+      if (isScrollLocked.current || expandedCoin) return;
+      
+      const cardHeight = container.clientHeight;
+      const scrollTop = container.scrollTop;
+      const targetIndex = Math.round(scrollTop / cardHeight);
+      const targetScroll = targetIndex * cardHeight;
+      const offset = Math.abs(scrollTop - targetScroll);
+      
+      // If misaligned by more than 5px, snap to correct position
+      if (offset > 5) {
+        console.log(`📍 Snap correction: ${offset.toFixed(0)}px offset, snapping to coin ${targetIndex + 1}`);
+        container.scrollTo({
+          top: targetScroll,
+          behavior: 'smooth'
+        });
+      }
+      
+      updateCurrentIndex();
+    };
+    
     const handleScrollEvent = () => {
       // Update enrichment during scroll
       handleScroll();
@@ -753,15 +775,24 @@ const ModernTokenScroller = ({
       // Clear previous timer
       if (scrollEndTimer) clearTimeout(scrollEndTimer);
       
-      // Wait for scroll to fully stop before final index update
-      scrollEndTimer = setTimeout(updateCurrentIndex, 150);
+      // Wait for scroll to fully stop before snap correction
+      scrollEndTimer = setTimeout(snapToNearest, 100);
+    };
+    
+    // Mobile-specific: snap when user lifts finger
+    const handleTouchEnd = () => {
+      if (touchEndTimer) clearTimeout(touchEndTimer);
+      touchEndTimer = setTimeout(snapToNearest, 150);
     };
     
     container.addEventListener('scroll', handleScrollEvent, { passive: true });
+    container.addEventListener('touchend', handleTouchEnd, { passive: true });
     
     return () => {
       container.removeEventListener('scroll', handleScrollEvent);
+      container.removeEventListener('touchend', handleTouchEnd);
       if (scrollEndTimer) clearTimeout(scrollEndTimer);
+      if (touchEndTimer) clearTimeout(touchEndTimer);
       if (rafId) cancelAnimationFrame(rafId);
     };
   }, [handleScroll, expandedCoin, currentIndex, coins, enrichedCoins, onCurrentCoinChange]);

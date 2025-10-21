@@ -100,10 +100,10 @@
 .modern-scroller-container {
   height: 100dvh; /* Use dynamic viewport height */
   width: 100%;
-  overflow-y: auto;
-  /* Mandatory snap with proximity for smoother mobile experience */
+  overflow-y: scroll; /* Force scrollbar for better snap behavior */
+  /* Mandatory snap - aggressive on mobile */
   scroll-snap-type: y mandatory;
-  scroll-behavior: auto; /* Let native physics handle it, no animation interference */
+  scroll-behavior: smooth; /* Smooth for snap corrections */
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* IE and Edge */
@@ -112,8 +112,10 @@
   contain: layout style paint;
   transform: translateZ(0); /* Force hardware acceleration */
   /* Prevent bounce/overscroll on iOS */
-  overscroll-behavior: none;
+  overscroll-behavior: contain; /* Contain instead of none for better snap */
   scroll-padding: 0;
+  /* iOS-specific fixes for scroll snap */
+  -webkit-scroll-snap-type: y mandatory;
 }
 
 .modern-scroller-container.scroll-locked {
@@ -141,12 +143,23 @@
   background: linear-gradient(135deg, #0b1220 0%, #0e1426 50%, #0b1220 100%);
   /* Scroll snap alignment - start is most reliable */
   scroll-snap-align: start;
-  scroll-snap-stop: normal; /* Allow smooth continuous scrolling */
+  scroll-snap-stop: always; /* Force stop at each item on mobile */
   flex-shrink: 0;
   contain: layout style paint;
   /* Ensure exact height for perfect snap points */
   min-height: 100dvh;
   max-height: 100dvh;
+  /* iOS-specific fixes */
+  -webkit-scroll-snap-align: start;
+  -webkit-scroll-snap-stop: always;
+}
+
+/* Desktop: allow smoother multi-scroll */
+@media (min-width: 768px) {
+  .modern-coin-slide {
+    scroll-snap-stop: normal;
+    -webkit-scroll-snap-stop: normal;
+  }
 }
 
 /* Placeholder coins - must match real coins exactly for consistent scroll-snap */
