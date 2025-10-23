@@ -4,7 +4,7 @@ services:
     env: node
     plan: free
     buildCommand: npm install --prefix backend
-    startCommand: node backend/server.js
+    startCommand: ./start.sh
     envVars:
       - key: NODE_ENV
         value: production
@@ -12,6 +12,7 @@ services:
         value: 10000
     healthCheckPath: /api/health
     autoDeploy: true
-    # Health check configuration
-    initialDelaySeconds: 10
-    # Give server time to start before first health check
+    # Health check configuration - increased for slow cold starts
+    initialDelaySeconds: 60
+    healthCheckInterval: 30
+    healthCheckTimeout: 10
