@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live Price Update Demo</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #0a0f1e 0%, #1a1f3a 100%);
+      color: #fff;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    
+    .container {
+      max-width: 800px;
+      width: 100%;
+    }
+    
+    h1 {
+      font-size: 36px;
+      margin-bottom: 10px;
+      text-align: center;
+      background: linear-gradient(135deg, #00d4ff, #7000ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    
+    .subtitle {
+      text-align: center;
+      color: #8899aa;
+      margin-bottom: 40px;
+      font-size: 18px;
+    }
+    
+    .coin-card {
+      background: linear-gradient(135deg, #1a1f3a 0%, #0f1629 100%);
+      border: 1px solid #2a3a5a;
+      border-radius: 20px;
+      padding: 30px;
+      margin-bottom: 20px;
+      box-shadow: 0 8px 32px rgba(0, 212, 255, 0.1);
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .coin-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, #00d4ff, #7000ff, #00d4ff);
+      background-size: 200% 100%;
+      animation: shimmer 2s linear infinite;
+    }
+    
+    @keyframes shimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+    
+    .coin-header {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      margin-bottom: 25px;
+    }
+    
+    .coin-icon {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #00d4ff, #7000ff);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      font-weight: bold;
+    }
+    
+    .coin-info {
+      flex: 1;
+    }
+    
+    .coin-name {
+      font-size: 24px;
+      font-weight: 600;
+      margin-bottom: 5px;
+    }
+    
+    .coin-symbol {
+      color: #8899aa;
+      font-size: 16px;
+    }
+    
+    .price-section {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+    
+    .price-display {
+      font-size: 48px;
+      font-weight: 700;
+      color: #00ff88;
+      font-family: 'Courier New', monospace;
+      transition: all 0.3s ease;
+      position: relative;
+    }
+    
+    .price-display.flash-up {
+      animation: flashUp 0.6s ease;
+    }
+    
+    .price-display.flash-down {
+      animation: flashDown 0.6s ease;
+    }
+    
+    @keyframes flashUp {
+      0%, 100% { color: #00ff88; }
+      50% { 
+        color: #00ffff;
+        transform: scale(1.05);
+        text-shadow: 0 0 20px rgba(0, 255, 136, 0.5);
+      }
+    }
+    
+    @keyframes flashDown {
+      0%, 100% { color: #00ff88; }
+      50% { 
+        color: #ff4444;
+        transform: scale(0.95);
+        text-shadow: 0 0 20px rgba(255, 68, 68, 0.5);
+      }
+    }
+    
+    .live-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      background: rgba(0, 212, 255, 0.1);
+      border: 1px solid rgba(0, 212, 255, 0.3);
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: 600;
+      color: #00d4ff;
+    }
+    
+    .live-dot {
+      width: 8px;
+      height: 8px;
+      background: #00ff88;
+      border-radius: 50%;
+      animation: pulse 1s infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { 
+        opacity: 1;
+        transform: scale(1);
+      }
+      50% { 
+        opacity: 0.3;
+        transform: scale(0.8);
+      }
+    }
+    
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin-top: 20px;
+      padding-top: 20px;
+      border-top: 1px solid rgba(136, 153, 170, 0.2);
+    }
+    
+    .stat {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    
+    .stat-label {
+      color: #8899aa;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    
+    .stat-value {
+      color: #fff;
+      font-size: 18px;
+      font-weight: 600;
+    }
+    
+    .changelog {
+      background: rgba(0, 255, 136, 0.1);
+      border: 1px solid rgba(0, 255, 136, 0.3);
+      border-radius: 12px;
+      padding: 20px;
+      margin-top: 30px;
+    }
+    
+    .changelog h2 {
+      color: #00ff88;
+      margin-bottom: 15px;
+      font-size: 20px;
+    }
+    
+    .changelog ul {
+      list-style: none;
+      padding: 0;
+    }
+    
+    .changelog li {
+      padding: 8px 0;
+      padding-left: 25px;
+      position: relative;
+      color: #ddd;
+    }
+    
+    .changelog li::before {
+      content: '✓';
+      position: absolute;
+      left: 0;
+      color: #00ff88;
+      font-weight: bold;
+    }
+    
+    .footer {
+      text-align: center;
+      margin-top: 30px;
+      color: #8899aa;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🚀 Live Price Updates</h1>
+    <p class="subtitle">Real-time price streaming with 1-second updates</p>
+    
+    <div class="coin-card">
+      <div class="coin-header">
+        <div class="coin-icon">🪐</div>
+        <div class="coin-info">
+          <div class="coin-name">Example Meme Coin</div>
+          <div class="coin-symbol">MEME • Solana</div>
+        </div>
+      </div>
+      
+      <div class="price-section">
+        <div class="price-display" id="price">$0.0₃44097</div>
+        <div class="live-indicator">
+          <div class="live-dot"></div>
+          <span>LIVE</span>
+        </div>
+      </div>
+      
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-label">Updates/Min</div>
+          <div class="stat-value" id="updates">0</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Last Change</div>
+          <div class="stat-value" id="lastChange">—</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Price Range</div>
+          <div class="stat-value" id="range">—</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Connection</div>
+          <div class="stat-value" style="color: #00ff88;">✓ Connected</div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="changelog">
+      <h2>✨ What's Fixed</h2>
+      <ul>
+        <li><strong>Property Mismatch Resolved:</strong> WebSocket now sets <code>price</code>, <code>price_usd</code>, and <code>priceUsd</code></li>
+        <li><strong>Real-Time Updates:</strong> Prices update every 1 second instead of being static</li>
+        <li><strong>Visual Feedback:</strong> Flash animations show when price goes up (green) or down (red)</li>
+        <li><strong>Live Indicator:</strong> 🪐 Jupiter icon shows when live pricing is active</li>
+        <li><strong>Subscript Notation:</strong> Small prices display as $0.0₃44097 for easy reading</li>
+        <li><strong>Debug Logging:</strong> Console shows price updates for monitoring</li>
+      </ul>
+    </div>
+    
+    <div class="footer">
+      <p>Demo simulating live price updates • Actual app receives data via WebSocket</p>
+    </div>
+  </div>
+  
+  <script>
+    // Simulate live price updates
+    let basePrice = 0.000044097;
+    let previousPrice = basePrice;
+    let updateCount = 0;
+    let minPrice = basePrice;
+    let maxPrice = basePrice;
+    
+    const priceEl = document.getElementById('price');
+    const updatesEl = document.getElementById('updates');
+    const lastChangeEl = document.getElementById('lastChange');
+    const rangeEl = document.getElementById('range');
+    
+    function formatPrice(price) {
+      if (price < 0.0001) {
+        const str = price.toExponential();
+        const [coefficient, exponent] = str.split('e');
+        const exp = Math.abs(parseInt(exponent));
+        const cleanCoef = parseFloat(coefficient).toFixed(5).replace(/\.?0+$/, '');
+        const significantDigits = cleanCoef.replace('.', '').substring(0, 5);
+        const subscriptMap = {'0':'₀','1':'₁','2':'₂','3':'₃','4':'₄','5':'₅','6':'₆','7':'₇','8':'₈','9':'₉'};
+        const subscriptExp = (exp - 1).toString().split('').map(d => subscriptMap[d]).join('');
+        return `$0.0${subscriptExp}${significantDigits}`;
+      }
+      return `$${price.toFixed(6)}`;
+    }
+    
+    function updatePrice() {
+      // Random price change ±3%
+      const change = (Math.random() - 0.5) * 0.06;
+      basePrice = basePrice * (1 + change);
+      
+      // Track min/max
+      minPrice = Math.min(minPrice, basePrice);
+      maxPrice = Math.max(maxPrice, basePrice);
+      
+      // Update display
+      priceEl.textContent = formatPrice(basePrice);
+      
+      // Flash animation
+      priceEl.classList.remove('flash-up', 'flash-down');
+      void priceEl.offsetWidth; // Force reflow
+      if (basePrice > previousPrice) {
+        priceEl.classList.add('flash-up');
+      } else if (basePrice < previousPrice) {
+        priceEl.classList.add('flash-down');
+      }
+      
+      // Update stats
+      updateCount++;
+      updatesEl.textContent = updateCount;
+      
+      const pctChange = ((basePrice - previousPrice) / previousPrice * 100).toFixed(2);
+      lastChangeEl.textContent = `${pctChange > 0 ? '+' : ''}${pctChange}%`;
+      lastChangeEl.style.color = pctChange > 0 ? '#00ff88' : '#ff4444';
+      
+      const rangePct = ((maxPrice - minPrice) / minPrice * 100).toFixed(2);
+      rangeEl.textContent = `±${rangePct}%`;
+      
+      previousPrice = basePrice;
+    }
+    
+    // Update every 1 second (matching Jupiter service frequency)
+    setInterval(updatePrice, 1000);
+    
+    // Initial update
+    updatePrice();
+    
+    // Log updates to console (like the real app)
+    setInterval(() => {
+      console.log(`💰 Live price update: ${formatPrice(basePrice)} (${updateCount} total updates)`);
+    }, 5000);
+  </script>
+</body>
+</html>

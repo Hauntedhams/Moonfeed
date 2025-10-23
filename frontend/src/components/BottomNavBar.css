@@ -174,36 +174,23 @@
 }
 
 .dark-mode .nav-btn {
-  color: rgba(255, 255, 255, 0.6) !important;
+  color: rgba(255, 255, 255, 0.6);
 }
 
 .dark-mode .nav-btn:hover {
-  color: rgba(255, 255, 255, 0.9) !important;
+  color: rgba(255, 255, 255, 0.9);
   background: rgba(255, 255, 255, 0.05);
 }
 
 .dark-mode .nav-btn.active {
-  color: #fff !important;
+  color: #fff;
   background: rgba(255, 255, 255, 0.1);
 }
 
 .dark-mode .nav-btn:active,
 .dark-mode .nav-btn:focus {
-  color: #fff !important;
+  color: #fff;
   background: rgba(255, 255, 255, 0.15);
-}
-
-/* Ensure nav labels and icons inherit color */
-.dark-mode .nav-label {
-  color: inherit;
-}
-
-.dark-mode .nav-icon {
-  color: inherit;
-}
-
-.dark-mode .nav-icon svg {
-  color: inherit;
 }
 
 /* Trade button stays the same in dark mode (gradient) */

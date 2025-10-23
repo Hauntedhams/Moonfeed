@@ -229,6 +229,13 @@ function initializeWithLatestBatch() {
         newCoins = freshNewBatch;
         newCoinStorage.saveBatch(freshNewBatch); // Save to disk
         console.log(`✅ NEW feed initialized with ${freshNewBatch.length} coins (on-demand enrichment only)`);
+        
+        // Update Jupiter Live Price Service with combined coin list (TRENDING + NEW)
+        if (jupiterLivePriceService && jupiterLivePriceService.isRunning) {
+          const allCoins = [...currentCoins, ...freshNewBatch];
+          jupiterLivePriceService.updateCoinList(allCoins);
+          console.log(`🪐 Updated Jupiter service with ${allCoins.length} coins (${currentCoins.length} trending + ${freshNewBatch.length} new)`);
+        }
       })
       .catch(error => {
         console.error('❌ Failed to fetch initial NEW feed:', error.message);
@@ -721,6 +728,9 @@ async function fetchDexscreenerTrendingBatch() {
         volume_24h_usd: parseFloat(pair.volume?.h24) || 0,
         liquidity_usd: parseFloat(pair.liquidity?.usd) || 0,
         price_change_24h: parseFloat(pair.priceChange?.h24) || 0,
+        change_24h: parseFloat(pair.priceChange?.h24) || 0, // ✅ Frontend expects this field
+        change24h: parseFloat(pair.priceChange?.h24) || 0,  // ✅ Alternative field name
+        priceChange24h: parseFloat(pair.priceChange?.h24) || 0, // ✅ For consistency
         description: boost.description || '',
         
         // Dexscreener specific fields
@@ -746,6 +756,13 @@ async function fetchDexscreenerTrendingBatch() {
     // Update cache
     dextrendingCoins = formattedTokens;
     dextrendingLastFetch = now;
+    
+    // ✅ ADD DEXtrending coins to Jupiter Live Price tracking
+    if (jupiterLivePriceService && jupiterLivePriceService.isRunning) {
+      const allCoins = [...currentCoins, ...newCoins, ...formattedTokens];
+      jupiterLivePriceService.updateCoinList(allCoins);
+      console.log(`🪐 Updated Jupiter service with ${allCoins.length} total coins (${currentCoins.length} trending + ${newCoins.length} new + ${formattedTokens.length} dextrending)`);
+    }
     
     return formattedTokens;
     
@@ -1386,6 +1403,24 @@ app.post('/api/admin/dextrending-refresh-trigger', async (req, res) => {
   }
 });
 
+// 🔍 DEBUG: Jupiter Live Price Service diagnostic endpoint
+app.get('/api/debug/jupiter-status', (req, res) => {
+  res.json({
+    isRunning: jupiterLivePriceService?.isRunning || false,
+    subscribers: jupiterLivePriceService?.subscribers?.size || 0,
+    coinsTracked: jupiterLivePriceService?.coinList?.length || 0,
+    lastUpdate: jupiterLivePriceService?.lastUpdate || null,
+    lastFetchAttempt: jupiterLivePriceService?.lastFetchAttempt || null,
+    priceCache: jupiterLivePriceService?.priceCache?.size || 0,
+    updateFrequency: jupiterLivePriceService?.updateFrequency || 0,
+    samplePrices: Array.from(jupiterLivePriceService?.priceCache?.entries() || []).slice(0, 3).map(([addr, data]) => ({
+      address: addr.substring(0, 8) + '...',
+      symbol: data.symbol,
+      price: data.price
+    }))
+  });
+});
+
 // Health check endpoints (both /health and /api/health for Render compatibility)
 // CRITICAL: These must respond immediately without any dependencies or slow operations
 app.get('/health', (req, res) => {
@@ -1575,6 +1610,13 @@ function startNewFeedAutoRefresher() {
       // Update cache
       newCoins = freshNewBatch;
       
+      // Update Jupiter Live Price Service with combined coin list (TRENDING + NEW)
+      if (jupiterLivePriceService && jupiterLivePriceService.isRunning) {
+        const allCoins = [...currentCoins, ...freshNewBatch];
+        jupiterLivePriceService.updateCoinList(allCoins);
+        console.log(`🪐 Updated Jupiter service with ${allCoins.length} coins after NEW feed refresh`);
+      }
+      
       console.log('✅ NEW feed cache updated (on-demand enrichment only)');
     }
   );
@@ -1585,13 +1627,20 @@ function startDextrendingAutoRefresher() {
   dextrendingAutoRefresher.start(
     // Function to fetch fresh DEXTRENDING coins
     fetchDexscreenerTrendingBatch,
-    // Callback when refresh completes - update cache (NO enrichment)
+    // Callback when refresh completes - update cache AND Jupiter tracking
     async (freshDextrendingBatch) => {
       console.log(`🔄 Updating DEXTRENDING feed cache with ${freshDextrendingBatch.length} fresh coins`);
       
       // Update cache
       dextrendingCoins = freshDextrendingBatch;
       dextrendingLastFetch = Date.now();
+      
+      // ✅ Update Jupiter Live Price Service with DEXtrending coins
+      if (jupiterLivePriceService && jupiterLivePriceService.isRunning) {
+        const allCoins = [...currentCoins, ...newCoins, ...freshDextrendingBatch];
+        jupiterLivePriceService.updateCoinList(allCoins);
+        console.log(`🪐 Updated Jupiter service with ${allCoins.length} total coins after DEXTRENDING refresh`);
+      }
       
       console.log('✅ DEXTRENDING feed cache updated (on-demand enrichment only)');
     }
@@ -1602,11 +1651,29 @@ function startDextrendingAutoRefresher() {
 // SERVER STARTUP
 // ═══════════════════════════════════════════════════════════════
 
-app.listen(PORT, () => {
+// Create HTTP server for WebSocket support
+const server = http.createServer(app);
+
+// Initialize WebSocket server
+const wsServer = new WebSocketServer(server);
+console.log('✅ WebSocket server initialized');
+
+server.listen(PORT, () => {
   console.log('\n🚀 ═══════════════════════════════════════════════════════════════');
   console.log(`🚀 MoonFeed Backend Server running on port ${PORT}`);
   console.log('🚀 ═══════════════════════════════════════════════════════════════\n');
   
   // Initialize feeds and start auto-refreshers
   initializeWithLatestBatch();
+  
+  // Start Jupiter Live Price Service (5-second intervals for real-time prices)
+  console.log('🪐 Starting Jupiter Live Price Service...');
+  if (currentCoins.length > 0) {
+    jupiterLivePriceService.start(currentCoins);
+    console.log(`✅ Jupiter Live Price Service started with ${currentCoins.length} coins`);
+  } else {
+    // Start with empty list, will be updated when coins are fetched
+    jupiterLivePriceService.start([]);
+    console.log('⚠️ Jupiter Live Price Service started with empty list (will update when coins are fetched)');
+  }
 });

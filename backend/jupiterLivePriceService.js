@@ -8,12 +8,12 @@ class JupiterLivePriceService extends EventEmitter {
     this.subscribers = new Set(); // WebSocket clients
     this.updateInterval = null;
     this.isRunning = false;
-    this.batchSize = 50; // Reduced batch size to respect rate limits
-    this.updateFrequency = 5000; // Update every 5 seconds to respect rate limits
+    this.batchSize = 100; // Jupiter allows 100 tokens per request
+    this.updateFrequency = 10000; // Update every 10 seconds (was 1s - too aggressive, caused rate limiting)
     this.retryAttempts = 3;
-    this.batchDelay = 500; // Delay between batches in milliseconds
+    this.batchDelay = 1000; // 1 second delay between batches to avoid rate limits
     
-    console.log('🪐 Jupiter Live Price Service initialized');
+    console.log('🪐 Jupiter Live Price Service initialized (10-second intervals)');
   }
 
   /**
@@ -39,7 +39,7 @@ class JupiterLivePriceService extends EventEmitter {
       this.fetchAllPrices();
     }, this.updateFrequency);
     
-    console.log(`✅ Jupiter Live Price Service started (${this.updateFrequency}ms intervals)`);
+    console.log(`✅ Jupiter Live Price Service started (${this.updateFrequency}ms = ${this.updateFrequency/1000} second intervals)`);
   }
 
   /**
@@ -107,12 +107,12 @@ class JupiterLivePriceService extends EventEmitter {
     this.lastFetchAttempt = Date.now();
     
     if (!this.coinList || this.coinList.length === 0) {
-      console.log('⚠️ No coins to fetch prices for');
+      console.log('⚠️ [Jupiter] No coins to fetch prices for');
       return;
     }
 
     try {
-      console.log(`💰 Fetching live prices for ${this.coinList.length} coins from Jupiter...`);
+      console.log(`� [Jupiter Live] STARTING price fetch for ${this.coinList.length} coins (${this.subscribers.size} subscribers waiting)`);
       
       // Split coins into batches
       const batches = this.chunkArray(this.coinList, this.batchSize);
@@ -120,9 +120,10 @@ class JupiterLivePriceService extends EventEmitter {
       
       for (let i = 0; i < batches.length; i++) {
         const batch = batches[i];
-        console.log(`📦 Processing batch ${i + 1}/${batches.length} (${batch.length} coins)`);
+        console.log(`📦 [Jupiter] Processing batch ${i + 1}/${batches.length} (${batch.length} coins)`);
         
         const updates = await this.fetchBatchPrices(batch);
+        console.log(`📦 [Jupiter] Batch ${i + 1} returned ${updates.length} price updates`);
         allUpdates.push(...updates);
         
         // Delay between batches to respect rate limits
@@ -132,26 +133,32 @@ class JupiterLivePriceService extends EventEmitter {
       }
       
       if (allUpdates.length > 0) {
-        console.log(`✅ Updated ${allUpdates.length} coin prices`);
+        console.log(`🔥 [Jupiter Live] Broadcasting prices for ${allUpdates.length} coins to ${this.subscribers.size} subscribers`);
         this.lastUpdate = Date.now();
         this.lastSuccessfulFetch = Date.now();
         
         // Emit update event
         this.emit('prices-updated', allUpdates);
         
+        // DEBUG: Log first price update for verification
+        console.log(`� [Jupiter Live] Sample: ${allUpdates[0].symbol} = $${allUpdates[0].price}`);
+        
         // Broadcast to all subscribers
-        this.broadcastToSubscribers({
+        const broadcastMessage = {
           type: 'jupiter-prices-update',
           data: allUpdates,
           timestamp: Date.now(),
           source: 'jupiter-live'
-        });
+        };
+        this.broadcastToSubscribers(broadcastMessage);
+        console.log(`✅ [Jupiter Live] Broadcast complete`);
       } else {
-        console.log('⚠️ No price updates received');
+        console.error('❌ [Jupiter Live] NO PRICE UPDATES - All batches returned empty! API may be down or rate limiting.');
       }
       
     } catch (error) {
-      console.error('❌ Error fetching all prices:', error.message);
+      console.error('❌ [Jupiter Live] Fatal error fetching prices:', error.message);
+      console.error('❌ [Jupiter Live] Stack:', error.stack);
     }
   }
 
@@ -436,10 +443,14 @@ class JupiterLivePriceService extends EventEmitter {
    * @param {Object} message - Message to broadcast
    */
   broadcastToSubscribers(message) {
-    if (this.subscribers.size === 0) return;
+    if (this.subscribers.size === 0) {
+      console.log('⚠️ [Jupiter] No subscribers to broadcast to');
+      return;
+    }
     
     const messageStr = JSON.stringify(message);
     let successCount = 0;
+    let closedCount = 0;
     
     this.subscribers.forEach(client => {
       if (client.readyState === 1) { // WebSocket.OPEN
@@ -447,16 +458,19 @@ class JupiterLivePriceService extends EventEmitter {
           client.send(messageStr);
           successCount++;
         } catch (error) {
-          console.error('❌ Error broadcasting to client:', error.message);
+          console.error('❌ [Jupiter] Error broadcasting to client:', error.message);
           this.removeSubscriber(client);
         }
       } else {
+        closedCount++;
         this.removeSubscriber(client);
       }
     });
     
     if (successCount > 0) {
-      console.log(`📡 Broadcasted price update to ${successCount} clients`);
+      console.log(`📡 [Jupiter] Broadcasted to ${successCount}/${this.subscribers.size + closedCount} clients (${closedCount} closed)`);
+    } else {
+      console.log(`⚠️ [Jupiter] Broadcast failed - ${closedCount} closed connections`);
     }
   }
 

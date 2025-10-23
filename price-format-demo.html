@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Price Display Format Examples</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0a0f1e;
+      color: #fff;
+      padding: 40px;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    
+    h1 {
+      font-size: 32px;
+      margin-bottom: 10px;
+      background: linear-gradient(135deg, #00d4ff, #7000ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    
+    .subtitle {
+      color: #8899aa;
+      margin-bottom: 40px;
+    }
+    
+    .comparison {
+      display: grid;
+      gap: 20px;
+      margin-bottom: 40px;
+    }
+    
+    .price-row {
+      background: #141b2d;
+      border: 1px solid #2a3a5a;
+      border-radius: 12px;
+      padding: 20px;
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 20px;
+      align-items: center;
+    }
+    
+    .label {
+      color: #8899aa;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    
+    .old-price {
+      font-size: 24px;
+      color: #ff4444;
+      font-family: 'Courier New', monospace;
+    }
+    
+    .new-price {
+      font-size: 28px;
+      color: #00ff88;
+      font-weight: 600;
+      position: relative;
+    }
+    
+    .new-price::before {
+      content: '✨';
+      position: absolute;
+      left: -30px;
+      font-size: 20px;
+    }
+    
+    .arrow {
+      color: #00d4ff;
+      font-size: 24px;
+    }
+    
+    .benefits {
+      background: #141b2d;
+      border: 2px solid #00ff88;
+      border-radius: 12px;
+      padding: 30px;
+    }
+    
+    .benefits h2 {
+      color: #00ff88;
+      margin-top: 0;
+    }
+    
+    .benefits ul {
+      list-style: none;
+      padding: 0;
+    }
+    
+    .benefits li {
+      padding: 10px 0;
+      padding-left: 30px;
+      position: relative;
+    }
+    
+    .benefits li::before {
+      content: '✓';
+      position: absolute;
+      left: 0;
+      color: #00ff88;
+      font-weight: bold;
+      font-size: 20px;
+    }
+    
+    .live-indicator {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      background: #00ff88;
+      border-radius: 50%;
+      margin-left: 10px;
+      animation: pulse 1s infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+    
+    .example-card {
+      background: linear-gradient(135deg, #1a1f3a 0%, #0f1629 100%);
+      border: 1px solid #2a3a5a;
+      border-radius: 16px;
+      padding: 24px;
+      margin-top: 40px;
+      box-shadow: 0 8px 32px rgba(0, 212, 255, 0.1);
+    }
+    
+    .coin-header {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+    
+    .coin-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #00d4ff, #7000ff);
+    }
+    
+    .coin-name {
+      font-size: 20px;
+      font-weight: 600;
+    }
+    
+    .price-display {
+      font-size: 36px;
+      font-weight: 700;
+      color: #00ff88;
+      margin-bottom: 10px;
+    }
+    
+    .update-time {
+      color: #8899aa;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <h1>🚀 New Price Display Format</h1>
+  <p class="subtitle">Subscript notation for easy reading + 1-second real-time updates</p>
+  
+  <div class="comparison">
+    <div class="price-row">
+      <div>
+        <div class="label">Original</div>
+        <div class="old-price">$0.000044097</div>
+      </div>
+      <div class="arrow">→</div>
+      <div>
+        <div class="label">New Format</div>
+        <div class="new-price">$0.0₃44097</div>
+      </div>
+    </div>
+    
+    <div class="price-row">
+      <div>
+        <div class="label">Original</div>
+        <div class="old-price">$0.0000012345</div>
+      </div>
+      <div class="arrow">→</div>
+      <div>
+        <div class="label">New Format</div>
+        <div class="new-price">$0.0₅12345</div>
+      </div>
+    </div>
+    
+    <div class="price-row">
+      <div>
+        <div class="label">Original</div>
+        <div class="old-price">$0.00000000891</div>
+      </div>
+      <div class="arrow">→</div>
+      <div>
+        <div class="label">New Format</div>
+        <div class="new-price">$0.0₈891</div>
+      </div>
+    </div>
+    
+    <div class="price-row">
+      <div>
+        <div class="label">Original</div>
+        <div class="old-price">$0.000000456</div>
+      </div>
+      <div class="arrow">→</div>
+      <div>
+        <div class="label">New Format</div>
+        <div class="new-price">$0.0₆456</div>
+      </div>
+    </div>
+  </div>
+  
+  <div class="benefits">
+    <h2>✨ Benefits</h2>
+    <ul>
+      <li><strong>Easy to Read:</strong> No need to count zeros manually</li>
+      <li><strong>Compact Display:</strong> Takes less horizontal space</li>
+      <li><strong>Professional Look:</strong> Similar to scientific notation but more readable</li>
+      <li><strong>Real-Time Updates:</strong> Prices update every 1 second instead of 5</li>
+      <li><strong>Live Indicator:</strong> 🪐 shows when Jupiter live pricing is active</li>
+    </ul>
+  </div>
+  
+  <div class="example-card">
+    <div class="coin-header">
+      <div class="coin-icon"></div>
+      <div>
+        <div class="coin-name">Example Meme Coin</div>
+        <div style="color: #8899aa; font-size: 14px;">MEME • Solana</div>
+      </div>
+    </div>
+    <div class="price-display">
+      $0.0₃44097
+      <span class="live-indicator"></span>
+    </div>
+    <div class="update-time">
+      Last updated: Just now • <span style="color: #00ff88;">🪐 Live</span>
+    </div>
+  </div>
+  
+  <script>
+    // Simulate live price updates
+    let price = 0.000044097;
+    const priceDisplay = document.querySelector('.price-display');
+    
+    setInterval(() => {
+      // Random price change ±5%
+      const change = (Math.random() - 0.5) * 0.1;
+      price = price * (1 + change);
+      
+      // Format with subscript
+      const exp = Math.floor(Math.log10(Math.abs(price)));
+      const absExp = Math.abs(exp) - 1;
+      const coefficient = (price / Math.pow(10, exp)).toFixed(5);
+      const digits = coefficient.replace('.', '').substring(0, 5);
+      
+      const subscriptMap = {'0':'₀','1':'₁','2':'₂','3':'₃','4':'₄','5':'₅','6':'₆','7':'₇','8':'₈','9':'₉'};
+      const subscript = absExp.toString().split('').map(d => subscriptMap[d]).join('');
+      
+      priceDisplay.innerHTML = `$0.0${subscript}${digits} <span class="live-indicator"></span>`;
+      
+      // Update timestamp
+      document.querySelector('.update-time').innerHTML = 
+        'Last updated: Just now • <span style="color: #00ff88;">🪐 Live</span>';
+    }, 1000); // Update every 1 second
+  </script>
+</body>
+</html>

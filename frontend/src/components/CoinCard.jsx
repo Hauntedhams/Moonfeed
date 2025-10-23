@@ -1,4 +1,4 @@
-import React, { memo, useState, useRef, useEffect } from 'react';
+import React, { memo, useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import './CoinCard.css';
 import DexScreenerChart from './DexScreenerChart';
@@ -67,10 +67,58 @@ const CoinCard = memo(({
   const isMobile = useRef(/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)).current;
 
   // Get live data from WebSocket (COMPLETELY disabled on mobile for performance)
-  const { getCoin, getChart, connected, connectionStatus } = useLiveData();
-  const liveData = isMobile ? null : (isVisible ? getCoin(coin.mintAddress || coin.address) : null);
-  const chartData = isMobile ? null : (isVisible ? getChart(coin.mintAddress || coin.address) : null);
-
+  // 🔥 CRITICAL FIX: Get coins Map directly from context to force re-renders when it updates
+  const { getCoin, getChart, connected, connectionStatus, coins, updateCount } = useLiveData();
+  
+  // 🔥 PRICE UPDATE FIX: Directly read from coins Map and use it to trigger re-renders
+  const address = coin.mintAddress || coin.address;
+  
+  // 🔥 CRITICAL: Compute liveData directly from the coins Map
+  // This makes the component reactive to Map changes
+  const liveData = useMemo(() => {
+    if (isMobile || !isVisible || !address) return null;
+    const data = coins?.get(address) || null;
+    
+    // 🐛 DEBUG: Always log for coins with Jupiter live pricing
+    if (data?.jupiterLive) {
+      console.log(`🔄 [CoinCard] liveData computed for ${coin.symbol}:`, {
+        address: address?.substring(0, 8),
+        price: data.price,
+        jupiterLive: data.jupiterLive,
+        coinsMapSize: coins?.size,
+        updateCount,
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    return data;
+  }, [isMobile, isVisible, address, coins, coin.symbol, updateCount]); // ← Added updateCount
+  
+  const chartData = useMemo(() => {
+    if (isMobile || !isVisible || !address) return null;
+    return getChart(address);
+  }, [isMobile, isVisible, address, getChart]);
+  
+  // 🔥 CRITICAL FIX: Compute display price directly without useMemo to ensure it updates on every render
+  // This guarantees that when liveData changes, the price display updates immediately
+  const livePrice = liveData?.price;
+  const fallbackPrice = coin.price_usd || coin.priceUsd || coin.price || 0;
+  const displayPrice = livePrice || fallbackPrice;
+  
+  // 🐛 DEBUG: Log when displayPrice value changes (only when Jupiter live is active)
+  if (liveData?.jupiterLive && import.meta.env.DEV) {
+    console.log(`💰 [CoinCard] ${coin.symbol} displayPrice:`, {
+      address: address?.substring(0, 8),
+      livePrice,
+      fallbackPrice,
+      displayPrice,
+      hasLiveData: !!liveData,
+      jupiterLive: true,
+      updateCount,
+      timestamp: new Date().toISOString()
+    });
+  }
+  
   // Helius live transactions - auto-load when autoLoadTransactions is true
   const mintAddress = coin.mintAddress || coin.mint || coin.address || coin.contract_address || coin.contractAddress || coin.tokenAddress;
   const { transactions, isConnected: txConnected, error: txError, clearTransactions } = useHeliusTransactions(
@@ -213,6 +261,24 @@ const CoinCard = memo(({
   const formatPrice = (v) => {
     const n = Number(v);
     if (!isFinite(n)) return '$0.00';
+    
+    // For very small numbers, use subscript notation (e.g., $0.0₃44097)
+    if (Math.abs(n) > 0 && Math.abs(n) < 0.0001) {
+      const str = n.toExponential();
+      const [coefficient, exponent] = str.split('e');
+      const exp = Math.abs(parseInt(exponent));
+      
+      // Get significant digits
+      const cleanCoef = parseFloat(coefficient).toFixed(5).replace(/\.?0+$/, '');
+      const significantDigits = cleanCoef.replace('.', '').substring(0, 5);
+      
+      // Convert exponent to subscript
+      const subscriptMap = {'0':'₀','1':'₁','2':'₂','3':'₃','4':'₄','5':'₅','6':'₆','7':'₇','8':'₈','9':'₉'};
+      const subscriptExp = (exp - 1).toString().split('').map(d => subscriptMap[d]).join('');
+      
+      return `$0.0${subscriptExp}${significantDigits}`;
+    }
+    
     if (Math.abs(n) < 0.01) return `$${n.toFixed(6)}`;
     if (Math.abs(n) < 1) return `$${n.toFixed(4)}`;
     return `$${n.toFixed(2)}`;
@@ -842,7 +908,8 @@ const CoinCard = memo(({
   };
 
   // Use live data when available, fallback to coin data
-  const price = liveData?.price ?? coin.price_usd ?? coin.priceUsd ?? coin.price ?? 0;
+  // 🔥 CRITICAL FIX: Use displayPrice computed from useMemo which is reactive to coins Map
+  const price = displayPrice;
   const changePct = liveData?.change24h ?? coin.change_24h ?? coin.priceChange24h ?? coin.change24h ?? 0;
   const marketCap = liveData?.marketCap ?? coin.market_cap_usd ?? coin.market_cap ?? coin.marketCap ?? 0;
   const volume24h = liveData?.volume24h ?? coin.volume_24h_usd ?? coin.volume_24h ?? coin.volume24h ?? 0;

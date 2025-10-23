@@ -15,6 +15,8 @@ export function LiveDataProvider({ children }) {
   const [charts, setCharts] = useState(new Map());
   const [connected, setConnected] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
+  // 🔥 CRITICAL FIX: Add update counter to force re-renders
+  const [updateCount, setUpdateCount] = useState(0);
   const wsRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
   const reconnectAttempts = useRef(0);
@@ -26,6 +28,12 @@ export function LiveDataProvider({ children }) {
   const updateCoins = useCallback((updater) => {
     coinsState = typeof updater === 'function' ? updater(coinsState) : updater;
     setCoins(new Map(coinsState));
+    // 🔥 FORCE RE-RENDER: Increment counter to trigger dependent components
+    setUpdateCount(prev => {
+      const next = prev + 1;
+      console.log(`🔢 [LiveDataContext] updateCount incremented: ${prev} → ${next}, Map size: ${coinsState.size}`);
+      return next;
+    });
   }, []);
 
   const updateCharts = useCallback((updater) => {
@@ -96,6 +104,13 @@ export function LiveDataProvider({ children }) {
               break;
               
             case 'jupiter-prices-update':
+              // 🔥 ENHANCED LOGGING: Always log Jupiter updates to debug price display issue
+              const timestamp = new Date().toISOString();
+              console.log(`💰 [WebSocket ${timestamp}] Jupiter price update received:`, message.data?.length || 0, 'coins');
+              if (message.data && message.data.length > 0) {
+                console.log(`💰 [WebSocket ${timestamp}] Sample price:`, message.data[0].symbol, '=', `$${message.data[0].price}`);
+              }
+              
               updateCoins(prev => {
                 const updated = new Map(prev);
                 if (message.data) {
@@ -103,15 +118,29 @@ export function LiveDataProvider({ children }) {
                     const address = priceUpdate.address;
                     if (address) {
                       const existing = updated.get(address) || {};
-                      updated.set(address, { 
+                      // Set ALL price fields to ensure compatibility
+                      const newData = { 
                         ...existing, 
-                        price_usd: priceUpdate.price,
+                        price: priceUpdate.price,           // For liveData.price
+                        price_usd: priceUpdate.price,       // For coin.price_usd
+                        priceUsd: priceUpdate.price,        // For coin.priceUsd
+                        previousPrice: priceUpdate.previousPrice,
+                        priceChangeInstant: priceUpdate.priceChangeInstant,
+                        lastPriceUpdate: priceUpdate.timestamp || Date.now(),
                         livePrice: true,
-                        jupiterLive: true
-                      });
+                        jupiterLive: true,
+                        source: 'jupiter-live'
+                      };
+                      updated.set(address, newData);
+                      
+                      // Debug log for first coin
+                      if (priceUpdate === message.data[0]) {
+                        console.log(`💰 [WebSocket ${timestamp}] Updated Map for`, priceUpdate.symbol, ':', newData.price);
+                      }
                     }
                   });
                 }
+                console.log(`💰 [WebSocket ${timestamp}] Coins Map updated, new size:`, updated.size);
                 return updated;
               });
               break;
@@ -181,7 +210,8 @@ export function LiveDataProvider({ children }) {
     connected,
     connectionStatus,
     getCoin,
-    getChart
+    getChart,
+    updateCount // 🔥 Include update counter for components that need it
   };
 
   return (
@@ -202,7 +232,8 @@ export function useLiveData() {
       connected: false,
       connectionStatus: 'disconnected',
       getCoin: () => null,
-      getChart: () => null
+      getChart: () => null,
+      updateCount: 0
     };
   }
   return context;

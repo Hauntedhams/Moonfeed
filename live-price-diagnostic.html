@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live Price Update Test</title>
+  <style>
+    body {
+      font-family: 'Monaco', 'Menlo', monospace;
+      padding: 20px;
+      background: #1a1a1a;
+      color: #00ff00;
+      line-height: 1.6;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    h1 {
+      color: #00ffff;
+      border-bottom: 2px solid #00ffff;
+      padding-bottom: 10px;
+    }
+    .section {
+      background: #2a2a2a;
+      padding: 20px;
+      margin: 20px 0;
+      border-radius: 8px;
+      border-left: 4px solid #00ff00;
+    }
+    .log {
+      background: #000;
+      padding: 15px;
+      margin: 10px 0;
+      border-radius: 4px;
+      overflow-x: auto;
+      font-size: 12px;
+    }
+    .log-entry {
+      margin: 5px 0;
+      padding: 5px;
+    }
+    .log-entry.websocket { color: #ff9900; }
+    .log-entry.context { color: #00ffff; }
+    .log-entry.coincard { color: #00ff00; }
+    .log-entry.effect { color: #ff00ff; }
+    .status {
+      display: inline-block;
+      padding: 5px 10px;
+      border-radius: 4px;
+      font-weight: bold;
+      margin: 5px;
+    }
+    .status.good { background: #004400; color: #00ff00; }
+    .status.bad { background: #440000; color: #ff0000; }
+    .status.warning { background: #444400; color: #ffff00; }
+    code {
+      background: #3a3a3a;
+      padding: 2px 6px;
+      border-radius: 3px;
+      color: #ffff00;
+    }
+    .checklist {
+      list-style: none;
+      padding: 0;
+    }
+    .checklist li {
+      padding: 8px;
+      margin: 5px 0;
+      background: #1a1a1a;
+      border-radius: 4px;
+    }
+    .checklist li::before {
+      content: "☐ ";
+      color: #666;
+    }
+    .checklist li.done::before {
+      content: "✓ ";
+      color: #00ff00;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔬 Live Price Update Diagnostic</h1>
+    
+    <div class="section">
+      <h2>📋 Pre-Flight Checklist</h2>
+      <ul class="checklist">
+        <li id="check-backend">Backend server running on <code>localhost:3001</code></li>
+        <li id="check-frontend">Frontend server running on <code>localhost:5173</code></li>
+        <li id="check-browser">Browser DevTools console open (Cmd+Option+I)</li>
+        <li id="check-page">App loaded in browser</li>
+      </ul>
+    </div>
+
+    <div class="section">
+      <h2>🔍 Expected Log Sequence</h2>
+      <p>When a Jupiter price update occurs, you should see logs in this order:</p>
+      
+      <div class="log">
+        <div class="log-entry websocket">
+          💰 [WebSocket 2024-XX-XXTXX:XX:XX.XXXZ] Jupiter price update received: 50 coins
+        </div>
+        <div class="log-entry websocket">
+          💰 [WebSocket 2024-XX-XXTXX:XX:XX.XXXZ] Sample price: SYMBOL = $0.123456
+        </div>
+        <div class="log-entry websocket">
+          💰 [WebSocket 2024-XX-XXTXX:XX:XX.XXXZ] Updated Map for SYMBOL : 0.123456
+        </div>
+        <div class="log-entry websocket">
+          💰 [WebSocket 2024-XX-XXTXX:XX:XX.XXXZ] Coins Map updated, new size: 150
+        </div>
+        <div class="log-entry context">
+          🔢 [LiveDataContext] updateCount incremented: 42 → 43, Map size: 150
+        </div>
+        <div class="log-entry coincard">
+          🔄 [CoinCard] liveData computed for SYMBOL: { address: "BwbZ992s", price: 0.123456, ... }
+        </div>
+        <div class="log-entry coincard">
+          💰 [CoinCard] displayPrice computed for SYMBOL: { livePrice: 0.123456, ... }
+        </div>
+        <div class="log-entry effect">
+          🔄 [CoinCard SYMBOL] liveData or displayPrice changed: { displayPrice: 0.123456, ... }
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>🚨 Troubleshooting</h2>
+      
+      <h3>Scenario 1: No logs at all</h3>
+      <div class="status bad">PROBLEM</div>
+      <p>Backend is not sending updates OR WebSocket is not connected</p>
+      <p><strong>Solution:</strong></p>
+      <ul>
+        <li>Check backend terminal for <code>💰 [Jupiter] Broadcasting prices</code> logs</li>
+        <li>Check browser console for WebSocket connection errors</li>
+        <li>Verify <code>connected</code> indicator is green in the UI</li>
+      </ul>
+
+      <h3>Scenario 2: WebSocket logs only</h3>
+      <div class="status warning">PARTIAL</div>
+      <p>Seeing: <code>💰 [WebSocket] Jupiter price update received</code></p>
+      <p>Missing: <code>🔢 [LiveDataContext] updateCount incremented</code></p>
+      <p><strong>This means:</strong> WebSocket is receiving data but context is not updating</p>
+      <p><strong>Solution:</strong> Check the <code>updateCoins</code> callback in useLiveDataContext.jsx</p>
+
+      <h3>Scenario 3: WebSocket + Context logs, no CoinCard logs</h3>
+      <div class="status warning">PARTIAL</div>
+      <p>Seeing: <code>🔢 [LiveDataContext] updateCount incremented</code></p>
+      <p>Missing: <code>🔄 [CoinCard] liveData computed</code></p>
+      <p><strong>This means:</strong> Context is updating but CoinCard is not re-computing</p>
+      <p><strong>Solution:</strong></p>
+      <ul>
+        <li>Check that <code>updateCount</code> is in the useMemo dependencies</li>
+        <li>Check that the coin is visible (not off-screen)</li>
+        <li>Check that the coin address matches the one being updated</li>
+      </ul>
+
+      <h3>Scenario 4: All logs present but price doesn't change on screen</h3>
+      <div class="status warning">RENDERING ISSUE</div>
+      <p>Seeing all logs including: <code>💰 [CoinCard] displayPrice computed</code></p>
+      <p>But: Price on screen doesn't update</p>
+      <p><strong>This means:</strong> React is computing new values but not re-rendering the DOM</p>
+      <p><strong>Solution:</strong></p>
+      <ul>
+        <li>Check if <code>displayPrice</code> value is actually changing in the logs</li>
+        <li>Verify that the <code>{formatPrice(price)}</code> JSX is using the correct variable</li>
+        <li>Try force-refreshing the component with DevTools React profiler</li>
+      </ul>
+
+      <h3>Scenario 5: Logs show same price value</h3>
+      <div class="status warning">DATA ISSUE</div>
+      <p>Seeing: <code>displayPrice: 0.123456</code> over and over with same value</p>
+      <p><strong>This means:</strong> Backend is sending updates but price isn't actually changing</p>
+      <p><strong>Solution:</strong> Check backend Jupiter service to ensure it's fetching fresh prices</p>
+    </div>
+
+    <div class="section">
+      <h2>🧪 Manual Tests</h2>
+      
+      <h3>Test 1: Check updateCount in real-time</h3>
+      <div class="log">
+        <code>
+          // In browser console, run:<br>
+          setInterval(() => {<br>
+          &nbsp;&nbsp;const context = window.__REACT_DEVTOOLS_GLOBAL_HOOK__?.renderers?.get(1)?._currentRoot?._debugRootType?.type?.contextType?.Provider?._context?._currentValue;<br>
+          &nbsp;&nbsp;if (context) console.log('updateCount:', context.updateCount);<br>
+          }, 1000);
+        </code>
+      </div>
+
+      <h3>Test 2: Manually trigger price update</h3>
+      <div class="log">
+        <code>
+          // In browser console, run:<br>
+          const ws = new WebSocket('ws://localhost:3001/ws');<br>
+          ws.onopen = () => console.log('Test WS connected');<br>
+          ws.onmessage = (e) => console.log('Test WS message:', JSON.parse(e.data));
+        </code>
+      </div>
+
+      <h3>Test 3: Force React re-render</h3>
+      <div class="log">
+        <code>
+          // In browser console, run:<br>
+          window.dispatchEvent(new Event('resize'));
+        </code>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>✅ Success Criteria</h2>
+      <p>The fix is working when:</p>
+      <ul class="checklist">
+        <li>All 4 log types appear in sequence (WebSocket → Context → CoinCard → Effect)</li>
+        <li>Logs appear every 10 seconds (Jupiter update interval)</li>
+        <li>The <code>displayPrice</code> value changes in the logs</li>
+        <li>The price on the screen updates without page refresh</li>
+        <li>The Jupiter live indicator (🪐) is visible on coins with live pricing</li>
+      </ul>
+    </div>
+  </div>
+
+  <script>
+    // Auto-check if servers are running
+    setTimeout(() => {
+      fetch('http://localhost:3001/api/health')
+        .then(() => document.getElementById('check-backend').classList.add('done'))
+        .catch(() => {});
+      
+      if (window.location.port === '5173' || window.location.port === '5174') {
+        document.getElementById('check-frontend').classList.add('done');
+        document.getElementById('check-page').classList.add('done');
+      }
+      
+      if (window.navigator.userAgent.includes('DevTools')) {
+        document.getElementById('check-browser').classList.add('done');
+      }
+    }, 1000);
+  </script>
+</body>
+</html>

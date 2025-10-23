@@ -142,8 +142,10 @@ class OnDemandEnrichmentService {
       } else {
         console.warn(`⚠️ Rugcheck data not available for ${coin.symbol}:`, 
           rugResult.status === 'rejected' ? rugResult.reason?.message : 'No data returned');
-        // Set rugcheckVerified to false when rugcheck fails
+        // Set rugcheckVerified to false when rugcheck fails with explicit fields
         enrichedData.rugcheckVerified = false;
+        enrichedData.rugcheckProcessedAt = new Date().toISOString();
+        enrichedData.rugcheckError = rugResult.status === 'rejected' ? rugResult.reason?.message : 'No data';
       }
 
       // ✅ Apply Jupiter Ultra data for holderCount (same as search)
@@ -311,16 +313,28 @@ class OnDemandEnrichmentService {
    */
   async fetchRugcheck(mintAddress) {
     try {
+      // Try primary endpoint first with timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      
       let response = await fetch(`${this.apis.rugcheck}/tokens/${mintAddress}/report`, {
         headers: { 'Accept': 'application/json' },
-        timeout: 3000
+        signal: controller.signal
       });
 
+      clearTimeout(timeoutId);
+
       if (!response.ok) {
+        // Fallback to alternative endpoint
+        const controller2 = new AbortController();
+        const timeoutId2 = setTimeout(() => controller2.abort(), 3000);
+        
         response = await fetch(`${this.apis.rugcheck}/tokens/${mintAddress}`, {
           headers: { 'Accept': 'application/json' },
-          timeout: 3000
+          signal: controller2.signal
         });
+        
+        clearTimeout(timeoutId2);
       }
 
       if (response.status === 429) {
@@ -334,7 +348,11 @@ class OnDemandEnrichmentService {
 
       return await response.json();
     } catch (error) {
-      console.warn(`⚠️ Rugcheck failed for ${mintAddress}:`, error.message);
+      if (error.name === 'AbortError') {
+        console.warn(`⏰ Rugcheck timeout for ${mintAddress}`);
+      } else {
+        console.warn(`⚠️ Rugcheck failed for ${mintAddress}:`, error.message);
+      }
       return null;
     }
   }
@@ -480,6 +498,8 @@ class OnDemandEnrichmentService {
       liquidity_usd: parseFloat(pair.liquidity?.usd || '0'),
       volume_24h_usd: parseFloat(pair.volume?.h24 || '0'),
       priceChange24h: parseFloat(pair.priceChange?.h24 || '0'),
+      change_24h: parseFloat(pair.priceChange?.h24 || '0'), // ✅ Frontend expects this field
+      change24h: parseFloat(pair.priceChange?.h24 || '0'),  // ✅ Alternative field name
       fdv: parseFloat(pair.fdv || '0'),
       marketCap: parseFloat(pair.marketCap || '0'),
       
