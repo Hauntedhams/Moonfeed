@@ -667,58 +667,6 @@ const ModernTokenScroller = ({
     }
   }, []);
 
-  // Handle scroll events for snap scrolling - optimized to prevent white flash
-  const handleScroll = useCallback(() => {
-    // Don't handle scroll if a coin is expanded
-    if (isScrollLocked.current || expandedCoin) return;
-    
-    if (!scrollerRef.current || coins.length === 0) return;
-    
-    const container = scrollerRef.current;
-    
-    // 🎯 MOBILE FIX V3: Use DOM-based nearest card detection instead of math
-    // This prevents cumulative rounding errors that cause index drift
-    const findNearestCardIndexDuringScroll = () => {
-      const scrollTop = container.scrollTop;
-      const cards = container.querySelectorAll('.modern-coin-slide');
-      
-      let nearestIndex = 0;
-      let minDistance = Infinity;
-      
-      cards.forEach((card, index) => {
-        const distance = Math.abs(card.offsetTop - scrollTop);
-        if (distance < minDistance) {
-          minDistance = distance;
-          nearestIndex = index;
-        }
-      });
-      
-      return nearestIndex;
-    };
-    
-    const newIndex = findNearestCardIndexDuringScroll();
-    
-    // Clamp to valid range
-    const clampedIndex = Math.max(0, Math.min(newIndex, coins.length - 1));
-    
-    // Trigger enrichment for the currently viewed coin if not already enriched
-    // Only do enrichment logic here, index update is handled elsewhere
-    if (clampedIndex >= 0 && clampedIndex < coins.length) {
-      const currentCoin = coins[clampedIndex];
-      
-      // ✅ UNIFORM ENRICHMENT: Enable on all devices for consistent Age/Holders display
-      if (currentCoin && !enrichedCoins.has(currentCoin.mintAddress)) {
-        setTimeout(() => {
-          enrichCoins([currentCoin.mintAddress]);
-        }, 100);
-      }
-    }
-  }, [coins, enrichedCoins, enrichCoins, expandedCoin]);
-
-
-
-
-
   // Hybrid scroll handler - USE ACTUAL DOM POSITIONS, NOT MATH (fixes cumulative drift)
   useEffect(() => {
     const container = scrollerRef.current;
@@ -806,13 +754,13 @@ const ModernTokenScroller = ({
       const targetScroll = getCardOffsetTop(nearestIndex);
       const drift = Math.abs(container.scrollTop - targetScroll);
       
-      // 🎯 MOBILE FIX: Lower tolerance to 0.1px for perfect alignment
-      if (drift > 0.1) {
+      // 🎯 MOBILE FIX: Relaxed tolerance (5px) to avoid over-snapping
+      if (drift > 5) {
         console.log(`🎯 Snap correction: drift=${drift.toFixed(1)}px, snapping to card ${nearestIndex + 1} (offsetTop=${targetScroll})`);
         scrollToIndex(nearestIndex, true); // Instant snap
         updateCurrentIndex(); // Update index immediately after snap
       } else if (drift > 0) {
-        // Even sub-pixel drift, just update the index to be safe
+        // Small drift, just update the index without snapping
         updateCurrentIndex();
       }
     };
@@ -821,33 +769,40 @@ const ModernTokenScroller = ({
     const checkScrollStopped = () => {
       const currentScrollTop = container.scrollTop;
       
-      // 🎯 MOBILE FIX: Tighter tolerance (0.1px) for faster detection
-      if (Math.abs(currentScrollTop - lastScrollTop) < 0.1) {
+      // 🎯 MOBILE FIX: Relaxed tolerance (1px) for more natural feel
+      if (Math.abs(currentScrollTop - lastScrollTop) < 1) {
         // Scroll has stopped, apply snap correction
         scrollStopCheckCount++;
-        if (scrollStopCheckCount >= 1) {
-          // 🎯 MOBILE FIX: Snap after just 1 check (30ms) for instant response
+        if (scrollStopCheckCount >= 2) {
+          // 🎯 MOBILE FIX: Snap after 2 checks (200ms total) to avoid fighting with momentum
           snapToNearestCard();
           scrollStopCheckCount = 0;
         } else {
-          // Check again in 30ms (faster than before)
-          scrollEndTimer = setTimeout(checkScrollStopped, 30);
+          // Check again in 100ms
+          scrollEndTimer = setTimeout(checkScrollStopped, 100);
         }
       } else {
         // Still scrolling, reset and check again
         lastScrollTop = currentScrollTop;
         scrollStopCheckCount = 0;
-        scrollEndTimer = setTimeout(checkScrollStopped, 30);
+        scrollEndTimer = setTimeout(checkScrollStopped, 100);
       }
     };
     
     const handleScrollEvent = () => {
-      // 🎯 CRITICAL FIX: Update index during scroll AND on snap
-      // This ensures currentIndex always matches the visible card
+      // 🎯 Update index during scroll for real-time tracking
       updateCurrentIndex();
       
-      // Also update enrichment during scroll
-      handleScroll();
+      // 🎯 Handle enrichment inline (no separate function needed)
+      const newIndex = findNearestCardIndex();
+      if (newIndex >= 0 && newIndex < coins.length) {
+        const currentCoin = coins[newIndex];
+        if (currentCoin && !enrichedCoins.has(currentCoin.mintAddress)) {
+          setTimeout(() => {
+            enrichCoins([currentCoin.mintAddress]);
+          }, 100);
+        }
+      }
       
       // Clear previous timer
       if (scrollEndTimer) clearTimeout(scrollEndTimer);
@@ -855,7 +810,7 @@ const ModernTokenScroller = ({
       // Start checking if scroll has stopped
       lastScrollTop = container.scrollTop;
       scrollStopCheckCount = 0;
-      scrollEndTimer = setTimeout(checkScrollStopped, 30); // 🎯 Faster initial check
+      scrollEndTimer = setTimeout(checkScrollStopped, 100);
     };
     
     // Mobile: swipe-based navigation
@@ -912,7 +867,7 @@ const ModernTokenScroller = ({
       }
       if (scrollEndTimer) clearTimeout(scrollEndTimer);
     };
-  }, [handleScroll, expandedCoin, currentIndex, coins, enrichedCoins, onCurrentCoinChange]);
+  }, [expandedCoin, currentIndex, coins, enrichedCoins, enrichCoins, onCurrentCoinChange]);
   
   // Handle favorite toggle
   const handleFavoriteToggle = (coin) => {

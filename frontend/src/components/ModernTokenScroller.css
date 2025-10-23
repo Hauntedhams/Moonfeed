@@ -121,8 +121,8 @@
   .modern-scroller-container {
     scroll-snap-type: none;
     -webkit-scroll-snap-type: none;
-    /* Keep smooth for user swipes, but JS will override for snap correction */
-    scroll-behavior: smooth;
+    /* 🎯 CRITICAL: Use 'auto' to let JS control scrolling, 'smooth' conflicts with instant snap */
+    scroll-behavior: auto;
   }
 }
 
