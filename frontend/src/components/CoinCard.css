@@ -1302,6 +1302,7 @@
 .transactions-section-header {
   font-size: 0.7rem;
   font-weight: 600;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.3px;
   color: #667eea;
@@ -1319,6 +1320,7 @@
   gap: 4px;
   font-size: 0.7rem;
   font-weight: 600;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   background: linear-gradient(135deg, #10b981 0%, #059669 100%);
   color: white;
   padding: 4px 10px;
@@ -1399,7 +1401,9 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 13px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 .status-indicator {
@@ -1419,7 +1423,9 @@
 
 .tx-count {
   color: rgba(0, 0, 0, 0.6);
-  font-size: 12px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 .close-transactions-btn {
@@ -1428,8 +1434,9 @@
   border-radius: 8px;
   padding: 6px 12px;
   color: #ef4444;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 0.7rem;
+  font-weight: 700;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   cursor: pointer;
   transition: all 0.2s ease;
   display: flex;
@@ -1475,6 +1482,7 @@
   text-align: center;
   padding: 60px 20px;
   color: rgba(0, 0, 0, 0.5);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 .empty-icon {
@@ -1483,15 +1491,18 @@
 }
 
 .empty-text {
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 0.85rem;
+  font-weight: 700;
   color: rgba(0, 0, 0, 0.7);
   margin-bottom: 8px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 .empty-subtext {
-  font-size: 13px;
+  font-size: 0.7rem;
+  font-weight: 600;
   color: rgba(0, 0, 0, 0.5);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 /* Transaction item - horizontal layout: wallet | type | error (if any) | time */
@@ -1520,8 +1531,9 @@
 
 /* Wallet column (far left) */
 .tx-wallet {
-  font-family: 'Monaco', 'Courier New', monospace;
-  font-size: 12px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 0.7rem;
+  font-weight: 600;
   color: rgba(0, 0, 0, 0.7);
   min-width: 0;
 }
@@ -1533,28 +1545,8 @@
 }
 
 .tx-wallet span[style*="cursor: pointer"]:hover {
-  background: rgba(79, 195, 247, 0.1);
+  background: rgba(79, 195, 247, 0.2);
   color: #4FC3F7 !important;
-  text-decoration: underline !important;
-}
-
-.tx-link {
-  color: #667eea;
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  transition: all 0.2s ease;
-}
-
-.tx-link:hover {
-  color: #764ba2;
-  text-decoration: underline;
-}
-
-.external-icon {
-  font-size: 10px;
-  opacity: 0.6;
 }
 
 /* Type column */
@@ -1604,11 +1596,30 @@
 }
 
 .tx-time {
-  font-size: 12px;
-  font-family: 'Monaco', 'Courier New', monospace;
+  font-size: 0.7rem;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   color: rgba(0, 0, 0, 0.5);
-  font-weight: 500;
+  font-weight: 600;
   white-space: nowrap;
+}
+
+.tx-link {
+  color: #667eea;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s ease;
+}
+
+.tx-link:hover {
+  color: #764ba2;
+  text-decoration: underline;
+}
+
+.external-icon {
+  font-size: 10px;
+  opacity: 0.6;
 }
 
 .tx-error {
@@ -1617,8 +1628,38 @@
   border: 1px solid rgba(239, 68, 68, 0.2);
   border-radius: 8px;
   color: #ef4444;
-  font-size: 13px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   margin-bottom: 12px;
+}
+
+/* Dark mode for transaction time text */
+.dark-mode .tx-time {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* Dark mode for transaction count */
+.dark-mode .tx-count {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* Dark mode for transaction item hover */
+.dark-mode .transaction-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* Dark mode for empty state text */
+.dark-mode .empty-text {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.dark-mode .empty-subtext {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.dark-mode .transactions-empty {
+  color: rgba(255, 255, 255, 0.6);
 }
 
 /* Slide in animation for new transactions */
@@ -2877,6 +2918,48 @@
 .dark-mode .transactions-section-header {
   color: var(--text-primary);
   border-bottom-color: var(--border-color);
+}
+
+/* Dark mode for transaction wallet text */
+.dark-mode .tx-wallet {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.dark-mode .tx-wallet span[style*="cursor: pointer"] {
+  color: #4FC3F7 !important;
+}
+
+.dark-mode .tx-wallet span[style*="cursor: pointer"]:hover {
+  background: rgba(79, 195, 247, 0.2);
+  color: #4FC3F7 !important;
+}
+
+/* Dark mode for transaction time text */
+.dark-mode .tx-time {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* Dark mode for transaction count */
+.dark-mode .tx-count {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* Dark mode for transaction item hover */
+.dark-mode .transaction-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* Dark mode for empty state text */
+.dark-mode .empty-text {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.dark-mode .empty-subtext {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.dark-mode .transactions-empty {
+  color: rgba(255, 255, 255, 0.6);
 }
 
 /* Dark mode scrollbar for info-layer-content */

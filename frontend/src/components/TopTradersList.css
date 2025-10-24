@@ -16,8 +16,9 @@
 .top-traders-header h3 {
   margin: 0;
   color: rgba(0, 0, 0, 0.7);
-  font-size: 14px;
+  font-size: 0.7rem;
   font-weight: 600;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 .refresh-traders-btn {
@@ -46,7 +47,9 @@
   text-align: center;
   padding: 40px 20px;
   color: rgba(0, 0, 0, 0.5);
-  font-size: 14px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 /* Table structure - like Market Metrics info rows */
@@ -70,8 +73,9 @@
   border-bottom: 2px solid rgba(0, 0, 0, 0.1);
   margin-bottom: 4px;
   color: rgba(0, 0, 0, 0.6);
-  font-size: 10px;
-  font-weight: 700;
+  font-size: 0.7rem;
+  font-weight: 600;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.3px;
 }
@@ -145,18 +149,18 @@
 /* Column 1: Rank (smallest) */
 .col-rank {
   color: rgba(0, 0, 0, 0.5);
-  font-size: 12px;
-  font-family: 'Monaco', 'Courier New', monospace;
-  font-weight: 500;
+  font-size: 0.7rem;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-weight: 600;
   text-align: left;
 }
 
 /* Column 2: Wallet */
 .col-wallet {
   color: rgba(0, 0, 0, 0.9);
-  font-size: 12px;
-  font-family: 'Monaco', 'Courier New', monospace;
-  font-weight: 500;
+  font-size: 0.7rem;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -182,26 +186,26 @@
 /* Column 3: Buy */
 .col-buy {
   color: #22c55e;
-  font-size: 12px;
-  font-family: 'Monaco', 'Courier New', monospace;
-  font-weight: 500;
+  font-size: 0.7rem;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-weight: 700;
   text-align: right;
 }
 
 /* Column 4: Sell */
 .col-sell {
   color: #ef4444;
-  font-size: 12px;
-  font-family: 'Monaco', 'Courier New', monospace;
-  font-weight: 500;
+  font-size: 0.7rem;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-weight: 700;
   text-align: right;
 }
 
 /* Column 5: PnL (far right) */
 .col-pnl {
-  font-size: 12px;
-  font-family: 'Monaco', 'Courier New', monospace;
-  font-weight: 500;
+  font-size: 0.7rem;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-weight: 700;
   text-align: right;
 }
 
