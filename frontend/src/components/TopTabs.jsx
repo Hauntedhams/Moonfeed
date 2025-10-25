@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './TopTabs.css';
 
-const TopTabs = ({ activeFilter, onFilterChange, showFilterButton = false, onFilterClick, isFilterActive = false, onActiveTabClick, hasCustomFilters = false }) => {
+const TopTabs = ({ activeFilter, onFilterChange, showFilterButton = false, onFilterClick, isFilterActive = false, onActiveTabClick, hasCustomFilters = false, customTabs = null }) => {
   const [touchStartX, setTouchStartX] = useState(0);
   const [touchEndX, setTouchEndX] = useState(0);
   const containerRef = useRef(null);
@@ -17,8 +17,13 @@ const TopTabs = ({ activeFilter, onFilterChange, showFilterButton = false, onFil
   // 🆕 Custom tab (only shown when filters are active)
   const customTab = { id: 'custom', label: 'Custom', icon: 'filter' };
 
-  // 🆕 Conditionally include Custom tab only if filters are active
-  const tabs = hasCustomFilters ? [...baseTabs, customTab] : baseTabs;
+  // 🆕 Use customTabs if provided, otherwise use default tabs
+  let tabs;
+  if (customTabs) {
+    tabs = customTabs;
+  } else {
+    tabs = hasCustomFilters ? [...baseTabs, customTab] : baseTabs;
+  }
 
   const currentIndex = tabs.findIndex(tab => tab.id === activeFilter);
 
@@ -212,10 +217,13 @@ const TopTabs = ({ activeFilter, onFilterChange, showFilterButton = false, onFil
         const currentIndex = tabs.findIndex(tab => tab.id === activeFilter);
         const targetIndex = distanceX > 0 ? currentIndex + 1 : currentIndex - 1;
         
-        // Allow swiping to trending, new, dextrending, graduating, and custom tabs
-        if (targetIndex >= 0 && targetIndex < tabs.length && 
-            (tabs[targetIndex].id === 'trending' || tabs[targetIndex].id === 'new' || 
-             tabs[targetIndex].id === 'dextrending' || tabs[targetIndex].id === 'graduating' || tabs[targetIndex].id === 'custom')) {
+        // Allow swiping to all tabs if customTabs is provided, otherwise check specific tabs
+        const isValidTarget = customTabs || 
+          (targetIndex >= 0 && targetIndex < tabs.length && 
+           (tabs[targetIndex].id === 'trending' || tabs[targetIndex].id === 'new' || 
+            tabs[targetIndex].id === 'dextrending' || tabs[targetIndex].id === 'graduating' || tabs[targetIndex].id === 'custom'));
+            
+        if (targetIndex >= 0 && targetIndex < tabs.length && isValidTarget) {
           onFilterChange({ type: tabs[targetIndex].id });
         }
       }
@@ -239,8 +247,35 @@ const TopTabs = ({ activeFilter, onFilterChange, showFilterButton = false, onFil
 
   return (
     <div className="top-tabs-container" ref={containerRef}>
-      <div className="top-tabs-wrapper">
-        {reorderedTabs.map((tab, index) => {
+      <div className={`top-tabs-wrapper ${customTabs ? 'simple-layout' : ''}`}>
+        {customTabs ? (
+          // Simple non-rotating layout for custom tabs (e.g., Favorites page)
+          tabs.map((tab) => {
+            const isActive = activeFilter === tab.id;
+            
+            return (
+              <button
+                key={tab.id}
+                className={`top-tab ${isActive ? 'active' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onFilterChange({ type: tab.id });
+                }}
+                style={{
+                  opacity: 1,
+                  zIndex: 10,
+                  transform: 'scale(1)',
+                  cursor: 'pointer',
+                  touchAction: 'none'
+                }}
+              >
+                <span className="tab-label">{tab.label}</span>
+              </button>
+            );
+          })
+        ) : (
+          // Rotating carousel layout for homepage tabs
+          reorderedTabs.map((tab, index) => {
           const isActive = activeFilter === tab.id;
           const isCenter = tab.position === 'center';
           
@@ -261,9 +296,9 @@ const TopTabs = ({ activeFilter, onFilterChange, showFilterButton = false, onFil
             scale = 0.9;
           }
           
-          const canClick = tab.id === 'trending' || tab.id === 'new' || tab.id === 'dextrending' || (tab.id === 'custom' && hasCustomFilters);
+          const canClick = customTabs ? true : (tab.id === 'trending' || tab.id === 'new' || tab.id === 'dextrending' || (tab.id === 'custom' && hasCustomFilters));
           const showClickHint = isActive && isCenter && canClick && onActiveTabClick;
-          const isDisabled = tab.id === 'custom' && !hasCustomFilters;
+          const isDisabled = !customTabs && tab.id === 'custom' && !hasCustomFilters;
           
           return (
             <button
@@ -272,8 +307,10 @@ const TopTabs = ({ activeFilter, onFilterChange, showFilterButton = false, onFil
               onClick={(e) => {
                 e.stopPropagation(); // Prevent event bubbling
                 
-                // Allow trending, new, dextrending, and graduating tabs always; custom only when filters are applied
-                if (tab.id === 'trending' || tab.id === 'new' || tab.id === 'dextrending' || tab.id === 'graduating' || (tab.id === 'custom' && hasCustomFilters)) {
+                // Allow all tabs for customTabs, otherwise check specific tabs
+                const isAllowed = customTabs || tab.id === 'trending' || tab.id === 'new' || tab.id === 'dextrending' || tab.id === 'graduating' || (tab.id === 'custom' && hasCustomFilters);
+                
+                if (isAllowed) {
                   // If clicking on the already active tab, show the coin list modal
                   if (isActive && onActiveTabClick) {
                     onActiveTabClick(tab.id);
@@ -290,21 +327,22 @@ const TopTabs = ({ activeFilter, onFilterChange, showFilterButton = false, onFil
                 opacity: isDisabled ? 0.4 : opacity,
                 zIndex,
                 transform: `scale(${scale})`,
-                cursor: (tab.id === 'trending' || tab.id === 'new' || tab.id === 'dextrending' || tab.id === 'graduating' || (tab.id === 'custom' && hasCustomFilters)) ? 'pointer' : 'not-allowed',
+                cursor: (customTabs || tab.id === 'trending' || tab.id === 'new' || tab.id === 'dextrending' || tab.id === 'graduating' || (tab.id === 'custom' && hasCustomFilters)) ? 'pointer' : 'not-allowed',
                 touchAction: 'none' // Prevent default touch behaviors
               }}
             >
               <span className="tab-label" style={{
-                opacity: (tab.id === 'trending' || tab.id === 'new' || tab.id === 'dextrending' || tab.id === 'graduating' || (tab.id === 'custom' && hasCustomFilters))
+                opacity: (customTabs || tab.id === 'trending' || tab.id === 'new' || tab.id === 'dextrending' || tab.id === 'graduating' || (tab.id === 'custom' && hasCustomFilters))
                   ? (isActive ? 1 : 0.8)
                   : 0.5,
-                color: (tab.id === 'trending' || tab.id === 'new' || tab.id === 'dextrending' || tab.id === 'graduating' || (tab.id === 'custom' && hasCustomFilters))
+                color: (customTabs || tab.id === 'trending' || tab.id === 'new' || tab.id === 'dextrending' || tab.id === 'graduating' || (tab.id === 'custom' && hasCustomFilters))
                   ? (isActive ? 'rgba(255, 255, 255, 1)' : 'rgba(255, 255, 255, 0.8)')
                   : 'rgba(255, 255, 255, 0.5)'
               }}>{tab.label}</span>
             </button>
           );
-        })}
+        })
+        )}
       </div>
       
       {/* Filter Button - positioned absolutely in top right */}

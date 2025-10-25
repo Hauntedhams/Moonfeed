@@ -1,0 +1,320 @@
+/* Interactive Tutorial Overlay */
+.interactive-tutorial-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3000;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+/* Dark backdrop */
+.tutorial-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Highlight for targeted elements */
+.tutorial-highlight {
+  position: absolute;
+  border: 3px solid #4a90e2;
+  border-radius: 12px;
+  box-shadow: 
+    0 0 0 4px rgba(74, 144, 226, 0.3),
+    0 0 20px rgba(74, 144, 226, 0.5),
+    inset 0 0 20px rgba(74, 144, 226, 0.1);
+  pointer-events: none;
+  animation: pulse 2s ease-in-out infinite;
+  z-index: 3001;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    box-shadow: 
+      0 0 0 4px rgba(74, 144, 226, 0.3),
+      0 0 20px rgba(74, 144, 226, 0.5),
+      inset 0 0 20px rgba(74, 144, 226, 0.1);
+  }
+  50% {
+    box-shadow: 
+      0 0 0 8px rgba(74, 144, 226, 0.2),
+      0 0 30px rgba(74, 144, 226, 0.7),
+      inset 0 0 30px rgba(74, 144, 226, 0.2);
+  }
+}
+
+/* Arrow pointing to element */
+.tutorial-arrow {
+  position: absolute;
+  pointer-events: none;
+  z-index: 3002;
+  transform: translate(-50%, -50%);
+  animation: bounce 1.5s ease-in-out infinite;
+}
+
+@keyframes bounce {
+  0%, 100% {
+    transform: translate(-50%, -50%) translateY(0);
+  }
+  50% {
+    transform: translate(-50%, -50%) translateY(-10px);
+  }
+}
+
+.arrow-pointer svg {
+  filter: drop-shadow(0 2px 8px rgba(74, 144, 226, 0.8));
+}
+
+/* Tutorial popup */
+.tutorial-popup {
+  position: absolute;
+  z-index: 3003;
+  pointer-events: none;
+  animation: slideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Center position for welcome/complete */
+.tutorial-popup:not(.top):not(.bottom):not(.left):not(.right) {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) !important;
+}
+
+/* Position-based transforms */
+.tutorial-popup.top {
+  transform: translate(-50%, -100%) translateY(-10px);
+}
+
+.tutorial-popup.bottom {
+  transform: translate(-50%, 10px);
+}
+
+.tutorial-popup.left {
+  transform: translate(-100%, -50%) translateX(-10px);
+}
+
+.tutorial-popup.right {
+  transform: translate(10px, -50%);
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+/* Popup content */
+.tutorial-popup-content {
+  background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+  border-radius: 16px;
+  border: 2px solid rgba(74, 144, 226, 0.5);
+  padding: 24px;
+  max-width: 340px;
+  box-shadow: 
+    0 20px 40px rgba(0, 0, 0, 0.7),
+    0 0 20px rgba(74, 144, 226, 0.3);
+  pointer-events: auto;
+}
+
+.tutorial-popup-content h3 {
+  margin: 0 0 12px 0;
+  color: #fff;
+  font-size: 20px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #4a90e2 0%, #60c0ff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.tutorial-popup-content p {
+  margin: 0 0 20px 0;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* Progress indicator */
+.tutorial-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.progress-bar {
+  flex: 1;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4a90e2 0%, #60c0ff 100%);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.progress-text {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Navigation hints */
+.tutorial-nav-hints {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.nav-hint {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  font-weight: 500;
+}
+
+.nav-hint.left {
+  text-align: left;
+}
+
+.nav-hint.right {
+  text-align: right;
+}
+
+/* Close button */
+.tutorial-close-button {
+  width: 100%;
+  padding: 12px 24px;
+  background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
+  border: 1px solid rgba(74, 144, 226, 0.3);
+  border-radius: 10px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  pointer-events: auto;
+}
+
+.tutorial-close-button:hover {
+  background: linear-gradient(135deg, #357abd 0%, #2868a3 100%);
+  border-color: rgba(74, 144, 226, 0.5);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(74, 144, 226, 0.4);
+}
+
+.tutorial-close-button:active {
+  transform: translateY(0);
+}
+
+/* Skip button */
+.tutorial-skip-button {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  padding: 6px 12px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  pointer-events: auto;
+}
+
+.tutorial-skip-button:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #fff;
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .tutorial-popup-content {
+    max-width: 280px;
+    padding: 20px;
+  }
+
+  .tutorial-popup-content h3 {
+    font-size: 18px;
+  }
+
+  .tutorial-popup-content p {
+    font-size: 13px;
+  }
+
+  .arrow-pointer svg {
+    width: 32px;
+    height: 32px;
+  }
+}
+
+@media (max-width: 480px) {
+  .tutorial-popup-content {
+    max-width: calc(100vw - 40px);
+    padding: 18px;
+  }
+
+  .tutorial-popup-content h3 {
+    font-size: 16px;
+  }
+
+  .tutorial-popup-content p {
+    font-size: 12px;
+  }
+
+  .nav-hint {
+    font-size: 10px;
+  }
+}
+
+/* Animations for tutorial transitions */
+.tutorial-popup.transitioning {
+  animation: popTransition 0.3s ease-out;
+}
+
+@keyframes popTransition {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: translate(-50%, -50%) scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}

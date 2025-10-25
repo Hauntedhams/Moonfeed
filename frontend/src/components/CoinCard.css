@@ -240,52 +240,56 @@
   margin-left: 8px;
 }
 
-/* Banner Favorites Button */
-.banner-favorites-button {
-  background: none;
-  border: none;
-  color: rgba(255, 255, 255, 0.7);
+/* Banner Follow Button */
+.banner-follow-button {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1.5px solid rgba(255, 255, 255, 0.3);
+  color: rgba(255, 255, 255, 0.9);
   cursor: pointer;
-  padding: 4px;
-  border-radius: 6px;
+  padding: 6px 14px;
+  border-radius: 20px;
   transition: all 0.2s ease;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  font-size: 0.8rem;
+  font-weight: 600;
   flex-shrink: 0;
+  white-space: nowrap;
+  text-transform: capitalize;
+  letter-spacing: 0.3px;
 }
 
-.banner-favorites-button:hover {
-  color: rgba(255, 255, 255, 1);
-  background: rgba(255, 255, 255, 0.15);
-  transform: scale(1.1);
-}
-
-.banner-favorites-button.favorited {
-  color: rgba(255, 255, 255, 1);
-}
-
-.banner-favorites-button.favorited:hover {
-  color: rgba(255, 255, 255, 1);
+.banner-follow-button:hover {
   background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.5);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
-.banner-favorites-button svg {
-  width: 16px;
-  height: 16px;
-  stroke-width: 2;
+.banner-follow-button.following {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(255, 255, 255, 0.95);
+  color: rgba(0, 0, 0, 0.85);
 }
 
-/* Adjust stroke width for unfavorited state to make outline more visible */
-.banner-favorites-button:not(.favorited) svg {
-  stroke-width: 2.5;
+.banner-follow-button.following:hover {
+  background: rgba(255, 80, 80, 0.9);
+  border-color: rgba(255, 80, 80, 0.9);
+  color: white;
 }
 
-/* Favorited state uses filled star with thinner stroke */
-.banner-favorites-button.favorited svg {
-  stroke-width: 1.5;
+.banner-follow-button.following:hover::after {
+  content: 'Unfollow';
+  position: absolute;
+}
+
+.banner-follow-button.following:hover {
+  color: transparent;
+}
+
+.banner-follow-button.following:hover::after {
+  color: white;
 }
 
 /* Inline description styling - single line with ellipsis */

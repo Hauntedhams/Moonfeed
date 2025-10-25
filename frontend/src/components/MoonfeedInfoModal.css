@@ -106,10 +106,17 @@
 /* Modal Header */
 .moonfeed-info-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  padding: 24px 24px 16px 24px;
+  padding: 24px 24px 20px 24px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.moonfeed-header-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
 }
 
 .moonfeed-logo-header {
@@ -119,8 +126,18 @@
 }
 
 .moonfeed-logo-header .moonfeed-logo {
-  font-size: 24px;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  object-fit: cover;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+}
+
+.moonfeed-logo-header .moonfeed-logo:not(img) {
+  font-size: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .moonfeed-info-header h2 {
@@ -160,32 +177,33 @@
   transform: translateY(0);
 }
 
-/* Header Social Icons */
+/* Header Social Icons - Now under the title */
 .header-social-links {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-left: 12px;
+  margin-left: 0;
+  padding-left: 54px; /* Align with Moonfeed text (42px logo + 12px gap) */
 }
 
 .header-social-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
   text-decoration: none;
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(255, 255, 255, 0.7);
   transition: all 0.2s ease;
   cursor: pointer;
 }
 
 .header-social-icon svg {
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
   fill: currentColor;
   transition: all 0.2s ease;
 }
@@ -437,22 +455,6 @@
 
 .got-it-button:active {
   transform: translateY(0);
-}
-
-/* Header Social Section */
-.moonfeed-social-section {
-  padding: 16px 24px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  display: flex;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.02);
-}
-
-.moonfeed-social-section .header-social-links {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-left: 0;
 }
 
 /* Custom text selection color */

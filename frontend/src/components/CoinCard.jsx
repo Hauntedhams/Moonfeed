@@ -1078,24 +1078,6 @@ const CoinCard = memo(({
               <p className="banner-coin-symbol">
                 ${coin.symbol || coin.ticker || 'N/A'}
               </p>
-              <button 
-                className={`banner-favorites-button ${isFavorite ? 'favorited' : ''}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onFavoriteToggle?.();
-                }}
-                title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-              >
-                <svg width="18" height="18" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path 
-                    d="M10 3L12.4721 7.94454L17.9445 8.52786L13.9722 12.0555L15.2361 17.4721L10 14.5L4.76393 17.4721L6.02778 12.0555L2.05548 8.52786L7.52786 7.94454L10 3Z" 
-                    stroke="currentColor" 
-                    strokeWidth="1.5" 
-                    strokeLinejoin="round"
-                    fill={isFavorite ? 'currentColor' : 'none'}
-                  />
-                </svg>
-              </button>
               {coin.description && (
                 <>
                   <span className="banner-coin-description-inline">
@@ -1239,6 +1221,16 @@ const CoinCard = memo(({
                       </svg>
                     </a>
                   )}
+                  <button 
+                    className={`banner-follow-button ${isFavorite ? 'following' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onFavoriteToggle?.();
+                    }}
+                    title={isFavorite ? 'Click to unfollow' : 'Click to follow'}
+                  >
+                    {isFavorite ? 'Following' : 'Follow'}
+                  </button>
                 </div>
               </div>
             </div>
