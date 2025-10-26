@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import './BottomNavBar.css';
 
-function BottomNavBar({ activeTab, setActiveTab, onSearchClick }) {
+function BottomNavBar({ activeTab, setActiveTab, onSearchClick, onOrdersClick }) {
 
   return (
     <nav className="bottom-nav">
@@ -12,16 +12,20 @@ function BottomNavBar({ activeTab, setActiveTab, onSearchClick }) {
         </span>
         <span className="nav-label">Home</span>
       </button>
-      {/* Search button */}
-      <button className="nav-btn" onClick={onSearchClick} title="Search coin by address">
+      {/* Orders button - View active limit orders */}
+      <button 
+        className={`nav-btn${activeTab === 'orders' ? ' active' : ''}`} 
+        onClick={onOrdersClick || (() => setActiveTab('profile'))}
+        title="View your active limit orders"
+      >
         <span className="nav-icon">
-          {/* Search icon */}
+          {/* Orders/List icon */}
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="1.5"/>
-            <path d="m21 21-4.35-4.35" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M9 12h6m-6 4h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </span>
-        <span className="nav-label">Search</span>
+        <span className="nav-label">Orders</span>
       </button>
       <button className={`nav-btn nav-btn-trade${activeTab === 'trade' ? ' active' : ''}`} onClick={() => setActiveTab('trade')}>
         <span className="nav-icon">

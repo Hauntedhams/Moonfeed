@@ -17,7 +17,8 @@ const ModernTokenScroller = ({
   advancedFilters = null, // Add advanced filters prop
   // New props for filter handling
   onAdvancedFilter = null,
-  isAdvancedFilterActive = false
+  isAdvancedFilterActive = false,
+  onSearchClick = null // Add search click handler
 }) => {
   const [coins, setCoins] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -29,7 +30,7 @@ const ModernTokenScroller = ({
   const [isBackendLoading, setIsBackendLoading] = useState(false); // Track backend loading state
   
   // Virtual scrolling DISABLED - was causing blank UI issues
-  // const [visibleRange, setVisibleRange] = useState({ start: 0, end: 5 }); // Start with small range
+  // Render distance optimized: Mobile ±2, Desktop ±3
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   
   const scrollerRef = useRef(null);
@@ -38,30 +39,6 @@ const ModernTokenScroller = ({
   
   // API base configuration
   const API_BASE = API_CONFIG.COINS_API;
-
-  // Virtual scrolling DISABLED - rendering all coins now
-  /*
-  const calculateVisibleRange = useCallback((index, totalCoins) => {
-    const isMobile = window.innerWidth < 768;
-    const buffer = isMobile ? 2 : 3; // Smaller buffer on mobile to save memory
-    
-    const start = Math.max(0, index - buffer);
-    const end = Math.min(totalCoins - 1, index + buffer);
-    
-    console.log(`📊 Virtual scrolling: Index ${index}, rendering ${start}-${end} (${end - start + 1} cards)`);
-    return { start, end };
-  }, []);
-  */
-
-  // Virtual scrolling stats DISABLED - not using virtual scrolling anymore
-  /*
-  const getVirtualScrollStats = useCallback(() => {
-    const rendered = visibleRange.end - visibleRange.start + 1;
-    const total = coins.length;
-    const percentage = total > 0 ? ((rendered / total) * 100).toFixed(1) : 0;
-    return { rendered, total, percentage };
-  }, [coins.length, visibleRange]);
-  */
 
   // Update mobile detection on window resize
   useEffect(() => {
@@ -667,33 +644,18 @@ const ModernTokenScroller = ({
     }
   }, []);
 
-  // Hybrid scroll handler - USE ACTUAL DOM POSITIONS, NOT MATH (fixes cumulative drift)
+  // 🚀 OPTIMIZED: Simplified scroll handler with throttling - CSS snap handles alignment
   useEffect(() => {
     const container = scrollerRef.current;
     if (!container) return;
     
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    let scrollEndTimer;
-    let touchStartY = 0;
-    let touchStartTime = 0;
-    let isSwiping = false;
-    let lastScrollTop = 0;
-    let scrollStopCheckCount = 0;
+    let lastUpdateTime = 0;
+    const THROTTLE_MS = 100; // Update index max 10 times per second
     
-    // 🎯 KEY FIX: Get actual DOM element position instead of calculating with math
-    const getCardElement = (index) => {
-      const cards = container.querySelectorAll('.modern-coin-slide');
-      return cards[index];
-    };
-    
-    const getCardOffsetTop = (index) => {
-      const card = getCardElement(index);
-      return card ? card.offsetTop : index * container.clientHeight; // Fallback to math
-    };
-    
+    // Find nearest card based on scroll position
     const findNearestCardIndex = () => {
       const scrollTop = container.scrollTop;
-      const cards = container.querySelectorAll('.modern-coin-slide');
+      const cards = container.querySelectorAll('.modern-coin-slide:not(.modern-coin-placeholder)');
       
       let nearestIndex = 0;
       let minDistance = Infinity;
@@ -702,170 +664,86 @@ const ModernTokenScroller = ({
         const distance = Math.abs(card.offsetTop - scrollTop);
         if (distance < minDistance) {
           minDistance = distance;
-          nearestIndex = index;
+          nearestIndex = parseInt(card.dataset.index) || index;
         }
       });
       
       return nearestIndex;
     };
     
-    const updateCurrentIndex = () => {
-      if (isScrollLocked.current || expandedCoin) return;
-      
-      const newIndex = findNearestCardIndex();
-      
-      // Only update if index changed
-      if (newIndex !== currentIndex && newIndex >= 0 && newIndex < coins.length) {
-        setCurrentIndex(newIndex);
-        
-        const currentCoin = coins[newIndex];
-        const enriched = enrichedCoins.get(currentCoin.mintAddress);
-        const enrichedCoin = enriched ? { ...currentCoin, ...enriched } : currentCoin;
-        onCurrentCoinChange?.(enrichedCoin, newIndex);
-        
-        // Log occasionally
-        if (newIndex % 5 === 0) {
-          console.log(`📜 Viewing coin ${newIndex + 1}/${coins.length} - ${currentCoin?.symbol || 'Unknown'}`);
-        }
-      }
-    };
-    
-    const scrollToIndex = (index, instant = false) => {
-      // 🎯 USE ACTUAL ELEMENT POSITION - no more cumulative math errors!
-      const targetScroll = getCardOffsetTop(index);
-      
-      if (instant) {
-        // Instant snap - no animation, prevents drift
-        container.scrollTop = targetScroll;
-      } else {
-        // Smooth scroll for user swipes
-        container.scrollTo({
-          top: targetScroll,
-          behavior: 'smooth'
-        });
-      }
-    };
-    
-    // Aggressive snap correction: ensure pixel-perfect alignment on EVERY scroll stop
-    const snapToNearestCard = () => {
-      if (isScrollLocked.current || expandedCoin) return;
-      
-      const nearestIndex = findNearestCardIndex();
-      const targetScroll = getCardOffsetTop(nearestIndex);
-      const drift = Math.abs(container.scrollTop - targetScroll);
-      
-      // 🎯 MOBILE FIX: Relaxed tolerance (5px) to avoid over-snapping
-      if (drift > 5) {
-        console.log(`🎯 Snap correction: drift=${drift.toFixed(1)}px, snapping to card ${nearestIndex + 1} (offsetTop=${targetScroll})`);
-        scrollToIndex(nearestIndex, true); // Instant snap
-        updateCurrentIndex(); // Update index immediately after snap
-      } else if (drift > 0) {
-        // Small drift, just update the index without snapping
-        updateCurrentIndex();
-      }
-    };
-    
-    // Check if scroll has truly stopped
-    const checkScrollStopped = () => {
-      const currentScrollTop = container.scrollTop;
-      
-      // 🎯 MOBILE FIX: Relaxed tolerance (1px) for more natural feel
-      if (Math.abs(currentScrollTop - lastScrollTop) < 1) {
-        // Scroll has stopped, apply snap correction
-        scrollStopCheckCount++;
-        if (scrollStopCheckCount >= 2) {
-          // 🎯 MOBILE FIX: Snap after 2 checks (200ms total) to avoid fighting with momentum
-          snapToNearestCard();
-          scrollStopCheckCount = 0;
-        } else {
-          // Check again in 100ms
-          scrollEndTimer = setTimeout(checkScrollStopped, 100);
-        }
-      } else {
-        // Still scrolling, reset and check again
-        lastScrollTop = currentScrollTop;
-        scrollStopCheckCount = 0;
-        scrollEndTimer = setTimeout(checkScrollStopped, 100);
-      }
-    };
+    // Throttled scroll handler with snap correction for light scrolls
+    let scrollEndTimer = null;
+    let lastScrollTop = container.scrollTop;
     
     const handleScrollEvent = () => {
-      // 🎯 Update index during scroll for real-time tracking
-      updateCurrentIndex();
+      if (isScrollLocked.current || expandedCoin) return;
       
-      // 🎯 Handle enrichment inline (no separate function needed)
-      const newIndex = findNearestCardIndex();
-      if (newIndex >= 0 && newIndex < coins.length) {
-        const currentCoin = coins[newIndex];
-        if (currentCoin && !enrichedCoins.has(currentCoin.mintAddress)) {
-          setTimeout(() => {
-            enrichCoins([currentCoin.mintAddress]);
-          }, 100);
-        }
+      const now = Date.now();
+      if (now - lastUpdateTime < THROTTLE_MS) return; // Throttle
+      
+      lastUpdateTime = now;
+      
+      // Clear existing timer
+      if (scrollEndTimer) {
+        clearTimeout(scrollEndTimer);
       }
       
-      // Clear previous timer
-      if (scrollEndTimer) clearTimeout(scrollEndTimer);
-      
-      // Start checking if scroll has stopped
-      lastScrollTop = container.scrollTop;
-      scrollStopCheckCount = 0;
-      scrollEndTimer = setTimeout(checkScrollStopped, 100);
-    };
-    
-    // Mobile: swipe-based navigation
-    const handleTouchStart = (e) => {
-      if (!isMobile || isScrollLocked.current || expandedCoin) return;
-      touchStartY = e.touches[0].clientY;
-      touchStartTime = Date.now();
-      isSwiping = true;
-    };
-    
-    const handleTouchEnd = (e) => {
-      if (!isMobile || !isSwiping || isScrollLocked.current || expandedCoin) return;
-      
-      const touchEndY = e.changedTouches[0].clientY;
-      const touchDuration = Date.now() - touchStartTime;
-      const swipeDistance = touchStartY - touchEndY;
-      const swipeSpeed = Math.abs(swipeDistance) / touchDuration;
-      
-      // Detect intentional swipe (moved >50px OR fast swipe >0.5px/ms)
-      if (Math.abs(swipeDistance) > 50 || swipeSpeed > 0.5) {
-        const currentPage = findNearestCardIndex();
+      // Wait for scroll to settle, then snap if needed
+      scrollEndTimer = setTimeout(() => {
+        const currentScrollTop = container.scrollTop;
         
-        let targetPage = currentPage;
-        
-        if (swipeDistance > 30) {
-          // Swipe up = next coin
-          targetPage = Math.min(currentPage + 1, coins.length - 1);
-        } else if (swipeDistance < -30) {
-          // Swipe down = previous coin
-          targetPage = Math.max(currentPage - 1, 0);
+        // Check if scroll has stopped (no movement for 150ms)
+        if (Math.abs(currentScrollTop - lastScrollTop) < 1) {
+          const newIndex = findNearestCardIndex();
+          
+          // Check if we're aligned with the nearest card
+          const cards = container.querySelectorAll('.modern-coin-slide:not(.modern-coin-placeholder)');
+          const nearestCard = cards[newIndex];
+          
+          if (nearestCard) {
+            const targetOffset = nearestCard.offsetTop;
+            const drift = Math.abs(currentScrollTop - targetOffset);
+            
+            // If CSS snap didn't complete (drift > 5px), help it finish
+            if (drift > 5) {
+              console.log(`🎯 Snap correction: ${drift}px drift detected, snapping to coin ${newIndex + 1}`);
+              container.scrollTo({
+                top: targetOffset,
+                behavior: 'smooth'
+              });
+            }
+          }
+          
+          // Update index
+          if (newIndex !== currentIndex && newIndex >= 0 && newIndex < coins.length) {
+            setCurrentIndex(newIndex);
+            
+            const currentCoin = coins[newIndex];
+            const enriched = enrichedCoins.get(currentCoin.mintAddress);
+            const enrichedCoin = enriched ? { ...currentCoin, ...enriched } : currentCoin;
+            onCurrentCoinChange?.(enrichedCoin, newIndex);
+            
+            // Log occasionally
+            if (newIndex % 5 === 0) {
+              console.log(`📱 Viewing coin ${newIndex + 1}/${coins.length} - ${currentCoin?.symbol || 'Unknown'}`);
+            }
+          }
+        } else {
+          // Still scrolling, update lastScrollTop and check again
+          lastScrollTop = currentScrollTop;
+          handleScrollEvent();
         }
-        
-        if (targetPage !== currentPage) {
-          console.log(`👆 Swipe detected: going to coin ${targetPage + 1}`);
-          scrollToIndex(targetPage, false); // Smooth scroll for swipes
-        }
-      }
-      
-      isSwiping = false;
+      }, 150); // Wait 150ms to detect scroll stop
     };
     
+    // Passive scroll listener for best performance
     container.addEventListener('scroll', handleScrollEvent, { passive: true });
     
-    if (isMobile) {
-      container.addEventListener('touchstart', handleTouchStart, { passive: true });
-      container.addEventListener('touchend', handleTouchEnd, { passive: true });
-    }
-    
     return () => {
-      container.removeEventListener('scroll', handleScrollEvent);
-      if (isMobile) {
-        container.removeEventListener('touchstart', handleTouchStart);
-        container.removeEventListener('touchend', handleTouchEnd);
+      if (scrollEndTimer) {
+        clearTimeout(scrollEndTimer);
       }
-      if (scrollEndTimer) clearTimeout(scrollEndTimer);
+      container.removeEventListener('scroll', handleScrollEvent);
     };
   }, [expandedCoin, currentIndex, coins, enrichedCoins, enrichCoins, onCurrentCoinChange]);
   
@@ -1050,20 +928,22 @@ const ModernTokenScroller = ({
         {/* Moonfeed Info Button - top left */}
         <MoonfeedInfoButton className="banner-positioned-left" />
         
-        {/* Filter Button - top right (only show on main feed) */}
-        {onAdvancedFilter && (
+        {/* Search Button - top right (only show on main feed) */}
+        {onSearchClick && (
           <button
             onClick={(e) => {
               e.stopPropagation();
-              console.log('🔥 Banner filter button clicked!');
-              onAdvancedFilter && onAdvancedFilter(null); // Open modal by triggering callback
+              console.log('🔍 Banner search button clicked!');
+              onSearchClick && onSearchClick(); // Open search modal
             }}
-            className={`banner-filter-button ${isAdvancedFilterActive ? 'active' : ''}`}
+            className="banner-search-button"
+            title="Search coins"
+            aria-label="Search coins"
           >
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M3 4.5H21V6H3V4.5ZM6 10.5H18V12H6V10.5ZM9 16.5H15V18H9V16.5Z" fill="currentColor"/>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="2"/>
+              <path d="m21 21-4.35-4.35" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            Filter
           </button>
         )}
       </div>

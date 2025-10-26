@@ -1938,16 +1938,6 @@ const CoinCard = memo(({
                       </div>
                     )}
                   </div>
-                  {coin.enriched && (
-                    <div className="enrichment-status">
-                      <span className="enriched-badge">✓ Enriched</span>
-                      {coin.enrichedAt && (
-                        <span className="enriched-time">
-                          {new Date(coin.enrichedAt).toLocaleTimeString()}
-                        </span>
-                      )}
-                    </div>
-                  )}
                 </div>
               </div>
             </div>

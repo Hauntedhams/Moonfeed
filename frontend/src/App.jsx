@@ -8,6 +8,7 @@ import WalletDebug from './components/WalletDebug'
 import CoinSearchModal from './components/CoinSearchModal'
 import CoinListModal from './components/CoinListModal'
 import ProfileView from './components/ProfileView'
+import OrdersView from './components/OrdersView'
 import JupiterTradeModal from './components/JupiterTradeModal'
 import AdvancedFilter from './components/AdvancedFilter'
 import { WalletProvider } from './contexts/WalletContext'
@@ -202,13 +203,19 @@ function App() {
     setCoinToTrade(null);
   };
 
+  // Handle Orders button click - navigate to orders page
+  const handleOrdersClick = () => {
+    console.log('📋 Orders button clicked - navigating to orders page');
+    setActiveTab('orders');
+  };
+
   return (
     <DarkModeProvider>
       <TrackedWalletsProvider>
         <WalletProvider>
           <div style={{ minHeight: '100vh', position: 'relative', paddingBottom: 72 }}>
         {/* Top tabs - only show on home screen */}
-        {activeTab !== 'favorites' && activeTab !== 'coin-detail' && activeTab !== 'profile' && (
+        {activeTab !== 'favorites' && activeTab !== 'coin-detail' && activeTab !== 'profile' && activeTab !== 'orders' && (
           <TopTabs 
             activeFilter={filters.type || 'graduating'} 
             onFilterChange={handleTopTabFilterChange}
@@ -227,6 +234,8 @@ function App() {
         />
       ) : activeTab === 'profile' ? (
         <ProfileView />
+      ) : activeTab === 'orders' ? (
+        <OrdersView />
       ) : activeTab === 'coin-detail' && selectedCoin ? (
         <div style={{ position: 'relative' }}>
           {/* Back button for coin detail view */}
@@ -274,6 +283,7 @@ function App() {
             onCurrentCoinChange={handleCurrentCoinChange}
             advancedFilters={null}
             showFiltersButton={false} // Don't show filters in coin detail view
+            onSearchClick={null} // No search button in coin detail view
           />
         </div>
       ) : (
@@ -290,6 +300,7 @@ function App() {
           onAdvancedFilter={handleAdvancedFilter}
           isAdvancedFilterActive={isAdvancedFilterActive}
           showFiltersButton={true} // Show filters button on home view
+          onSearchClick={handleSearchClick} // Add search click handler
         />
       )}
       </div>
@@ -304,11 +315,13 @@ function App() {
           }
         }}
         onSearchClick={handleSearchClick}
+        onOrdersClick={handleOrdersClick}
       />
       <CoinSearchModal
         visible={searchModalOpen}
         onClose={handleSearchClose}
         onCoinSelect={handleCoinFound}
+        onAdvancedFilterClick={() => setAdvancedFilterModalOpen(true)}
       />
       
       {/* Coin List Modal */}

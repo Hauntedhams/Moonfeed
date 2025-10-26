@@ -6,7 +6,7 @@ function resolveApiBase() {
   return API_CONFIG.BASE_URL;
 }
 
-function CoinSearchModal({ visible, onClose, onCoinSelect }) {
+function CoinSearchModal({ visible, onClose, onCoinSelect, onAdvancedFilterClick }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -211,10 +211,24 @@ function CoinSearchModal({ visible, onClose, onCoinSelect }) {
         <div className="search-modal-header">
           <h3>Search Tokens</h3>
           <div className="search-header-actions">
+            {onAdvancedFilterClick && (
+              <button 
+                className="feed-filter-btn"
+                onClick={() => {
+                  onAdvancedFilterClick();
+                }}
+                title="Feed Filters"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M3 4.5H21V6H3V4.5ZM6 10.5H18V12H6V10.5ZM9 16.5H15V18H9V16.5Z" fill="currentColor"/>
+                </svg>
+                <span>Feed Filters</span>
+              </button>
+            )}
             <button 
               className={`filter-toggle-btn ${showFilters ? 'active' : ''}`}
               onClick={toggleFilters}
-              title="Toggle filters"
+              title="Search filters"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>

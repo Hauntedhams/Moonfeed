@@ -17,9 +17,9 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 6px; /* Reduced gap for smaller buttons */
+  gap: 4px; /* Reduced gap for 4 tabs */
   padding: 0 20px;
-  max-width: 320px; /* Increased to accommodate 4 tabs */
+  max-width: 380px; /* Increased to accommodate 4 tabs */
   margin: 0 auto;
   position: relative;
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); /* Smooth transition for reordering */
@@ -32,13 +32,13 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 6px 8px; /* Further reduced padding for smaller buttons */
+  padding: 4px 6px; /* Smaller padding for 4 tabs */
   background: rgba(0, 0, 0, 0.4); /* Slightly darker for better contrast */
   border: 1px solid rgba(255, 255, 255, 0.15); /* Slightly more visible border */
   cursor: pointer;
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); /* Smoother, longer transition */
-  border-radius: 14px; /* Smaller border radius for smaller buttons */
-  min-height: 28px; /* Further reduced height */
+  border-radius: 12px; /* Smaller border radius for smaller buttons */
+  min-height: 24px; /* Smaller height for 4 tabs */
   position: relative;
   backdrop-filter: blur(20px) saturate(180%); /* Enhanced blur with saturation */
   -webkit-backdrop-filter: blur(20px) saturate(180%);
@@ -71,10 +71,16 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
+.top-tab.far-left,
 .top-tab.left,
 .top-tab.right {
   background: rgba(0, 0, 0, 0.25);
   border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Far-left tab is slightly more transparent */
+.top-tab.far-left {
+  opacity: 0.85;
 }
 
 /* Disabled tab state (for custom tab when no filters applied) */
@@ -103,11 +109,11 @@
 }
 
 .tab-label {
-  font-size: 10px; /* Further reduced text for smaller buttons */
+  font-size: 9px; /* Smaller text for 4 tabs */
   font-weight: 600;
   color: rgba(255, 255, 255, 0.8);
   text-transform: uppercase;
-  letter-spacing: 0.2px; /* Further reduced letter spacing */
+  letter-spacing: 0.1px; /* Reduced letter spacing */
   line-height: 1;
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3); /* Text shadow for better readability */
@@ -119,6 +125,7 @@
   text-shadow: 0 0 12px rgba(255, 255, 255, 0.3), 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
+.top-tab.far-left .tab-label,
 .top-tab.left .tab-label,
 .top-tab.right .tab-label {
   color: rgba(255, 255, 255, 0.7);
@@ -204,19 +211,19 @@
 @media (max-width: 480px) {
   .top-tabs-wrapper {
     padding: 0 16px;
-    max-width: 200px; /* Even smaller for mobile */
-    gap: 4px;
+    max-width: 280px; /* Adjusted for 4 smaller tabs on mobile */
+    gap: 3px;
   }
   
   .top-tab {
-    padding: 4px 6px; /* Much smaller padding on mobile */
-    min-height: 24px; /* Much smaller height on mobile */
-    border-radius: 12px;
+    padding: 3px 5px; /* Much smaller padding on mobile */
+    min-height: 22px; /* Much smaller height on mobile */
+    border-radius: 10px;
   }
   
   .tab-label {
-    font-size: 8px; /* Much smaller font on mobile */
-    letter-spacing: 0.1px;
+    font-size: 7px; /* Much smaller font on mobile */
+    letter-spacing: 0.05px;
   }
   
   .filter-tab {

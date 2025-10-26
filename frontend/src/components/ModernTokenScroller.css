@@ -101,7 +101,7 @@
   height: 100dvh; /* Use dynamic viewport height */
   width: 100%;
   overflow-y: auto;
-  /* Desktop: CSS scroll-snap works great */
+  /* Mandatory snap: one swipe = one coin */
   scroll-snap-type: y mandatory;
   -webkit-overflow-scrolling: touch; /* Smooth momentum on iOS */
   scrollbar-width: none; /* Firefox */
@@ -116,13 +116,13 @@
   scroll-padding: 0;
 }
 
-/* Mobile: disable CSS snap, use JS touch navigation with instant snap correction */
+/* Mobile: enable native CSS snap for best performance - browser optimized */
 @media (max-width: 767px) {
   .modern-scroller-container {
-    scroll-snap-type: none;
-    -webkit-scroll-snap-type: none;
-    /* 🎯 CRITICAL: Use 'auto' to let JS control scrolling, 'smooth' conflicts with instant snap */
-    scroll-behavior: auto;
+    scroll-snap-type: y mandatory;
+    -webkit-scroll-snap-type: y mandatory;
+    /* Native smooth scrolling with CSS snap is optimal */
+    scroll-behavior: smooth;
   }
 }
 
@@ -149,9 +149,9 @@
   flex-direction: column;
   position: relative;
   background: linear-gradient(135deg, #0b1220 0%, #0e1426 50%, #0b1220 100%);
-  /* Scroll snap - same as desktop */
+  /* Scroll snap - normal allows momentum scrolling */
   scroll-snap-align: start;
-  scroll-snap-stop: normal;
+  scroll-snap-stop: normal; /* Allow momentum scrolling through cards */
   flex-shrink: 0;
   contain: layout style paint;
   /* Ensure exact height for perfect snap points */
@@ -166,7 +166,7 @@
   max-height: 100dvh;
   width: 100%;
   scroll-snap-align: start;
-  scroll-snap-stop: normal; /* Same as real coins */
+  scroll-snap-stop: normal; /* Allow smooth scrolling */
   flex-shrink: 0;
   background: linear-gradient(135deg, #0b1220 0%, #0e1426 50%, #0b1220 100%);
 }
@@ -410,6 +410,20 @@
     padding: 3px 6px;
     min-width: 40px;
   }
+  
+  /* Mobile adjustments for search button to align with tabs */
+  .banner-search-button {
+    top: 16px; /* Match tab container padding */
+    right: 12px;
+    width: 28px;
+    height: 28px;
+    padding: 5px;
+  }
+  
+  .banner-search-button svg {
+    width: 12px;
+    height: 12px;
+  }
 }
 
 /* Hide scrollbar completely */
@@ -447,52 +461,50 @@
 
 .banner-overlay-buttons .moonfeed-info-button,
 .banner-overlay-buttons .filters-button,
-.banner-overlay-buttons .banner-filter-button {
+.banner-overlay-buttons .banner-search-button {
   pointer-events: auto; /* Re-enable clicks on the buttons themselves */
 }
 
-/* Banner Filter Button - positioned over top right of banner */
-.banner-filter-button {
+/* Banner Search Button - positioned inline with tabs at top right */
+.banner-search-button {
   position: fixed;
-  top: 20px;
-  right: 20px;
+  top: 16px; /* Align with tabs vertically */
+  right: 16px;
   z-index: 2100; /* Even higher than banner overlay buttons to be above TopTabs (1000) */
   background: rgba(0, 0, 0, 0.4);
   color: #fff;
   border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 12px;
-  padding: 4px 8px;
-  font-size: 10px;
-  font-weight: 600;
+  border-radius: 50%; /* Make it circular for icon-only button */
+  padding: 6px;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  min-height: 20px;
+  width: 32px;
+  height: 32px;
   pointer-events: auto !important;
   user-select: none;
 }
 
-.banner-filter-button:hover {
+.banner-search-button:hover {
   background: rgba(255, 255, 255, 0.2);
   border-color: rgba(255, 255, 255, 0.3);
-  transform: translateY(-2px);
+  transform: translateY(-2px) scale(1.05);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
 }
 
-.banner-filter-button.active {
-  background: rgba(74, 144, 226, 0.8);
-  border-color: rgba(74, 144, 226, 0.3);
-  color: #fff;
+.banner-search-button:active {
+  transform: translateY(0px) scale(0.95);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
 }
 
-.banner-filter-button svg {
-  width: 10px;
-  height: 10px;
+.banner-search-button svg {
+  width: 14px;
+  height: 14px;
 }
 
 /* Filter container positioned over banner */
@@ -541,5 +553,19 @@
     scroll-margin-top: 0;
     /* Allow touch actions */
     touch-action: pan-y pinch-zoom;
+  }
+  
+  /* Mobile adjustments for search button to align with tabs */
+  .banner-search-button {
+    top: 16px; /* Match tab container padding */
+    right: 12px;
+    width: 28px;
+    height: 28px;
+    padding: 5px;
+  }
+  
+  .banner-search-button svg {
+    width: 12px;
+    height: 12px;
   }
 }
