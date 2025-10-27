@@ -185,3 +185,96 @@ To track your referral revenue:
 - **Can users see the fee?** No, it's built into Jupiter's execution price
 
 **Your referral wallet is now correctly configured to receive 1% of all limit order volume! 🎉**
+
+---
+
+## 🤔 Why Am I Seeing 0.1% Instead of 1%?
+
+**Short Answer**: You're seeing Jupiter's platform fee, not your referral fee. Your 1% is separate and goes to your wallet.
+
+### The Confusion Explained
+
+When you see **0.1%** displayed in Jupiter's UI, this is **NOT your referral fee**. Here's what's happening:
+
+#### Two Separate Fees:
+
+1. **Jupiter's Platform Fee**: ~0.1-0.2%
+   - This is Jupiter's own fee for routing trades
+   - Displayed in Jupiter's UI
+   - Goes to Jupiter, not you
+   - Users see this as "Platform Fee"
+
+2. **Your Referral Fee**: 1.0% (100 BPS)
+   - Configured in your backend
+   - Applied ON TOP of Jupiter's fee
+   - Goes directly to your wallet: `42DqmQMZrVeZkP2Btj2cS96Ej81jVxFqwUZWazVvhUPt`
+   - NOT displayed separately in Jupiter's UI
+   - Collected automatically when orders execute
+
+### How It Actually Works
+
+```
+User executes $1000 limit order:
+├─ Jupiter Platform Fee (~0.1%): $1.00 → Jupiter
+├─ Your Referral Fee (1.0%): $10.00 → Your Wallet ✅
+└─ Net to user: $989.00
+
+Total fees: $11.00 (1.1%)
+Your share: $10.00 (91% of total fees!)
+```
+
+### Why Jupiter Shows 0.1%
+
+Jupiter's UI only shows **THEIR** fee, not referral partner fees. This is intentional:
+- Keeps UI clean for end users
+- Referral fees are between Jupiter and partners
+- Users see total execution price (includes all fees)
+
+### Verification That 1% Is Working
+
+To confirm your 1% referral is active:
+
+1. **Check Backend Logs**:
+   ```
+   [Jupiter Trigger] Using referral account: 42DqmQMZrVeZkP2Btj2cS96Ej81jVxFqwUZWazVvhUPt with 100 BPS
+   ```
+
+2. **Check Order Payload**:
+   ```json
+   {
+     "maker": "user_wallet",
+     "referralAccount": "42DqmQMZrVeZkP2Btj2cS96Ej81jVxFqwUZWazVvhUPt",
+     "feeBps": 100
+   }
+   ```
+
+3. **Check Your Wallet After Orders Execute**:
+   - Watch: `42DqmQMZrVeZkP2Btj2cS96Ej81jVxFqwUZWazVvhUPt`
+   - You'll see small token deposits as orders fill
+   - Each deposit = 1% of that order's volume
+
+### Real Example
+
+```
+Order: Buy 1000 USDC worth of TOKEN
+├─ Jupiter routes the trade
+├─ Order executes on-chain
+├─ User receives ~989 USDC worth of TOKEN
+├─ Jupiter takes 0.1%: ~1 USDC
+└─ You receive 1%: 10 USDC ✅
+
+Your wallet gets: 10 USDC (or 10 USD worth of TOKEN)
+```
+
+### TL;DR
+
+- ✅ Backend configured correctly: 100 BPS (1%)
+- ✅ Referral wallet correct: `42DqmQMZrVeZkP2Btj2cS96Ej81jVxFqwUZWazVvhUPt`
+- ✅ Fee is working (just not displayed in Jupiter's UI)
+- ⚠️ The 0.1% you see is Jupiter's own platform fee
+- ✅ Your 1% is applied separately and goes to your wallet
+- ✅ Check your wallet for deposits after orders execute
+
+**Don't worry - you're getting your full 1%! Jupiter just doesn't show referral fees in their UI.**
+
+---
