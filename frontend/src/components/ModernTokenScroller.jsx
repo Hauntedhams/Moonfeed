@@ -668,9 +668,9 @@ const ModernTokenScroller = ({
       // Clear previous timer
       if (scrollTimer) clearTimeout(scrollTimer);
       
-      // Wait for user to stop scrolling (reduced on mobile for better responsiveness)
+      // Wait for user to stop scrolling (ultra-fast on mobile for instant snap)
       const isMobileDevice = window.innerWidth < 768 || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      const snapDelay = isMobileDevice ? 100 : 150; // Faster snap on mobile
+      const snapDelay = isMobileDevice ? 50 : 100; // Ultra-fast snap on mobile (50ms), fast on desktop (100ms)
       
       scrollTimer = setTimeout(() => {
         const scrollTop = container.scrollTop;
@@ -752,10 +752,20 @@ const ModernTokenScroller = ({
           
           // Only snap if we're not already perfectly aligned (within 1px)
           if (Math.abs(targetTop - currentTop) > 1) {
-            container.scrollTo({
-              top: targetTop,
-              behavior: 'smooth'
-            });
+            // 🔥 INSTANT SNAP: Use immediate scroll on mobile for snappy feel
+            if (isMobileDevice) {
+              // On mobile: instant snap with no animation for immediate response
+              container.scrollTo({
+                top: targetTop,
+                behavior: 'instant'
+              });
+            } else {
+              // On desktop: smooth animation
+              container.scrollTo({
+                top: targetTop,
+                behavior: 'smooth'
+              });
+            }
           }
           
           // Update index if changed
