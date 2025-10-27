@@ -668,7 +668,10 @@ const ModernTokenScroller = ({
       // Clear previous timer
       if (scrollTimer) clearTimeout(scrollTimer);
       
-      // Wait for user to stop scrolling (increased for momentum scrolls)
+      // Wait for user to stop scrolling (reduced on mobile for better responsiveness)
+      const isMobileDevice = window.innerWidth < 768 || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      const snapDelay = isMobileDevice ? 100 : 150; // Faster snap on mobile
+      
       scrollTimer = setTimeout(() => {
         const scrollTop = container.scrollTop;
         const viewportHeight = container.clientHeight;
@@ -686,6 +689,9 @@ const ModernTokenScroller = ({
         let bestCandidate = null;
         let bestDistance = Infinity;
         
+        // 🔥 MOBILE SENSITIVITY: More sensitive threshold on mobile (20% vs 10%)
+        const snapThreshold = isMobileDevice ? 0.2 : 0.1; // 20% on mobile, 10% on desktop
+        
         cards.forEach((card) => {
           const cardIndex = parseInt(card.dataset.index);
           if (isNaN(cardIndex)) return;
@@ -694,23 +700,26 @@ const ModernTokenScroller = ({
           const distance = Math.abs(cardTop - scrollTop);
           const offset = cardTop - scrollTop;
           
-          // If we're very close to a card (within 10% of viewport), snap to it
-          if (distance < viewportHeight * 0.1) {
+          // If we're close to a card (within threshold), snap to it
+          if (distance < viewportHeight * snapThreshold) {
             if (distance < bestDistance) {
               bestDistance = distance;
               bestCandidate = { card, index: cardIndex };
             }
           }
-          // If we're between cards, use scroll direction to decide
+          // If we're between cards, use scroll direction to decide (more aggressive on mobile)
           else if (scrollDirection !== 0) {
+            // 🔥 MOBILE: Even small scrolls trigger next/prev coin
+            const scrollSensitivity = isMobileDevice ? 0 : viewportHeight * 0.05; // No minimum on mobile
+            
             // Scrolling down: find the next card below current position
-            if (scrollDirection === 1 && offset > 0) {
+            if (scrollDirection === 1 && offset > scrollSensitivity) {
               if (!bestCandidate || cardIndex < bestCandidate.index) {
                 bestCandidate = { card, index: cardIndex };
               }
             }
             // Scrolling up: find the previous card above current position
-            else if (scrollDirection === -1 && offset <= 0) {
+            else if (scrollDirection === -1 && offset <= -scrollSensitivity) {
               if (!bestCandidate || cardIndex > bestCandidate.index) {
                 bestCandidate = { card, index: cardIndex };
               }
@@ -756,7 +765,7 @@ const ModernTokenScroller = ({
         
         // Reset direction after snap
         scrollDirection = 0;
-      }, 150); // Increased from 100ms to handle momentum scrolls better
+      }, snapDelay); // Use dynamic delay based on device
     };
     
     container.addEventListener('scroll', handleScroll, { passive: true });
