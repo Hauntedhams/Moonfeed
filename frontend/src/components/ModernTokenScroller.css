@@ -96,17 +96,16 @@
   background: rgba(244, 67, 54, 0.95);
 }
 
-/* Scrollable container with performance optimizations */
+/* Scrollable container - hybrid CSS + JS snap */
 .modern-scroller-container {
   height: 100dvh; /* Use dynamic viewport height */
   width: 100%;
-  overflow-y: auto;
-  /* Mandatory snap: one swipe = one coin */
-  scroll-snap-type: y mandatory;
+  overflow-y: scroll;
+  /* Enable CSS snap as foundation, JS enhances it */
+  scroll-snap-type: y proximity; /* proximity = less aggressive, JS refines the snap */
   -webkit-overflow-scrolling: touch; /* Smooth momentum on iOS */
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* IE and Edge */
-  scroll-behavior: smooth; /* Smooth scrolling by default */
   /* Performance optimizations */
   will-change: scroll-position;
   contain: layout style paint;
@@ -116,13 +115,10 @@
   scroll-padding: 0;
 }
 
-/* Mobile: enable native CSS snap for best performance - browser optimized */
+/* Mobile: use proximity snap for smoother experience */
 @media (max-width: 767px) {
   .modern-scroller-container {
-    scroll-snap-type: y mandatory;
-    -webkit-scroll-snap-type: y mandatory;
-    /* Native smooth scrolling with CSS snap is optimal */
-    scroll-behavior: smooth;
+    scroll-snap-type: y proximity; /* proximity works better with touch momentum */
   }
 }
 
@@ -141,7 +137,7 @@
   display: none; /* Chrome, Safari, Opera */
 }
 
-/* Individual coin slides - exactly like desktop */
+/* Individual coin slides - snap to start */
 .modern-coin-slide {
   height: 100dvh; /* Use dynamic viewport height */
   width: 100%;
@@ -149,9 +145,9 @@
   flex-direction: column;
   position: relative;
   background: linear-gradient(135deg, #0b1220 0%, #0e1426 50%, #0b1220 100%);
-  /* Scroll snap - normal allows momentum scrolling */
+  /* Enable snap point at start of each card */
   scroll-snap-align: start;
-  scroll-snap-stop: normal; /* Allow momentum scrolling through cards */
+  scroll-snap-stop: normal; /* Allow skipping cards for fast scrolls */
   flex-shrink: 0;
   contain: layout style paint;
   /* Ensure exact height for perfect snap points */
@@ -159,14 +155,12 @@
   max-height: 100dvh;
 }
 
-/* Placeholder coins - must match real coins exactly for consistent scroll-snap */
+/* Placeholder coins - no snap */
 .modern-coin-placeholder {
   height: 100dvh;
   min-height: 100dvh;
   max-height: 100dvh;
   width: 100%;
-  scroll-snap-align: start;
-  scroll-snap-stop: normal; /* Allow smooth scrolling */
   flex-shrink: 0;
   background: linear-gradient(135deg, #0b1220 0%, #0e1426 50%, #0b1220 100%);
 }

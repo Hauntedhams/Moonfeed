@@ -644,108 +644,128 @@ const ModernTokenScroller = ({
     }
   }, []);
 
-  // 🚀 OPTIMIZED: Simplified scroll handler with throttling - CSS snap handles alignment
+  // 🎯 ROBUST SNAP: One swipe = one coin with direction awareness
   useEffect(() => {
     const container = scrollerRef.current;
     if (!container) return;
     
-    let lastUpdateTime = 0;
-    const THROTTLE_MS = 100; // Update index max 10 times per second
-    
-    // Find nearest card based on scroll position
-    const findNearestCardIndex = () => {
-      const scrollTop = container.scrollTop;
-      const cards = container.querySelectorAll('.modern-coin-slide:not(.modern-coin-placeholder)');
-      
-      let nearestIndex = 0;
-      let minDistance = Infinity;
-      
-      cards.forEach((card, index) => {
-        const distance = Math.abs(card.offsetTop - scrollTop);
-        if (distance < minDistance) {
-          minDistance = distance;
-          nearestIndex = parseInt(card.dataset.index) || index;
-        }
-      });
-      
-      return nearestIndex;
-    };
-    
-    // Throttled scroll handler with snap correction for light scrolls
-    let scrollEndTimer = null;
+    let scrollTimer = null;
     let lastScrollTop = container.scrollTop;
+    let scrollDirection = 0; // 1 = down, -1 = up, 0 = unknown
     
-    const handleScrollEvent = () => {
+    const handleScroll = () => {
       if (isScrollLocked.current || expandedCoin) return;
       
-      const now = Date.now();
-      if (now - lastUpdateTime < THROTTLE_MS) return; // Throttle
-      
-      lastUpdateTime = now;
-      
-      // Clear existing timer
-      if (scrollEndTimer) {
-        clearTimeout(scrollEndTimer);
+      // Track scroll direction
+      const currentScrollTop = container.scrollTop;
+      if (currentScrollTop > lastScrollTop) {
+        scrollDirection = 1; // Scrolling down
+      } else if (currentScrollTop < lastScrollTop) {
+        scrollDirection = -1; // Scrolling up
       }
+      lastScrollTop = currentScrollTop;
       
-      // Wait for scroll to settle, then snap if needed
-      scrollEndTimer = setTimeout(() => {
-        const currentScrollTop = container.scrollTop;
+      // Clear previous timer
+      if (scrollTimer) clearTimeout(scrollTimer);
+      
+      // Wait for user to stop scrolling (increased for momentum scrolls)
+      scrollTimer = setTimeout(() => {
+        const scrollTop = container.scrollTop;
+        const viewportHeight = container.clientHeight;
         
-        // Check if scroll has stopped (no movement for 150ms)
-        if (Math.abs(currentScrollTop - lastScrollTop) < 1) {
-          const newIndex = findNearestCardIndex();
+        // Find all coin cards
+        const cards = Array.from(container.querySelectorAll('.modern-coin-slide:not(.modern-coin-placeholder)'));
+        if (cards.length === 0) return;
+        
+        // Find the coin that should be snapped to based on scroll position and direction
+        let targetIndex = currentIndex;
+        let targetCard = null;
+        
+        // Find the card whose top is closest to the viewport top
+        // If we're in between cards, prefer the direction we were scrolling
+        let bestCandidate = null;
+        let bestDistance = Infinity;
+        
+        cards.forEach((card) => {
+          const cardIndex = parseInt(card.dataset.index);
+          if (isNaN(cardIndex)) return;
           
-          // Check if we're aligned with the nearest card
-          const cards = container.querySelectorAll('.modern-coin-slide:not(.modern-coin-placeholder)');
-          const nearestCard = cards[newIndex];
+          const cardTop = card.offsetTop;
+          const distance = Math.abs(cardTop - scrollTop);
+          const offset = cardTop - scrollTop;
           
-          if (nearestCard) {
-            const targetOffset = nearestCard.offsetTop;
-            const drift = Math.abs(currentScrollTop - targetOffset);
-            
-            // If CSS snap didn't complete (drift > 5px), help it finish
-            if (drift > 5) {
-              console.log(`🎯 Snap correction: ${drift}px drift detected, snapping to coin ${newIndex + 1}`);
-              container.scrollTo({
-                top: targetOffset,
-                behavior: 'smooth'
-              });
+          // If we're very close to a card (within 10% of viewport), snap to it
+          if (distance < viewportHeight * 0.1) {
+            if (distance < bestDistance) {
+              bestDistance = distance;
+              bestCandidate = { card, index: cardIndex };
             }
           }
-          
-          // Update index
-          if (newIndex !== currentIndex && newIndex >= 0 && newIndex < coins.length) {
-            setCurrentIndex(newIndex);
-            
-            const currentCoin = coins[newIndex];
-            const enriched = enrichedCoins.get(currentCoin.mintAddress);
-            const enrichedCoin = enriched ? { ...currentCoin, ...enriched } : currentCoin;
-            onCurrentCoinChange?.(enrichedCoin, newIndex);
-            
-            // Log occasionally
-            if (newIndex % 5 === 0) {
-              console.log(`📱 Viewing coin ${newIndex + 1}/${coins.length} - ${currentCoin?.symbol || 'Unknown'}`);
+          // If we're between cards, use scroll direction to decide
+          else if (scrollDirection !== 0) {
+            // Scrolling down: find the next card below current position
+            if (scrollDirection === 1 && offset > 0) {
+              if (!bestCandidate || cardIndex < bestCandidate.index) {
+                bestCandidate = { card, index: cardIndex };
+              }
+            }
+            // Scrolling up: find the previous card above current position
+            else if (scrollDirection === -1 && offset <= 0) {
+              if (!bestCandidate || cardIndex > bestCandidate.index) {
+                bestCandidate = { card, index: cardIndex };
+              }
             }
           }
-        } else {
-          // Still scrolling, update lastScrollTop and check again
-          lastScrollTop = currentScrollTop;
-          handleScrollEvent();
+          // Fallback: closest card by distance
+          else if (!bestCandidate && distance < bestDistance) {
+            bestDistance = distance;
+            bestCandidate = { card, index: cardIndex };
+          }
+        });
+        
+        if (bestCandidate) {
+          targetCard = bestCandidate.card;
+          targetIndex = bestCandidate.index;
         }
-      }, 150); // Wait 150ms to detect scroll stop
+        
+        // Snap to the target card
+        if (targetCard) {
+          const targetTop = targetCard.offsetTop;
+          const currentTop = container.scrollTop;
+          
+          // Only snap if we're not already perfectly aligned (within 1px)
+          if (Math.abs(targetTop - currentTop) > 1) {
+            container.scrollTo({
+              top: targetTop,
+              behavior: 'smooth'
+            });
+          }
+          
+          // Update index if changed
+          if (targetIndex !== currentIndex) {
+            setCurrentIndex(targetIndex);
+            
+            const coin = coins[targetIndex];
+            const enriched = enrichedCoins.get(coin.mintAddress);
+            const enrichedCoin = enriched ? { ...coin, ...enriched } : coin;
+            onCurrentCoinChange?.(enrichedCoin, targetIndex);
+            
+            console.log(`📱 Coin ${targetIndex + 1}/${coins.length} (direction: ${scrollDirection === 1 ? '↓' : scrollDirection === -1 ? '↑' : '•'})`);
+          }
+        }
+        
+        // Reset direction after snap
+        scrollDirection = 0;
+      }, 150); // Increased from 100ms to handle momentum scrolls better
     };
     
-    // Passive scroll listener for best performance
-    container.addEventListener('scroll', handleScrollEvent, { passive: true });
+    container.addEventListener('scroll', handleScroll, { passive: true });
     
     return () => {
-      if (scrollEndTimer) {
-        clearTimeout(scrollEndTimer);
-      }
-      container.removeEventListener('scroll', handleScrollEvent);
+      if (scrollTimer) clearTimeout(scrollTimer);
+      container.removeEventListener('scroll', handleScroll);
     };
-  }, [expandedCoin, currentIndex, coins, enrichedCoins, enrichCoins, onCurrentCoinChange]);
+  }, [expandedCoin, currentIndex, coins, enrichedCoins, onCurrentCoinChange]);
   
   // Handle favorite toggle
   const handleFavoriteToggle = (coin) => {
