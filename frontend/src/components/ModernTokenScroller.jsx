@@ -713,19 +713,27 @@ const ModernTokenScroller = ({
             const scrollSensitivity = isMobileDevice ? 0 : viewportHeight * 0.05; // No minimum on mobile
             
             // Scrolling down: find the next card below current position
+            // FIXED: Only select cards AFTER currentIndex to prevent jumping back
             if (scrollDirection === 1 && offset > scrollSensitivity) {
-              if (!bestCandidate || cardIndex < bestCandidate.index) {
-                bestCandidate = { card, index: cardIndex };
+              // Only consider cards with higher index than current (moving forward)
+              if (cardIndex > currentIndex) {
+                if (!bestCandidate || cardIndex < bestCandidate.index) {
+                  bestCandidate = { card, index: cardIndex };
+                }
               }
             }
             // Scrolling up: find the previous card above current position
+            // FIXED: Only select cards BEFORE currentIndex to prevent jumping forward
             else if (scrollDirection === -1 && offset <= -scrollSensitivity) {
-              if (!bestCandidate || cardIndex > bestCandidate.index) {
-                bestCandidate = { card, index: cardIndex };
+              // Only consider cards with lower index than current (moving backward)
+              if (cardIndex < currentIndex) {
+                if (!bestCandidate || cardIndex > bestCandidate.index) {
+                  bestCandidate = { card, index: cardIndex };
+                }
               }
             }
           }
-          // Fallback: closest card by distance
+          // Fallback: closest card by distance (but prefer maintaining current position)
           else if (!bestCandidate && distance < bestDistance) {
             bestDistance = distance;
             bestCandidate = { card, index: cardIndex };
