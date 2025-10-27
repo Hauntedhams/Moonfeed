@@ -76,6 +76,10 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError }
         formProps: {
           initialOutputMint: coin.mintAddress,
           initialInputMint: "So11111111111111111111111111111111111111112", // SOL
+          
+          // 💰 REFERRAL FEE CONFIGURATION (1%)
+          referralAccount: "42DqmQMZrVeZkP2Btj2cS96Ej81jVxFqwUZWazVvhUPt",
+          referralFee: 100, // 100 BPS = 1%
         },
 
         strictTokenList: false,
