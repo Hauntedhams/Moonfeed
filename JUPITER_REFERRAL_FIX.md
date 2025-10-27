@@ -278,3 +278,167 @@ Your wallet gets: 10 USDC (or 10 USD worth of TOKEN)
 **Don't worry - you're getting your full 1%! Jupiter just doesn't show referral fees in their UI.**
 
 ---
+
+## 🚨 CRITICAL UPDATE: Trigger API Referral Implementation
+
+### ⚠️ Current Implementation Status: INCOMPLETE
+
+After reviewing Jupiter's official documentation, the current implementation is **NOT CORRECT** for the Trigger API. Here's what needs to be fixed:
+
+### What's Wrong
+
+The current implementation in `backend/services/jupiterTriggerService.js` uses:
+```javascript
+// ❌ INCORRECT - This is the OLD/DEPRECATED approach
+payload.referralAccount = REFERRAL_ACCOUNT; // Just a wallet address
+payload.feeBps = FEE_BPS; // Wrong parameter location
+```
+
+### What's Required (Per Jupiter Docs)
+
+According to [Jupiter's official documentation](https://dev.jup.ag/docs/swap/add-fees-to-swap#for-trigger-api-integrator-fee), the Trigger API requires:
+
+1. **Create a Referral Account** (not just a wallet)
+   - Use the [Referral Dashboard](https://referral.jup.ag/dashboard) or SDK
+   - This is a Program Derived Address (PDA), not a regular wallet
+   - Jupiter Swap project account: `45ruCyfdRkWpRNGEqWzjCiXRHkZs8WXCLQ67Pnpye7Hp`
+
+2. **Create Referral Token Accounts** for each token mint
+   - Must be initialized for EVERY token you want to collect fees in
+   - Owned by your referral account
+   - Uses the Referral Program: `REFER4ZgmyYx9c6He5XfaTMiGfdLwRnkV4RPp9t9iF3`
+
+3. **Use the correct API parameters**:
+   ```javascript
+   // ✅ CORRECT - New approach
+   {
+     feeAccount: referralTokenAccount, // Token account for the specific mint
+     params: {
+       makingAmount: "...",
+       takingAmount: "...",
+       feeBps: "20" // Fee INSIDE params object
+     }
+   }
+   ```
+
+### Required Actions
+
+#### Step 1: Create Referral Account
+Visit [https://referral.jup.ag/dashboard](https://referral.jup.ag/dashboard) and:
+1. Connect wallet: `42DqmQMZrVeZkP2Btj2cS96Ej81jVxFqwUZWazVvhUPt`
+2. Create a new Referral Account
+3. Save the "Referral Key" (this is your actual referral account PDA)
+
+#### Step 2: Update Backend Code
+Modify `backend/services/jupiterTriggerService.js` to:
+1. Remove `referralAccount` and `feeBps` from payload root
+2. Move `feeBps` inside `params` object
+3. Add `feeAccount` parameter (referral token account)
+4. Implement logic to get/create referral token accounts for each mint
+
+#### Step 3: Install Required Dependencies
+```bash
+cd backend
+npm install @jup-ag/referral-sdk @solana/web3.js @solana/spl-token
+```
+
+#### Step 4: Environment Variables
+Update `.env` to use the new referral account PDA (not just wallet):
+```bash
+# Old (just a wallet)
+JUPITER_REFERRAL_ACCOUNT=42DqmQMZrVeZkP2Btj2cS96Ej81jVxFqwUZWazVvhUPt
+
+# New (referral account PDA from dashboard)
+JUPITER_REFERRAL_ACCOUNT=<YOUR_REFERRAL_ACCOUNT_PDA>
+JUPITER_REFERRAL_FEE_BPS=100
+```
+
+### Code Example (What It Should Look Like)
+
+```javascript
+const { ReferralProvider } = require('@jup-ag/referral-sdk');
+const { Connection, PublicKey } = require('@solana/web3.js');
+
+// Initialize referral provider
+const connection = new Connection(process.env.SOLANA_RPC);
+const provider = new ReferralProvider(connection);
+
+// Get or create referral token account for the mint
+async function getReferralTokenAccount(referralAccount, mintAccount) {
+  // Try to find existing account
+  const [feeAccount] = PublicKey.findProgramAddressSync(
+    [
+      Buffer.from("referral_ata"),
+      new PublicKey(referralAccount).toBuffer(),
+      new PublicKey(mintAccount).toBuffer(),
+    ],
+    new PublicKey("REFER4ZgmyYx9c6He5XfaTMiGfdLwRnkV4RPp9t9iF3")
+  );
+  
+  // Check if account exists, if not, create it
+  const accountInfo = await connection.getAccountInfo(feeAccount);
+  if (!accountInfo) {
+    console.log(`Creating referral token account for mint ${mintAccount}...`);
+    // Initialize token account via SDK
+    const { tx } = await provider.initializeReferralTokenAccount({
+      payerPubKey: new PublicKey(REFERRAL_ACCOUNT),
+      referralAccountPubKey: new PublicKey(REFERRAL_ACCOUNT),
+      mint: new PublicKey(mintAccount),
+    });
+    // Send transaction...
+  }
+  
+  return feeAccount;
+}
+
+// In createOrder function
+const outputFeeAccount = await getReferralTokenAccount(
+  REFERRAL_ACCOUNT,
+  outputMint // or inputMint for ExactOut
+);
+
+const payload = {
+  maker,
+  payer: payer || maker,
+  inputMint,
+  outputMint,
+  params: {
+    makingAmount: makingAmount.toString(),
+    takingAmount: takingAmount.toString(),
+    feeBps: FEE_BPS.toString() // MOVED INSIDE params
+  },
+  feeAccount: outputFeeAccount.toString(), // ADDED - referral token account
+  computeUnitPrice: "auto"
+};
+```
+
+### Why This Matters
+
+**Current status**: Referral fees are **NOT BEING COLLECTED** because:
+- The Trigger API doesn't recognize `referralAccount` parameter
+- The `feeBps` is in the wrong location
+- No `feeAccount` (referral token account) is provided
+
+**After fixing**: Referral fees will be properly collected into your referral token accounts.
+
+### Resources
+
+- [Jupiter Referral Program Docs](https://dev.jup.ag/tool-kits/referral-program)
+- [Add Fees to Trigger API](https://dev.jup.ag/docs/swap/add-fees-to-swap#for-trigger-api-integrator-fee)
+- [Referral Dashboard](https://referral.jup.ag/dashboard)
+- [Referral SDK Example](https://github.com/TeamRaccoons/referral/blob/main/example/src/createReferralAccount.ts)
+- [Referral Program Source Code](https://github.com/TeamRaccoons/referral)
+
+### Next Steps Checklist
+
+- [ ] Create referral account via dashboard
+- [ ] Get referral account PDA from dashboard
+- [ ] Update backend code to use correct API format
+- [ ] Install required npm packages
+- [ ] Implement referral token account creation
+- [ ] Test with actual limit orders
+- [ ] Verify fees are collected in referral token accounts
+
+**Status**: Implementation incomplete - referral fees are not currently being collected. ⚠️
+
+---
