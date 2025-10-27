@@ -956,4 +956,115 @@ const handleScroll = () => {
       
       // Very close to a card? Snap to it
       if (distance < viewportHeight * 0.1) {
-        if
+        if (offset > 0 && scrollDirection === -1) {
+          // Scrolling up, snap to this card
+          bestCandidate = card;
+          bestDistance = distance;
+        } else if (offset < 0 && scrollDirection === 1) {
+          // Scrolling down, snap to this card
+          bestCandidate = card;
+          bestDistance = distance;
+        }
+      }
+    });
+    
+    // If we found a good candidate, snap to it
+    if (bestCandidate && bestDistance < 50) {
+      container.scrollTo({ top: bestCandidate.offsetTop, behavior: 'smooth' });
+    }
+  }, 150);
+};
+```
+
+### How It Works:
+1. User scrolls (any amount)
+2. Wait 150ms for scroll to stop
+3. Check scroll direction (up or down)
+4. Find the card closest to the scroll position
+5. If the card is within 50px, snap to it
+6. Smooth scrolling animation
+
+### Benefits:
+- **Gentle CSS snap**: Provides a natural feel, doesn't fight momentum
+- **JS refinement**: Ensures accuracy, especially for one-card-at-a-time behavior
+- **Adaptive**: Works with fast and slow scrolls, up and down
+- **Smooth**: Leverages browser's native smooth scrolling
+
+### Expected Results:
+- ✅ Perfect alignment with each coin
+- ✅ No more skipping or partial snaps
+- ✅ Consistent behavior across all devices
+- ✅ Utilizes the best of CSS and JS for optimal performance
+
+---
+
+## 🐛 BLACK SCREEN FIX (CRITICAL)
+
+**Date**: Current Fix  
+**Issue**: Screen goes black after 3-4 scrolls  
+**Root Cause**: Virtual scrolling was unmounting coin cards during scroll transitions
+
+### The Problem
+
+The previous implementation used "virtual scrolling" to save memory:
+
+```javascript
+// OLD CODE - CAUSED BLACK SCREEN
+const renderDistance = isMobileDevice ? 2 : 3;
+const shouldRender = Math.abs(index - currentIndex) <= renderDistance;
+
+if (!shouldRender) {
+  return <div className="modern-coin-placeholder" />; // Black placeholder
+}
+```
+
+**Why it failed:**
+1. User scrolls from coin 0 → coin 1
+2. `currentIndex` updates to 1 during scroll
+3. Coin 3 (which is still visible on screen) is now outside render distance
+4. React unmounts coin 3's DOM element → **BLACK SCREEN**
+5. After scroll completes, coin 3 gets re-mounted, but the damage is done
+
+### The Solution
+
+**Remove virtual scrolling entirely** - render all coins at once:
+
+```javascript
+// NEW CODE - FIXED
+{coins.map((coin, index) => renderCoinWithChart(coin, index))}
+```
+
+**Why this is safe:**
+1. Backend already limits coins: 20 on mobile, 50 on desktop
+2. Modern devices can handle 20-50 DOM elements easily
+3. We still optimize chart rendering (only render charts for visible coins)
+4. No risk of black screen during scroll transitions
+
+### Performance Optimization
+
+Instead of virtual scrolling, we optimize **chart rendering**:
+
+```javascript
+// Only render charts for visible coins (current ± 2 on mobile, ± 3 on desktop)
+const chartRenderDistance = isMobileDevice ? 2 : 3;
+const shouldShowChart = Math.abs(index - currentIndex) <= chartRenderDistance;
+
+if (shouldShowChart && dexManagerRef.current) {
+  chartComponent = dexManagerRef.current.getChartForCoin(enrichedCoin, index);
+}
+```
+
+**Benefits:**
+- ✅ No black screen - all coin cards stay mounted
+- ✅ Smooth scrolling - no unmount/remount during transitions
+- ✅ Still performant - charts only load for visible coins
+- ✅ Charts prefetch - next 2-3 coins have charts ready
+
+### Lessons Learned
+
+1. **Virtual scrolling breaks scroll-snap** - Don't unmount elements that are snap targets
+2. **Optimize rendering, not mounting** - It's cheaper to keep DOM nodes and hide content
+3. **Backend limits are sufficient** - With proper limits, you don't need virtual scrolling
+4. **Test scroll transitions carefully** - Black screens happen during state changes
+
+---

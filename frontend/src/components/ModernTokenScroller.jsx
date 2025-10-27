@@ -804,11 +804,12 @@ const ModernTokenScroller = ({
   const renderCoinWithChart = (coin, index) => {
     const isCurrentCoin = index === currentIndex;
     
-    // 🔥 MOBILE PERFORMANCE: Only render charts for visible coins (current ± 1)
+    // 🔥 OPTIMIZED: Only render charts for visible coins (current ± 2)
+    // This prevents performance issues while keeping all coin cards rendered
     const isMobileDevice = window.innerWidth < 768 || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    const chartRenderDistance = isMobileDevice ? 1 : 2; // Render fewer charts on mobile
+    const chartRenderDistance = isMobileDevice ? 2 : 3; // Render charts for current ± 2 on mobile, ± 3 on desktop
     const shouldShowChart = Math.abs(index - currentIndex) <= chartRenderDistance;
-    const isVisible = Math.abs(index - currentIndex) <= 1; // Coin is visible if it's current or adjacent
+    const isVisible = Math.abs(index - currentIndex) <= 2; // Mark as visible if within ± 2
     
     // Auto-load transactions for current coin only on mobile, current + 2 on desktop
     const shouldAutoLoadTransactions = isMobileDevice 
@@ -982,30 +983,10 @@ const ModernTokenScroller = ({
         ref={scrollerRef}
         className={`modern-scroller-container ${expandedCoin ? 'scroll-locked' : ''}`}
       >
-        {/* 🔥 MOBILE PERFORMANCE V6: Virtual scrolling with proper snap points */}
+        {/* Render all coins - no virtual scrolling to prevent black screen during scroll */}
+        {/* Note: Backend already limits to 20 coins on mobile, so rendering all is safe */}
         {coins.length > 0 ? (
-          coins.map((coin, index) => {
-            // 🔥 CRITICAL: Only render coins within render distance to save memory
-            const isMobileDevice = window.innerWidth < 768 || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-            const renderDistance = isMobileDevice ? 2 : 3; // Mobile: current ± 2, Desktop: current ± 3
-            const shouldRender = Math.abs(index - currentIndex) <= renderDistance;
-            
-            // For non-rendered coins, return a lightweight placeholder with proper snap-align
-            if (!shouldRender) {
-              return (
-                <div 
-                  key={coin.mintAddress || coin.tokenAddress || index}
-                  className="modern-coin-slide modern-coin-placeholder"
-                  data-index={index}
-                >
-                  {/* Empty placeholder - maintains scroll snap points without content */}
-                </div>
-              );
-            }
-            
-            // Render actual coin card for visible coins
-            return renderCoinWithChart(coin, index);
-          })
+          coins.map((coin, index) => renderCoinWithChart(coin, index))
         ) : (
           <div style={{ color: 'white', padding: '20px', textAlign: 'center' }}>
             {loading ? 'Loading coins...' : 'No coins available'}
