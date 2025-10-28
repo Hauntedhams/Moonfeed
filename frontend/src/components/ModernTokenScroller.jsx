@@ -644,33 +644,22 @@ const ModernTokenScroller = ({
     }
   }, []);
 
-  // 🎯 ROBUST SNAP: One swipe = one coin with direction awareness
+  // 🎯 SIMPLIFIED SNAP: Ultra-fast and responsive mobile scrolling
   useEffect(() => {
     const container = scrollerRef.current;
     if (!container) return;
     
     let scrollTimer = null;
-    let lastScrollTop = container.scrollTop;
-    let scrollDirection = 0; // 1 = down, -1 = up, 0 = unknown
+    const isMobileDevice = window.innerWidth < 768 || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     
     const handleScroll = () => {
       if (isScrollLocked.current || expandedCoin) return;
       
-      // Track scroll direction
-      const currentScrollTop = container.scrollTop;
-      if (currentScrollTop > lastScrollTop) {
-        scrollDirection = 1; // Scrolling down
-      } else if (currentScrollTop < lastScrollTop) {
-        scrollDirection = -1; // Scrolling up
-      }
-      lastScrollTop = currentScrollTop;
-      
       // Clear previous timer
       if (scrollTimer) clearTimeout(scrollTimer);
       
-      // Wait for user to stop scrolling (ultra-fast on mobile for instant snap)
-      const isMobileDevice = window.innerWidth < 768 || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      const snapDelay = isMobileDevice ? 50 : 100; // Ultra-fast snap on mobile (50ms), fast on desktop (100ms)
+      // Ultra-fast snap delay on mobile (30ms), slightly longer on desktop (80ms)
+      const snapDelay = isMobileDevice ? 30 : 80;
       
       scrollTimer = setTimeout(() => {
         const scrollTop = container.scrollTop;
@@ -680,17 +669,10 @@ const ModernTokenScroller = ({
         const cards = Array.from(container.querySelectorAll('.modern-coin-slide:not(.modern-coin-placeholder)'));
         if (cards.length === 0) return;
         
-        // Find the coin that should be snapped to based on scroll position and direction
-        let targetIndex = currentIndex;
-        let targetCard = null;
-        
-        // Find the card whose top is closest to the viewport top
-        // If we're in between cards, prefer the direction we were scrolling
-        let bestCandidate = null;
-        let bestDistance = Infinity;
-        
-        // 🔥 MOBILE SENSITIVITY: More sensitive threshold on mobile (20% vs 10%)
-        const snapThreshold = isMobileDevice ? 0.2 : 0.1; // 20% on mobile, 10% on desktop
+        // 🔥 SIMPLIFIED: Just find the closest card to the top of the viewport
+        let closestCard = null;
+        let closestDistance = Infinity;
+        let closestIndex = currentIndex;
         
         cards.forEach((card) => {
           const cardIndex = parseInt(card.dataset.index);
@@ -698,92 +680,42 @@ const ModernTokenScroller = ({
           
           const cardTop = card.offsetTop;
           const distance = Math.abs(cardTop - scrollTop);
-          const offset = cardTop - scrollTop;
           
-          // If we're close to a card (within threshold), snap to it
-          if (distance < viewportHeight * snapThreshold) {
-            if (distance < bestDistance) {
-              bestDistance = distance;
-              bestCandidate = { card, index: cardIndex };
-            }
-          }
-          // If we're between cards, use scroll direction to decide (more aggressive on mobile)
-          else if (scrollDirection !== 0) {
-            // 🔥 MOBILE: Even small scrolls trigger next/prev coin
-            const scrollSensitivity = isMobileDevice ? 0 : viewportHeight * 0.05; // No minimum on mobile
-            
-            // Scrolling down: find the next card below current position
-            // FIXED: Only select cards AFTER currentIndex to prevent jumping back
-            if (scrollDirection === 1 && offset > scrollSensitivity) {
-              // Only consider cards with higher index than current (moving forward)
-              if (cardIndex > currentIndex) {
-                if (!bestCandidate || cardIndex < bestCandidate.index) {
-                  bestCandidate = { card, index: cardIndex };
-                }
-              }
-            }
-            // Scrolling up: find the previous card above current position
-            // FIXED: Only select cards BEFORE currentIndex to prevent jumping forward
-            else if (scrollDirection === -1 && offset <= -scrollSensitivity) {
-              // Only consider cards with lower index than current (moving backward)
-              if (cardIndex < currentIndex) {
-                if (!bestCandidate || cardIndex > bestCandidate.index) {
-                  bestCandidate = { card, index: cardIndex };
-                }
-              }
-            }
-          }
-          // Fallback: closest card by distance (but prefer maintaining current position)
-          else if (!bestCandidate && distance < bestDistance) {
-            bestDistance = distance;
-            bestCandidate = { card, index: cardIndex };
+          // Find the card closest to the viewport top
+          if (distance < closestDistance) {
+            closestDistance = distance;
+            closestCard = card;
+            closestIndex = cardIndex;
           }
         });
         
-        if (bestCandidate) {
-          targetCard = bestCandidate.card;
-          targetIndex = bestCandidate.index;
-        }
-        
-        // Snap to the target card
-        if (targetCard) {
-          const targetTop = targetCard.offsetTop;
+        // Snap to the closest card
+        if (closestCard) {
+          const targetTop = closestCard.offsetTop;
           const currentTop = container.scrollTop;
           
-          // Only snap if we're not already perfectly aligned (within 1px)
-          if (Math.abs(targetTop - currentTop) > 1) {
-            // 🔥 INSTANT SNAP: Use immediate scroll on mobile for snappy feel
-            if (isMobileDevice) {
-              // On mobile: instant snap with no animation for immediate response
-              container.scrollTo({
-                top: targetTop,
-                behavior: 'instant'
-              });
-            } else {
-              // On desktop: smooth animation
-              container.scrollTo({
-                top: targetTop,
-                behavior: 'smooth'
-              });
-            }
+          // Only snap if we need to move more than 2px
+          if (Math.abs(targetTop - currentTop) > 2) {
+            // 🔥 INSTANT on mobile, smooth on desktop
+            container.scrollTo({
+              top: targetTop,
+              behavior: isMobileDevice ? 'instant' : 'smooth'
+            });
           }
           
           // Update index if changed
-          if (targetIndex !== currentIndex) {
-            setCurrentIndex(targetIndex);
+          if (closestIndex !== currentIndex) {
+            setCurrentIndex(closestIndex);
             
-            const coin = coins[targetIndex];
+            const coin = coins[closestIndex];
             const enriched = enrichedCoins.get(coin.mintAddress);
             const enrichedCoin = enriched ? { ...coin, ...enriched } : coin;
-            onCurrentCoinChange?.(enrichedCoin, targetIndex);
+            onCurrentCoinChange?.(enrichedCoin, closestIndex);
             
-            console.log(`📱 Coin ${targetIndex + 1}/${coins.length} (direction: ${scrollDirection === 1 ? '↓' : scrollDirection === -1 ? '↑' : '•'})`);
+            console.log(`📱 Coin ${closestIndex + 1}/${coins.length}`);
           }
         }
-        
-        // Reset direction after snap
-        scrollDirection = 0;
-      }, snapDelay); // Use dynamic delay based on device
+      }, snapDelay);
     };
     
     container.addEventListener('scroll', handleScroll, { passive: true });
