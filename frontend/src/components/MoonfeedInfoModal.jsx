@@ -1,37 +1,67 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import './MoonfeedInfoModal.css';
-import InteractiveTutorial from './InteractiveTutorial';
 
 // Use the new logo from public folder
 const moonfeedLogo = '/new logo.jpeg';
 
-const MoonfeedInfoModal = ({ isVisible, onClose, onInteractiveModeClick }) => {
-  if (!isVisible) return null;
+const MoonfeedInfoModal = ({ isVisible, onClose }) => {
+  const [isClosing, setIsClosing] = useState(false);
+  const [touchStart, setTouchStart] = useState(null);
+  const [touchEnd, setTouchEnd] = useState(null);
+
+  if (!isVisible && !isClosing) return null;
+
+  // Minimum swipe distance (in px) to trigger close
+  const minSwipeDistance = 50;
 
   const handleClose = () => {
     console.log('🌙 Moonfeed modal closing...');
-    onClose();
+    setIsClosing(true);
+    setTimeout(() => {
+      setIsClosing(false);
+      onClose();
+    }, 600); // Match animation duration (0.6s)
   };
 
-  const handleInteractiveModeClick = () => {
-    console.log('🎓 Interactive mode starting...');
-    handleClose(); // Close the info modal first
-    if (onInteractiveModeClick) {
-      onInteractiveModeClick(); // Trigger the tutorial
+  const onTouchStart = (e) => {
+    setTouchEnd(null);
+    setTouchStart(e.targetTouches[0].clientX);
+  };
+
+  const onTouchMove = (e) => {
+    setTouchEnd(e.targetTouches[0].clientX);
+  };
+
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    
+    const distance = touchStart - touchEnd;
+    const isLeftSwipe = distance > minSwipeDistance;
+    
+    // Close if swiped left
+    if (isLeftSwipe) {
+      handleClose();
     }
   };
 
-  return (
+  return createPortal(
     <div 
-      className="moonfeed-info-overlay" 
+      className={`moonfeed-info-overlay ${isClosing ? 'closing' : ''}`}
       onClick={(e) => {
-        // Only close if clicking directly on the overlay, not on any child elements
+        // Close if clicking on the overlay (not the panel)
         if (e.target === e.currentTarget) {
           handleClose();
         }
       }}
     >
-      <div className="moonfeed-info-modal" onClick={(e) => e.stopPropagation()}>
+      <div 
+        className={`moonfeed-info-modal ${isClosing ? 'closing' : ''}`}
+        onClick={(e) => e.stopPropagation()}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+      >
         {/* Header */}
         <div className="moonfeed-info-header">
           <div className="moonfeed-header-wrapper">
@@ -46,9 +76,6 @@ const MoonfeedInfoModal = ({ isVisible, onClose, onInteractiveModeClick }) => {
                 <span className="moonfeed-logo">🌙</span>
               )}
               <h2>Moonfeed</h2>
-              <button className="interactive-mode-button" onClick={handleInteractiveModeClick}>
-                Interactive Mode
-              </button>
             </div>
             {/* Social Links - Below Title */}
             <div className="header-social-links">
@@ -94,17 +121,42 @@ const MoonfeedInfoModal = ({ isVisible, onClose, onInteractiveModeClick }) => {
 
         {/* Content */}
         <div className="moonfeed-info-content">
-          <div className="info-section" style={{ background: 'none', backgroundColor: 'transparent' }}>
-            <h3 style={{ background: 'none', backgroundColor: 'transparent' }}>What is Moonfeed?</h3>
+          <div className="hero-image-section">
+            <img 
+              src="/moocow train.png" 
+              alt="Moonfeed Train" 
+              className="hero-image"
+            />
+          </div>
+
+          <div className="info-section welcome-section" style={{ background: 'none', backgroundColor: 'transparent' }}>
+            <h2 style={{ background: 'none', backgroundColor: 'transparent' }}>Welcome to Moonfeed! 🚀</h2>
             <p style={{ background: 'none', backgroundColor: 'transparent' }}>
-              MoonFeed was created to make trading more accessible, people assume you need to be an insider to make money trading on solana, but much like any industry, if you have the right tools there's money to be made.
+              We created an app that shows you feeds of meme coins going to the moon!
             </p>
           </div>
 
-          <div className="info-section" style={{ background: 'none', backgroundColor: 'transparent' }}>
-            <h3 style={{ background: 'none', backgroundColor: 'transparent' }}>How it Works</h3>
+          <div className="info-section rug-section" style={{ background: 'none', backgroundColor: 'transparent' }}>
+            <h3 style={{ background: 'none', backgroundColor: 'transparent' }}>Tired of getting rugged? 🛡️</h3>
             <p style={{ background: 'none', backgroundColor: 'transparent' }}>
-              Moonfeed pulls Solana coins from the blockchain with specific numeric values, these are what we've found to be strong indicators that a coin will go up, we want to show you coins going to the moon. in addition to our Trending, and New Feeds, we're adding graduating coins from Pump.fun. We encourage you to play with the filters to find coins that suit your trading style, as we intend to add more feeds in the future for different kinds of traders.
+              We do a personal rugcheck for <strong>EVERY</strong> coin we show you! Just hover over liquidity and we'll show you the juice.
+            </p>
+          </div>
+
+          <div className="info-section how-section" style={{ background: 'none', backgroundColor: 'transparent' }}>
+            <h3 style={{ background: 'none', backgroundColor: 'transparent' }}>How do we do it? 🔍</h3>
+            <p style={{ background: 'none', backgroundColor: 'transparent' }}>
+              We aggregate real-time data from multiple trusted sources across the Solana blockchain to give you the most comprehensive view of the market:
+            </p>
+            <ul className="data-sources-list">
+              <li><strong>DexScreener</strong> - Live price charts, trading volume, and market data</li>
+              <li><strong>Pump.fun</strong> - Newly graduating tokens and trending launches</li>
+              <li><strong>Rugcheck</strong> - Contract safety verification and liquidity lock status</li>
+              <li><strong>Solana RPC</strong> - Direct blockchain data for holder distribution and on-chain metrics</li>
+              <li><strong>Jupiter</strong> - Secure, trustless trading directly to your wallet</li>
+            </ul>
+            <p style={{ background: 'none', backgroundColor: 'transparent' }}>
+              By combining these sources, we filter for coins with strong indicators like solid liquidity, active trading volume, and verified safety features - showing you opportunities before they take off!
             </p>
           </div>
 
@@ -112,27 +164,6 @@ const MoonfeedInfoModal = ({ isVisible, onClose, onInteractiveModeClick }) => {
             <h3 style={{ background: 'none', backgroundColor: 'transparent' }}>How Trading Works</h3>
             <p style={{ background: 'none', backgroundColor: 'transparent' }}>
               Trading is all handled through Jupiter, they are the most reliable and trusted company to handle trades on the Solana network, and they send trades directly to your wallet. We never hold your funds everything is done through Jupiter, they handle the swap and it gets sent directly to your hot wallet, which can be used anywhere else online!
-            </p>
-          </div>
-
-          <div className="info-section" style={{ background: 'none', backgroundColor: 'transparent' }}>
-            <h3 style={{ background: 'none', backgroundColor: 'transparent' }}>Where We Get Our Data</h3>
-            <p style={{ background: 'none', backgroundColor: 'transparent' }}>
-              Moonfeed aggregates data from multiple trusted sources on the Solana blockchain. We pull real-time information from DexScreener for price charts and trading data, Pump.fun for newly graduating tokens, and use Rugcheck to verify liquidity locks and contract safety. All of this data is continuously updated to give you the most accurate view of what's happening in the market.
-            </p>
-          </div>
-
-          <div className="info-section" style={{ background: 'none', backgroundColor: 'transparent' }}>
-            <h3 style={{ background: 'none', backgroundColor: 'transparent' }}>How We Load Coins</h3>
-            <p style={{ background: 'none', backgroundColor: 'transparent' }}>
-              Our backend constantly scans the Solana blockchain looking for tokens that meet specific criteria. We analyze factors like liquidity depth, trading volume, holder distribution, and price momentum. Coins that show strong indicators are automatically added to our feeds. The Trending feed shows tokens with the highest recent activity, while the New feed displays fresh launches. Our filters let you narrow down results by market cap, liquidity, and other key metrics.
-            </p>
-          </div>
-
-          <div className="info-section" style={{ background: 'none', backgroundColor: 'transparent' }}>
-            <h3 style={{ background: 'none', backgroundColor: 'transparent' }}>Understanding the Interface</h3>
-            <p style={{ background: 'none', backgroundColor: 'transparent' }}>
-              Moonfeed uses a TikTok-style vertical scroll interface to make browsing tokens fast and intuitive. Each card displays essential information: current price, 24-hour change, market cap, volume, and liquidity. Tap on any wallet address to see detailed analytics including whale activity and top trader rankings. Use the star icon to save favorites, and the trade button for quick swaps through Jupiter. The chart shows real-time price action with multiple timeframes available.
             </p>
           </div>
 
@@ -161,14 +192,14 @@ const MoonfeedInfoModal = ({ isVisible, onClose, onInteractiveModeClick }) => {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
 // Main button component
 const MoonfeedInfoButton = ({ className = '' }) => {
   const [showModal, setShowModal] = useState(false);
-  const [showTutorial, setShowTutorial] = useState(false);
 
   const handleOpenModal = () => {
     console.log('🌙 Opening Moonfeed info modal...');
@@ -178,16 +209,6 @@ const MoonfeedInfoButton = ({ className = '' }) => {
   const handleCloseModal = () => {
     console.log('🌙 Closing Moonfeed info modal...');
     setShowModal(false);
-  };
-
-  const handleStartTutorial = () => {
-    console.log('🎓 Starting interactive tutorial...');
-    setShowTutorial(true);
-  };
-
-  const handleCloseTutorial = () => {
-    console.log('🎓 Closing interactive tutorial...');
-    setShowTutorial(false);
   };
 
   return (
@@ -211,12 +232,6 @@ const MoonfeedInfoButton = ({ className = '' }) => {
       <MoonfeedInfoModal 
         isVisible={showModal} 
         onClose={handleCloseModal}
-        onInteractiveModeClick={handleStartTutorial}
-      />
-
-      <InteractiveTutorial
-        isActive={showTutorial}
-        onClose={handleCloseTutorial}
       />
     </>
   );

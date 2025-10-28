@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fee Split Viewer - Live Demo</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      margin: 0;
+      padding: 20px;
+      color: white;
+    }
+    
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+    
+    h1 {
+      text-align: center;
+      margin-bottom: 10px;
+    }
+    
+    .subtitle {
+      text-align: center;
+      opacity: 0.9;
+      margin-bottom: 30px;
+    }
+    
+    .card {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    
+    .split-visual {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      margin: 20px 0;
+    }
+    
+    .split-row {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+    
+    .split-bar {
+      flex: 1;
+      height: 40px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      padding: 0 15px;
+      font-weight: bold;
+      transition: transform 0.2s;
+    }
+    
+    .split-bar:hover {
+      transform: scale(1.02);
+    }
+    
+    .jupiter-cut {
+      background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+    }
+    
+    .influencer-share {
+      background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+    }
+    
+    .platform-share {
+      background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+    }
+    
+    .label {
+      min-width: 100px;
+      font-weight: 600;
+    }
+    
+    .amount {
+      min-width: 80px;
+      text-align: right;
+      font-size: 18px;
+      font-weight: bold;
+    }
+    
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+    }
+    
+    th, td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    th {
+      font-weight: 600;
+      opacity: 0.8;
+      font-size: 12px;
+      text-transform: uppercase;
+    }
+    
+    .highlight-blue {
+      color: #60a5fa;
+      font-weight: 600;
+    }
+    
+    .highlight-green {
+      color: #4ade80;
+      font-weight: 600;
+    }
+    
+    .highlight-yellow {
+      color: #fbbf24;
+      font-weight: 600;
+    }
+    
+    button {
+      background: white;
+      color: #667eea;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+    
+    button:hover {
+      transform: scale(1.05);
+    }
+    
+    .button-group {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      margin-top: 20px;
+    }
+    
+    .loading {
+      text-align: center;
+      padding: 20px;
+      opacity: 0.7;
+    }
+    
+    .error {
+      background: rgba(239, 68, 68, 0.2);
+      border: 1px solid rgba(239, 68, 68, 0.5);
+      padding: 15px;
+      border-radius: 8px;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>💎 Fee Split Viewer</h1>
+    <p class="subtitle">Live demonstration of affiliate vs platform share</p>
+    
+    <!-- Example Split Visualization -->
+    <div class="card">
+      <h2>📊 Example: $10 Fee Split (moonfeedtest @ 50%)</h2>
+      <div class="split-visual">
+        <div class="split-row">
+          <div class="label">Total Fee:</div>
+          <div class="split-bar" style="background: rgba(255,255,255,0.2);">
+            $10.00
+          </div>
+          <div class="amount">100%</div>
+        </div>
+        
+        <div class="split-row">
+          <div class="label">Jupiter Cut:</div>
+          <div class="split-bar jupiter-cut">
+            $2.00
+          </div>
+          <div class="amount">20%</div>
+        </div>
+        
+        <div class="split-row">
+          <div class="label">Net Fee:</div>
+          <div class="split-bar" style="background: rgba(255,255,255,0.15);">
+            $8.00
+          </div>
+          <div class="amount">80%</div>
+        </div>
+        
+        <div class="split-row">
+          <div class="label">Affiliate:</div>
+          <div class="split-bar influencer-share">
+            💙 $4.00 (to moonfeedtest)
+          </div>
+          <div class="amount">50%</div>
+        </div>
+        
+        <div class="split-row">
+          <div class="label">Platform:</div>
+          <div class="split-bar platform-share">
+            💚 $4.00 (to Ultra wallet)
+          </div>
+          <div class="amount">50%</div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Live Data Section -->
+    <div class="card">
+      <h2>🔴 Live Trades for moonfeedtest</h2>
+      <div id="trades-container">
+        <div class="loading">Click "Load Trades" to fetch live data...</div>
+      </div>
+      
+      <div class="button-group">
+        <button onclick="loadTrades()">🔄 Load Trades</button>
+        <button onclick="loadPlatformEarnings()">💰 Platform Earnings</button>
+      </div>
+    </div>
+    
+    <!-- Platform Earnings -->
+    <div class="card">
+      <h2>💎 Ultra Wallet Total Earnings</h2>
+      <div id="platform-container">
+        <div class="loading">Click "Platform Earnings" to see totals...</div>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    const API_URL = 'http://localhost:3001';
+    
+    async function loadTrades() {
+      const container = document.getElementById('trades-container');
+      container.innerHTML = '<div class="loading">Loading...</div>';
+      
+      try {
+        const response = await fetch(`${API_URL}/api/affiliates/moonfeedtest/trades`);
+        const data = await response.json();
+        
+        if (data.success && data.trades.length > 0) {
+          container.innerHTML = `
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Volume</th>
+                  <th>Total Fee</th>
+                  <th>Jupiter Cut</th>
+                  <th>Affiliate Share</th>
+                  <th>Platform Share</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${data.trades.map(trade => `
+                  <tr>
+                    <td>${new Date(trade.timestamp).toLocaleDateString()}</td>
+                    <td>$${trade.tradeVolume.toFixed(2)}</td>
+                    <td>$${trade.feeEarned.toFixed(4)}</td>
+                    <td class="highlight-yellow">$${trade.jupiterCut.toFixed(4)}</td>
+                    <td class="highlight-blue">$${trade.influencerShare.toFixed(4)}</td>
+                    <td class="highlight-green">$${trade.platformShare.toFixed(4)}</td>
+                    <td>${trade.payoutStatus}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+            <p style="margin-top: 15px; opacity: 0.8;">
+              Total trades: ${data.trades.length} | 
+              <span class="highlight-blue">Affiliate earned: $${data.trades.reduce((sum, t) => sum + t.influencerShare, 0).toFixed(2)}</span> | 
+              <span class="highlight-green">Platform earned: $${data.trades.reduce((sum, t) => sum + t.platformShare, 0).toFixed(2)}</span>
+            </p>
+          `;
+        } else {
+          container.innerHTML = '<p>No trades found. Record a trade first!</p>';
+        }
+      } catch (error) {
+        container.innerHTML = `<div class="error">Error: ${error.message}. Make sure backend is running on port 3001.</div>`;
+      }
+    }
+    
+    async function loadPlatformEarnings() {
+      const container = document.getElementById('platform-container');
+      container.innerHTML = '<div class="loading">Loading...</div>';
+      
+      try {
+        const response = await fetch(`${API_URL}/api/affiliates/platform/earnings`);
+        const data = await response.json();
+        
+        if (data.success) {
+          const earnings = data.platformEarnings;
+          container.innerHTML = `
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+              <div style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px;">
+                <div style="font-size: 12px; opacity: 0.7; margin-bottom: 5px;">TOTAL EARNED</div>
+                <div style="font-size: 28px; font-weight: bold;" class="highlight-green">$${earnings.total.toFixed(2)}</div>
+              </div>
+              <div style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px;">
+                <div style="font-size: 12px; opacity: 0.7; margin-bottom: 5px;">PENDING</div>
+                <div style="font-size: 28px; font-weight: bold;" class="highlight-yellow">$${earnings.pending.toFixed(2)}</div>
+              </div>
+              <div style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px;">
+                <div style="font-size: 12px; opacity: 0.7; margin-bottom: 5px;">PAID OUT</div>
+                <div style="font-size: 28px; font-weight: bold;" class="highlight-blue">$${earnings.paid.toFixed(2)}</div>
+              </div>
+              <div style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px;">
+                <div style="font-size: 12px; opacity: 0.7; margin-bottom: 5px;">TOTAL TRADES</div>
+                <div style="font-size: 28px; font-weight: bold;">${earnings.tradeCount}</div>
+              </div>
+            </div>
+            
+            <h3 style="margin-top: 20px;">By Affiliate:</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>Affiliate</th>
+                  <th>Total</th>
+                  <th>Pending</th>
+                  <th>Paid</th>
+                  <th>Trades</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${Object.entries(data.byAffiliate).map(([code, stats]) => `
+                  <tr>
+                    <td>${code}</td>
+                    <td class="highlight-green">$${stats.total.toFixed(2)}</td>
+                    <td class="highlight-yellow">$${stats.pending.toFixed(2)}</td>
+                    <td class="highlight-blue">$${stats.paid.toFixed(2)}</td>
+                    <td>${stats.tradeCount}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          `;
+        }
+      } catch (error) {
+        container.innerHTML = `<div class="error">Error: ${error.message}. Make sure backend is running on port 3001.</div>`;
+      }
+    }
+  </script>
+</body>
+</html>

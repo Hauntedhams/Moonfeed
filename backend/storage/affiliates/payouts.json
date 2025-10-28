@@ -1,0 +1,18 @@
+[
+  {
+    "payoutId": "payout_1761626156640_0hed1iiba",
+    "referralCode": "testaffiliate123",
+    "influencerWallet": "TestWallet123456789abcdefghijklmnop",
+    "influencerName": "Test Influencer",
+    "amount": 4,
+    "tradeIds": [
+      "trade_1761626156636_1s9udsvyg"
+    ],
+    "tradeCount": 1,
+    "transactionSignature": "TestPayoutTx123",
+    "notes": "Test payout",
+    "status": "completed",
+    "createdAt": "2025-10-28T04:35:56.640Z",
+    "completedAt": "2025-10-28T04:35:56.640Z"
+  }
+]

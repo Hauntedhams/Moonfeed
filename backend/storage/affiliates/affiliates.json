@@ -1,0 +1,30 @@
+[
+  {
+    "code": "testaffiliate123",
+    "name": "Test Influencer",
+    "walletAddress": "TestWallet123456789abcdefghijklmnop",
+    "sharePercentage": 50,
+    "email": "test@example.com",
+    "telegram": "@testuser",
+    "totalEarned": 4,
+    "totalVolume": 1000,
+    "totalTrades": 1,
+    "status": "active",
+    "createdAt": "2025-10-28T04:35:56.626Z",
+    "updatedAt": "2025-10-28T04:35:56.636Z"
+  },
+  {
+    "code": "moonfeedtest",
+    "name": "Moonfeed Test Affiliate",
+    "walletAddress": "TestWallet123456789abcdefghijklmnopqrstuvwxyz",
+    "sharePercentage": 50,
+    "email": "test@moonfeed.app",
+    "telegram": "@moonfeedtest",
+    "totalEarned": 1,
+    "totalVolume": 1000,
+    "totalTrades": 1,
+    "status": "active",
+    "createdAt": "2025-10-28T04:39:48.862Z",
+    "updatedAt": "2025-10-28T04:51:26.044Z"
+  }
+]

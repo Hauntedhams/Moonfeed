@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🎯 Affiliate System Test Page</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #fff;
+      padding: 40px 20px;
+      min-height: 100vh;
+    }
+    
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    
+    h1 {
+      font-size: 32px;
+      margin-bottom: 10px;
+    }
+    
+    .subtitle {
+      opacity: 0.9;
+      margin-bottom: 40px;
+    }
+    
+    .card {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 12px;
+      padding: 30px;
+      margin-bottom: 20px;
+    }
+    
+    .card h2 {
+      font-size: 22px;
+      margin-bottom: 20px;
+    }
+    
+    .link-box {
+      background: rgba(0, 0, 0, 0.3);
+      padding: 15px;
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 14px;
+      margin-bottom: 15px;
+      word-break: break-all;
+    }
+    
+    .link-box.large {
+      font-size: 16px;
+      font-weight: bold;
+    }
+    
+    button {
+      background: #fff;
+      color: #667eea;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-weight: bold;
+      cursor: pointer;
+      font-size: 14px;
+      margin-right: 10px;
+      margin-bottom: 10px;
+      transition: transform 0.2s;
+    }
+    
+    button:hover {
+      transform: scale(1.05);
+    }
+    
+    button:active {
+      transform: scale(0.95);
+    }
+    
+    .status {
+      padding: 8px 16px;
+      border-radius: 6px;
+      display: inline-block;
+      font-size: 14px;
+      font-weight: bold;
+      margin-top: 10px;
+    }
+    
+    .status.success {
+      background: rgba(34, 197, 94, 0.3);
+      color: #22c55e;
+    }
+    
+    .status.error {
+      background: rgba(239, 68, 68, 0.3);
+      color: #ef4444;
+    }
+    
+    .status.info {
+      background: rgba(59, 130, 246, 0.3);
+      color: #3b82f6;
+    }
+    
+    .result-box {
+      background: rgba(0, 0, 0, 0.3);
+      padding: 15px;
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 12px;
+      margin-top: 15px;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    
+    .step {
+      margin-bottom: 30px;
+      padding-bottom: 30px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .step:last-child {
+      border-bottom: none;
+    }
+    
+    .step-number {
+      background: rgba(255, 255, 255, 0.2);
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      margin-right: 10px;
+    }
+    
+    .code-snippet {
+      background: rgba(0, 0, 0, 0.5);
+      padding: 12px;
+      border-radius: 6px;
+      font-family: monospace;
+      font-size: 13px;
+      margin: 10px 0;
+      overflow-x: auto;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎯 Affiliate System Test Page</h1>
+    <p class="subtitle">Test your referral links and affiliate tracking</p>
+    
+    <div class="card">
+      <h2>📋 Your Referral Links</h2>
+      
+      <div class="link-box large">
+        http://localhost:5173?ref=moonfeedtest
+      </div>
+      <button onclick="copyLink('http://localhost:5173?ref=moonfeedtest')">📋 Copy Link</button>
+      <button onclick="testLink('moonfeedtest')">🧪 Test Link</button>
+      
+      <div class="link-box large" style="margin-top: 20px;">
+        http://localhost:5173?ref=testaffiliate123
+      </div>
+      <button onclick="copyLink('http://localhost:5173?ref=testaffiliate123')">📋 Copy Link</button>
+      <button onclick="testLink('testaffiliate123')">🧪 Test Link</button>
+    </div>
+    
+    <div class="card">
+      <h2>🧪 Quick Tests</h2>
+      
+      <div class="step">
+        <h3><span class="step-number">1</span> Check Current Referral Code</h3>
+        <p>See if a referral code is currently saved in your browser</p>
+        <button onclick="checkCurrentReferral()">Check Referral Code</button>
+        <div id="current-result"></div>
+      </div>
+      
+      <div class="step">
+        <h3><span class="step-number">2</span> Set Test Referral Code</h3>
+        <p>Manually set a referral code (simulates clicking a link)</p>
+        <button onclick="setTestReferral('moonfeedtest')">Set: moonfeedtest</button>
+        <button onclick="setTestReferral('testaffiliate123')">Set: testaffiliate123</button>
+        <div id="set-result"></div>
+      </div>
+      
+      <div class="step">
+        <h3><span class="step-number">3</span> Validate Referral Code</h3>
+        <p>Check if the referral code exists in the system</p>
+        <button onclick="validateReferral()">Validate Code</button>
+        <div id="validate-result"></div>
+      </div>
+      
+      <div class="step">
+        <h3><span class="step-number">4</span> Simulate a Trade</h3>
+        <p>Track a test trade with the current referral code</p>
+        <button onclick="simulateTrade()">Simulate $1000 Trade</button>
+        <div id="trade-result"></div>
+      </div>
+      
+      <div class="step">
+        <h3><span class="step-number">5</span> View Affiliate Stats</h3>
+        <p>See earnings and trade count for an affiliate</p>
+        <button onclick="viewStats('moonfeedtest')">Stats: moonfeedtest</button>
+        <button onclick="viewStats('testaffiliate123')">Stats: testaffiliate123</button>
+        <div id="stats-result"></div>
+      </div>
+      
+      <div class="step">
+        <h3><span class="step-number">6</span> Clear Referral Code</h3>
+        <p>Remove the referral code from browser storage</p>
+        <button onclick="clearReferral()">Clear Code</button>
+        <div id="clear-result"></div>
+      </div>
+    </div>
+    
+    <div class="card">
+      <h2>💻 Console Commands</h2>
+      <p style="margin-bottom: 15px;">Open browser console (F12) and try these:</p>
+      
+      <div class="code-snippet">
+// Check localStorage<br>
+localStorage.getItem('moonfeed_referral_code')
+      </div>
+      
+      <div class="code-snippet">
+// Set referral code<br>
+localStorage.setItem('moonfeed_referral_code', 'moonfeedtest')<br>
+localStorage.setItem('moonfeed_referral_expiry', Date.now() + (30 * 24 * 60 * 60 * 1000))
+      </div>
+      
+      <div class="code-snippet">
+// Clear referral code<br>
+localStorage.removeItem('moonfeed_referral_code')<br>
+localStorage.removeItem('moonfeed_referral_expiry')
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    const API_BASE = 'http://localhost:3001/api/affiliates';
+    
+    function copyLink(link) {
+      navigator.clipboard.writeText(link);
+      alert('✅ Link copied: ' + link);
+    }
+    
+    function testLink(code) {
+      window.location.href = `http://localhost:5173?ref=${code}`;
+    }
+    
+    function checkCurrentReferral() {
+      const code = localStorage.getItem('moonfeed_referral_code');
+      const expiry = localStorage.getItem('moonfeed_referral_expiry');
+      
+      const resultDiv = document.getElementById('current-result');
+      
+      if (code && expiry) {
+        const expiryDate = new Date(parseInt(expiry));
+        const isExpired = Date.now() > parseInt(expiry);
+        
+        resultDiv.innerHTML = `
+          <div class="status ${isExpired ? 'error' : 'success'}">
+            ${isExpired ? '⏰ Expired' : '✅ Active'}
+          </div>
+          <div class="result-box">
+            <strong>Code:</strong> ${code}<br>
+            <strong>Expires:</strong> ${expiryDate.toLocaleString()}<br>
+            <strong>Status:</strong> ${isExpired ? 'Expired' : 'Active'}
+          </div>
+        `;
+      } else {
+        resultDiv.innerHTML = `
+          <div class="status info">ℹ️ No Referral Code</div>
+          <div class="result-box">No referral code found in localStorage</div>
+        `;
+      }
+    }
+    
+    function setTestReferral(code) {
+      const expiry = Date.now() + (30 * 24 * 60 * 60 * 1000); // 30 days
+      localStorage.setItem('moonfeed_referral_code', code);
+      localStorage.setItem('moonfeed_referral_expiry', expiry);
+      
+      const resultDiv = document.getElementById('set-result');
+      resultDiv.innerHTML = `
+        <div class="status success">✅ Code Set</div>
+        <div class="result-box">
+          <strong>Code:</strong> ${code}<br>
+          <strong>Expires:</strong> ${new Date(expiry).toLocaleString()}
+        </div>
+      `;
+    }
+    
+    async function validateReferral() {
+      const code = localStorage.getItem('moonfeed_referral_code');
+      const resultDiv = document.getElementById('validate-result');
+      
+      if (!code) {
+        resultDiv.innerHTML = `
+          <div class="status error">❌ No Code</div>
+          <div class="result-box">No referral code in localStorage. Set one first!</div>
+        `;
+        return;
+      }
+      
+      try {
+        const response = await fetch(`${API_BASE}/validate/${code}`);
+        const data = await response.json();
+        
+        if (data.success && data.valid) {
+          resultDiv.innerHTML = `
+            <div class="status success">✅ Valid Code</div>
+            <div class="result-box">
+              <strong>Code:</strong> ${data.affiliate.code}<br>
+              <strong>Name:</strong> ${data.affiliate.name}<br>
+              <strong>Status:</strong> ${data.affiliate.status}
+            </div>
+          `;
+        } else {
+          resultDiv.innerHTML = `
+            <div class="status error">❌ Invalid</div>
+            <div class="result-box">Referral code "${code}" not found in system</div>
+          `;
+        }
+      } catch (error) {
+        resultDiv.innerHTML = `
+          <div class="status error">❌ Error</div>
+          <div class="result-box">${error.message}</div>
+        `;
+      }
+    }
+    
+    async function simulateTrade() {
+      const code = localStorage.getItem('moonfeed_referral_code');
+      const resultDiv = document.getElementById('trade-result');
+      
+      if (!code) {
+        resultDiv.innerHTML = `
+          <div class="status error">❌ No Code</div>
+          <div class="result-box">No referral code set. Set one first!</div>
+        `;
+        return;
+      }
+      
+      try {
+        const response = await fetch(`${API_BASE}/track-trade`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            referralCode: code,
+            userWallet: 'TestUser' + Math.random().toString(36).substring(7),
+            tradeVolume: 1000,
+            feeEarned: 10,
+            tokenIn: 'SOL',
+            tokenOut: 'BONK',
+            transactionSignature: 'TestTx' + Date.now()
+          })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          resultDiv.innerHTML = `
+            <div class="status success">✅ Trade Tracked</div>
+            <div class="result-box">
+              <strong>Volume:</strong> $${data.trade.tradeVolume}<br>
+              <strong>Fee Earned:</strong> $${data.trade.feeEarned}<br>
+              <strong>Jupiter Cut (20%):</strong> $${data.trade.jupiterCut.toFixed(2)}<br>
+              <strong>Net Fee:</strong> $${data.trade.netFee.toFixed(2)}<br>
+              <strong>Influencer Share (50%):</strong> $${data.trade.influencerShare.toFixed(2)}<br>
+              <strong>Platform Share (50%):</strong> $${data.trade.platformShare.toFixed(2)}<br>
+              <strong>Status:</strong> ${data.trade.payoutStatus}
+            </div>
+          `;
+        } else {
+          resultDiv.innerHTML = `
+            <div class="status error">❌ Failed</div>
+            <div class="result-box">${data.error}</div>
+          `;
+        }
+      } catch (error) {
+        resultDiv.innerHTML = `
+          <div class="status error">❌ Error</div>
+          <div class="result-box">${error.message}</div>
+        `;
+      }
+    }
+    
+    async function viewStats(code) {
+      const resultDiv = document.getElementById('stats-result');
+      
+      try {
+        const response = await fetch(`${API_BASE}/${code}/stats`);
+        const data = await response.json();
+        
+        if (data.success) {
+          resultDiv.innerHTML = `
+            <div class="status success">✅ Stats Loaded</div>
+            <div class="result-box">
+              <strong>Affiliate:</strong> ${data.affiliate.name} (${data.affiliate.code})<br>
+              <strong>Total Earned:</strong> $${data.stats.totalEarnings.toFixed(2)}<br>
+              <strong>Pending Earnings:</strong> $${data.stats.pendingEarnings.toFixed(2)}<br>
+              <strong>Paid Earnings:</strong> $${data.stats.paidEarnings.toFixed(2)}<br>
+              <strong>Total Volume:</strong> $${data.stats.totalVolume.toLocaleString()}<br>
+              <strong>Total Trades:</strong> ${data.stats.totalTrades}<br>
+              <strong>Pending Trades:</strong> ${data.stats.pendingTradeCount}<br>
+              <strong>Paid Trades:</strong> ${data.stats.paidTradeCount}
+            </div>
+          `;
+        } else {
+          resultDiv.innerHTML = `
+            <div class="status error">❌ Not Found</div>
+            <div class="result-box">${data.error}</div>
+          `;
+        }
+      } catch (error) {
+        resultDiv.innerHTML = `
+          <div class="status error">❌ Error</div>
+          <div class="result-box">${error.message}</div>
+        `;
+      }
+    }
+    
+    function clearReferral() {
+      localStorage.removeItem('moonfeed_referral_code');
+      localStorage.removeItem('moonfeed_referral_expiry');
+      
+      const resultDiv = document.getElementById('clear-result');
+      resultDiv.innerHTML = `
+        <div class="status success">✅ Cleared</div>
+        <div class="result-box">Referral code removed from localStorage</div>
+      `;
+    }
+  </script>
+</body>
+</html>

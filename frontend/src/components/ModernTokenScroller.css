@@ -106,6 +106,8 @@
   -webkit-overflow-scrolling: touch; /* Smooth momentum on iOS */
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* IE and Edge */
+  /* Smooth scroll behavior for better UX */
+  scroll-behavior: smooth;
   /* Performance optimizations */
   will-change: scroll-position;
   contain: layout style paint;

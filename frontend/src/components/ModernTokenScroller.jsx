@@ -660,8 +660,8 @@ const ModernTokenScroller = ({
       // Clear previous timer
       if (scrollTimer) clearTimeout(scrollTimer);
       
-      // 🔥 FASTER detection on mobile (50ms), desktop (100ms) - but SAME smooth behavior
-      const snapDelay = isMobileDevice ? 50 : 100;
+      // 🔥 Longer delay for smoother momentum scrolling (200ms mobile, 150ms desktop)
+      const snapDelay = isMobileDevice ? 200 : 150;
       
       scrollTimer = setTimeout(() => {
         const scrollTop = container.scrollTop;
@@ -694,9 +694,9 @@ const ModernTokenScroller = ({
           const targetTop = closestCard.offsetTop;
           const currentTop = container.scrollTop;
           
-          // Only snap if we need to move more than 1px
-          if (Math.abs(targetTop - currentTop) > 1) {
-            // 🔥 SAME SMOOTH BEHAVIOR for both mobile & desktop
+          // Only snap if we're far enough away (increased threshold for smoother feel)
+          if (Math.abs(targetTop - currentTop) > 5) {
+            // 🔥 Smooth behavior for natural scrolling
             container.scrollTo({
               top: targetTop,
               behavior: 'smooth'

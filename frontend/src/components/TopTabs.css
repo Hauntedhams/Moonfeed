@@ -17,9 +17,9 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 4px; /* Reduced gap for 4 tabs */
+  gap: 3px; /* Reduced gap for more compact look */
   padding: 0 20px;
-  max-width: 380px; /* Increased to accommodate 4 tabs */
+  max-width: 360px; /* Reduced width for smaller tabs */
   margin: 0 auto;
   position: relative;
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); /* Smooth transition for reordering */
@@ -32,13 +32,13 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 4px 6px; /* Smaller padding for 4 tabs */
+  padding: 3px 5px; /* Even smaller padding */
   background: rgba(0, 0, 0, 0.4); /* Slightly darker for better contrast */
   border: 1px solid rgba(255, 255, 255, 0.15); /* Slightly more visible border */
   cursor: pointer;
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); /* Smoother, longer transition */
-  border-radius: 12px; /* Smaller border radius for smaller buttons */
-  min-height: 24px; /* Smaller height for 4 tabs */
+  border-radius: 10px; /* Smaller border radius */
+  min-height: 20px; /* Smaller height */
   position: relative;
   backdrop-filter: blur(20px) saturate(180%); /* Enhanced blur with saturation */
   -webkit-backdrop-filter: blur(20px) saturate(180%);
@@ -109,11 +109,11 @@
 }
 
 .tab-label {
-  font-size: 9px; /* Smaller text for 4 tabs */
+  font-size: 8px; /* Even smaller text */
   font-weight: 600;
   color: rgba(255, 255, 255, 0.8);
   text-transform: uppercase;
-  letter-spacing: 0.1px; /* Reduced letter spacing */
+  letter-spacing: 0.05px; /* Even more reduced letter spacing */
   line-height: 1;
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3); /* Text shadow for better readability */
@@ -165,10 +165,10 @@
 /* Filter Tab Specific Styles */
 .filter-tab {
   flex: 0 0 auto; /* Don't grow like other tabs */
-  min-width: 60px; /* Wider button */
-  max-width: 60px;
-  padding: 4px 6px; /* Smaller padding for more compact look */
-  min-height: 24px; /* Smaller height */
+  min-width: 55px; /* Smaller width */
+  max-width: 55px;
+  padding: 3px 5px; /* Smaller padding to match other tabs */
+  min-height: 20px; /* Smaller height to match other tabs */
   position: absolute; /* Position it absolutely */
   top: -8px; /* Move it higher up */
   right: 20px; /* Position from right edge */
@@ -178,12 +178,12 @@
 }
 
 .filter-tab svg {
-  width: 12px; /* Smaller icon */
-  height: 12px;
+  width: 11px; /* Smaller icon */
+  height: 11px;
 }
 
 .filter-tab .tab-label {
-  font-size: 9px !important; /* Smaller text */
+  font-size: 8px !important; /* Smaller text to match other tabs */
   margin-top: 1px;
 }
 

@@ -1,0 +1,45 @@
+[
+  {
+    "tradeId": "trade_1761626156636_1s9udsvyg",
+    "referralCode": "testaffiliate123",
+    "influencerWallet": "TestWallet123456789abcdefghijklmnop",
+    "influencerName": "Test Influencer",
+    "userWallet": "UserWallet123456789",
+    "tradeVolume": 1000,
+    "feeEarned": 10,
+    "jupiterCut": 2,
+    "netFee": 8,
+    "influencerShare": 4,
+    "platformShare": 4,
+    "tokenIn": "SOL",
+    "tokenOut": "BONK",
+    "transactionSignature": "TestTxSignature123",
+    "metadata": {
+      "testMode": true
+    },
+    "payoutStatus": "paid",
+    "payoutId": "payout_1761626156640_0hed1iiba",
+    "timestamp": "2025-10-28T04:35:56.636Z",
+    "paidAt": "2025-10-28T04:35:56.641Z"
+  },
+  {
+    "tradeId": "trade_1761627086043_3dmtbs8mn",
+    "referralCode": "moonfeedtest",
+    "influencerWallet": "TestWallet123456789abcdefghijklmnopqrstuvwxyz",
+    "influencerName": "Moonfeed Test Affiliate",
+    "userWallet": "TestUser789",
+    "tradeVolume": 1000,
+    "feeEarned": 2.5,
+    "jupiterCut": 0.5,
+    "netFee": 2,
+    "influencerShare": 1,
+    "platformShare": 1,
+    "tokenIn": "SOL",
+    "tokenOut": "BONK",
+    "transactionSignature": null,
+    "metadata": {},
+    "payoutStatus": "pending",
+    "payoutId": null,
+    "timestamp": "2025-10-28T04:51:26.043Z"
+  }
+]

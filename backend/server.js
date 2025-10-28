@@ -23,6 +23,7 @@ const TokenMetadataService = require('./tokenMetadataService');
 const walletRoutes = require('./routes/walletRoutes');
 const triggerRoutes = require('./routes/trigger');
 const searchRoutes = require('./routes/search');
+const affiliateRoutes = require('./routes/affiliates');
 const onDemandEnrichment = require('./services/OnDemandEnrichmentService');
 
 const app = express();
@@ -73,6 +74,9 @@ app.use('/api/trigger', triggerRoutes);
 
 // Mount Jupiter Ultra Search routes
 app.use('/api/search', searchRoutes);
+
+// Mount Affiliate routes
+app.use('/api/affiliates', affiliateRoutes);
 
 // ⭐ On-demand enrichment endpoint for single coins
 app.post('/api/coins/enrich-single', async (req, res) => {

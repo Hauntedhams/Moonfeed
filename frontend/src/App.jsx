@@ -14,6 +14,7 @@ import AdvancedFilter from './components/AdvancedFilter'
 import { WalletProvider } from './contexts/WalletContext'
 import { TrackedWalletsProvider } from './contexts/TrackedWalletsContext'
 import { DarkModeProvider } from './contexts/DarkModeContext'
+import ReferralTracker from './utils/ReferralTracker'
 
 function App() {
   // Build timestamp - only log once on initial load
@@ -49,6 +50,11 @@ function App() {
   const [coinListModalFilter, setCoinListModalFilter] = useState(null); // Filter type for coin list modal
   const [currentCoinIndex, setCurrentCoinIndex] = useState(0); // Current coin index in scroller
   const [totalCoinsInList, setTotalCoinsInList] = useState(0); // Total coins in current list
+
+  // Initialize referral tracking on app load
+  useEffect(() => {
+    ReferralTracker.initialize();
+  }, []);
 
   // Listen for favorites changes from TokenScroller
   const handleFavoritesChange = (newFavs) => {
