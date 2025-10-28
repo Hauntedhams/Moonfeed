@@ -112,6 +112,17 @@ const MoonfeedInfoModal = ({ isVisible, onClose }) => {
                   <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z"/>
                 </svg>
               </a>
+              <a 
+                href="https://t.me/+KYOvhdMRv2BlMmVh" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="header-social-icon telegram"
+                title="Join our Telegram"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 0 0-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/>
+                </svg>
+              </a>
             </div>
           </div>
           <button className="close-button" onClick={handleClose}>
@@ -130,21 +141,21 @@ const MoonfeedInfoModal = ({ isVisible, onClose }) => {
           </div>
 
           <div className="info-section welcome-section" style={{ background: 'none', backgroundColor: 'transparent' }}>
-            <h2 style={{ background: 'none', backgroundColor: 'transparent' }}>Welcome to Moonfeed! 🚀</h2>
+            <h2 style={{ background: 'none', backgroundColor: 'transparent' }}>Welcome to Moonfeed!</h2>
             <p style={{ background: 'none', backgroundColor: 'transparent' }}>
               We created an app that shows you feeds of meme coins going to the moon!
             </p>
           </div>
 
           <div className="info-section rug-section" style={{ background: 'none', backgroundColor: 'transparent' }}>
-            <h3 style={{ background: 'none', backgroundColor: 'transparent' }}>Tired of getting rugged? 🛡️</h3>
+            <h3 style={{ background: 'none', backgroundColor: 'transparent' }}>Tired of getting rugged?</h3>
             <p style={{ background: 'none', backgroundColor: 'transparent' }}>
               We do a personal rugcheck for <strong>EVERY</strong> coin we show you! Just hover over liquidity and we'll show you the juice.
             </p>
           </div>
 
           <div className="info-section how-section" style={{ background: 'none', backgroundColor: 'transparent' }}>
-            <h3 style={{ background: 'none', backgroundColor: 'transparent' }}>How do we do it? 🔍</h3>
+            <h3 style={{ background: 'none', backgroundColor: 'transparent' }}>How do we do it?</h3>
             <p style={{ background: 'none', backgroundColor: 'transparent' }}>
               We aggregate real-time data from multiple trusted sources across the Solana blockchain to give you the most comprehensive view of the market:
             </p>
@@ -179,7 +190,7 @@ const MoonfeedInfoModal = ({ isVisible, onClose }) => {
             <div className="warning-box">
               <p>
                 <strong>Always DYOR (Do Your Own Research)!</strong> Meme coins are highly volatile and risky. 
-                Only invest what you can afford to lose. Look for liquidity locks (🔒) and verify token contracts.
+                Only invest what you can afford to lose. Look for liquidity locks and verify token contracts.
               </p>
             </div>
           </div>
