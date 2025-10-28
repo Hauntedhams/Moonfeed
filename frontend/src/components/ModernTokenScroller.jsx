@@ -644,7 +644,7 @@ const ModernTokenScroller = ({
     }
   }, []);
 
-  // 🎯 SIMPLIFIED SNAP: Ultra-fast and responsive mobile scrolling
+  // 🎯 UNIVERSAL SMOOTH SNAP: Same smooth behavior for mobile & desktop
   useEffect(() => {
     const container = scrollerRef.current;
     if (!container) return;
@@ -658,18 +658,17 @@ const ModernTokenScroller = ({
       // Clear previous timer
       if (scrollTimer) clearTimeout(scrollTimer);
       
-      // Ultra-fast snap delay on mobile (30ms), slightly longer on desktop (80ms)
-      const snapDelay = isMobileDevice ? 30 : 80;
+      // 🔥 FASTER detection on mobile (50ms), desktop (100ms) - but SAME smooth behavior
+      const snapDelay = isMobileDevice ? 50 : 100;
       
       scrollTimer = setTimeout(() => {
         const scrollTop = container.scrollTop;
-        const viewportHeight = container.clientHeight;
         
         // Find all coin cards
         const cards = Array.from(container.querySelectorAll('.modern-coin-slide:not(.modern-coin-placeholder)'));
         if (cards.length === 0) return;
         
-        // 🔥 SIMPLIFIED: Just find the closest card to the top of the viewport
+        // Find the closest card to the top of the viewport
         let closestCard = null;
         let closestDistance = Infinity;
         let closestIndex = currentIndex;
@@ -681,7 +680,6 @@ const ModernTokenScroller = ({
           const cardTop = card.offsetTop;
           const distance = Math.abs(cardTop - scrollTop);
           
-          // Find the card closest to the viewport top
           if (distance < closestDistance) {
             closestDistance = distance;
             closestCard = card;
@@ -694,12 +692,12 @@ const ModernTokenScroller = ({
           const targetTop = closestCard.offsetTop;
           const currentTop = container.scrollTop;
           
-          // Only snap if we need to move more than 2px
-          if (Math.abs(targetTop - currentTop) > 2) {
-            // 🔥 INSTANT on mobile, smooth on desktop
+          // Only snap if we need to move more than 1px
+          if (Math.abs(targetTop - currentTop) > 1) {
+            // 🔥 SAME SMOOTH BEHAVIOR for both mobile & desktop
             container.scrollTo({
               top: targetTop,
-              behavior: isMobileDevice ? 'instant' : 'smooth'
+              behavior: 'smooth'
             });
           }
           
