@@ -140,6 +140,36 @@ const MoonfeedInfoModal = ({ isVisible, onClose }) => {
             />
           </div>
 
+          <div className="info-section roadmap-section" style={{ background: 'none', backgroundColor: 'transparent' }}>
+            <h3 style={{ background: 'none', backgroundColor: 'transparent' }}>Roadmap</h3>
+            <div className="roadmap-timeline">
+              <div className="roadmap-phase completed">
+                <div className="phase-marker">✓</div>
+                <div className="phase-content">
+                  <h4>Phase 1: Launch</h4>
+                  <p>Successfully launched Moonfeed with real-time tracking, safety checks, and seamless trading integration.</p>
+                  <span className="phase-status">Completed</span>
+                </div>
+              </div>
+              <div className="roadmap-phase in-progress">
+                <div className="phase-marker">2</div>
+                <div className="phase-content">
+                  <h4>Phase 2: Mobile Apps</h4>
+                  <p>Launch on iOS App Store and Google Play Store, bringing Moonfeed to mobile devices everywhere.</p>
+                  <span className="phase-status">In Progress</span>
+                </div>
+              </div>
+              <div className="roadmap-phase upcoming">
+                <div className="phase-marker">3</div>
+                <div className="phase-content">
+                  <h4>Phase 3: Growth & Marketing</h4>
+                  <p>Influencer partnerships, community expansion, and taking Moonfeed to the moon!</p>
+                  <span className="phase-status">Coming Soon</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div className="info-section welcome-section" style={{ background: 'none', backgroundColor: 'transparent' }}>
             <h2 style={{ background: 'none', backgroundColor: 'transparent' }}>Welcome to Moonfeed!</h2>
             <p style={{ background: 'none', backgroundColor: 'transparent' }}>
