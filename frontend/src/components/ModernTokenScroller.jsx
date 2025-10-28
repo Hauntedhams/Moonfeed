@@ -156,6 +156,8 @@ const ModernTokenScroller = ({
           // Rugcheck data
           rugcheckScore: enrichedData.rugcheckScore,
           rugcheckVerified: enrichedData.rugcheckVerified,
+          rugcheckProcessedAt: enrichedData.rugcheckProcessedAt,
+          rugcheckError: enrichedData.rugcheckError,
           liquidityLocked: enrichedData.liquidityLocked,
           lockPercentage: enrichedData.lockPercentage,
           burnPercentage: enrichedData.burnPercentage,

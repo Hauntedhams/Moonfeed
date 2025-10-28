@@ -464,6 +464,12 @@ const CoinCard = memo(({
       case 'liquidity':
         // Build comprehensive rugcheck security information with proper HTML formatting
         let rugcheckInfo = '';
+        
+        // 🔥 FIX: Check rugcheckProcessedAt to distinguish between "loading" and "unavailable"
+        // - If rugcheckProcessedAt exists: Rugcheck was attempted (show results or unavailable message)
+        // - If rugcheckProcessedAt is missing: Rugcheck not yet attempted (show loading)
+        const rugcheckAttempted = coin.rugcheckProcessedAt || coin.enriched;
+        
         if (coin.rugcheckVerified) {
           rugcheckInfo = '<div style="margin-top: 16px; padding: 12px; background: rgba(0,0,0,0.03); border-radius: 8px; border-left: 3px solid #4F46E5;">';
           rugcheckInfo += '<div style="font-weight: 700; font-size: 0.85rem; color: #4F46E5; margin-bottom: 10px;">🔐 SECURITY ANALYSIS</div>';
@@ -550,7 +556,14 @@ const CoinCard = memo(({
           rugcheckInfo += '<div style="font-size: 0.7rem; color: #64748b; margin-top: 8px; text-align: center;">✅ Verified by Rugcheck API</div>';
           rugcheckInfo += '</div>';
           
+        } else if (rugcheckAttempted) {
+          // Rugcheck was attempted but returned no data (show informative message instead of loading)
+          rugcheckInfo = '<div style="margin-top: 16px; padding: 12px; background: rgba(203, 213, 225, 0.2); border-radius: 8px; border-left: 3px solid #94a3b8; text-align: center;">';
+          rugcheckInfo += '<div style="font-size: 0.75rem; color: #64748b; margin-bottom: 4px;">ℹ️ Advanced security data unavailable</div>';
+          rugcheckInfo += '<div style="font-size: 0.7rem; color: #94a3b8;">Check other metrics carefully</div>';
+          rugcheckInfo += '</div>';
         } else {
+          // Rugcheck not yet attempted (show loading state)
           rugcheckInfo = '<div style="margin-top: 16px; padding: 12px; background: rgba(249, 115, 22, 0.1); border-radius: 8px; border-left: 3px solid #f97316; text-align: center;">';
           rugcheckInfo += '<div style="font-size: 0.8rem; color: #c2410c;">⏳ Security data loading...</div>';
           rugcheckInfo += '</div>';

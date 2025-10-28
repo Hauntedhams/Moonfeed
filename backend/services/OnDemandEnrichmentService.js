@@ -145,12 +145,32 @@ class OnDemandEnrichmentService {
           holders: rugcheckData.holders // 🆕 Log holder data
         });
       } else {
-        console.warn(`⚠️ Rugcheck data not available for ${coin.symbol}:`, 
-          rugResult.status === 'rejected' ? rugResult.reason?.message : 'No data returned');
-        // Set rugcheckVerified to false when rugcheck fails with explicit fields
+        const errorReason = rugResult.status === 'rejected' 
+          ? rugResult.reason?.message 
+          : (rugResult.value === null ? 'API returned null' : 'No data returned');
+        
+        console.warn(`⚠️ Rugcheck data not available for ${coin.symbol}:`, errorReason);
+        console.warn(`⚠️ Rugcheck result details:`, {
+          status: rugResult.status,
+          hasValue: !!rugResult.value,
+          valueType: typeof rugResult.value,
+          reason: rugResult.reason?.message
+        });
+        
+        // 🔥 EXPLICITLY SET ALL RUGCHECK FIELDS to prevent "loading" state
         enrichedData.rugcheckVerified = false;
         enrichedData.rugcheckProcessedAt = new Date().toISOString();
-        enrichedData.rugcheckError = rugResult.status === 'rejected' ? rugResult.reason?.message : 'No data';
+        enrichedData.rugcheckError = errorReason;
+        enrichedData.rugcheckScore = null;
+        enrichedData.liquidityLocked = null;
+        enrichedData.lockPercentage = null;
+        enrichedData.burnPercentage = null;
+        enrichedData.riskLevel = null;
+        enrichedData.freezeAuthority = null;
+        enrichedData.mintAuthority = null;
+        enrichedData.topHolderPercent = null;
+        enrichedData.isHoneypot = null;
+        console.log(`🔒 Rugcheck fields explicitly set to null to prevent loading state`);
       }
 
       // ✅ Apply Jupiter Ultra data for holderCount (same as search)
@@ -319,9 +339,11 @@ class OnDemandEnrichmentService {
    */
   async fetchRugcheck(mintAddress) {
     try {
+      console.log(`🔐 Fetching rugcheck for ${mintAddress}...`);
+      
       // Try primary endpoint first with timeout
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // Increased to 5s
       
       let response = await fetch(`${this.apis.rugcheck}/tokens/${mintAddress}/report`, {
         headers: { 'Accept': 'application/json' },
@@ -329,11 +351,14 @@ class OnDemandEnrichmentService {
       });
 
       clearTimeout(timeoutId);
+      
+      console.log(`🔐 Rugcheck primary endpoint response: ${response.status} ${response.statusText}`);
 
       if (!response.ok) {
         // Fallback to alternative endpoint
+        console.log(`🔐 Trying rugcheck fallback endpoint...`);
         const controller2 = new AbortController();
-        const timeoutId2 = setTimeout(() => controller2.abort(), 3000);
+        const timeoutId2 = setTimeout(() => controller2.abort(), 5000); // Increased to 5s
         
         response = await fetch(`${this.apis.rugcheck}/tokens/${mintAddress}`, {
           headers: { 'Accept': 'application/json' },
@@ -341,6 +366,7 @@ class OnDemandEnrichmentService {
         });
         
         clearTimeout(timeoutId2);
+        console.log(`🔐 Rugcheck fallback endpoint response: ${response.status} ${response.statusText}`);
       }
 
       if (response.status === 429) {
@@ -349,13 +375,22 @@ class OnDemandEnrichmentService {
       }
 
       if (!response.ok) {
-        throw new Error(`Rugcheck API returned ${response.status}`);
+        const errorText = await response.text();
+        throw new Error(`Rugcheck API returned ${response.status}: ${errorText.substring(0, 100)}`);
       }
 
-      return await response.json();
+      const data = await response.json();
+      console.log(`✅ Rugcheck success for ${mintAddress}:`, {
+        hasScore: !!data.score,
+        hasRiskLevel: !!data.riskLevel,
+        hasMarkets: !!data.markets?.length,
+        hasTopHolders: !!data.topHolders?.length
+      });
+      
+      return data;
     } catch (error) {
       if (error.name === 'AbortError') {
-        console.warn(`⏰ Rugcheck timeout for ${mintAddress}`);
+        console.warn(`⏰ Rugcheck timeout for ${mintAddress} (took > 5s)`);
       } else {
         console.warn(`⚠️ Rugcheck failed for ${mintAddress}:`, error.message);
       }
