@@ -67,15 +67,21 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError }
         }
       }
 
-      // Initialize - simplified for mobile
+      // Initialize - Enable Jupiter's built-in swap arrow to work
       window.Jupiter.init({
         displayMode: "integrated",
         integratedTargetId: "jupiter-container",
         endpoint: "https://api.mainnet-beta.solana.com",
         
         formProps: {
-          initialOutputMint: coin.mintAddress,
+          // Set default direction: Buy token with SOL
           initialInputMint: "So11111111111111111111111111111111111111112", // SOL
+          initialOutputMint: coin.mintAddress, // Meme token
+          
+          // 🔑 KEY FIX: Don't fix the mints - allow Jupiter's swap arrow to work
+          // This enables the built-in swap direction button in Jupiter UI
+          fixedInputMint: false,
+          fixedOutputMint: false,
           
           // 💰 REFERRAL FEE CONFIGURATION (1%)
           referralAccount: "42DqmQMZrVeZkP2Btj2cS96Ej81jVxFqwUZWazVvhUPt",

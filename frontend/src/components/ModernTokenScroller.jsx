@@ -64,7 +64,7 @@ const ModernTokenScroller = ({
         const coin = coins.find(c => c.mintAddress === mintAddress);
         if (!coin) return null;
         
-        // Skip if already in enrichment cache
+        // Skip if already in enrichment cache (backend will handle rugcheck retries)
         if (enrichedCoins.has(mintAddress)) {
           console.log(`📦 Already enriched: ${coin.symbol}`);
           return null;
@@ -153,11 +153,12 @@ const ModernTokenScroller = ({
           cleanChartData: enrichedData.cleanChartData,
           priceChange: enrichedData.priceChange || enrichedData.priceChanges,
           priceChanges: enrichedData.priceChanges || enrichedData.priceChange,
-          // Rugcheck data
+          // Rugcheck data (including unavailable flag)
           rugcheckScore: enrichedData.rugcheckScore,
           rugcheckVerified: enrichedData.rugcheckVerified,
           rugcheckProcessedAt: enrichedData.rugcheckProcessedAt,
           rugcheckError: enrichedData.rugcheckError,
+          rugcheckUnavailable: enrichedData.rugcheckUnavailable, // NEW: Track when rugcheck times out
           liquidityLocked: enrichedData.liquidityLocked,
           lockPercentage: enrichedData.lockPercentage,
           burnPercentage: enrichedData.burnPercentage,
@@ -752,6 +753,58 @@ const ModernTokenScroller = ({
     console.log('🔥 onFavoritesChange called with:', newFavorites.length, 'favorites');
   };
   
+  // Handle Buy $MOO button click
+  const handleBuyMoo = useCallback(async () => {
+    console.log('🐄 Buy $MOO button clicked!');
+    const MOO_ADDRESS = 'FeqAiLPejhkTJ2nEiCCL7JdtJkZdPNTYSm8vAjrZmoon';
+    
+    try {
+      // Create a minimal coin object for MOO
+      const mooCoin = {
+        mintAddress: MOO_ADDRESS,
+        symbol: 'MOO',
+        name: 'Moonfeed',
+        address: MOO_ADDRESS
+      };
+      
+      console.log('🔄 Enriching $MOO coin...');
+      
+      // Call backend enrichment API
+      const response = await fetch(`${API_BASE}/enrich-single`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          mintAddress: MOO_ADDRESS,
+          coin: mooCoin 
+        })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.coin) {
+          console.log('✅ $MOO coin enriched successfully!');
+          
+          // Replace the feed with just the MOO coin
+          setCoins([data.coin]);
+          setCurrentIndex(0);
+          
+          // Store enriched data
+          setEnrichedCoins(prev => new Map(prev).set(MOO_ADDRESS, data.coin));
+          
+          // Notify parent components
+          onTotalCoinsChange?.(1);
+          onCurrentCoinChange?.(data.coin, 0);
+        } else {
+          console.error('❌ Failed to enrich $MOO coin:', data);
+        }
+      } else {
+        console.error('❌ Enrichment API error:', response.status);
+      }
+    } catch (error) {
+      console.error('❌ Error loading $MOO coin:', error);
+    }
+  }, [API_BASE, onTotalCoinsChange, onCurrentCoinChange]);
+  
   // Check if coin is favorite
   const isFavorite = (coin) => {
     return favorites.some(fav => 
@@ -847,7 +900,7 @@ const ModernTokenScroller = ({
         enrichCoins(coinsToEnrich);
       }
     }
-  }, [currentIndex, coins.length]); // Remove enrichedCoins and enrichCoins dependencies
+  }, [currentIndex, coins.length]); // Keep dependencies minimal to avoid re-render loops
   
   // Debug logging - reduce frequency to prevent console spam
   const shouldLog = Math.random() < 0.1; // Only log 10% of renders
@@ -906,7 +959,10 @@ const ModernTokenScroller = ({
       {/* Banner overlay buttons */}
       <div className="banner-overlay-buttons">
         {/* Moonfeed Info Button - top left */}
-        <MoonfeedInfoButton className="banner-positioned-left" />
+        <MoonfeedInfoButton 
+          className="banner-positioned-left"
+          onBuyMoo={handleBuyMoo}
+        />
         
         {/* Search Button - top right (only show on main feed) */}
         {onSearchClick && (

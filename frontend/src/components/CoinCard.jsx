@@ -170,7 +170,8 @@ const CoinCard = memo(({
               debug.log(`📊 Enriched coin data:`, {
                 hasCleanChartData: !!data.coin.cleanChartData,
                 hasRugcheck: !!data.coin.rugcheckScore || !!data.coin.liquidityLocked,
-                hasBanner: !!data.coin.banner
+                hasBanner: !!data.coin.banner,
+                phase: data.coin.phase // 'fast' or 'complete'
               });
               
               // 🆕 Mark enrichment as completed to trigger chart auto-load
@@ -192,9 +193,8 @@ const CoinCard = memo(({
         }
       };
       
-      // Debounce enrichment by 500ms to prevent spam during rapid scrolling
-      const timer = setTimeout(enrichCoin, 500);
-      return () => clearTimeout(timer);
+      // 🚀 NO DEBOUNCE - Start enrichment immediately for fast loading
+      enrichCoin();
     }
   }, [isVisible, isEnriched, enrichmentRequested, mintAddress, coin, onEnrichmentComplete]);
 
@@ -588,10 +588,22 @@ const CoinCard = memo(({
           rugcheckInfo += '</div>';
           
         } else if (rugcheckAttempted && coin.rugcheckError) {
-          // Rugcheck was attempted but failed with an error (show informative message)
+          // Rugcheck was attempted but failed with an error after retries
           rugcheckInfo = '<div style="margin-top: 16px; padding: 12px; background: rgba(203, 213, 225, 0.2); border-radius: 8px; border-left: 3px solid #94a3b8; text-align: center;">';
-          rugcheckInfo += '<div style="font-size: 0.75rem; color: #64748b; margin-bottom: 4px;">ℹ️ Advanced security data unavailable</div>';
-          rugcheckInfo += '<div style="font-size: 0.7rem; color: #94a3b8;">Check other metrics carefully</div>';
+          rugcheckInfo += '<div style="font-size: 0.75rem; color: #64748b; margin-bottom: 4px;">ℹ️ Security analysis incomplete</div>';
+          rugcheckInfo += '<div style="font-size: 0.7rem; color: #94a3b8;">Check liquidity and other metrics carefully</div>';
+          rugcheckInfo += '</div>';
+        } else if (coin.rugcheckUnavailable) {
+          // Rugcheck timed out or was unavailable (quick timeout reached)
+          rugcheckInfo = '<div style="margin-top: 16px; padding: 12px; background: rgba(203, 213, 225, 0.2); border-radius: 8px; border-left: 3px solid #94a3b8; text-align: center;">';
+          rugcheckInfo += '<div style="font-size: 0.75rem; color: #64748b; margin-bottom: 4px;">ℹ️ Security check unavailable</div>';
+          rugcheckInfo += '<div style="font-size: 0.7rem; color: #94a3b8;">Rugcheck API timeout - check other metrics</div>';
+          rugcheckInfo += '</div>';
+        } else if (coin.enriched && coin.rugcheckError && !rugcheckAttempted) {
+          // Rugcheck failed but will retry (not marked as processed)
+          rugcheckInfo = '<div style="margin-top: 16px; padding: 12px; background: rgba(249, 115, 22, 0.1); border-radius: 8px; border-left: 3px solid #f97316; text-align: center;">';
+          rugcheckInfo += '<div style="font-size: 0.8rem; color: #c2410c;">⏳ Security check in progress...</div>';
+          rugcheckInfo += '<div style="font-size: 0.7rem; color: #ea580c; margin-top: 4px;">Rugcheck API can take a few seconds</div>';
           rugcheckInfo += '</div>';
         } else if (!rugcheckAttempted && coin.enriched) {
           // Coin is enriched but rugcheck hasn't completed yet (still waiting for API response)

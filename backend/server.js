@@ -108,10 +108,10 @@ app.post('/api/coins/enrich-single', async (req, res) => {
       }
     }
 
-    // Use fast on-demand enrichment service with extended timeout for rugcheck
+    // Use fast on-demand enrichment service
     const enrichedCoin = await onDemandEnrichment.enrichCoin(baseCoin, {
       skipCache: false, // Use cache if available
-      timeout: 10000 // 10 second timeout to accommodate rugcheck (8s) + other APIs
+      timeout: 8000 // 8 second timeout for fast APIs + 5s rugcheck attempt
     });
 
     // 🔍 DEBUG: Log specific coin data

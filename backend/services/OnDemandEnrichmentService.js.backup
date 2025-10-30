@@ -120,14 +120,58 @@ class OnDemandEnrichmentService {
       if (dexResult.status === 'fulfilled' && dexResult.value) {
         Object.assign(enrichedData, this.processDexScreenerData(dexResult.value, coin));
         hasDexScreenerData = true;
-        console.log(`✅ Phase 1: DexScreener applied (${Date.now() - startTime}ms)`);
       }
 
-      // ✅ Apply Jupiter Ultra data for holderCount
+      // Apply Rugcheck data (optional)
+      if (rugResult.status === 'fulfilled' && rugResult.value) {
+        const rugcheckData = this.processRugcheckData(rugResult.value);
+        Object.assign(enrichedData, rugcheckData);
+        console.log(`🔐 Rugcheck data applied for ${coin.symbol}:`, {
+          liquidityLocked: rugcheckData.liquidityLocked,
+          lockPercentage: rugcheckData.lockPercentage,
+          burnPercentage: rugcheckData.burnPercentage,
+          riskLevel: rugcheckData.riskLevel,
+          rugcheckScore: rugcheckData.rugcheckScore,
+          rugcheckVerified: rugcheckData.rugcheckVerified,
+          freezeAuthority: rugcheckData.freezeAuthority,
+          mintAuthority: rugcheckData.mintAuthority,
+          holders: rugcheckData.holders // 🆕 Log holder data
+        });
+      } else {
+        const errorReason = rugResult.status === 'rejected' 
+          ? rugResult.reason?.message 
+          : (rugResult.value === null ? 'API returned null' : 'No data returned');
+        
+        console.warn(`⚠️ Rugcheck data not available for ${coin.symbol}:`, errorReason);
+        console.warn(`⚠️ Rugcheck result details:`, {
+          status: rugResult.status,
+          hasValue: !!rugResult.value,
+          valueType: typeof rugResult.value,
+          reason: rugResult.reason?.message
+        });
+        
+        // 🔥 SET ERROR STATE BUT DON'T MARK AS PROCESSED
+        // This allows rugcheck to be retried on next enrichment
+        enrichedData.rugcheckError = errorReason;
+        enrichedData.rugcheckScore = null;
+        enrichedData.liquidityLocked = null;
+        enrichedData.lockPercentage = null;
+        enrichedData.burnPercentage = null;
+        enrichedData.riskLevel = null;
+        enrichedData.freezeAuthority = null;
+        enrichedData.mintAuthority = null;
+        enrichedData.topHolderPercent = null;
+        enrichedData.isHoneypot = null;
+        // ⚠️ DO NOT SET rugcheckProcessedAt or rugcheckVerified
+        // This ensures rugcheck will be retried on next view
+        console.log(`� Rugcheck will be retried on next enrichment (not marking as processed)`);
+      }
+
+      // ✅ Apply Jupiter Ultra data for holderCount (same as search)
       if (jupiterResult.status === 'fulfilled' && jupiterResult.value) {
         enrichedData.holderCount = jupiterResult.value.holderCount;
-        enrichedData.holders = jupiterResult.value.holderCount;
-        console.log(`✅ Phase 1: Jupiter holders applied (${Date.now() - startTime}ms)`);
+        enrichedData.holders = jupiterResult.value.holderCount; // Both field names
+        console.log(`🪙 Jupiter Ultra holder count for ${coin.symbol}: ${jupiterResult.value.holderCount}`);
       } else {
         console.warn(`⚠️ Jupiter Ultra data not available for ${coin.symbol}:`,
           jupiterResult.status === 'rejected' ? jupiterResult.reason?.message : 'No data returned');
@@ -137,16 +181,18 @@ class OnDemandEnrichmentService {
       if (!enrichedData.holders && !enrichedData.holderCount) {
         if (coin.holders) {
           enrichedData.holders = coin.holders;
+          console.log(`✅ Preserved original holder count: ${coin.holders}`);
         } else if (coin.holderCount) {
           enrichedData.holderCount = coin.holderCount;
+          console.log(`✅ Preserved original holderCount: ${coin.holderCount}`);
         }
       }
 
-      // Apply Pump.fun description
+      // Apply Pump.fun description (if available, replaces generic description)
       if (pumpfunResult.status === 'fulfilled' && pumpfunResult.value) {
         enrichedData.description = pumpfunResult.value;
         enrichedData.descriptionSource = 'pump.fun';
-        console.log(`✅ Phase 1: Pump.fun description applied (${Date.now() - startTime}ms)`);
+        console.log(`🚀 Pump.fun description applied for ${coin.symbol}: "${pumpfunResult.value.substring(0, 50)}..."`);
       } else {
         // Remove description entirely if no Pump.fun description (don't use generic fallback)
         delete enrichedData.description;
@@ -179,43 +225,17 @@ class OnDemandEnrichmentService {
         console.warn(`⚠️ No valid price for ${coin.symbol}, cannot generate chart`);
       }
 
-      // 🚀 PHASE 2: Try to get rugcheck data quickly (with timeout)
-      // Give rugcheck 5 seconds to respond, otherwise return without it
-      console.log(`🔐 Phase 2: Fetching rugcheck for ${coin.symbol}...`);
+      // Cache the enriched data in GLOBAL cache (shared across all feeds)
+      // 🚀 OPTIMIZED: Using compact storage (40% less RAM)
+      // ⚠️ DON'T CACHE if rugcheck failed - allow retry on next view
+      const shouldCache = !enrichedData.rugcheckError || enrichedData.rugcheckVerified;
       
-      try {
-        const rugcheckPromise = this.fetchRugcheck(mintAddress);
-        const rugcheckTimeout = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Rugcheck timeout')), 5000)
-        );
-        
-        const rugData = await Promise.race([rugcheckPromise, rugcheckTimeout]);
-        
-        if (rugData) {
-          const rugcheckData = this.processRugcheckData(rugData);
-          Object.assign(enrichedData, rugcheckData);
-          console.log(`✅ Phase 2: Rugcheck applied in ${Date.now() - startTime}ms`);
-          console.log(`🔐 Rugcheck data:`, {
-            liquidityLocked: rugcheckData.liquidityLocked,
-            lockPercentage: rugcheckData.lockPercentage,
-            riskLevel: rugcheckData.riskLevel
-          });
-        }
-      } catch (rugError) {
-        console.warn(`⚠️ Rugcheck timeout or error for ${coin.symbol} (continuing without it):`, rugError.message);
-        // Set default rugcheck values so UI shows "Security check unavailable" instead of "analyzing..."
-        enrichedData.liquidityLocked = false;
-        enrichedData.lockPercentage = 0;
-        enrichedData.riskLevel = 'unknown';
-        enrichedData.rugcheckUnavailable = true;
+      if (shouldCache) {
+        this.cache.set(mintAddress, coin, enrichedData);
+        console.log(`✅ Cached enriched data for ${coin.symbol} (rugcheck: ${enrichedData.rugcheckVerified ? 'success' : 'N/A'})`);
+      } else {
+        console.log(`⚠️ NOT caching ${coin.symbol} - rugcheck failed, will retry on next view`);
       }
-
-      // Update enrichment time to include rugcheck attempt
-      enrichedData.enrichmentTime = Date.now() - startTime;
-
-      // Cache complete data (with or without rugcheck)
-      this.cache.set(mintAddress, coin, enrichedData);
-      console.log(`✅ Cached ${coin.symbol} in ${enrichedData.enrichmentTime}ms`);
 
       // Update stats
       this.stats.totalEnrichments++;
@@ -223,6 +243,8 @@ class OnDemandEnrichmentService {
         (this.stats.averageTime * (this.stats.totalEnrichments - 1) + enrichedData.enrichmentTime) / 
         this.stats.totalEnrichments;
 
+      console.log(`✅ Enriched ${coin.symbol} in ${enrichedData.enrichmentTime}ms [Cached globally for 10min]`);
+      
       return enrichedData;
 
     } catch (error) {
@@ -270,53 +292,6 @@ class OnDemandEnrichmentService {
     console.log(`✅ Batch enrichment complete: ${enrichedCount}/${coins.length} enriched in ${duration}ms (${cacheHitsInBatch} cache hits saved ${(cacheHitsInBatch * 3).toFixed(1)}s)`);
     
     return results;
-  }
-
-  /**
-   * 🆕 PHASE 2: Background Rugcheck Processing
-   * Runs rugcheck async without blocking Phase 1 return
-   * Updates cache when complete for future lookups
-   */
-  async startBackgroundRugcheck(mintAddress, originalCoin, fastEnrichedData) {
-    try {
-      console.log(`🔐 Phase 2: Starting background rugcheck for ${originalCoin.symbol}...`);
-      const rugcheckStartTime = Date.now();
-      
-      // Fetch rugcheck data (5-8 seconds)
-      const rugData = await this.fetchRugcheck(mintAddress);
-      
-      if (rugData) {
-        const rugcheckData = this.processRugcheckData(rugData);
-        
-        // Merge with fast data
-        const fullyEnrichedData = {
-          ...fastEnrichedData,
-          ...rugcheckData,
-          phase: 'complete', // Mark as fully enriched
-          rugcheckTime: Date.now() - rugcheckStartTime
-        };
-        
-        console.log(`✅ Phase 2 complete for ${originalCoin.symbol} in ${fullyEnrichedData.rugcheckTime}ms`);
-        console.log(`🔐 Rugcheck data:`, {
-          liquidityLocked: rugcheckData.liquidityLocked,
-          lockPercentage: rugcheckData.lockPercentage,
-          riskLevel: rugcheckData.riskLevel,
-          verified: rugcheckData.rugcheckVerified
-        });
-        
-        // Update cache with complete data
-        this.cache.set(mintAddress, originalCoin, fullyEnrichedData);
-        console.log(`✅ Cache updated with Phase 2 (complete) data for ${originalCoin.symbol}`);
-        
-        return fullyEnrichedData;
-      } else {
-        console.warn(`⚠️ Phase 2: Rugcheck returned no data for ${originalCoin.symbol}`);
-        return null;
-      }
-    } catch (error) {
-      console.error(`❌ Phase 2: Background rugcheck error for ${originalCoin.symbol}:`, error.message);
-      throw error;
-    }
   }
 
   /**
@@ -368,9 +343,9 @@ class OnDemandEnrichmentService {
     try {
       console.log(`🔐 Fetching rugcheck for ${mintAddress}...`);
       
-      // Give rugcheck 5 seconds to respond
+      // Try primary endpoint first with extended timeout (rugcheck can be slow)
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout
+      const timeoutId = setTimeout(() => controller.abort(), 8000); // Increased to 8s for rugcheck
       
       let response = await fetch(`${this.apis.rugcheck}/tokens/${mintAddress}/report`, {
         headers: { 'Accept': 'application/json' },
@@ -385,7 +360,7 @@ class OnDemandEnrichmentService {
         // Fallback to alternative endpoint
         console.log(`🔐 Trying rugcheck fallback endpoint...`);
         const controller2 = new AbortController();
-        const timeoutId2 = setTimeout(() => controller2.abort(), 5000); // 5s timeout
+        const timeoutId2 = setTimeout(() => controller2.abort(), 8000); // Increased to 8s
         
         response = await fetch(`${this.apis.rugcheck}/tokens/${mintAddress}`, {
           headers: { 'Accept': 'application/json' },
@@ -417,7 +392,7 @@ class OnDemandEnrichmentService {
       return data;
     } catch (error) {
       if (error.name === 'AbortError') {
-        console.warn(`⏰ Rugcheck timeout for ${mintAddress} (took > 5s)`);
+        console.warn(`⏰ Rugcheck timeout for ${mintAddress} (took > 8s)`);
       } else {
         console.warn(`⚠️ Rugcheck failed for ${mintAddress}:`, error.message);
       }
