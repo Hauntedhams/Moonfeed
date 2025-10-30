@@ -63,7 +63,7 @@ class OnDemandEnrichmentService {
       skipCache = false,
       priorityApis = ['dexscreener'], // APIs to wait for
       optionalApis = ['rugcheck'], // APIs that can fail (removed birdeye)
-      timeout = 3000 // Reduced from 5000ms for faster response
+      timeout = 10000 // 10s to accommodate rugcheck (5-8s API response time)
     } = options;
 
     const mintAddress = coin.mintAddress || coin.tokenAddress || coin.address;

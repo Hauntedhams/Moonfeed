@@ -465,36 +465,65 @@ const CoinCard = memo(({
         // Build comprehensive rugcheck security information with proper HTML formatting
         let rugcheckInfo = '';
         
-        // 🔥 FIX: Check rugcheckProcessedAt to distinguish between "loading" and "unavailable"
-        // - If rugcheckProcessedAt exists: Rugcheck was attempted (show results or unavailable message)
-        // - If rugcheckProcessedAt is missing: Rugcheck not yet attempted (show loading)
-        const rugcheckAttempted = coin.rugcheckProcessedAt || coin.enriched;
+        // � DEBUG: Log rugcheck data to see what we're working with
+        if (coin.rugcheckVerified || coin.enriched) {
+          console.log(`🔍 Rugcheck data for ${coin.symbol}:`, {
+            rugcheckVerified: coin.rugcheckVerified,
+            rugcheckProcessedAt: coin.rugcheckProcessedAt,
+            liquidityLocked: coin.liquidityLocked,
+            lockPercentage: coin.lockPercentage,
+            burnPercentage: coin.burnPercentage,
+            riskLevel: coin.riskLevel,
+            rugcheckScore: coin.rugcheckScore,
+            freezeAuthority: coin.freezeAuthority,
+            mintAuthority: coin.mintAuthority,
+            topHolderPercent: coin.topHolderPercent,
+            isHoneypot: coin.isHoneypot,
+            rugcheckError: coin.rugcheckError
+          });
+        }
         
-        if (coin.rugcheckVerified) {
+        // �🔥 NEW LOGIC: Only consider rugcheck "attempted" if rugcheckProcessedAt exists
+        // If rugcheck fails, backend won't set rugcheckProcessedAt, so it will retry on next view
+        const rugcheckAttempted = coin.rugcheckProcessedAt;
+        
+        // Check if we have ANY rugcheck data (not just verified flag)
+        const hasAnyRugcheckData = coin.rugcheckVerified || 
+                                   coin.liquidityLocked !== null && coin.liquidityLocked !== undefined ||
+                                   coin.rugcheckScore !== null && coin.rugcheckScore !== undefined ||
+                                   coin.riskLevel || 
+                                   coin.freezeAuthority !== null && coin.freezeAuthority !== undefined ||
+                                   coin.mintAuthority !== null && coin.mintAuthority !== undefined;
+        
+        if (coin.rugcheckVerified || hasAnyRugcheckData) {
           rugcheckInfo = '<div style="margin-top: 16px; padding: 12px; background: rgba(0,0,0,0.03); border-radius: 8px; border-left: 3px solid #4F46E5;">';
           rugcheckInfo += '<div style="font-weight: 700; font-size: 0.85rem; color: #4F46E5; margin-bottom: 10px;">🔐 SECURITY ANALYSIS</div>';
           
-          // Liquidity Lock Status
-          if (coin.liquidityLocked) {
-            rugcheckInfo += '<div style="margin-bottom: 10px; padding: 8px; background: rgba(34, 197, 94, 0.1); border-radius: 6px;">';
-            rugcheckInfo += '<div style="font-weight: 600; color: #16a34a; margin-bottom: 4px;">✅ Liquidity: LOCKED</div>';
-            if (coin.lockPercentage > 0) {
-              rugcheckInfo += `<div style="font-size: 0.75rem; color: #15803d; margin-left: 16px;">🔒 Locked: ${coin.lockPercentage}%</div>`;
+          // Liquidity Lock Status - ALWAYS show if rugcheckVerified (even if false)
+          if (coin.liquidityLocked !== null && coin.liquidityLocked !== undefined) {
+            if (coin.liquidityLocked) {
+              rugcheckInfo += '<div style="margin-bottom: 10px; padding: 8px; background: rgba(34, 197, 94, 0.1); border-radius: 6px;">';
+              rugcheckInfo += '<div style="font-weight: 600; color: #16a34a; margin-bottom: 4px;">✅ Liquidity: LOCKED</div>';
+              if (coin.lockPercentage > 0) {
+                rugcheckInfo += `<div style="font-size: 0.75rem; color: #15803d; margin-left: 16px;">🔒 Locked: ${coin.lockPercentage}%</div>`;
+              }
+              if (coin.burnPercentage > 0) {
+                rugcheckInfo += `<div style="font-size: 0.75rem; color: #15803d; margin-left: 16px;">🔥 Burned: ${coin.burnPercentage}%</div>`;
+              }
+              const totalSecured = Math.max(coin.lockPercentage || 0, coin.burnPercentage || 0);
+              if (totalSecured > 0) {
+                rugcheckInfo += `<div style="font-size: 0.75rem; font-weight: 600; color: #15803d; margin-left: 16px; margin-top: 4px;">🛡️ Total Secured: ${totalSecured}%</div>`;
+              }
+              rugcheckInfo += '</div>';
+            } else {
+              rugcheckInfo += '<div style="margin-bottom: 10px; padding: 8px; background: rgba(239, 68, 68, 0.1); border-radius: 6px;">';
+              rugcheckInfo += '<div style="font-weight: 600; color: #dc2626; margin-bottom: 4px;">⚠️ Liquidity: UNLOCKED</div>';
+              rugcheckInfo += '<div style="font-size: 0.75rem; color: #b91c1c; margin-left: 16px;">⚡ Developers can remove liquidity anytime</div>';
+              rugcheckInfo += '</div>';
             }
-            if (coin.burnPercentage > 0) {
-              rugcheckInfo += `<div style="font-size: 0.75rem; color: #15803d; margin-left: 16px;">🔥 Burned: ${coin.burnPercentage}%</div>`;
-            }
-            const totalSecured = Math.max(coin.lockPercentage || 0, coin.burnPercentage || 0);
-            rugcheckInfo += `<div style="font-size: 0.75rem; font-weight: 600; color: #15803d; margin-left: 16px; margin-top: 4px;">🛡️ Total Secured: ${totalSecured}%</div>`;
-            rugcheckInfo += '</div>';
-          } else {
-            rugcheckInfo += '<div style="margin-bottom: 10px; padding: 8px; background: rgba(239, 68, 68, 0.1); border-radius: 6px;">';
-            rugcheckInfo += '<div style="font-weight: 600; color: #dc2626; margin-bottom: 4px;">⚠️ Liquidity: UNLOCKED</div>';
-            rugcheckInfo += '<div style="font-size: 0.75rem; color: #b91c1c; margin-left: 16px;">⚡ Developers can remove liquidity</div>';
-            rugcheckInfo += '</div>';
           }
           
-          // Risk Assessment & Score
+          // Risk Assessment & Score - ALWAYS show if rugcheckVerified
           const riskSection = [];
           if (coin.riskLevel && coin.riskLevel !== 'unknown') {
             const riskEmoji = coin.riskLevel === 'low' ? '🟢' : 
@@ -503,10 +532,12 @@ const CoinCard = memo(({
                              coin.riskLevel === 'medium' ? '#ca8a04' : '#dc2626';
             riskSection.push(`<div style="font-weight: 600; color: ${riskColor}; margin-bottom: 4px;">${riskEmoji} Risk Level: ${coin.riskLevel.toUpperCase()}</div>`);
           }
-          if (coin.rugcheckScore) {
+          if (coin.rugcheckScore !== null && coin.rugcheckScore !== undefined) {
             const scoreEmoji = coin.rugcheckScore >= 1000 ? '🌟' :
                               coin.rugcheckScore >= 500 ? '⭐' : '⚡';
-            riskSection.push(`<div style="font-weight: 600; color: #7c3aed;">${scoreEmoji} Score: ${coin.rugcheckScore}/5000</div>`);
+            const scoreColor = coin.rugcheckScore >= 1000 ? '#16a34a' :
+                              coin.rugcheckScore >= 500 ? '#ca8a04' : '#dc2626';
+            riskSection.push(`<div style="font-weight: 600; color: ${scoreColor};">${scoreEmoji} Score: ${coin.rugcheckScore}/5000</div>`);
           }
           if (riskSection.length > 0) {
             rugcheckInfo += '<div style="margin-bottom: 10px; padding: 8px; background: rgba(124, 58, 237, 0.05); border-radius: 6px;">';
@@ -556,14 +587,20 @@ const CoinCard = memo(({
           rugcheckInfo += '<div style="font-size: 0.7rem; color: #64748b; margin-top: 8px; text-align: center;">✅ Verified by Rugcheck API</div>';
           rugcheckInfo += '</div>';
           
-        } else if (rugcheckAttempted) {
-          // Rugcheck was attempted but returned no data (show informative message instead of loading)
+        } else if (rugcheckAttempted && coin.rugcheckError) {
+          // Rugcheck was attempted but failed with an error (show informative message)
           rugcheckInfo = '<div style="margin-top: 16px; padding: 12px; background: rgba(203, 213, 225, 0.2); border-radius: 8px; border-left: 3px solid #94a3b8; text-align: center;">';
           rugcheckInfo += '<div style="font-size: 0.75rem; color: #64748b; margin-bottom: 4px;">ℹ️ Advanced security data unavailable</div>';
           rugcheckInfo += '<div style="font-size: 0.7rem; color: #94a3b8;">Check other metrics carefully</div>';
           rugcheckInfo += '</div>';
+        } else if (!rugcheckAttempted && coin.enriched) {
+          // Coin is enriched but rugcheck hasn't completed yet (still waiting for API response)
+          rugcheckInfo = '<div style="margin-top: 16px; padding: 12px; background: rgba(249, 115, 22, 0.1); border-radius: 8px; border-left: 3px solid #f97316; text-align: center;">';
+          rugcheckInfo += '<div style="font-size: 0.8rem; color: #c2410c;">⏳ Analyzing security data...</div>';
+          rugcheckInfo += '<div style="font-size: 0.7rem; color: #ea580c; margin-top: 4px;">This may take a few seconds</div>';
+          rugcheckInfo += '</div>';
         } else {
-          // Rugcheck not yet attempted (show loading state)
+          // Rugcheck not yet attempted (coin not enriched yet)
           rugcheckInfo = '<div style="margin-top: 16px; padding: 12px; background: rgba(249, 115, 22, 0.1); border-radius: 8px; border-left: 3px solid #f97316; text-align: center;">';
           rugcheckInfo += '<div style="font-size: 0.8rem; color: #c2410c;">⏳ Security data loading...</div>';
           rugcheckInfo += '</div>';
