@@ -117,39 +117,33 @@
     overflow-x: hidden;
     background: linear-gradient(135deg, #0b1220 0%, #0e1426 50%, #0b1220 100%);
     position: relative;
-    display: flex;
-    flex-direction: column;
+    /* Smooth scrolling */
     scroll-behavior: smooth;
     -webkit-overflow-scrolling: touch;
   }
 
   /* Right side - DexScreener chart (fixed, fills remaining space) */
   .coin-card-right-panel {
-    display: flex !important;
     flex: 1;
     height: 100vh;
     background: #0a0e1a;
     position: relative;
     overflow: hidden;
-    align-items: stretch;
-    justify-content: stretch;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   /* Make the DexScreener chart fill the entire right panel */
-  .coin-card-right-panel > div {
-    width: 100% !important;
-    height: 100% !important;
-    min-height: 100vh !important;
-    border-radius: 0 !important;
-    margin: 0 !important;
+  .coin-card-right-panel .dexscreener-chart-container {
+    width: 100%;
+    height: 100%;
   }
 
   .coin-card-right-panel iframe {
-    width: 100% !important;
-    height: 100% !important;
-    min-height: 100vh !important;
+    width: 100%;
+    height: 100%;
     border: none;
-    border-radius: 0 !important;
   }
 
   /* Remove the expand/collapse button from right panel chart */
@@ -170,11 +164,23 @@
     display: none !important;
   }
 
+  /* Hide connection status overlay on desktop */
+  .coin-card-left-panel .connection-status-overlay {
+    display: none !important;
+  }
+
+  /* Ensure enrichment badge doesn't overlap top tabs */
+  .coin-card-left-panel .enrichment-status-badge {
+    top: 70px !important; /* Move below top tabs */
+    left: 10px;
+    z-index: 90;
+  }
+
   /* Adjust banner to fit in left panel */
   .coin-card-left-panel .coin-banner {
     position: relative !important;
     width: 100%;
-    height: 280px !important;
+    height: 350px !important; /* Increased from 280px */
     flex-shrink: 0;
   }
 
@@ -185,20 +191,14 @@
     right: 0;
   }
 
-  /* Adjust info layer positioning for left panel */
+  /* Adjust info layer to account for taller banner */
   .coin-card-left-panel .coin-info-layer {
     position: relative !important;
-    margin-top: -60px;
+    margin-top: -80px; /* Increased from -60px */
     height: auto !important;
     transform: none !important;
     border-top-left-radius: 24px;
     border-top-right-radius: 24px;
-  }
-
-  .coin-card-left-panel .coin-info-layer.expanded {
-    position: relative !important;
-    height: auto !important;
-    transform: none !important;
   }
 
   /* Make charts section smaller in left panel since main chart is on right */
@@ -213,19 +213,15 @@
 
   /* Style the chart placeholder in left panel */
   .coin-card-left-panel .chart-placeholder {
-    padding: 30px 20px;
+    padding: 40px 20px;
     text-align: center;
     color: #64748b;
-    font-size: 13px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    font-size: 14px;
   }
 
   /* Add a subtle border between panels */
   .coin-card-left-panel {
-    border-right: 1px solid rgba(255, 255, 255, 0.08);
-    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.3);
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
   }
 
   /* Reduce padding in sections for more compact left panel */
@@ -246,14 +242,14 @@
 /* Medium desktop - slightly narrower left panel */
 @media (min-width: 1200px) and (max-width: 1600px) {
   .coin-card-left-panel {
-    width: 420px !important;
+    width: 420px;
   }
 }
 
 /* Large desktop - wider left panel for more comfortable reading */
 @media (min-width: 1600px) {
   .coin-card-left-panel {
-    width: 540px !important;
+    width: 540px;
   }
 }
 
@@ -2801,29 +2797,6 @@
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  font-size: 0.8rem;
-  line-height: 1.5;
-}
-
-.source-name {
-  font-weight: 700;
-  color: rgba(0, 0, 0, 0.9);
-  flex-shrink: 0;
-  min-width: 90px;
-}
-
-.source-info {
-  color: rgba(0, 0, 0, 0.7);
-  flex: 1;
-}
-
-.enrichment-status {
-  display: flex;
-  align-items: flex-start; /* Changed from center - align charts to top */
-  gap: 10px;
-  margin-top: 12px;
-  padding-top: 10px;
-  border-top: 1px solid rgba(0, 0, 0, 0.08);
   font-size: 0.75rem;
 }
 
@@ -2848,6 +2821,29 @@
 .dark-mode .coin-name,
 .dark-mode .coin-symbol,
 .dark-mode .coin-price,
+.dark-mode .stats-label,
+.dark-mode .stats-value,
+.dark-mode .section-title,
+.dark-mode .info-item-label,
+.dark-mode .info-item-value,
+.dark-mode .token-details h3,
+.dark-mode .token-details-item-value,
+.dark-mode .coin-header-symbol,
+.dark-mode .price-display,
+.dark-mode .stats-grid-label,
+.dark-mode .stats-grid-value {
+  color: var(--text-primary);
+}
+
+.dark-mode .coin-ticker,
+.dark-mode .token-details-item-label,
+.dark-mode .stats-label,
+.dark-mode .coin-header-ticker {
+  color: var(--text-secondary);
+}
+
+.dark-mode .stats-item,
+.dark-mode .info-item,
 .dark-mode .stats-label,
 .dark-mode .stats-value,
 .dark-mode .section-title,
@@ -3276,40 +3272,18 @@
     border-radius: 0 !important;
   }
 
-  /* Hide the expand button on desktop split-screen mode */
-  .coin-card-left-panel .expand-btn {
-    display: none !important;
+  /* Reduce padding in sections for more compact left panel */
+  .coin-card-left-panel .section-content {
+    padding: 14px;
   }
 
-  /* Adjust banner to fit in left panel */
-  .coin-card-left-panel .coin-banner {
-    position: relative !important;
-    width: 100%;
-    height: 300px;
+  /* Make metrics more compact */
+  .coin-card-left-panel .header-metrics {
+    gap: 8px;
   }
 
-  /* Adjust info layer positioning for left panel */
-  .coin-card-left-panel .info-layer {
-    position: relative;
-    margin-top: -80px;
-  }
-
-  /* Make charts section take less space in left panel since main chart is on right */
-  .coin-card-left-panel .charts-section {
-    min-height: 200px;
-  }
-
-  /* Style the chart placeholder in left panel */
-  .coin-card-left-panel .chart-placeholder {
-    padding: 40px 20px;
-    text-align: center;
-    color: #64748b;
-    font-size: 14px;
-  }
-
-  /* Add a subtle border between panels */
-  .coin-card-left-panel {
-    border-right: 1px solid rgba(255, 255, 255, 0.05);
+  .coin-card-left-panel .header-metric {
+    padding: 8px 12px;
   }
 }
 
