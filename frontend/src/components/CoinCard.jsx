@@ -43,6 +43,7 @@ const CoinCard = memo(({
   const [showTopTraders, setShowTopTraders] = useState(false);
   const [selectedWallet, setSelectedWallet] = useState(null);
   const [showDescriptionModal, setShowDescriptionModal] = useState(false);
+  const [chartHoveredPrice, setChartHoveredPrice] = useState(null); // Track hovered price from chart
   const chartsContainerRef = useRef(null);
   const chartNavRef = useRef(null);
   const prevPriceRef = useRef(null);
@@ -697,6 +698,11 @@ const CoinCard = memo(({
     onExpandChange?.(next);
   };
 
+  // Handle chart price hover - update main price display
+  const handleChartPriceHover = (hoveredPrice) => {
+    setChartHoveredPrice(hoveredPrice);
+  };
+
   // Chart navigation functions
   const handleChartScroll = () => {
     if (!chartsContainerRef.current) return;
@@ -971,7 +977,8 @@ const CoinCard = memo(({
 
   // Use live data when available, fallback to coin data
   // 🔥 CRITICAL FIX: Use displayPrice computed from useMemo which is reactive to coins Map
-  const price = displayPrice;
+  // 🎯 NEW: Use chartHoveredPrice when hovering over chart
+  const price = chartHoveredPrice !== null ? chartHoveredPrice : displayPrice;
   const changePct = liveData?.change24h ?? coin.change_24h ?? coin.priceChange24h ?? coin.change24h ?? 0;
   const marketCap = liveData?.marketCap ?? coin.market_cap_usd ?? coin.market_cap ?? coin.marketCap ?? 0;
   const volume24h = liveData?.volume24h ?? coin.volume_24h_usd ?? coin.volume_24h ?? coin.volume24h ?? 0;
@@ -1058,50 +1065,53 @@ const CoinCard = memo(({
 
   return (
     <div className="coin-card">
-      {/* Connection status overlay */}
-      {!connected && (
-        <div className="connection-status-overlay" title="Disconnected from live data">
-          <div className="connection-status-badge">⚠️ Offline</div>
-        </div>
-      )}
-      
-      {/* Enrichment status badge */}
-      {!isEnriched && (
-        <div 
-          className="enrichment-status-badge"
-          style={{
-            position: 'absolute',
-            top: 10,
-            left: 10,
-            zIndex: 100,
-            background: 'rgba(255, 165, 0, 0.9)',
-            color: 'white',
-            padding: '4px 8px',
-            borderRadius: '6px',
-            fontSize: '11px',
-            fontWeight: 600,
-            display: 'flex',
-            alignItems: 'center',
-            gap: '4px',
-            backdropFilter: 'blur(10px)',
-            animation: 'pulse 2s ease-in-out infinite'
-          }}
-          title="Loading full coin data..."
-        >
-          <span style={{ 
-            display: 'inline-block', 
-            width: '8px', 
-            height: '8px', 
-            borderRadius: '50%',
-            background: 'currentColor',
-            animation: 'blink 1s ease-in-out infinite'
-          }}></span>
-          Loading...
-        </div>
-      )}
-      
-      {/* Enhanced Banner with DexScreener support */}
-      <div className="coin-banner" onClick={handleBannerClick} style={{ cursor: coin.banner || coin.bannerImage || coin.header || coin.bannerUrl ? 'pointer' : 'default' }}>
+      {/* Desktop Split-Screen Layout */}
+      {/* Left Panel - Coin Card Content */}
+      <div className="coin-card-left-panel">
+        {/* Connection status overlay */}
+        {!connected && (
+          <div className="connection-status-overlay" title="Disconnected from live data">
+            <div className="connection-status-badge">⚠️ Offline</div>
+          </div>
+        )}
+        
+        {/* Enrichment status badge */}
+        {!isEnriched && (
+          <div 
+            className="enrichment-status-badge"
+            style={{
+              position: 'absolute',
+              top: 10,
+              left: 10,
+              zIndex: 100,
+              background: 'rgba(255, 165, 0, 0.9)',
+              color: 'white',
+              padding: '4px 8px',
+              borderRadius: '6px',
+              fontSize: '11px',
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              backdropFilter: 'blur(10px)',
+              animation: 'pulse 2s ease-in-out infinite'
+            }}
+            title="Loading full coin data..."
+          >
+            <span style={{ 
+              display: 'inline-block', 
+              width: '8px', 
+              height: '8px', 
+              borderRadius: '50%',
+              background: 'currentColor',
+              animation: 'blink 1s ease-in-out infinite'
+            }}></span>
+            Loading...
+          </div>
+        )}
+        
+        {/* Enhanced Banner with DexScreener support */}
+        <div className="coin-banner" onClick={handleBannerClick} style={{ cursor: coin.banner || coin.bannerImage || coin.header || coin.bannerUrl ? 'pointer' : 'default' }}>
         {coin.banner || coin.bannerImage || coin.header || coin.bannerUrl ? (
           <img 
             src={coin.banner || coin.bannerImage || coin.header || coin.bannerUrl}
@@ -1532,7 +1542,8 @@ const CoinCard = memo(({
                         key={`${coin.mintAddress || coin.tokenAddress}-${coin.cleanChartData ? 'enriched' : 'basic'}`}
                         coin={coin} 
                         width="100%" 
-                        height={200} 
+                        height={200}
+                        onPriceHover={handleChartPriceHover}
                       />
                     ) : (
                       <div className="chart-placeholder" style={{ 
@@ -2064,6 +2075,33 @@ const CoinCard = memo(({
             </div>
           </div>
         </div>
+      </div>
+      </div> {/* Close coin-card-left-panel */}
+
+      {/* Right Panel - DexScreener Chart (Desktop Only) */}
+      <div className="coin-card-right-panel">
+        {coin.pairAddress || coin.tokenAddress ? (
+          <DexScreenerChart 
+            coin={{
+              ...coin,
+              chainId: coin.chainId || 'solana',
+              pairAddress: coin.pairAddress || coin.tokenAddress || coin.mintAddress,
+              tokenAddress: coin.tokenAddress || coin.mintAddress || coin.pairAddress,
+              symbol: coin.symbol || coin.baseToken?.symbol
+            }} 
+            isPreview={false}
+            autoLoad={true}
+          />
+        ) : (
+          <div style={{ 
+            color: '#64748b', 
+            fontSize: '16px',
+            textAlign: 'center',
+            padding: '40px 20px'
+          }}>
+            Chart data unavailable
+          </div>
+        )}
       </div>
 
       {/* Banner Modal - Use Portal to render at document root */}

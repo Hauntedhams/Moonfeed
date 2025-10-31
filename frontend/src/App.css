@@ -10,7 +10,8 @@
 
 #root {
   width: 100%;
-  max-width: 430px; /* Phone width */
+  /* Mobile: max 430px centered, Desktop: full width */
+  max-width: 100%; /* Allow full width */
   height: 100dvh; /* Use dynamic viewport height */
   margin: 0 auto; /* Center on larger screens */
   padding: 0;
@@ -20,6 +21,13 @@
   box-sizing: border-box;
   position: relative;
   overflow: hidden; /* Prevent root-level scrolling */
+}
+
+/* Mobile: constrain to phone width */
+@media (max-width: 1199px) {
+  #root {
+    max-width: 430px;
+  }
 }
 
 .card {

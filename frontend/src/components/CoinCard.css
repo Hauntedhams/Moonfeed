@@ -82,6 +82,185 @@
   animation: blink 1s ease-in-out infinite;
 }
 
+/* =============================================================================
+   DESKTOP SPLIT-SCREEN MODE - Show coin card on left, chart on right
+   ============================================================================= */
+
+/* Mobile first - default mobile styles */
+.coin-card-left-panel {
+  /* On mobile, this is the full card */
+  width: 100%;
+  height: 100%;
+}
+
+.coin-card-right-panel {
+  /* Hidden on mobile */
+  display: none;
+}
+
+/* Desktop split-screen mode - 1200px and up */
+@media (min-width: 1200px) {
+  .coin-card {
+    display: flex !important;
+    flex-direction: row !important;
+    width: 100% !important;
+    height: 100vh !important;
+    overflow: hidden !important;
+  }
+
+  /* Left side - Coin card content (scrollable) */
+  .coin-card-left-panel {
+    width: 480px;
+    flex-shrink: 0;
+    height: 100vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    background: linear-gradient(135deg, #0b1220 0%, #0e1426 50%, #0b1220 100%);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Right side - DexScreener chart (fixed, fills remaining space) */
+  .coin-card-right-panel {
+    display: flex !important;
+    flex: 1;
+    height: 100vh;
+    background: #0a0e1a;
+    position: relative;
+    overflow: hidden;
+    align-items: stretch;
+    justify-content: stretch;
+  }
+
+  /* Make the DexScreener chart fill the entire right panel */
+  .coin-card-right-panel > div {
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 100vh !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+  }
+
+  .coin-card-right-panel iframe {
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 100vh !important;
+    border: none;
+    border-radius: 0 !important;
+  }
+
+  /* Remove the expand/collapse button from right panel chart */
+  .coin-card-right-panel button {
+    display: none !important;
+  }
+
+  /* Ensure loading states also fill the panel */
+  .coin-card-right-panel > div > div {
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 100vh !important;
+    border-radius: 0 !important;
+  }
+
+  /* Hide the expand button on desktop split-screen mode */
+  .coin-card-left-panel .expand-btn {
+    display: none !important;
+  }
+
+  /* Adjust banner to fit in left panel */
+  .coin-card-left-panel .coin-banner {
+    position: relative !important;
+    width: 100%;
+    height: 280px !important;
+    flex-shrink: 0;
+  }
+
+  .coin-card-left-panel .banner-text-overlay {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+  }
+
+  /* Adjust info layer positioning for left panel */
+  .coin-card-left-panel .coin-info-layer {
+    position: relative !important;
+    margin-top: -60px;
+    height: auto !important;
+    transform: none !important;
+    border-top-left-radius: 24px;
+    border-top-right-radius: 24px;
+  }
+
+  .coin-card-left-panel .coin-info-layer.expanded {
+    position: relative !important;
+    height: auto !important;
+    transform: none !important;
+  }
+
+  /* Make charts section smaller in left panel since main chart is on right */
+  .coin-card-left-panel .charts-section {
+    min-height: 180px !important;
+  }
+
+  .coin-card-left-panel .price-history-wrapper,
+  .coin-card-left-panel .advanced-chart-wrapper {
+    height: 150px !important;
+  }
+
+  /* Style the chart placeholder in left panel */
+  .coin-card-left-panel .chart-placeholder {
+    padding: 30px 20px;
+    text-align: center;
+    color: #64748b;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Add a subtle border between panels */
+  .coin-card-left-panel {
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.3);
+  }
+
+  /* Reduce padding in sections for more compact left panel */
+  .coin-card-left-panel .section-content {
+    padding: 14px;
+  }
+
+  /* Make metrics more compact */
+  .coin-card-left-panel .header-metrics {
+    gap: 8px;
+  }
+
+  .coin-card-left-panel .header-metric {
+    padding: 8px 12px;
+  }
+}
+
+/* Medium desktop - slightly narrower left panel */
+@media (min-width: 1200px) and (max-width: 1600px) {
+  .coin-card-left-panel {
+    width: 420px !important;
+  }
+}
+
+/* Large desktop - wider left panel for more comfortable reading */
+@media (min-width: 1600px) {
+  .coin-card-left-panel {
+    width: 540px !important;
+  }
+}
+
+/* =============================================================================
+   BASE COIN CARD STYLES
+   ============================================================================= */
+
 .coin-card {
   position: relative;
   width: 100%;
@@ -112,7 +291,7 @@
   height: clamp(180px, 30vh, 250px);
   background: linear-gradient(45deg, #667eea 0%, #764ba2 100%);
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   justify-content: center;
   overflow: hidden;
   z-index: 1;
@@ -141,7 +320,7 @@
   width: 100%;
   height: 100%;
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   justify-content: center;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
   position: relative;
@@ -223,7 +402,7 @@
 
 .banner-symbol-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   gap: 8px;
   flex-wrap: wrap;
 }
@@ -242,15 +421,15 @@
 
 /* Banner Follow Button */
 .banner-follow-button {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1.5px solid rgba(255, 255, 255, 0.3);
-  color: rgba(255, 255, 255, 0.9);
+  background: rgba(0, 0, 0, 0.05); /* Light gray for light mode */
+  border: 1.5px solid rgba(0, 0, 0, 0.2); /* Dark border for light mode */
+  color: rgba(0, 0, 0, 0.8); /* Dark text for light mode */
   cursor: pointer;
   padding: 6px 14px;
   border-radius: 20px;
   transition: all 0.2s ease;
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   justify-content: center;
   font-size: 0.8rem;
   font-weight: 600;
@@ -261,16 +440,16 @@
 }
 
 .banner-follow-button:hover {
-  background: rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.5);
+  background: rgba(0, 0, 0, 0.1); /* Slightly darker on hover */
+  border-color: rgba(0, 0, 0, 0.3);
   transform: translateY(-1px);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .banner-follow-button.following {
-  background: rgba(255, 255, 255, 0.95);
-  border-color: rgba(255, 255, 255, 0.95);
-  color: rgba(0, 0, 0, 0.85);
+  background: rgba(0, 0, 0, 0.85); /* Dark background when following */
+  border-color: rgba(0, 0, 0, 0.85);
+  color: rgba(255, 255, 255, 0.95); /* White text when following */
 }
 
 .banner-follow-button.following:hover {
@@ -408,14 +587,14 @@
 
 .header-top-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   justify-content: space-between;
   width: 100%;
 }
 
 .header-right {
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   gap: 16px;
 }
 
@@ -426,7 +605,7 @@
   transition: transform 0.2s ease;
   position: relative;
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   justify-content: center;
   /* Ensure clickability */
   pointer-events: auto;
@@ -513,7 +692,7 @@
 
 .price-section {
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   gap: 12px;
 }
 
@@ -548,7 +727,7 @@
 .header-social-icons {
   display: flex;
   gap: 8px;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   flex-shrink: 0;
   min-width: fit-content;
 }
@@ -624,7 +803,7 @@
   letter-spacing: 0.3px;
   margin-bottom: 2px;
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   gap: 4px;
 }
 
@@ -641,7 +820,7 @@
   font-weight: 700;
   line-height: 1.1;
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   gap: 4px;
 }
 
@@ -722,7 +901,7 @@
   width: 32px;
   height: 32px;
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   justify-content: center;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -732,6 +911,7 @@
   background: transparent;
   border: none;
   outline: none;
+  box-shadow: none; /* Remove any shadows */
 }
 
 .header-social-icon svg {
@@ -799,7 +979,7 @@
   border: 2px solid rgba(0, 0, 0, 0.1);
   background: rgba(0, 0, 0, 0.04);
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   justify-content: center;
   overflow: hidden;
   flex-shrink: 0;
@@ -827,7 +1007,7 @@
 
 .price-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   gap: 12px;
 }
 
@@ -844,7 +1024,7 @@
   padding: 4px 10px;
   border-radius: 999px;
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   gap: 6px;
 }
 
@@ -861,7 +1041,7 @@
 /* Live price indicators */
 .live-indicators {
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   gap: 4px;
   position: absolute;
   top: -8px;
@@ -875,7 +1055,7 @@
   border-radius: 50%;
   position: relative;
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   justify-content: center;
 }
 
@@ -949,7 +1129,7 @@
 .social-links-grid {
   display: flex;
   gap: 12px;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   justify-content: center;
   flex-wrap: wrap;
 }
@@ -1082,7 +1262,7 @@
   z-index: 10;
   width: 100%;
   min-height: 60px;
-  margin: 0 0 4px 0; /* Reduced bottom margin from 8px to 4px to bring charts closer */
+  margin: 0 0 0px 0; /* Removed bottom margin (was 4px) to bring charts directly under nav */
   cursor: grab;
   user-select: none;
   -webkit-user-select: none;
@@ -1098,7 +1278,7 @@
   position: relative;
   display: flex;
   justify-content: flex-start;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   gap: 8px;
   padding: 12px 20px;
   margin: 0 20px;
@@ -1128,7 +1308,7 @@
 .graduation-progress-bar-container {
   flex: 1;
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   gap: 8px;
   margin-left: 12px;
   min-width: 0;
@@ -1202,7 +1382,7 @@
 .chart-page-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   margin-bottom: 8px;
   padding: 0 4px;
 }
@@ -1228,24 +1408,26 @@
 .price-history-wrapper {
   display: flex;
   justify-content: center;
-  align-items: center;
-  min-height: 220px;
+  align-items: flex-start; /* Changed from center - align charts to top */
+
   width: 100%; /* Ensure full width */
   margin: 0; /* Remove any margins */
-  margin-top: -8px; /* Pull charts up closer to nav area */
+  margin-top: -20px; /* Pull charts up right under nav buttons (increased from -8px) */
   padding: 0; /* Remove any padding */
-  overflow: hidden; /* Prevent content overflow */
+
   position: relative; /* Establish stacking context */
 }
 
 .advanced-chart-wrapper {
   width: 100%;
+  min-height: 450px; /* Restore full height for advanced chart */
   overflow: visible; /* Allow DexScreener iframe to expand wider */
 }
 
 .price-history-wrapper {
   width: 100%;
   height: 300px;
+  min-height: 220px;
   overflow: hidden;
   background: white;
 }
@@ -1253,7 +1435,7 @@
 .advanced-chart-wrapper .chart-container,
 .advanced-chart-wrapper .chart-placeholder {
   width: 100%;
-  min-height: 200px;
+  min-height: 450px; /* Match parent height */
   overflow: hidden;
   position: relative; /* Contain the iframe */
 }
@@ -1318,14 +1500,14 @@
   padding: 16px;
   border-bottom: 1px solid rgba(79, 195, 247, 0.2);
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   gap: 8px;
   justify-content: space-between;
 }
 
 .auto-loaded-badge {
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   gap: 4px;
   font-size: 0.7rem;
   font-weight: 600;
@@ -1353,7 +1535,7 @@
 .load-transactions-wrapper {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   justify-content: center;
   gap: 12px;
   min-height: 120px;
@@ -1371,7 +1553,7 @@
   cursor: pointer;
   transition: all 0.3s ease;
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   justify-content: center;
   gap: 8px;
   box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
@@ -1393,14 +1575,14 @@
 .live-transactions-content {
   position: relative;
   color: rgba(0, 0, 0, 0.8);
-  min-height: 200px;
+  min-height: 450px; /* Match parent height */
   padding: 16px;
 }
 
 .transactions-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   padding: 0 0 12px 0;
   margin-bottom: 16px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
@@ -1408,7 +1590,7 @@
 
 .transactions-status {
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   gap: 12px;
   font-size: 0.7rem;
   font-weight: 600;
@@ -1417,7 +1599,7 @@
 
 .status-indicator {
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   gap: 4px;
   font-weight: 600;
 }
@@ -1449,7 +1631,7 @@
   cursor: pointer;
   transition: all 0.2s ease;
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   gap: 4px;
 }
 
@@ -1519,7 +1701,7 @@
   display: grid;
   grid-template-columns: 1fr auto auto auto;
   gap: 12px;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   padding: 12px 0;
   border-bottom: 1px solid rgba(0, 0, 0, 0.06);
   transition: all 0.2s ease;
@@ -1561,7 +1743,7 @@
 /* Type column */
 .tx-type-col {
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
 }
 
 .tx-type {
@@ -1581,7 +1763,7 @@
 /* Error column (conditional) */
 .tx-error-col {
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
 }
 
 .tx-error-badge {
@@ -1600,7 +1782,7 @@
 /* Time column (far right) */
 .tx-time-col {
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   justify-content: flex-end;
 }
 
@@ -1616,7 +1798,7 @@
   color: #667eea;
   text-decoration: none;
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   gap: 4px;
   transition: all 0.2s ease;
 }
@@ -1719,7 +1901,7 @@
   padding: 16px;
   border-bottom: 1px solid rgba(79, 195, 247, 0.2);
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   gap: 8px;
 }
 
@@ -1727,7 +1909,7 @@
 .load-top-traders-wrapper {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   justify-content: center;
   gap: 12px;
   min-height: 120px;
@@ -1745,7 +1927,7 @@
   cursor: pointer;
   transition: all 0.3s ease;
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   justify-content: center;
   gap: 8px;
   box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
@@ -1767,7 +1949,7 @@
 .top-traders-content {
   position: relative;
   color: rgba(0, 0, 0, 0.8);
-  min-height: 200px;
+  min-height: 450px; /* Match parent height */
   padding: 16px;
 }
 
@@ -1810,7 +1992,7 @@
   padding-bottom: 8px;
   border-bottom: 1px solid rgba(79, 195, 247, 0.2);
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   gap: 6px;
 }
 
@@ -1823,7 +2005,7 @@
 .info-row {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   font-size: 0.85rem;
   line-height: 1.4;
 }
@@ -2018,7 +2200,7 @@
   bottom: 0;
   background: rgba(0, 0, 0, 0.75);
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   justify-content: center;
   z-index: 10000;
   backdrop-filter: blur(4px);
@@ -2046,7 +2228,7 @@
   width: 32px;
   height: 32px;
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   justify-content: center;
   font-size: 24px;
   color: #000;
@@ -2188,7 +2370,7 @@
   bottom: 0;
   background: rgba(0, 0, 0, 0.9);
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   justify-content: center;
   z-index: 10000;
   backdrop-filter: blur(8px);
@@ -2201,7 +2383,7 @@
   max-width: 95%;
   max-height: 90vh;
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   justify-content: center;
   animation: zoomIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
@@ -2227,7 +2409,7 @@
   width: 40px;
   height: 40px;
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   justify-content: center;
   font-size: 28px;
   color: #fff;
@@ -2291,7 +2473,7 @@
   bottom: 0;
   background: rgba(0, 0, 0, 0.85);
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   justify-content: center;
   z-index: 10000;
   backdrop-filter: blur(8px);
@@ -2307,7 +2489,7 @@
   padding: 0;
   max-width: 600px;
   width: 90%;
-  max-height: 80vh;
+  max-height:  80vh;
   overflow: hidden;
   animation: slideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
@@ -2324,7 +2506,7 @@
   width: 36px;
   height: 36px;
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   justify-content: center;
   font-size: 24px;
   color: #fff;
@@ -2440,7 +2622,7 @@
   bottom: 0;
   background: rgba(0, 0, 0, 0.9);
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   justify-content: center;
   z-index: 10000;
   backdrop-filter: blur(8px);
@@ -2451,7 +2633,7 @@
 .profile-modal-content {
   position: relative;
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   justify-content: center;
   animation: zoomIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
@@ -2496,7 +2678,7 @@
   width: 40px;
   height: 40px;
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   justify-content: center;
   font-size: 28px;
   color: #fff;
@@ -2551,7 +2733,7 @@
   border: 1.5px solid rgba(0, 0, 0, 0.4);
   background: rgba(255, 255, 255, 0.9);
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   justify-content: center;
   cursor: pointer;
   font-size: 11px;
@@ -2637,7 +2819,7 @@
 
 .enrichment-status {
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center - align charts to top */
   gap: 10px;
   margin-top: 12px;
   padding-top: 10px;
@@ -2835,12 +3017,20 @@
 
 /* Dark mode for social icons */
 .dark-mode .header-social-icon {
-  color: var(--text-secondary);
+  color: rgba(255, 255, 255, 0.8); /* White icons for dark mode */
   background: transparent;
+  border: none; /* Remove any borders */
+  box-shadow: none; /* Remove any shadows */
 }
 
 .dark-mode .header-social-icon:hover {
   background: transparent;
+  color: rgba(255, 255, 255, 1); /* Brighter white on hover */
+}
+
+/* Override platform-specific colors for dark mode - all start white */
+.dark-mode .header-social-icon.twitter-icon {
+  color: rgba(255, 255, 255, 0.8);
 }
 
 .dark-mode .header-social-icon.twitter-icon:hover {
@@ -2848,9 +3038,17 @@
   background: transparent;
 }
 
+.dark-mode .header-social-icon.telegram-icon {
+  color: rgba(255, 255, 255, 0.8);
+}
+
 .dark-mode .header-social-icon.telegram-icon:hover {
   color: #0088cc;
   background: transparent;
+}
+
+.dark-mode .header-social-icon.discord-icon {
+  color: rgba(255, 255, 255, 0.8);
 }
 
 .dark-mode .header-social-icon.discord-icon:hover {
@@ -2858,14 +3056,46 @@
   background: transparent;
 }
 
+.dark-mode .header-social-icon.tiktok-icon {
+  color: rgba(255, 255, 255, 0.8);
+}
+
 .dark-mode .header-social-icon.tiktok-icon:hover {
   color: #ffffff;
   background: transparent;
 }
 
+.dark-mode .header-social-icon.website-icon {
+  color: rgba(255, 255, 255, 0.8);
+}
+
 .dark-mode .header-social-icon.website-icon:hover {
-  color: var(--text-primary);
+  color: rgba(255, 255, 255, 1);
   background: transparent;
+}
+
+/* Dark mode for follow button */
+.dark-mode .banner-follow-button {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.dark-mode .banner-follow-button:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.dark-mode .banner-follow-button.following {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(255, 255, 255, 0.95);
+  color: rgba(0, 0, 0, 0.85);
+}
+
+.dark-mode .banner-follow-button.following:hover {
+  background: rgba(255, 80, 80, 0.9);
+  border-color: rgba(255, 80, 80, 0.9);
+  color: white;
 }
 
 /* Dark mode for profile image */
@@ -2985,1884 +3215,114 @@
 }
 
 /* =============================================================================
-   📱 INFO LAYER SCROLLING BEHAVIOR
-   ============================================================================= 
-   
-   When NOT expanded (default state):
-   - .info-layer-content has overflow-y: hidden and touch-action: none
-   - This prevents the info layer from capturing scroll/touch events
-   - Scrolls/swipes pass through to the parent scroller, allowing coin-to-coin navigation
-   - Clicks/taps on buttons still work (pointer-events: auto)
-   
-   When expanded (after clicking expand button):
-   - .info-layer-content has overflow-y: auto and touch-action: pan-y
-   - The info layer becomes scrollable to view all content
-   - Parent scroller is locked (scroll-locked class on .modern-scroller-container)
-   - User can scroll within the expanded info layer
-   
+   DESKTOP SPLIT-SCREEN MODE - Show coin card on left, chart on right
    ============================================================================= */
-
-.coin-info-layer {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: #ffffff;
-  backdrop-filter: blur(20px);
-  border-top-left-radius: 24px;
-  border-top-right-radius: 24px;
-  transition: transform 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94), 
-              height 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-  transform: translateY(0%);
-  /* Adjust height to work with the new shorter banner size */
-  height: calc(100dvh - clamp(180px, 30vh, 250px));
-  z-index: 50; /* Increased z-index to ensure it's above other elements */
-  overflow: hidden;
-  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
-  /* Ensure pointer events work */
-  pointer-events: auto;
-}
-
-.coin-info-layer.expanded {
-  transform: translateY(0%);
-  height: calc(100dvh - 80px); /* Fill viewport minus bottom nav bar */
-}
-
-.info-layer-header {
-  padding: 16px 20px 4px;
-  background: rgba(255, 255, 255, 0.98);
-  position: sticky;
-  top: 0;
-  z-index: 60; /* Increased z-index to ensure header stays on top */
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  /* 🔥 CRITICAL: Don't block events from nav area below */
-  pointer-events: none;
-  border-bottom: none;
-  box-shadow: none;
-}
-
-/* 🔥 Re-enable pointer events for interactive children */
-.info-layer-header > * {
-  pointer-events: auto;
-}
-
-.header-top-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-}
-
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.expand-handle {
-  width: 32px;
-  height: 32px;
-  cursor: pointer;
-  transition: transform 0.2s ease;
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  /* Ensure clickability */
-  pointer-events: auto;
-  z-index: 70; /* High z-index to ensure it's clickable */
-  /* Better touch target */
-  min-width: 44px;
-  min-height: 44px;
-  /* Prevent text selection */
-  user-select: none;
-  -webkit-user-select: none;
-  /* Ensure it's always on top */
-  isolation: isolate;
-  /* Prevent touch gestures from causing scroll */
-  touch-action: none;
-  -webkit-touch-callout: none;
-}
-
-.expand-handle::before {
-  content: '';
-  width: 12px;
-  height: 12px;
-  border-bottom: 2px solid rgba(0, 0, 0, 0.6);
-  border-right: 2px solid rgba(0, 0, 0, 0.6);
-  transform: rotate(-135deg);
-  transition: all 0.2s ease;
-}
-
-.expand-handle:hover {
-  background: rgba(0, 0, 0, 0.1);
-  border-radius: 50%;
-  transform: scale(1.1);
-}
-
-.expand-handle:hover::before {
-  border-bottom-color: rgba(0, 0, 0, 0.8);
-  border-right-color: rgba(0, 0, 0, 0.8);
-}
-
-.expand-handle:active {
-  transform: scale(0.95);
-  background: rgba(0, 0, 0, 0.15);
-}
-
-.trade-button {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  color: white;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 8px;
-  font-size: 0.9rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
-}
-
-.trade-button:hover {
-  background: linear-gradient(135deg, #059669 0%, #047857 100%);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
-}
-
-.trade-button:active {
-  transform: translateY(0);
-  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);
-}
-
-.coin-info-layer.expanded .expand-handle::before {
-  transform: rotate(45deg);
-}
-
-.header-left {
-  display: flex;
-  align-items: flex-start;
-  gap: 16px;
-  flex: 1;
-}
-
-.price-and-social-section {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.price-section {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-/* 🎓 GRADUATION PROGRESS DISPLAY */
-.graduation-progress-display {
-  margin-top: 6px;
-  padding: 6px 10px;
-  border-radius: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  backdrop-filter: blur(10px);
-  transition: all 0.3s ease;
-}
-
-.graduation-progress-display:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-@keyframes pulse {
-  0%, 100% { 
-    opacity: 1; 
-    transform: scale(1);
-  }
-  50% { 
-    opacity: 0.85;
-    transform: scale(1.02);
-  }
-}
-
-.header-social-icons {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-shrink: 0;
-  min-width: fit-content;
-}
-
-.header-metrics-row {
-  display: flex;
-  width: 100%;
-}
-
-/* Header Metrics Grid - Full width row */
-.header-metrics-grid {
-  display: flex;
-  gap: 16px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding: 0 4px 4px 4px;
-  scroll-behavior: smooth;
-  flex: 1;
-  width: 100%;
-  position: relative;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin; /* Firefox */
-  scrollbar-color: rgba(255, 255, 255, 0.2) transparent; /* Firefox dark mode */
-}
-
-.header-metrics-grid::-webkit-scrollbar {
-  height: 4px;
-}
-
-.header-metrics-grid::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 2px;
-}
-
-.header-metrics-grid::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 2px;
-}
-
-.header-metrics-grid::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
-}
-
-.header-metric {
-  background: transparent;
-  border-radius: 0;
-  padding: 8px 16px;
-  text-align: center;
-  border: none;
-  border-right: 1px solid rgba(0, 0, 0, 0.1);
-  flex: 0 0 auto;
-  min-width: 90px;
-  transition: all 0.2s ease;
-  position: relative;
-  cursor: help;
-}
-
-.header-metric:last-child {
-  border-right: none;
-}
-
-.header-metric:hover {
-  background: rgba(0, 0, 0, 0.04);
-  transform: translateY(-1px);
-  border-radius: 6px;
-}
-
-.header-metric-label {
-  font-size: 0.7rem;
-  color: rgba(0, 0, 0, 0.6);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-  margin-bottom: 2px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.header-metric-value {
-  font-size: 0.85rem;
-  color: #000000;
-  font-weight: 700;
-  line-height: 1.1;
-}
-
-.header-metric-value-with-icon {
-  font-size: 0.85rem;
-  color: #000000;
-  font-weight: 700;
-  line-height: 1.1;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-/* Metric Tooltip Styles */
-.metric-tooltip {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  background: rgba(255, 255, 255, 0.98);
-  color: #000000;
-  padding: 12px;
-  border-radius: 12px;
-  width: 360px; /* Slightly smaller */
-  max-width: 92vw;
-  max-height: 90vh; /* Constrain to viewport but allow expansion */
-  font-size: 0.8rem; /* Slightly smaller text */
-  line-height: 1.35;
-  z-index: 999999; /* Maximum z-index for mobile compatibility */
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  pointer-events: none;
-  overflow-y: auto; /* Only show scroll if content exceeds 90vh */
-  /* Ensure it's above everything on mobile */
-  isolation: isolate;
-}
-
-.metric-tooltip::before {
-  display: none;
-}
-
-.tooltip-title {
-  font-size: 0.88rem;
-  font-weight: 700;
-  color: #000000;
-  margin-bottom: 5px;
-}
-
-.tooltip-exact {
-  font-size: 0.95rem;
-  font-weight: 800;
-  color: #22c55e;
-  margin-bottom: 7px;
-  font-family: 'Inter', monospace;
-}
-
-.tooltip-description {
-  font-size: 0.78rem;
-  color: #333333;
-  margin-bottom: 7px;
-  line-height: 1.4;
-}
-
-.tooltip-example {
-  font-size: 0.72rem;
-  color: #666666;
-  font-style: italic;
-  padding-top: 5px;
-  border-top: 1px solid rgba(0, 0, 0, 0.1);
-  line-height: 1.35;
-}
-
-/* Enhanced hover effect for metrics */
-.header-metric {
-  cursor: help;
-  transition: all 0.2s ease;
-}
-
-.header-metric:hover {
-  background: rgba(0, 0, 0, 0.02);
-  transform: translateY(-1px);
-  border-radius: 6px;
-}
-
-/* Social Icon Base Styles */
-.header-social-icon {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  color: rgba(0, 0, 0, 0.6);
-  text-decoration: none;
-  border-radius: 0;
-  background: transparent;
-  border: none;
-  outline: none;
-}
-
-.header-social-icon svg {
-  width: 16px;
-  height: 16px;
-  fill: currentColor;
-  transition: all 0.2s ease;
-}
-
-.header-social-icon:hover {
-  background: transparent;
-  transform: translateY(-1px);
-}
-
-/* Platform-specific icon styling with brand colors on hover */
-.header-social-icon.twitter-icon {
-  color: rgba(0, 0, 0, 0.6);
-}
-
-.header-social-icon.twitter-icon:hover {
-  color: #000000;
-  background: transparent;
-}
-
-.header-social-icon.telegram-icon {
-  color: rgba(0, 0, 0, 0.6);
-}
-
-.header-social-icon.telegram-icon:hover {
-  color: #0088cc;
-  background: transparent;
-}
-
-.header-social-icon.discord-icon {
-  color: rgba(0, 0, 0, 0.6);
-}
-
-.header-social-icon.discord-icon:hover {
-  color: #5865F2;
-  background: transparent;
-}
-
-.header-social-icon.tiktok-icon {
-  color: rgba(0, 0, 0, 0.6);
-}
-
-.header-social-icon.tiktok-icon:hover {
-  color: #000000;
-  background: transparent;
-}
-
-.header-social-icon.website-icon {
-  color: rgba(0, 0, 0, 0.6);
-}
-
-.header-social-icon.website-icon:hover {
-  color: rgba(0, 0, 0, 0.9);
-  background: transparent;
-}
-
-.info-layer-profile-image {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  border: 2px solid rgba(0, 0, 0, 0.1);
-  background: rgba(0, 0, 0, 0.04);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  flex-shrink: 0;
-  transition: all 0.2s ease;
-}
-
-.info-layer-profile-image:hover {
-  transform: scale(1.05);
-  border-color: rgba(0, 0, 0, 0.2);
-  background: rgba(0, 0, 0, 0.08);
-}
-
-.info-layer-profile-image img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: 50%;
-}
-
-.info-layer-profile-placeholder {
-  color: rgba(0, 0, 0, 0.6);
-  font-size: 0.9rem;
-  font-weight: 600;
-}
-
-.price-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.coin-price {
-  font-size: 1.7rem;
-  font-weight: 800;
-  color: #000000;
-  text-shadow: none;
-}
-
-.price-change {
-  font-size: 0.95rem;
-  font-weight: 700;
-  padding: 4px 10px;
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.price-change.positive {
-  background: rgba(34, 197, 94, 0.15);
-  color: #22c55e;
-}
-
-.price-change.negative {
-  background: rgba(239, 68, 68, 0.15);
-  color: #ef4444;
-}
-
-/* Live price indicators */
-.live-indicators {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  position: absolute;
-  top: -8px;
-  right: -8px;
-  z-index: 10;
-}
-
-.live-indicator {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.live-indicator.connected .live-dot {
-  background: #22c55e;
-  animation: pulse-green 2s ease-in-out infinite;
-}
-
-.live-indicator.disconnected .live-dot {
-  background: #ef4444;
-  animation: pulse-red 2s ease-in-out infinite;
-}
-
-.live-dot {
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-}
-
-.jupiter-live-indicator {
-  font-size: 10px;
-  animation: rotate 3s linear infinite;
-  filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.8));
-}
-
-@keyframes pulse-green {
-  0%, 100% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.3); opacity: 0.7; }
-}
-
-@keyframes pulse-red {
-  0%, 100% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.3); opacity: 0.7; }
-}
-
-@keyframes rotate {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-/* Price flash animations for live updates */
-.coin-price.price-up {
-  animation: flash-green 0.6s ease-out;
-}
-
-.coin-price.price-down {
-  animation: flash-red 0.6s ease-out;
-}
-
-@keyframes flash-green {
-  0% { background-color: transparent; }
-  50% { background-color: rgba(34, 197, 94, 0.3); border-radius: 8px; }
-  100% { background-color: transparent; }
-}
-
-@keyframes flash-red {
-  0% { background-color: transparent; }
-  50% { background-color: rgba(239, 68, 68, 0.3); border-radius: 8px; }
-  100% { background-color: transparent; }
-}
-
-/* =============================================================================
-   SOCIAL LINKS SECTION - Between price and metrics
-   ============================================================================= */
-
-.social-links-section {
-  margin-bottom: 12px;
-  padding-top: 8px;
-}
-
-.social-links-grid {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
-}
-
-.info-layer-content {
-  padding: 0 20px 100px; /* Increased bottom padding to clear the bottom nav bar */
-  padding-top: 0; /* Remove top padding to move charts up */
-  overflow-y: hidden; /* 🔥 DISABLED by default - only scrollable when expanded */
-  height: calc(100% - 80px);
-  opacity: 1; /* Changed from 0.7 to 1 - no graying out */
-  transition: opacity 0.3s ease;
-  /* 🔥 CRITICAL: Allow pointer events for clicks but prevent scroll capture */
-  pointer-events: auto;
-  /* Establish proper stacking context */
-  position: relative;
-  z-index: 55;
-  /* 🔥 Prevent overscroll when collapsed - pass scroll to parent */
-  overscroll-behavior: none;
-  -webkit-overflow-scrolling: touch;
-  /* 🔥 Disable touch scrolling when not expanded - clicks/taps still work */
-  touch-action: none;
-}
-
-.coin-info-layer.expanded .info-layer-content {
-  overflow-y: auto; /* 🔥 Enable scrolling when expanded */
-  height: calc(100% - 80px); /* Allow scrolling through all content */
-  opacity: 1;
-  /* 🔥 Re-enable vertical scrolling when expanded */
-  touch-action: pan-y;
-  overscroll-behavior: contain;
-}
-
-/* Scrollbar styling for info-layer-content */
-.info-layer-content::-webkit-scrollbar {
-  width: 8px;
-}
-
-.info-layer-content::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.05);
-  border-radius: 4px;
-}
-
-.info-layer-content::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.15);
-  border-radius: 4px;
-  transition: background 0.2s ease;
-}
-
-.info-layer-content::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.25);
-}
-
-/* =============================================================================
-   METRICS AND CONTENT SECTIONS
-   ============================================================================= */
-
-.metrics-grid {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-  overflow-x: auto;
-  padding-bottom: 4px;
-  scroll-behavior: smooth;
-}
-
-.metrics-grid::-webkit-scrollbar {
-  height: 3px;
-}
-
-.metrics-grid::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.03);
-  border-radius: 2px;
-}
-
-.metrics-grid::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.12);
-  border-radius: 2px;
-}
-
-.metrics-grid::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.2);
-}
-
-.metric {
-  background: transparent;
-  border-radius: 0;
-  padding: 8px 16px;
-  text-align: center;
-  border: none;
-  border-right: 1px solid rgba(0, 0, 0, 0.08);
-  flex: 0 0 110px;
-  min-width: 110px;
-  transition: all 0.2s ease;
-  position: relative;
-}
-
-.metric:last-child {
-  border-right: none;
-}
-
-.metric:hover {
-  background: transparent;
-  transform: translateY(-1px);
-}
-
-/* Section title styling - matches header metrics */
-.section-title {
-  font-size: 0.7rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-  color: rgba(0, 0, 0, 0.6);
-  margin-bottom: 12px;
-}
-
-/* Charts Section with Horizontal Snap Scrolling */
-.charts-section {
-  margin: 0 0 12px 0; /* Reduced bottom margin from 16px to 12px */
-  margin-top: 0; /* Reset margin - keep nav area in normal position */
-  position: relative;
-  /* Break out of parent padding to allow full-width charts */
-  margin-left: -20px;
-  margin-right: -20px;
-  width: calc(100% + 40px);
-}
-
-/* 🔥 HOT SWIPE AREA - Full-width, fixed-height container for natural scroll/drag */
-.chart-nav-hot-area {
-  position: relative;
-  z-index: 10;
-  width: 100%;
-  min-height: 60px;
-  margin: 0 0 4px 0; /* Reduced bottom margin from 8px to 4px to bring charts closer */
-  cursor: grab;
-  user-select: none;
-  -webkit-user-select: none;
-  pointer-events: auto;
-}
-
-.chart-nav-hot-area:active {
-  cursor: grabbing;
-}
-
-/* Visual content inside the hot area */
-.chart-nav-content {
-  position: relative;
-  display: flex;
-  justify-content: flex-start;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 20px;
-  margin: 0 20px;
-  height: 100%;
-  background: transparent;
-  border-radius: 12px;
-  transition: background 0.2s ease;
-  pointer-events: auto;
-}
-
-.chart-nav-hot-area:hover .chart-nav-content {
-  background: transparent;
-}
-
-.chart-nav-hot-area:active .chart-nav-content {
-  background: transparent;
-}
-
-/* Clickable elements */
-.chart-nav-content .nav-dot,
-.chart-nav-content .graduation-info-icon {
-  pointer-events: auto;
-  cursor: pointer;
-}
-
-/* Progress bar - visual only, events pass through */
-.graduation-progress-bar-container {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: 12px;
-  min-width: 0;
-  pointer-events: none;
-}
-
-.graduation-progress-track {
-  position: relative;
-  height: 8px;
-  flex: 1;
-  background: rgba(0, 0, 0, 0.1);
-  border-radius: 4px;
-  overflow: hidden;
-  min-width: 60px;
-  pointer-events: none;
-}
-
-.graduation-progress-fill {
-  height: 100%;
-  border-radius: 4px;
-  transition: width 0.5s ease-out, box-shadow 0.3s ease;
-  position: relative;
-  pointer-events: none;
-}
-
-.graduation-progress-fill::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-  animation: shimmer 2s infinite;
-}
-
-@keyframes shimmer {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
-}
-
-.charts-horizontal-container {
-  display: flex;
-  overflow-x: auto;
-  scroll-snap-type: x mandatory;
-  scroll-behavior: auto; /* Changed from smooth - let snap handle it */
-  -webkit-overflow-scrolling: touch;
-  gap: 0;
-  padding: 0;
-  margin: 0;
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none; /* Internet Explorer 10+ */
-  overflow-y: visible; /* Allow charts to use full height without clipping */
-  position: relative; /* Establish stacking context */
-}
-
-.charts-horizontal-container::-webkit-scrollbar {
-  display: none; /* WebKit */
-}
-
-.chart-page {
-  flex: 0 0 100%;
-  scroll-snap-align: start;
-  padding: 0; /* 🔥 No padding needed - nav is above, not overlapping */
-  box-sizing: border-box;
-  min-height: 280px;
-  overflow: visible; /* Allow chart to expand beyond container */
-  position: relative; /* Establish stacking context */
-}
-
-.chart-page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-  padding: 0 4px;
-}
-
-.chart-page-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: #fff;
-  margin: 0;
-}
-
-.chart-page-indicator {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.6);
-  background: rgba(255, 255, 255, 0.1);
-  padding: 4px 8px;
-  border-radius: 12px;
-  font-weight: 500;
-}
-
-.clean-chart-wrapper,
-.advanced-chart-wrapper,
-.price-history-wrapper {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 220px;
-  width: 100%; /* Ensure full width */
-  margin: 0; /* Remove any margins */
-  margin-top: -8px; /* Pull charts up closer to nav area */
-  padding: 0; /* Remove any padding */
-  overflow: hidden; /* Prevent content overflow */
-  position: relative; /* Establish stacking context */
-}
-
-.advanced-chart-wrapper {
-  width: 100%;
-  overflow: visible; /* Allow DexScreener iframe to expand wider */
-}
-
-.price-history-wrapper {
-  width: 100%;
-  height: 300px;
-  overflow: hidden;
-  background: white;
-}
-
-.advanced-chart-wrapper .chart-container,
-.advanced-chart-wrapper .chart-placeholder {
-  width: 100%;
-  min-height: 200px;
-  overflow: hidden;
-  position: relative; /* Contain the iframe */
-}
-
-/* Navigation Dots */
-.chart-nav-dots {
-  display: flex;
-  justify-content: center;
-  gap: 8px;
-}
-
-.nav-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.2);
-  transition: all 0.3s ease;
-  cursor: pointer;
-  flex-shrink: 0;
-  scroll-snap-align: center;
-}
-
-.nav-dot:hover {
-  background: rgba(0, 0, 0, 0.4);
-  transform: scale(1.2);
-}
-
-.nav-dot.active {
-  background: rgba(0, 0, 0, 0.7);
-  width: 20px;
-  border-radius: 4px;
-}
-
-/* =============================================================================
-   LIVE TRANSACTIONS SECTION
-   ============================================================================= */
-
-/* Live Transactions Section - matches Market Metrics card style */
-.transactions-section {
-  margin: 16px 0;
-  background: linear-gradient(135deg, rgba(79, 195, 247, 0.05) 0%, rgba(103, 126, 234, 0.05) 100%);
-  border: 1px solid rgba(79, 195, 247, 0.2);
-  border-radius: 12px;
-  padding: 0;
-  transition: all 0.3s ease;
-}
-
-.transactions-section:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(79, 195, 247, 0.15);
-  border-color: rgba(79, 195, 247, 0.4);
-}
-
-/* Section header with icon and title */
-.transactions-section-header {
-  font-size: 0.7rem;
-  font-weight: 600;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-  color: #667eea;
-  padding: 16px;
-  border-bottom: 1px solid rgba(79, 195, 247, 0.2);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  justify-content: space-between;
-}
-
-.auto-loaded-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 0.7rem;
-  font-weight: 600;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  color: white;
-  padding: 4px 10px;
-  border-radius: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
-  animation: pulse-glow 2s ease-in-out infinite;
-}
-
-@keyframes pulse-glow {
-  0%, 100% {
-    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
-  }
-  50% {
-    box-shadow: 0 2px 12px rgba(16, 185, 129, 0.5);
-  }
-}
-
-/* Button wrapper - centered container */
-.load-transactions-wrapper {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  min-height: 120px;
-  padding: 20px;
-}
-
-.load-live-transactions-btn {
-  padding: 14px 28px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border: none;
-  border-radius: 12px;
-  color: #fff;
-  font-size: 15px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
-  min-width: 200px;
-  min-height: 48px;
-}
-
-.load-live-transactions-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
-}
-
-.load-live-transactions-btn:active {
-  transform: translateY(0);
-  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
-}
-
-/* Live transactions content */
-.live-transactions-content {
-  position: relative;
-  color: rgba(0, 0, 0, 0.8);
-  min-height: 200px;
-  padding: 16px;
-}
-
-.transactions-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 0 12px 0;
-  margin-bottom: 16px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-}
-
-.transactions-status {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 0.7rem;
-  font-weight: 600;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-}
-
-.status-indicator {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-weight: 600;
-}
-
-.status-indicator.connected {
-  color: #22c55e;
-}
-
-.status-indicator.disconnected {
-  color: #ef4444;
-}
-
-.tx-count {
-  color: rgba(0, 0, 0, 0.6);
-  font-size: 0.7rem;
-  font-weight: 600;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-}
-
-.close-transactions-btn {
-  background: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.2);
-  border-radius: 8px;
-  padding: 6px 12px;
-  color: #ef4444;
-  font-size: 0.7rem;
-  font-weight: 700;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.close-transactions-btn:hover {
-  background: rgba(239, 68, 68, 0.15);
-  border-color: rgba(239, 68, 68, 0.3);
-  transform: translateY(-1px);
-}
-
-/* Transactions list - structured like Market Metrics */
-.transactions-list {
-  max-height: 150px; /* Reduced from 200px to show ~2-3 transactions compactly */
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.transactions-list::-webkit-scrollbar {
-  width: 8px;
-}
-
-.transactions-list::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.05);
-  border-radius: 4px;
-}
-
-.transactions-list::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 4px;
-}
-
-.transactions-list::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.3);
-}
-
-/* Empty state */
-.transactions-empty {
-  text-align: center;
-  padding: 60px 20px;
-  color: rgba(0, 0, 0, 0.5);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-}
-
-.empty-icon {
-  font-size: 48px;
-  margin-bottom: 16px;
-}
-
-.empty-text {
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: rgba(0, 0, 0, 0.7);
-  margin-bottom: 8px;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-}
-
-.empty-subtext {
-  font-size: 0.7rem;
-  font-weight: 600;
-  color: rgba(0, 0, 0, 0.5);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-}
-
-/* Transaction item - horizontal layout: wallet | type | error (if any) | time */
-.transaction-item {
-  display: grid;
-  grid-template-columns: 1fr auto auto auto;
-  gap: 12px;
-  align-items: center;
-  padding: 12px 0;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-  transition: all 0.2s ease;
-}
-
-.transaction-item:last-child {
-  border-bottom: none;
-}
-
-.transaction-item:hover {
-  background: rgba(0, 0, 0, 0.02);
-  padding-left: 8px;
-  padding-right: 8px;
-  margin-left: -8px;
-  margin-right: -8px;
-  border-radius: 6px;
-}
-
-/* Wallet column (far left) */
-.tx-wallet {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  font-size: 0.7rem;
-  font-weight: 600;
-  color: rgba(0, 0, 0, 0.7);
-  min-width: 0;
-}
-
-.tx-wallet span[style*="cursor: pointer"] {
-  transition: all 0.2s ease;
-  padding: 2px 4px;
-  border-radius: 4px;
-}
-
-.tx-wallet span[style*="cursor: pointer"]:hover {
-  background: rgba(79, 195, 247, 0.2);
-  color: #4FC3F7 !important;
-}
-
-/* Type column */
-.tx-type-col {
-  display: flex;
-  align-items: center;
-}
-
-.tx-type {
-  display: inline-block;
-  padding: 2px 6px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: 700;
-  font-family: 'Monaco', 'Courier New', monospace;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  white-space: nowrap;
-}
-
-/* Error column (conditional) */
-.tx-error-col {
-  display: flex;
-  align-items: center;
-}
-
-.tx-error-badge {
-  display: inline-block;
-  padding: 2px 6px;
-  background: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  border-radius: 4px;
-  color: #ef4444;
-  font-size: 10px;
-  font-weight: 700;
-  font-family: 'Monaco', 'Courier New', monospace;
-  white-space: nowrap;
-}
-
-/* Time column (far right) */
-.tx-time-col {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-}
-
-.tx-time {
-  font-size: 0.7rem;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  color: rgba(0, 0, 0, 0.5);
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.tx-link {
-  color: #667eea;
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  transition: all 0.2s ease;
-}
-
-.tx-link:hover {
-  color: #764ba2;
-  text-decoration: underline;
-}
-
-.external-icon {
-  font-size: 10px;
-  opacity: 0.6;
-}
-
-.tx-error {
-  padding: 12px;
-  background: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.2);
-  border-radius: 8px;
-  color: #ef4444;
-  font-size: 0.7rem;
-  font-weight: 600;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  margin-bottom: 12px;
-}
-
-/* Dark mode for transaction time text */
-.dark-mode .tx-time {
-  color: rgba(255, 255, 255, 0.6);
-}
-
-/* Dark mode for transaction count */
-.dark-mode .tx-count {
-  color: rgba(255, 255, 255, 0.6);
-}
-
-/* Dark mode for transaction item hover */
-.dark-mode .transaction-item:hover {
-  background: rgba(255, 255, 255, 0.05);
-}
-
-/* Dark mode for empty state text */
-.dark-mode .empty-text {
-  color: rgba(255, 255, 255, 0.9);
-}
-
-.dark-mode .empty-subtext {
-  color: rgba(255, 255, 255, 0.6);
-}
-
-.dark-mode .transactions-empty {
-  color: rgba(255, 255, 255, 0.6);
-}
-
-/* Slide in animation for new transactions */
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateX(-20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-.transactions-placeholder {
-  text-align: center;
-  padding: 60px 20px;
-  color: rgba(0, 0, 0, 0.5);
-}
-
-/* =============================================================================
-   TOP TRADERS SECTION
-   ============================================================================= */
-
-/* Top Traders Section - matches Market Metrics card style */
-.top-traders-section {
-  margin: 16px 0;
-  background: linear-gradient(135deg, rgba(79, 195, 247, 0.05) 0%, rgba(103, 126, 234, 0.05) 100%);
-  border: 1px solid rgba(79, 195, 247, 0.2);
-  border-radius: 12px;
-  padding: 0;
-  transition: all 0.3s ease;
-}
-
-.top-traders-section:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(79, 195, 247, 0.15);
-  border-color: rgba(79, 195, 247, 0.4);
-}
-
-/* Section header with icon and title */
-.top-traders-section-header {
-  font-size: 0.7rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-  color: #667eea;
-  padding: 16px;
-  border-bottom: 1px solid rgba(79, 195, 247, 0.2);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-/* Button wrapper for top traders */
-.load-top-traders-wrapper {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  min-height: 120px;
-  padding: 20px;
-}
-
-.load-top-traders-btn {
-  padding: 14px 28px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border: none;
-  border-radius: 12px;
-  color: #fff;
-  font-size: 15px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
-  min-width: 200px;
-  min-height: 48px;
-}
-
-.load-top-traders-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
-}
-
-.load-top-traders-btn:active {
-  transform: translateY(0);
-  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
-}
-
-/* Top traders content */
-.top-traders-content {
-  position: relative;
-  color: rgba(0, 0, 0, 0.8);
-  min-height: 200px;
-  padding: 16px;
-}
-
-/* =============================================================================
-   TOKEN INFORMATION GRID SECTION
-   ============================================================================= */
-
-.token-info-grid-section {
-  margin-bottom: 24px;
-}
-
-.info-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 16px;
-  margin-top: 12px;
-}
-
-.info-card {
-  background: linear-gradient(135deg, rgba(79, 195, 247, 0.05) 0%, rgba(103, 126, 234, 0.05) 100%);
-  border: 1px solid rgba(79, 195, 247, 0.2);
-  border-radius: 12px;
-  padding: 16px;
-  transition: all 0.3s ease;
-}
-
-.info-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(79, 195, 247, 0.15);
-  border-color: rgba(79, 195, 247, 0.4);
-}
-
-.info-card-header {
-  font-size: 0.7rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-  color: #667eea;
-  margin-bottom: 12px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid rgba(79, 195, 247, 0.2);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.info-card-content {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.info-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 0.85rem;
-  line-height: 1.4;
-}
-
-.info-label {
-  color: rgba(0, 0, 0, 0.6);
-  font-weight: 600;
-  font-size: 0.85rem;
-}
-
-.info-value {
-  color: rgba(0, 0, 0, 0.9);
-  font-weight: 700;
-  font-size: 0.85rem;
-  text-align: right;
-}
-
-.info-value.positive {
-  color: #22c55e;
-}
-
-.info-value.negative {
-  color: #ef4444;
-}
-
-/* Mobile optimization for info grid */
-@media (max-width: 640px) {
-  .info-grid {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-  
-  .info-card {
-    padding: 14px;
-  }
-  
-  .info-card-header {
-    font-size: 0.9rem;
-  }
-  
-  .info-row {
-    font-size: 0.85rem;
-  }
-}
-
-/* Responsive adjustments */
-@media (max-width: 480px) {
-  .chart-page {
-    padding: 0 16px;
-  }
-  
-  .clean-chart-wrapper .clean-price-chart {
+@media (min-width: 1200px) {
+  .coin-card {
+    display: flex;
+    flex-direction: row;
     width: 100%;
-    max-width: 300px;
+    height: 100vh;
+  }
+
+  /* Left side - Coin card content (scrollable) */
+  .coin-card-left-panel {
+    width: 480px;
+    flex-shrink: 0;
+    height: 100vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    background: linear-gradient(135deg, #0b1220 0%, #0e1426 50%, #0b1220 100%);
+    position: relative;
+    /* Smooth scrolling */
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Right side - DexScreener chart (fixed, fills remaining space) */
+  .coin-card-right-panel {
+    flex: 1;
+    height: 100vh;
+    background: #0a0e1a;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Make the DexScreener chart fill the entire right panel */
+  .coin-card-right-panel .dexscreener-chart-container {
+    width: 100%;
+    height: 100%;
+  }
+
+  .coin-card-right-panel iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+  }
+
+  /* Remove the expand/collapse button from right panel chart */
+  .coin-card-right-panel button {
+    display: none !important;
+  }
+
+  /* Ensure loading states also fill the panel */
+  .coin-card-right-panel > div > div {
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 100vh !important;
+    border-radius: 0 !important;
+  }
+
+  /* Hide the expand button on desktop split-screen mode */
+  .coin-card-left-panel .expand-btn {
+    display: none !important;
+  }
+
+  /* Adjust banner to fit in left panel */
+  .coin-card-left-panel .coin-banner {
+    position: relative !important;
+    width: 100%;
+    height: 300px;
+  }
+
+  /* Adjust info layer positioning for left panel */
+  .coin-card-left-panel .info-layer {
+    position: relative;
+    margin-top: -80px;
+  }
+
+  /* Make charts section take less space in left panel since main chart is on right */
+  .coin-card-left-panel .charts-section {
+    min-height: 200px;
+  }
+
+  /* Style the chart placeholder in left panel */
+  .coin-card-left-panel .chart-placeholder {
+    padding: 40px 20px;
+    text-align: center;
+    color: #64748b;
+    font-size: 14px;
+  }
+
+  /* Add a subtle border between panels */
+  .coin-card-left-panel {
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
   }
 }
 
-/* Mobile-specific optimizations for banner area */
-@media (max-width: 768px) {
-  .coin-banner {
-    /* Slightly smaller on mobile */
-    height: clamp(180px, 32vh, 250px);
-  }
-  
-  .coin-info-layer {
-    height: calc(100dvh - clamp(180px, 32vh, 250px));
+/* Medium desktop - slightly narrower left panel */
+@media (min-width: 1200px) and (max-width: 1600px) {
+  .coin-card-left-panel {
+    width: 420px;
   }
 }
 
-@media (max-width: 480px) {
-  .coin-banner {
-    /* Compact on very small screens */
-    height: clamp(160px, 28vh, 220px);
+/* Large desktop - wider left panel for more comfortable reading */
+@media (min-width: 1600px) {
+  .coin-card-left-panel {
+    width: 540px;
   }
-  
-  .coin-info-layer {
-    height: calc(100dvh - clamp(160px, 28vh, 220px));
-  }
-}
-
-/* For very tall screens, prevent banner from being too large */
-@media (min-height: 900px) {
-  .coin-banner {
-    height: clamp(220px, 30vh, 300px);
-  }
-  
-  .coin-info-layer {
-    height: calc(100dvh - clamp(220px, 30vh, 300px));
-  }
-}
-
-/* =============================================================================
-   MOBILE RESPONSIVE BANNER IMPROVEMENTS
-   ============================================================================= */
-
-/* Default mobile - use shorter banner to prioritize info layer */
-@media (max-width: 768px) {
-  .coin-banner {
-    /* Much shorter banner on mobile to show more info layer content */
-    height: clamp(160px, 25vh, 220px);
-  }
-  
-  .coin-info-layer {
-    height: calc(100dvh - clamp(160px, 25vh, 220px));
-  }
-}
-
-/* Small mobile devices - even more compact */
-@media (max-width: 390px) {
-  .coin-banner {
-    /* Compact banner for small screens */
-    height: clamp(140px, 22vh, 200px);
-  }
-  
-  .coin-info-layer {
-    height: calc(100dvh - clamp(140px, 22vh, 200px));
-  }
-}
-
-/* Medium mobile devices with problematic aspect ratios */
-@media (min-width: 391px) and (max-width: 430px) and (min-height: 800px) {
-  .coin-banner {
-    /* Target devices like iPhone 12 Pro, 13 Pro with tall screens */
-    height: clamp(170px, 23vh, 210px);
-  }
-  
-  .coin-info-layer {
-    height: calc(100dvh - clamp(170px, 23vh, 210px));
-  }
-}
-
-/* Very tall screens (tablets in portrait) */
-@media (min-height: 900px) and (max-width: 768px) {
-  .coin-banner {
-    /* Keep banner compact on tall mobile devices */
-    height: clamp(180px, 22vh, 240px);
-  }
-  
-  .coin-info-layer {
-    height: calc(100dvh - clamp(180px, 22vh, 240px));
-  }
-}
-
-/* Landscape orientation - ultra compact */
-@media (orientation: landscape) and (max-height: 500px) {
-  .coin-banner {
-    /* Very short in landscape to maximize info layer */
-    height: clamp(100px, 20vh, 140px);
-  }
-  
-  .coin-info-layer {
-    height: calc(100dvh - clamp(100px, 20vh, 140px));
-  }
-}
-
-/* Desktop and large tablets - can afford taller banner */
-@media (min-width: 769px) {
-  .coin-banner {
-    /* Taller banner is fine on desktop */
-    height: clamp(220px, 30vh, 300px);
-  }
-  
-  .coin-info-layer {
-    height: calc(100dvh - clamp(220px, 30vh, 300px));
-  }
-}
-
-/* Responsive image scaling for different screen sizes */
-@media (max-width: 768px) {
-  .coin-banner img {
-    width: 130%; /* Even wider on mobile for better content visibility */
-    left: -15%;
-  }
-}
-
-@media (max-width: 480px) {
-  .coin-banner img {
-    width: 140%; /* Maximum width on very small screens */
-    left: -20%;
-  }
-}
-
-/* =============================================================================
-   PRICE CHANGE MODAL
-   ============================================================================= */
-
-.price-change-modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.75);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 10000;
-  backdrop-filter: blur(4px);
-  animation: fadeIn 0.2s ease;
-}
-
-.price-change-modal-content {
-  background: #ffffff;
-  border-radius: 20px;
-  padding: 24px;
-  width: 90%;
-  max-width: 400px;
-  position: relative;
-  animation: slideUp 0.3s ease;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-}
-
-.price-change-modal-close {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  background: rgba(0, 0, 0, 0.05);
-  border: none;
-  border-radius: 50%;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-  color: #000;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.price-change-modal-close:hover {
-  background: rgba(0, 0, 0, 0.1);
-  transform: scale(1.1);
-}
-
-.price-change-modal-close:active {
-  transform: scale(0.95);
-}
-
-.price-change-modal-title {
-  font-size: 1.4rem;
-  font-weight: 700;
-  color: #000;
-  margin: 0 0 24px 0;
-  padding-right: 32px;
-}
-
-.price-change-modal-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin-bottom: 20px;
-}
-
-.price-change-modal-item {
-  background: rgba(0, 0, 0, 0.03);
-  border-radius: 12px;
-  padding: 16px;
-  text-align: center;
-}
-
-.price-change-modal-label {
-  font-size: 0.85rem;
-  color: rgba(0, 0, 0, 0.6);
-  font-weight: 500;
-  margin-bottom: 8px;
-}
-
-.price-change-modal-value {
-  font-size: 1.3rem;
-  font-weight: 700;
-  padding: 4px 8px;
-  border-radius: 8px;
-  display: inline-block;
-}
-
-.price-change-modal-value.positive {
-  color: #10b981;
-  background: rgba(16, 185, 129, 0.1);
-}
-
-.price-change-modal-value.negative {
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.1);
-}
-
-.price-change-modal-footer {
-  text-align: center;
-  padding-top: 16px;
-  border-top: 1px solid rgba(0, 0, 0, 0.1);
-}
-
-.price-change-modal-footer p {
-  margin: 0;
-  font-size: 0.8rem;
-  color: rgba(0, 0, 0, 0.5);
-  font-style: italic;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-/* Clickable price change indicator */
-.price-change.clickable {
-  transition: all 0.2s ease;
-  user-select: none;
-}
-
-.price-change.clickable:hover {
-  transform: scale(1.05);
-  opacity: 0.85;
-}
-
-.price-change.clickable:active {
-  transform: scale(0.95);
-}
-
-/* 🎓 GRADUATION INFO ICON */
-.graduation-info-icon {
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.graduation-info-icon:hover {
-  transform: scale(1.1);
-}
-
-.graduation-info-icon:active {
-  transform: scale(0.95);
-}
-
-.graduation-info-tooltip {
-  animation: tooltipFadeIn 0.2s ease-out;
-}
-
-@keyframes tooltipFadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(5px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* =============================================================================
-   BANNER MODAL - Full-size Banner Image Popup
-   ============================================================================= */
-
-.banner-modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.9);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 10000;
-  backdrop-filter: blur(8px);
-  animation: fadeIn 0.2s ease;
-  padding: 20px;
-}
-
-.banner-modal-content {
-  position: relative;
-  max-width: 95%;
-  max-height: 90vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  animation: zoomIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.banner-modal-image {
-  max-width: 100%;
-  max-height: 90vh;
-  width: auto;
-  height: auto;
-  border-radius: 16px;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-  object-fit: contain;
-}
-
-.banner-modal-close {
-  position: absolute;
-  top: -50px;
-  right: 0;
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
-  border: 2px solid rgba(255, 255, 255, 0.2);
 }

@@ -21,6 +21,31 @@
   border-radius: 0; /* no border radius for full width */
 }
 
+/* Desktop: Align with left panel */
+@media (min-width: 1200px) {
+  .bottom-nav {
+    left: 0;
+    right: auto;
+    width: 480px;
+    max-width: 480px;
+    margin: 0;
+  }
+}
+
+@media (min-width: 1200px) and (max-width: 1600px) {
+  .bottom-nav {
+    width: 420px;
+    max-width: 420px;
+  }
+}
+
+@media (min-width: 1600px) {
+  .bottom-nav {
+    width: 540px;
+    max-width: 540px;
+  }
+}
+
 .nav-btn {
   background: none;
   border: none;

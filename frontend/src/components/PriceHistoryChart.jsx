@@ -6,7 +6,7 @@ import './PriceHistoryChart.css';
 const DEBUG_MODE = false;
 const debugLog = (...args) => { if (DEBUG_MODE) console.log(...args); };
 
-const PriceHistoryChart = ({ coin, width, height = 200 }) => {
+const PriceHistoryChart = ({ coin, width, height = 200, onPriceHover }) => {
   const { isDarkMode } = useDarkMode();
   // Detect mobile devices
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
@@ -64,18 +64,28 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
     
     if (chartData.dataPoints[clampedIndex]) {
       const dataPoint = chartData.dataPoints[clampedIndex];
-      setHoveredPoint({
+      const hoverData = {
         x: mouseX,
         y: mouseY,
         price: dataPoint.price,
         time: dataPoint.timestamp,
         index: clampedIndex
-      });
+      };
+      setHoveredPoint(hoverData);
+      
+      // Notify parent component of hovered price
+      if (onPriceHover) {
+        onPriceHover(dataPoint.price);
+      }
     }
   };
 
   const handleCanvasMouseLeave = () => {
     setHoveredPoint(null);
+    // Notify parent that hover ended
+    if (onPriceHover) {
+      onPriceHover(null);
+    }
   };
 
   // Diagnostic logging - DISABLED in production for performance
@@ -520,8 +530,8 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
     ctx.fillStyle = isDarkMode ? '#0f0f0f' : '#ffffff';
     ctx.fillRect(0, 0, containerWidth, containerHeight);
 
-    // Calculate dimensions - Add padding for axis labels
-    const padding = { top: 10, right: 10, bottom: 35, left: 55 };
+    // Calculate dimensions - Minimal padding (no left padding since we removed price labels)
+    const padding = { top: 10, right: 10, bottom: 35, left: 10 }; // Reduced left from 55 to 10
     const chartWidth = containerWidth - padding.left - padding.right;
     const chartHeight = containerHeight - padding.top - padding.bottom;
 
@@ -541,23 +551,22 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
     const isPositive = prices[prices.length - 1] > prices[0];
     const lineColor = isPositive ? '#22c55e' : '#ef4444';
 
-    // Draw X and Y axes with theme-aware colors
+    // Draw axes with theme-aware colors
     ctx.strokeStyle = isDarkMode ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.2)';
     ctx.lineWidth = 1.5;
     
-    // Y-axis (left side)
-    ctx.beginPath();
-    ctx.moveTo(padding.left, padding.top);
-    ctx.lineTo(padding.left, containerHeight - padding.bottom);
-    ctx.stroke();
+    // Y-axis (left side) - REMOVED for cleaner look
+    // (No price labels means no need for Y-axis line)
     
-    // X-axis (bottom)
+    // X-axis (bottom) - Keep this for time labels
     ctx.beginPath();
     ctx.moveTo(padding.left, containerHeight - padding.bottom);
     ctx.lineTo(containerWidth - padding.right, containerHeight - padding.bottom);
     ctx.stroke();
     
-    // Y-axis labels (price values) with theme-aware colors
+    // Y-axis labels (price values) - HIDDEN for cleaner chart appearance
+    // Price info is already shown in the header, no need to duplicate on chart
+    /* DISABLED - Price labels removed for cleaner look
     ctx.fillStyle = isDarkMode ? 'rgba(255, 255, 255, 0.6)' : 'rgba(0, 0, 0, 0.6)';
     ctx.font = '10px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     ctx.textAlign = 'right';
@@ -585,8 +594,11 @@ const PriceHistoryChart = ({ coin, width, height = 200 }) => {
       
       ctx.fillText(formattedPrice, padding.left - 5, yPos);
     }
+    */
     
-    // X-axis labels (time values)
+    // X-axis labels (time values) - Keep these visible
+    ctx.fillStyle = isDarkMode ? 'rgba(255, 255, 255, 0.6)' : 'rgba(0, 0, 0, 0.6)';
+    ctx.font = '10px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     
