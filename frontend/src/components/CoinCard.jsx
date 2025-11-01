@@ -1176,6 +1176,38 @@ const CoinCard = memo(({
 
       {/* Info Layer */}
       <div className={`coin-info-layer ${isExpanded ? 'expanded' : ''}`}>
+        {/* Desktop-only: Coin name, symbol, and description at top */}
+        <div className="desktop-coin-header">
+          <h2 
+            className="banner-coin-name clickable-name" 
+            onClick={handleCopyAddress}
+            title={`Click to copy address: ${coin.mintAddress || coin.mint || coin.address || coin.contract_address || coin.contractAddress || coin.tokenAddress || 'No address available'}`}
+          >
+            {coin.name || 'Unknown Token'}
+          </h2>
+          <p className="banner-coin-symbol">
+            ${coin.symbol || coin.ticker || 'N/A'}
+          </p>
+          {coin.description && (
+            <div className="banner-coin-description-inline">
+              {coin.description}
+              {coin.description.length > 100 && (
+                <button 
+                  className="read-more-button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowDescriptionModal(true);
+                  }}
+                  title="Read more"
+                  style={{ marginLeft: '8px' }}
+                >
+                  read more
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
         <div className="info-layer-header">
           {/* Top row: Profile, Price with Social Links, Expand Arrow */}
           <div className="header-top-row">

@@ -180,7 +180,7 @@
   .coin-card-left-panel .coin-banner {
     position: relative !important;
     width: 100%;
-    height: 240px !important; /* Shorter, wider banner like modal view */
+    height: 280px !important; /* Taller banner to show full content */
     flex-shrink: 0;
   }
 
@@ -206,12 +206,13 @@
     left: 0;
     right: 0;
     padding: 20px;
+    padding-top: 40px; /* More padding to prevent overlap with top tabs */
   }
 
   /* Adjust info layer positioning for left panel */
   .coin-card-left-panel .coin-info-layer {
     position: relative !important;
-    margin-top: -50px; /* Adjusted for shorter 240px banner */
+    margin-top: -30px; /* Less overlap - show more banner */
     height: auto !important;
     transform: none !important;
     border-top-left-radius: 24px;
@@ -2129,140 +2130,140 @@
 /* Small mobile devices - even more compact */
 @media (max-width: 390px) {
   .coin-banner {
-    /* Compact banner for small screens */
-    height: clamp(140px, 22vh, 200px);
+  text-align: right;anner for small screens */
+}
+
+.info-value.positive {
+  color: #22c55e;.coin-info-layer {
+}dvh - clamp(140px, 22vh, 200px));
+
+.info-value.negative {
+  color: #ef4444;
+}/* Medium mobile devices with problematic aspect ratios */
+: 800px) {
+/* Mobile optimization for info grid */
+@media (max-width: 640px) {vices like iPhone 12 Pro, 13 Pro with tall screens */
+  .info-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
   }
   
+  .info-card {
+    padding: 14px;
+  }
+  
+  .info-card-header {h: 768px) {
+    font-size: 0.9rem;
+  }    /* Keep banner compact on tall mobile devices */
+  
+  .info-row {
+    font-size: 0.85rem;
+  }
+} 22vh, 240px));
+
+/* Responsive adjustments */
+@media (max-width: 480px) {
+  .chart-page {
+    padding: 0 16px;dia (orientation: landscape) and (max-height: 500px) {
+  } .coin-banner {
+      /* Very short in landscape to maximize info layer */
+  .clean-chart-wrapper .clean-price-chart {
+    width: 100%;
+    max-width: 300px;
+  }
+} 20vh, 140px));
+
+/* Mobile-specific optimizations for banner area */
+@media (max-width: 768px) {
+  .coin-banner {er */
+    /* Slightly smaller on mobile */dia (min-width: 769px) {
+    height: clamp(180px, 32vh, 250px); .coin-banner {
+  }    /* Taller banner is fine on desktop */
+  
   .coin-info-layer {
-    height: calc(100dvh - clamp(140px, 22vh, 200px));
+    height: calc(100dvh - clamp(180px, 32vh, 250px));
+  }
+} 30vh, 300px));
+
+@media (max-width: 480px) {
+  .coin-banner {
+    /* Compact on very small screens */s */
+    height: clamp(160px, 28vh, 220px);dia (max-width: 768px) {
+  } .coin-banner img {
+      width: 130%; /* Even wider on mobile for better content visibility */
+  .coin-info-layer {
+    height: calc(100dvh - clamp(160px, 28vh, 220px));
   }
 }
 
-/* Medium mobile devices with problematic aspect ratios */
-@media (min-width: 391px) and (max-width: 430px) and (min-height: 800px) {
+/* For very tall screens, prevent banner from being too large */coin-banner img {
+@media (min-height: 900px) {  width: 140%; /* Maximum width on very small screens */
   .coin-banner {
-    /* Target devices like iPhone 12 Pro, 13 Pro with tall screens */
-    height: clamp(170px, 23vh, 210px);
-  }
-  
-  .coin-info-layer {
-    height: calc(100dvh - clamp(170px, 23vh, 210px));
-  }
-}
-
-/* Very tall screens (tablets in portrait) */
-@media (min-height: 900px) and (max-width: 768px) {
-  .coin-banner {
-    /* Keep banner compact on tall mobile devices */
-    height: clamp(180px, 22vh, 240px);
-  }
-  
-  .coin-info-layer {
-    height: calc(100dvh - clamp(180px, 22vh, 240px));
-  }
-}
-
-/* Landscape orientation - ultra compact */
-@media (orientation: landscape) and (max-height: 500px) {
-  .coin-banner {
-    /* Very short in landscape to maximize info layer */
-    height: clamp(100px, 20vh, 140px);
-  }
-  
-  .coin-info-layer {
-    height: calc(100dvh - clamp(100px, 20vh, 140px));
-  }
-}
-
-/* Desktop and large tablets - can afford taller banner */
-@media (min-width: 769px) {
-  .coin-banner {
-    /* Taller banner is fine on desktop */
     height: clamp(220px, 30vh, 300px);
   }
   
-  .coin-info-layer {
+  .coin-info-layer {/* =============================================================================
     height: calc(100dvh - clamp(220px, 30vh, 300px));
-  }
-}
-
-/* Responsive image scaling for different screen sizes */
-@media (max-width: 768px) {
-  .coin-banner img {
-    width: 130%; /* Even wider on mobile for better content visibility */
-    left: -15%;
-  }
-}
-
-@media (max-width: 480px) {
-  .coin-banner img {
-    width: 140%; /* Maximum width on very small screens */
-    left: -20%;
-  }
+  }======================= */
 }
 
 /* =============================================================================
-   PRICE CHANGE MODAL
-   ============================================================================= */
+   MOBILE RESPONSIVE BANNER IMPROVEMENTSop: 0;
+   ============================================================================= */left: 0;
 
-.price-change-modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.75);
-  display: flex;
-  align-items: flex-start; /* Changed from center - align charts to top */
-  justify-content: center;
-  z-index: 10000;
-  backdrop-filter: blur(4px);
-  animation: fadeIn 0.2s ease;
-}
-
-.price-change-modal-content {
-  background: #ffffff;
-  border-radius: 20px;
-  padding: 24px;
-  width: 90%;
-  max-width: 400px;
-  position: relative;
-  animation: slideUp 0.3s ease;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-}
-
-.price-change-modal-close {
-  position: absolute;
+/* Default mobile - use shorter banner to prioritize info layer */
+@media (max-width: 768px) {ackground: rgba(0, 0, 0, 0.75);
+  .coin-banner { display: flex;
+    /* Much shorter banner on mobile to show more info layer content */  align-items: flex-start; /* Changed from center - align charts to top */
+    height: clamp(160px, 25vh, 220px);
+  }
+  r: blur(4px);
+  .coin-info-layer {
+    height: calc(100dvh - clamp(160px, 25vh, 220px));
+  }
+}rice-change-modal-content {
+f;
+/* Small mobile devices - even more compact */
+@media (max-width: 390px) {adding: 24px;
+  .coin-banner { width: 90%;
+    /* Compact banner for small screens */  max-width: 400px;
+    height: clamp(140px, 22vh, 200px);
+  }ase;
+   60px rgba(0, 0, 0, 0.3);
+  .coin-info-layer {
+    height: calc(100dvh - clamp(140px, 22vh, 200px));
+  }ice-change-modal-close {
+} position: absolute;
   top: 16px;
-  right: 16px;
-  background: rgba(0, 0, 0, 0.05);
-  border: none;
-  border-radius: 50%;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: flex-start; /* Changed from center - align charts to top */
-  justify-content: center;
-  font-size: 24px;
-  color: #000;
-  cursor: pointer;
-  transition: all 0.2s ease;
+/* Medium mobile devices with problematic aspect ratios */
+@media (min-width: 391px) and (max-width: 430px) and (min-height: 800px) {, 0, 0, 0.05);
+  .coin-banner {
+    /* Target devices like iPhone 12 Pro, 13 Pro with tall screens */: 50%;
+    height: clamp(170px, 23vh, 210px);idth: 32px;
+  } height: 32px;
+    display: flex;
+  .coin-info-layer {
+    height: calc(100dvh - clamp(170px, 23vh, 210px));nter;
+  }
+}  color: #000;
+
+/* Very tall screens (tablets in portrait) */0.2s ease;
+@media (min-height: 900px) and (max-width: 768px) {
+  .coin-banner {
+    /* Keep banner compact on tall mobile devices */ge-modal-close:hover {
+    height: clamp(180px, 22vh, 240px);: rgba(0, 0, 0, 0.1);
+  }
+  
+  .coin-info-layer {
+    height: calc(100dvh - clamp(180px, 22vh, 240px));active {
+  }e(0.95);
 }
 
-.price-change-modal-close:hover {
-  background: rgba(0, 0, 0, 0.1);
-  transform: scale(1.1);
-}
-
-.price-change-modal-close:active {
-  transform: scale(0.95);
-}
-
-.price-change-modal-title {
-  font-size: 1.4rem;
-  font-weight: 700;
-  color: #000;
-  margin: 0 0 24px 0;
+/* Landscape orientation - ultra compact */price-change-modal-title {
+@media (orientation: landscape) and (max-height: 500px) {  font-size: 1.4rem;
+  .coin-banner {
+    /* Very short in landscape to maximize info layer */
+    height: clamp(100px, 20vh, 140px);
   padding-right: 32px;
 }
 
