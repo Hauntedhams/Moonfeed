@@ -120,6 +120,8 @@
     /* Smooth scrolling */
     scroll-behavior: smooth;
     -webkit-overflow-scrolling: touch;
+    /* Push content below fixed top tabs */
+    padding-top: 60px;
   }
 
   /* Right side - DexScreener chart (fixed, fills remaining space) */
@@ -2202,9 +2204,9 @@
     height: clamp(220px, 30vh, 300px);
   }
   
-  .coin-info-layer {/* =============================================================================
+  .coin-info-layer {
     height: calc(100dvh - clamp(220px, 30vh, 300px));
-  }======================= */
+  }
 }
 
 /* =============================================================================
@@ -3251,6 +3253,8 @@ f;
     /* Smooth scrolling */
     scroll-behavior: smooth;
     -webkit-overflow-scrolling: touch;
+    /* Push content below fixed top tabs */
+    padding-top: 60px;
   }
 
   /* Right side - DexScreener chart (fixed, fills remaining space) */
@@ -3288,6 +3292,89 @@ f;
     height: 100% !important;
     min-height: 100vh !important;
     border-radius: 0 !important;
+  }
+
+  /* Hide the expand button on desktop split-screen mode */
+  .coin-card-left-panel .expand-btn {
+    display: none !important;
+  }
+
+  /* Hide connection status overlay on desktop */
+  .coin-card-left-panel .connection-status-overlay {
+    display: none !important;
+  }
+
+  /* Ensure enrichment badge doesn't overlap top tabs */
+  .coin-card-left-panel .enrichment-status-badge {
+    top: 70px !important; /* Move below top tabs */
+    left: 10px;
+    z-index: 90;
+  }
+
+  /* Adjust banner to fit in left panel - landscape/wide orientation */
+  .coin-card-left-panel .coin-banner {
+    position: relative !important;
+    width: 100%;
+    height: 280px !important; /* Taller banner to show full content */
+    flex-shrink: 0;
+  }
+
+  /* Ensure banner image shows at full width in landscape orientation */
+  .coin-card-left-panel .coin-banner img {
+    width: 100% !important; /* Full width */
+    height: 100%;
+    object-fit: cover; /* Cover to fill the space */
+    object-position: center center; /* Center the image */
+    position: absolute;
+    left: 0 !important; /* No offset */
+    top: 0;
+  }
+
+  .coin-card-left-panel .banner-placeholder {
+    width: 100%;
+    height: 100%;
+  }
+
+  .coin-card-left-panel .banner-text-overlay {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 20px;
+    padding-top: 40px; /* More padding to prevent overlap with top tabs */
+  }
+
+  /* Adjust info layer positioning for left panel */
+  .coin-card-left-panel .coin-info-layer {
+    position: relative !important;
+    margin-top: -30px; /* Less overlap - show more banner */
+    height: auto !important;
+    transform: none !important;
+    border-top-left-radius: 24px;
+    border-top-right-radius: 24px;
+  }
+
+  /* Make charts section smaller in left panel since main chart is on right */
+  .coin-card-left-panel .charts-section {
+    min-height: 180px !important;
+  }
+
+  .coin-card-left-panel .price-history-wrapper,
+  .coin-card-left-panel .advanced-chart-wrapper {
+    height: 150px !important;
+  }
+
+  /* Style the chart placeholder in left panel */
+  .coin-card-left-panel .chart-placeholder {
+    padding: 40px 20px;
+    text-align: center;
+    color: #64748b;
+    font-size: 14px;
+  }
+
+  /* Add a subtle border between panels */
+  .coin-card-left-panel {
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
   }
 
   /* Reduce padding in sections for more compact left panel */
