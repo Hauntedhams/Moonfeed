@@ -117,35 +117,39 @@
     overflow-x: hidden;
     background: linear-gradient(135deg, #0b1220 0%, #0e1426 50%, #0b1220 100%);
     position: relative;
-    /* Smooth scrolling */
+    display: flex;
+    flex-direction: column;
     scroll-behavior: smooth;
     -webkit-overflow-scrolling: touch;
-    /* Push content below fixed top tabs */
-    padding-top: 60px;
   }
 
   /* Right side - DexScreener chart (fixed, fills remaining space) */
   .coin-card-right-panel {
+    display: flex !important;
     flex: 1;
     height: 100vh;
     background: #0a0e1a;
     position: relative;
     overflow: hidden;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    align-items: stretch;
+    justify-content: stretch;
   }
 
   /* Make the DexScreener chart fill the entire right panel */
-  .coin-card-right-panel .dexscreener-chart-container {
-    width: 100%;
-    height: 100%;
+  .coin-card-right-panel > div {
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 100vh !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
   }
 
   .coin-card-right-panel iframe {
-    width: 100%;
-    height: 100%;
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 100vh !important;
     border: none;
+    border-radius: 0 !important;
   }
 
   /* Remove the expand/collapse button from right panel chart */
@@ -166,40 +170,12 @@
     display: none !important;
   }
 
-  /* Hide connection status overlay on desktop */
-  .coin-card-left-panel .connection-status-overlay {
-    display: none !important;
-  }
-
-  /* Ensure enrichment badge doesn't overlap top tabs */
-  .coin-card-left-panel .enrichment-status-badge {
-    top: 70px !important; /* Move below top tabs */
-    left: 10px;
-    z-index: 90;
-  }
-
-  /* Adjust banner to fit in left panel - landscape/wide orientation */
+  /* Adjust banner to fit in left panel */
   .coin-card-left-panel .coin-banner {
     position: relative !important;
     width: 100%;
-    height: 280px !important; /* Taller banner to show full content */
+    height: 280px !important;
     flex-shrink: 0;
-  }
-
-  /* Ensure banner image shows at full width in landscape orientation */
-  .coin-card-left-panel .coin-banner img {
-    width: 100% !important; /* Full width */
-    height: 100%;
-    object-fit: cover; /* Cover to fill the space */
-    object-position: center center; /* Center the image */
-    position: absolute;
-    left: 0 !important; /* No offset */
-    top: 0;
-  }
-
-  .coin-card-left-panel .banner-placeholder {
-    width: 100%;
-    height: 100%;
   }
 
   .coin-card-left-panel .banner-text-overlay {
@@ -207,18 +183,22 @@
     bottom: 0;
     left: 0;
     right: 0;
-    padding: 20px;
-    padding-top: 40px; /* More padding to prevent overlap with top tabs */
   }
 
   /* Adjust info layer positioning for left panel */
   .coin-card-left-panel .coin-info-layer {
     position: relative !important;
-    margin-top: -30px; /* Less overlap - show more banner */
+    margin-top: -60px;
     height: auto !important;
     transform: none !important;
     border-top-left-radius: 24px;
     border-top-right-radius: 24px;
+  }
+
+  .coin-card-left-panel .coin-info-layer.expanded {
+    position: relative !important;
+    height: auto !important;
+    transform: none !important;
   }
 
   /* Make charts section smaller in left panel since main chart is on right */
@@ -233,15 +213,19 @@
 
   /* Style the chart placeholder in left panel */
   .coin-card-left-panel .chart-placeholder {
-    padding: 40px 20px;
+    padding: 30px 20px;
     text-align: center;
     color: #64748b;
-    font-size: 14px;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   /* Add a subtle border between panels */
   .coin-card-left-panel {
-    border-right: 1px solid rgba(255, 255, 255, 0.05);
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.3);
   }
 
   /* Reduce padding in sections for more compact left panel */
@@ -262,14 +246,14 @@
 /* Medium desktop - slightly narrower left panel */
 @media (min-width: 1200px) and (max-width: 1600px) {
   .coin-card-left-panel {
-    width: 420px;
+    width: 420px !important;
   }
 }
 
 /* Large desktop - wider left panel for more comfortable reading */
 @media (min-width: 1600px) {
   .coin-card-left-panel {
-    width: 540px;
+    width: 540px !important;
   }
 }
 
@@ -2132,75 +2116,55 @@
 /* Small mobile devices - even more compact */
 @media (max-width: 390px) {
   .coin-banner {
-  text-align: right;anner for small screens */
-}
-
-.info-value.positive {
-  color: #22c55e;.coin-info-layer {
-}dvh - clamp(140px, 22vh, 200px));
-
-.info-value.negative {
-  color: #ef4444;
-}/* Medium mobile devices with problematic aspect ratios */
-: 800px) {
-/* Mobile optimization for info grid */
-@media (max-width: 640px) {vices like iPhone 12 Pro, 13 Pro with tall screens */
-  .info-grid {
-    grid-template-columns: 1fr;
-    gap: 12px;
+    /* Compact banner for small screens */
+    height: clamp(140px, 22vh, 200px);
   }
-  
-  .info-card {
-    padding: 14px;
-  }
-  
-  .info-card-header {h: 768px) {
-    font-size: 0.9rem;
-  }    /* Keep banner compact on tall mobile devices */
-  
-  .info-row {
-    font-size: 0.85rem;
-  }
-} 22vh, 240px));
-
-/* Responsive adjustments */
-@media (max-width: 480px) {
-  .chart-page {
-    padding: 0 16px;dia (orientation: landscape) and (max-height: 500px) {
-  } .coin-banner {
-      /* Very short in landscape to maximize info layer */
-  .clean-chart-wrapper .clean-price-chart {
-    width: 100%;
-    max-width: 300px;
-  }
-} 20vh, 140px));
-
-/* Mobile-specific optimizations for banner area */
-@media (max-width: 768px) {
-  .coin-banner {er */
-    /* Slightly smaller on mobile */dia (min-width: 769px) {
-    height: clamp(180px, 32vh, 250px); .coin-banner {
-  }    /* Taller banner is fine on desktop */
   
   .coin-info-layer {
-    height: calc(100dvh - clamp(180px, 32vh, 250px));
-  }
-} 30vh, 300px));
-
-@media (max-width: 480px) {
-  .coin-banner {
-    /* Compact on very small screens */s */
-    height: clamp(160px, 28vh, 220px);dia (max-width: 768px) {
-  } .coin-banner img {
-      width: 130%; /* Even wider on mobile for better content visibility */
-  .coin-info-layer {
-    height: calc(100dvh - clamp(160px, 28vh, 220px));
+    height: calc(100dvh - clamp(140px, 22vh, 200px));
   }
 }
 
-/* For very tall screens, prevent banner from being too large */coin-banner img {
-@media (min-height: 900px) {  width: 140%; /* Maximum width on very small screens */
+/* Medium mobile devices with problematic aspect ratios */
+@media (min-width: 391px) and (max-width: 430px) and (min-height: 800px) {
   .coin-banner {
+    /* Target devices like iPhone 12 Pro, 13 Pro with tall screens */
+    height: clamp(170px, 23vh, 210px);
+  }
+  
+  .coin-info-layer {
+    height: calc(100dvh - clamp(170px, 23vh, 210px));
+  }
+}
+
+/* Very tall screens (tablets in portrait) */
+@media (min-height: 900px) and (max-width: 768px) {
+  .coin-banner {
+    /* Keep banner compact on tall mobile devices */
+    height: clamp(180px, 22vh, 240px);
+  }
+  
+  .coin-info-layer {
+    height: calc(100dvh - clamp(180px, 22vh, 240px));
+  }
+}
+
+/* Landscape orientation - ultra compact */
+@media (orientation: landscape) and (max-height: 500px) {
+  .coin-banner {
+    /* Very short in landscape to maximize info layer */
+    height: clamp(100px, 20vh, 140px);
+  }
+  
+  .coin-info-layer {
+    height: calc(100dvh - clamp(100px, 20vh, 140px));
+  }
+}
+
+/* Desktop and large tablets - can afford taller banner */
+@media (min-width: 769px) {
+  .coin-banner {
+    /* Taller banner is fine on desktop */
     height: clamp(220px, 30vh, 300px);
   }
   
@@ -2209,63 +2173,83 @@
   }
 }
 
-/* =============================================================================
-   MOBILE RESPONSIVE BANNER IMPROVEMENTSop: 0;
-   ============================================================================= */left: 0;
-
-/* Default mobile - use shorter banner to prioritize info layer */
-@media (max-width: 768px) {ackground: rgba(0, 0, 0, 0.75);
-  .coin-banner { display: flex;
-    /* Much shorter banner on mobile to show more info layer content */  align-items: flex-start; /* Changed from center - align charts to top */
-    height: clamp(160px, 25vh, 220px);
+/* Responsive image scaling for different screen sizes */
+@media (max-width: 768px) {
+  .coin-banner img {
+    width: 130%; /* Even wider on mobile for better content visibility */
+    left: -15%;
   }
-  r: blur(4px);
-  .coin-info-layer {
-    height: calc(100dvh - clamp(160px, 25vh, 220px));
-  }
-}rice-change-modal-content {
-f;
-/* Small mobile devices - even more compact */
-@media (max-width: 390px) {adding: 24px;
-  .coin-banner { width: 90%;
-    /* Compact banner for small screens */  max-width: 400px;
-    height: clamp(140px, 22vh, 200px);
-  }ase;
-   60px rgba(0, 0, 0, 0.3);
-  .coin-info-layer {
-    height: calc(100dvh - clamp(140px, 22vh, 200px));
-  }ice-change-modal-close {
-} position: absolute;
-  top: 16px;
-/* Medium mobile devices with problematic aspect ratios */
-@media (min-width: 391px) and (max-width: 430px) and (min-height: 800px) {, 0, 0, 0.05);
-  .coin-banner {
-    /* Target devices like iPhone 12 Pro, 13 Pro with tall screens */: 50%;
-    height: clamp(170px, 23vh, 210px);idth: 32px;
-  } height: 32px;
-    display: flex;
-  .coin-info-layer {
-    height: calc(100dvh - clamp(170px, 23vh, 210px));nter;
-  }
-}  color: #000;
-
-/* Very tall screens (tablets in portrait) */0.2s ease;
-@media (min-height: 900px) and (max-width: 768px) {
-  .coin-banner {
-    /* Keep banner compact on tall mobile devices */ge-modal-close:hover {
-    height: clamp(180px, 22vh, 240px);: rgba(0, 0, 0, 0.1);
-  }
-  
-  .coin-info-layer {
-    height: calc(100dvh - clamp(180px, 22vh, 240px));active {
-  }e(0.95);
 }
 
-/* Landscape orientation - ultra compact */price-change-modal-title {
-@media (orientation: landscape) and (max-height: 500px) {  font-size: 1.4rem;
-  .coin-banner {
-    /* Very short in landscape to maximize info layer */
-    height: clamp(100px, 20vh, 140px);
+@media (max-width: 480px) {
+  .coin-banner img {
+    width: 140%; /* Maximum width on very small screens */
+    left: -20%;
+  }
+}
+
+/* =============================================================================
+   PRICE CHANGE MODAL
+   ============================================================================= */
+
+.price-change-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: flex-start; /* Changed from center - align charts to top */
+  justify-content: center;
+  z-index: 10000;
+  backdrop-filter: blur(4px);
+  animation: fadeIn 0.2s ease;
+}
+
+.price-change-modal-content {
+  background: #ffffff;
+  border-radius: 20px;
+  padding: 24px;
+  width: 90%;
+  max-width: 400px;
+  position: relative;
+  animation: slideUp 0.3s ease;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.price-change-modal-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: rgba(0, 0, 0, 0.05);
+  border: none;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: flex-start; /* Changed from center - align charts to top */
+  justify-content: center;
+  font-size: 24px;
+  color: #000;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.price-change-modal-close:hover {
+  background: rgba(0, 0, 0, 0.1);
+  transform: scale(1.1);
+}
+
+.price-change-modal-close:active {
+  transform: scale(0.95);
+}
+
+.price-change-modal-title {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #000;
+  margin: 0 0 24px 0;
   padding-right: 32px;
 }
 
@@ -2817,6 +2801,29 @@ f;
   display: flex;
   align-items: flex-start;
   gap: 8px;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.source-name {
+  font-weight: 700;
+  color: rgba(0, 0, 0, 0.9);
+  flex-shrink: 0;
+  min-width: 90px;
+}
+
+.source-info {
+  color: rgba(0, 0, 0, 0.7);
+  flex: 1;
+}
+
+.enrichment-status {
+  display: flex;
+  align-items: flex-start; /* Changed from center - align charts to top */
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
   font-size: 0.75rem;
 }
 
@@ -2841,29 +2848,6 @@ f;
 .dark-mode .coin-name,
 .dark-mode .coin-symbol,
 .dark-mode .coin-price,
-.dark-mode .stats-label,
-.dark-mode .stats-value,
-.dark-mode .section-title,
-.dark-mode .info-item-label,
-.dark-mode .info-item-value,
-.dark-mode .token-details h3,
-.dark-mode .token-details-item-value,
-.dark-mode .coin-header-symbol,
-.dark-mode .price-display,
-.dark-mode .stats-grid-label,
-.dark-mode .stats-grid-value {
-  color: var(--text-primary);
-}
-
-.dark-mode .coin-ticker,
-.dark-mode .token-details-item-label,
-.dark-mode .stats-label,
-.dark-mode .coin-header-ticker {
-  color: var(--text-secondary);
-}
-
-.dark-mode .stats-item,
-.dark-mode .info-item,
 .dark-mode .stats-label,
 .dark-mode .stats-value,
 .dark-mode .section-title,
@@ -3245,8 +3229,7 @@ f;
   .coin-card-left-panel {
     width: 480px;
     flex-shrink: 0;
-    height: calc(100vh - 60px); /* Account for top tabs */
-    margin-top: 60px; /* Start below top tabs */
+    height: 100vh;
     overflow-y: auto;
     overflow-x: hidden;
     background: linear-gradient(135deg, #0b1220 0%, #0e1426 50%, #0b1220 100%);
@@ -3298,69 +3281,22 @@ f;
     display: none !important;
   }
 
-  /* Hide connection status overlay on desktop */
-  .coin-card-left-panel .connection-status-overlay {
-    display: none !important;
-  }
-
-  /* Ensure enrichment badge doesn't overlap top tabs */
-  .coin-card-left-panel .enrichment-status-badge {
-    top: 70px !important; /* Move below top tabs */
-    left: 10px;
-    z-index: 90;
-  }
-
-  /* Adjust banner to fit in left panel - landscape/wide orientation */
+  /* Adjust banner to fit in left panel */
   .coin-card-left-panel .coin-banner {
     position: relative !important;
     width: 100%;
-    height: 280px !important; /* Taller banner to show full content */
-    flex-shrink: 0;
-  }
-
-  /* Ensure banner image shows at full width in landscape orientation */
-  .coin-card-left-panel .coin-banner img {
-    width: 100% !important; /* Full width */
-    height: 100%;
-    object-fit: cover; /* Cover to fill the space */
-    object-position: center center; /* Center the image */
-    position: absolute;
-    left: 0 !important; /* No offset */
-    top: 0;
-  }
-
-  .coin-card-left-panel .banner-placeholder {
-    width: 100%;
-    height: 100%;
-  }
-
-  .coin-card-left-panel .banner-text-overlay {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    padding: 20px;
-    padding-top: 40px; /* More padding to prevent overlap with top tabs */
+    height: 300px;
   }
 
   /* Adjust info layer positioning for left panel */
-  .coin-card-left-panel .coin-info-layer {
-    position: relative !important;
-    margin-top: -30px; /* Less overlap - show more banner */
-    height: auto !important;
-    transform: none !important;
-    border-top-left-radius: 24px;
-    border-top-right-radius: 24px;
+  .coin-card-left-panel .info-layer {
+    position: relative;
+    margin-top: -80px;
   }
 
-  /* Make charts section smaller in left panel since main chart is on right */
+  /* Make charts section take less space in left panel since main chart is on right */
   .coin-card-left-panel .charts-section {
-    min-height: 180px !important;
-  }
-
-  .coin-card-left-panel .price-history-wrapper,
-  .coin-card-left-panel .advanced-chart-wrapper {
-    height: 150px !important;
+    min-height: 200px;
   }
 
   /* Style the chart placeholder in left panel */
@@ -3374,20 +3310,6 @@ f;
   /* Add a subtle border between panels */
   .coin-card-left-panel {
     border-right: 1px solid rgba(255, 255, 255, 0.05);
-  }
-
-  /* Reduce padding in sections for more compact left panel */
-  .coin-card-left-panel .section-content {
-    padding: 14px;
-  }
-
-  /* Make metrics more compact */
-  .coin-card-left-panel .header-metrics {
-    gap: 8px;
-  }
-
-  .coin-card-left-panel .header-metric {
-    padding: 8px 12px;
   }
 }
 
