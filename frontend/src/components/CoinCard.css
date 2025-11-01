@@ -176,20 +176,20 @@
     z-index: 90;
   }
 
-  /* Adjust banner to fit in left panel - full width display */
+  /* Adjust banner to fit in left panel - landscape/wide orientation */
   .coin-card-left-panel .coin-banner {
     position: relative !important;
     width: 100%;
-    height: 400px !important; /* Taller to show full banner */
+    height: 240px !important; /* Shorter, wider banner like modal view */
     flex-shrink: 0;
   }
 
-  /* Ensure banner image shows at full width without cropping sides */
+  /* Ensure banner image shows at full width in landscape orientation */
   .coin-card-left-panel .coin-banner img {
-    width: 100% !important; /* Full width, not 120% */
+    width: 100% !important; /* Full width */
     height: 100%;
-    object-fit: cover;
-    object-position: center;
+    object-fit: cover; /* Cover to fill the space */
+    object-position: center center; /* Center the image */
     position: absolute;
     left: 0 !important; /* No offset */
     top: 0;
@@ -211,7 +211,7 @@
   /* Adjust info layer positioning for left panel */
   .coin-card-left-panel .coin-info-layer {
     position: relative !important;
-    margin-top: -100px; /* Adjusted for 400px banner */
+    margin-top: -50px; /* Adjusted for shorter 240px banner */
     height: auto !important;
     transform: none !important;
     border-top-left-radius: 24px;
