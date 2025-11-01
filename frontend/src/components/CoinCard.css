@@ -3245,7 +3245,8 @@ f;
   .coin-card-left-panel {
     width: 480px;
     flex-shrink: 0;
-    height: 100vh;
+    height: calc(100vh - 60px); /* Account for top tabs */
+    margin-top: 60px; /* Start below top tabs */
     overflow-y: auto;
     overflow-x: hidden;
     background: linear-gradient(135deg, #0b1220 0%, #0e1426 50%, #0b1220 100%);
@@ -3253,8 +3254,6 @@ f;
     /* Smooth scrolling */
     scroll-behavior: smooth;
     -webkit-overflow-scrolling: touch;
-    /* Push content below fixed top tabs */
-    padding-top: 60px;
   }
 
   /* Right side - DexScreener chart (fixed, fills remaining space) */
