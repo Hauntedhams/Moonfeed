@@ -24,7 +24,7 @@ export function useLiveData() {
 
       // Use ws:// for local development, wss:// for production
       const wsUrl = import.meta.env.PROD 
-        ? `wss://${window.location.host}/ws`
+        ? 'wss://api.moonfeed.app/ws'
         : 'ws://localhost:3001/ws';
       
       console.log('🔗 Connecting to WebSocket:', wsUrl);

@@ -12,7 +12,7 @@ export function usePriceUpdates() {
     try {
       // Use ws:// for local development, wss:// for production
       const wsUrl = import.meta.env.PROD 
-        ? `wss://${window.location.host}/ws`
+        ? 'wss://api.moonfeed.app/ws'
         : 'ws://localhost:3001/ws';
       
       wsRef.current = new WebSocket(wsUrl);
