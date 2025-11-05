@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const compression = require('compression'); // Add compression
 const fetch = require('node-fetch');
 const http = require('http');
 const CoinStorage = require('./coin-storage');
@@ -34,6 +35,7 @@ const CustomCoinStorage = require('./custom-coin-storage');
 const customCoinStorage = new CustomCoinStorage();
 
 // Middleware
+app.use(compression()); // Enable gzip compression for all responses
 app.use(cors({
   origin: [
     'http://localhost:5173', 
@@ -48,7 +50,7 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json());
-app.use(express.json());
+app.use(compression()); // Enable compression
 
 // Version endpoint to verify deployment
 app.get('/api/version', (req, res) => {

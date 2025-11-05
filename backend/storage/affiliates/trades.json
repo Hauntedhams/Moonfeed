@@ -41,5 +41,29 @@
     "payoutStatus": "pending",
     "payoutId": null,
     "timestamp": "2025-10-28T04:51:26.043Z"
+  },
+  {
+    "tradeId": "trade_1762109053994_ssx8rfdt0",
+    "referralCode": "influencer1",
+    "influencerWallet": "REPLACE_WITH_THEIR_REAL_SOLANA_WALLET",
+    "influencerName": "Influencer 1",
+    "userWallet": "GwW5v8ArhtE9DbT6HDC7ow7ZE8rmkyTPacb8ci2ENHQH",
+    "tradeVolume": 63.412730406,
+    "feeEarned": 0.6341273040600001,
+    "jupiterCut": 0.12682546081200002,
+    "netFee": 0.5073018432480001,
+    "influencerShare": 0.25365092162400005,
+    "platformShare": 0.25365092162400005,
+    "tokenIn": "SOL",
+    "tokenOut": "4S8JEBDFWszqBCuBgmks51Xnp3c9BCTRtrED9giQpump",
+    "transactionSignature": "5EgiNnA2jyWwmQpeyqcmE83cjjMkvqJadsks6E9uAuzKLry8qsNgDj6YGeCPNG4AtSHtPxzVpkY15WFkFjxzXiU1",
+    "metadata": {
+      "coinSymbol": "AIC3",
+      "coinName": "AI CLOUD 3",
+      "timestamp": "2025-11-02T18:44:13.986Z"
+    },
+    "payoutStatus": "pending",
+    "payoutId": null,
+    "timestamp": "2025-11-02T18:44:13.994Z"
   }
 ]

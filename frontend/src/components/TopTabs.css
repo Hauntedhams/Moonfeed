@@ -13,24 +13,27 @@
   pointer-events: none; /* Make container pass through clicks */
 }
 
-/* Desktop: Align with left panel */
+/* Desktop: Align with left panel and position above banner */
 @media (min-width: 1200px) {
   .top-tabs-container {
     left: 0;
     right: auto;
     width: 480px; /* Match left panel width */
+    top: 0; /* Position at top, above banner */
   }
 }
 
 @media (min-width: 1200px) and (max-width: 1600px) {
   .top-tabs-container {
     width: 420px;
+    top: 0; /* Position at top, above banner */
   }
 }
 
 @media (min-width: 1600px) {
   .top-tabs-container {
     width: 540px;
+    top: 0; /* Position at top, above banner */
   }
 }
 

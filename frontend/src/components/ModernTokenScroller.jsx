@@ -5,6 +5,15 @@ import MoonfeedInfoButton from './MoonfeedInfoModal';
 import { API_CONFIG, getApiUrl, getFullApiUrl } from '../config/api';
 import './ModernTokenScroller.css';
 
+// Debounce utility for performance
+const debounce = (func, wait) => {
+  let timeout;
+  return (...args) => {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func(...args), wait);
+  };
+};
+
 // Modern TikTok-style token scroller with DexScreener integration
 const ModernTokenScroller = ({ 
   favorites = [], 

@@ -1505,13 +1505,17 @@ const CoinCard = memo(({
               {/* Visual nav elements inside the hot area */}
               <div className="chart-nav-content">
                 <div 
-                  className={`nav-dot ${currentChartPage === 0 ? 'active' : ''}`}
+                  className={`nav-button ${currentChartPage === 0 ? 'active' : ''}`}
                   onClick={() => navigateToChartPage(0)}
-                ></div>
+                >
+                  Clean
+                </div>
                 <div 
-                  className={`nav-dot ${currentChartPage === 1 ? 'active' : ''}`}
+                  className={`nav-button ${currentChartPage === 1 ? 'active' : ''}`}
                   onClick={() => navigateToChartPage(1)}
-                  ></div>
+                >
+                  Advanced
+                </div>
                   
                   {/* 🎓 GRADUATION PROGRESS BAR - Show for graduating tokens */}
                   {graduationPercentage !== null && (

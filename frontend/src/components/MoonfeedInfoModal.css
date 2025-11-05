@@ -1177,6 +1177,25 @@
   }
 }
 
+/* Desktop: Position moonfeed info button above banner in left panel */
+@media (min-width: 1200px) {
+  .moonfeed-info-button {
+    top: 20px; /* Position at top, above banner */
+  }
+}
+
+@media (min-width: 1200px) and (max-width: 1600px) {
+  .moonfeed-info-button {
+    top: 20px; /* Position at top, above banner */
+  }
+}
+
+@media (min-width: 1600px) {
+  .moonfeed-info-button {
+    top: 20px; /* Position at top, above banner */
+  }
+}
+
 @media (max-width: 480px) {
   .moonfeed-info-overlay {
     padding: 0;

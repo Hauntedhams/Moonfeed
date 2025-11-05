@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Affiliate Payment Dashboard</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+    
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    
+    h1 {
+      color: white;
+      text-align: center;
+      margin-bottom: 30px;
+      font-size: 32px;
+    }
+    
+    .api-input {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    
+    .api-input label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+      color: #333;
+    }
+    
+    .api-input input {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 14px;
+      margin-bottom: 10px;
+    }
+    
+    .api-input input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+    
+    .button-group {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 10px;
+      margin-top: 15px;
+    }
+    
+    button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: transform 0.2s;
+    }
+    
+    button:hover {
+      transform: translateY(-2px);
+    }
+    
+    button:active {
+      transform: translateY(0);
+    }
+    
+    .results {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      margin-top: 20px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      display: none;
+    }
+    
+    .results.show {
+      display: block;
+    }
+    
+    .results h2 {
+      color: #333;
+      margin-bottom: 15px;
+      border-bottom: 2px solid #667eea;
+      padding-bottom: 10px;
+    }
+    
+    pre {
+      background: #f5f5f5;
+      padding: 15px;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    
+    .stat-card {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 20px;
+      border-radius: 12px;
+      margin-bottom: 15px;
+    }
+    
+    .stat-card h3 {
+      font-size: 14px;
+      opacity: 0.9;
+      margin-bottom: 5px;
+    }
+    
+    .stat-card .value {
+      font-size: 32px;
+      font-weight: bold;
+    }
+    
+    .stat-card .label {
+      font-size: 12px;
+      opacity: 0.8;
+      margin-top: 5px;
+    }
+    
+    .trade-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+    }
+    
+    .trade-table th {
+      background: #667eea;
+      color: white;
+      padding: 12px;
+      text-align: left;
+      font-size: 12px;
+    }
+    
+    .trade-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #e0e0e0;
+      font-size: 12px;
+    }
+    
+    .trade-table tr:hover {
+      background: #f9f9f9;
+    }
+    
+    .status-badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+    }
+    
+    .status-pending {
+      background: #fff3cd;
+      color: #856404;
+    }
+    
+    .status-paid {
+      background: #d4edda;
+      color: #155724;
+    }
+    
+    .loading {
+      text-align: center;
+      padding: 20px;
+      color: #666;
+    }
+    
+    .error {
+      background: #f8d7da;
+      color: #721c24;
+      padding: 15px;
+      border-radius: 8px;
+      margin-top: 10px;
+    }
+    
+    .success {
+      background: #d4edda;
+      color: #155724;
+      padding: 15px;
+      border-radius: 8px;
+      margin-top: 10px;
+    }
+    
+    .quick-actions {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 15px;
+      margin-top: 20px;
+    }
+    
+    .action-card {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    
+    .action-card h3 {
+      color: #333;
+      margin-bottom: 10px;
+      font-size: 16px;
+    }
+    
+    .action-card p {
+      color: #666;
+      font-size: 13px;
+      margin-bottom: 15px;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>💰 Affiliate Payment Dashboard</h1>
+    
+    <div class="api-input">
+      <label>🔗 Backend API URL</label>
+      <input type="text" id="apiUrl" value="http://localhost:3001" placeholder="http://localhost:3001">
+      
+      <label>👤 Affiliate Code</label>
+      <input type="text" id="affiliateCode" placeholder="cryptoking" value="">
+      
+      <div class="button-group">
+        <button onclick="checkPendingEarnings()">💵 Check Pending Earnings</button>
+        <button onclick="viewFullStats()">📊 View Full Stats</button>
+        <button onclick="viewPendingTrades()">📝 View Pending Trades</button>
+        <button onclick="listAllAffiliates()">👥 List All Affiliates</button>
+      </div>
+    </div>
+    
+    <div class="quick-actions">
+      <div class="action-card">
+        <h3>🆕 Create New Affiliate</h3>
+        <p>Generate a referral link for an influencer</p>
+        <button onclick="showCreateForm()">Create Affiliate</button>
+      </div>
+      
+      <div class="action-card">
+        <h3>💸 Record Payout</h3>
+        <p>Mark trades as paid after sending money</p>
+        <button onclick="showPayoutForm()">Record Payout</button>
+      </div>
+      
+      <div class="action-card">
+        <h3>📈 View All Trades</h3>
+        <p>See all trades across all affiliates</p>
+        <button onclick="viewAllTrades()">View Trades</button>
+      </div>
+    </div>
+    
+    <div id="results" class="results"></div>
+  </div>
+
+  <script>
+    const resultsDiv = document.getElementById('results');
+    
+    function getApiUrl() {
+      return document.getElementById('apiUrl').value.trim();
+    }
+    
+    function getAffiliateCode() {
+      const code = document.getElementById('affiliateCode').value.trim();
+      if (!code) {
+        showError('Please enter an affiliate code');
+        return null;
+      }
+      return code;
+    }
+    
+    function showLoading() {
+      resultsDiv.className = 'results show';
+      resultsDiv.innerHTML = '<div class="loading">⏳ Loading...</div>';
+    }
+    
+    function showError(message) {
+      resultsDiv.className = 'results show';
+      resultsDiv.innerHTML = `<div class="error">❌ Error: ${message}</div>`;
+    }
+    
+    function showSuccess(message) {
+      resultsDiv.className = 'results show';
+      resultsDiv.innerHTML = `<div class="success">✅ ${message}</div>`;
+    }
+    
+    async function fetchAPI(endpoint) {
+      showLoading();
+      try {
+        const response = await fetch(`${getApiUrl()}${endpoint}`);
+        const data = await response.json();
+        
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || 'API request failed');
+        }
+        
+        return data;
+      } catch (error) {
+        showError(error.message);
+        throw error;
+      }
+    }
+    
+    async function checkPendingEarnings() {
+      const code = getAffiliateCode();
+      if (!code) return;
+      
+      try {
+        const data = await fetchAPI(`/api/affiliates/${code}/pending-earnings`);
+        
+        resultsDiv.innerHTML = `
+          <h2>💵 Pending Earnings for "${code}"</h2>
+          <div class="stat-card">
+            <h3>Amount to Pay</h3>
+            <div class="value">$${data.pendingEarnings.toFixed(2)}</div>
+            <div class="label">${data.pendingTrades} unpaid trades</div>
+          </div>
+          <pre>${JSON.stringify(data, null, 2)}</pre>
+        `;
+      } catch (error) {
+        // Error already shown
+      }
+    }
+    
+    async function viewFullStats() {
+      const code = getAffiliateCode();
+      if (!code) return;
+      
+      try {
+        const data = await fetchAPI(`/api/affiliates/${code}/stats`);
+        
+        resultsDiv.innerHTML = `
+          <h2>📊 Full Statistics for "${code}"</h2>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+            <div class="stat-card">
+              <h3>Total Earned</h3>
+              <div class="value">$${data.stats.totalEarnings.toFixed(2)}</div>
+              <div class="label">Lifetime</div>
+            </div>
+            <div class="stat-card">
+              <h3>Pending</h3>
+              <div class="value">$${data.stats.pendingEarnings.toFixed(2)}</div>
+              <div class="label">To pay now</div>
+            </div>
+            <div class="stat-card">
+              <h3>Already Paid</h3>
+              <div class="value">$${data.stats.paidEarnings.toFixed(2)}</div>
+              <div class="label">Historical</div>
+            </div>
+            <div class="stat-card">
+              <h3>Total Volume</h3>
+              <div class="value">$${data.affiliate.totalVolume.toFixed(0)}</div>
+              <div class="label">${data.affiliate.totalTrades} trades</div>
+            </div>
+          </div>
+          <h3 style="margin-top: 20px; color: #333;">Wallet Address</h3>
+          <pre>${data.affiliate.walletAddress}</pre>
+          <h3 style="margin-top: 20px; color: #333;">Full Response</h3>
+          <pre>${JSON.stringify(data, null, 2)}</pre>
+        `;
+      } catch (error) {
+        // Error already shown
+      }
+    }
+    
+    async function viewPendingTrades() {
+      const code = getAffiliateCode();
+      if (!code) return;
+      
+      try {
+        const data = await fetchAPI(`/api/affiliates/${code}/trades?payoutStatus=pending`);
+        
+        let totalPending = 0;
+        let tableHTML = '';
+        
+        if (data.trades && data.trades.length > 0) {
+          tableHTML = `
+            <table class="trade-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Volume</th>
+                  <th>Total Fee</th>
+                  <th>Influencer Share</th>
+                  <th>Platform Share</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+          `;
+          
+          data.trades.forEach(trade => {
+            totalPending += trade.influencerShare;
+            const date = new Date(trade.timestamp).toLocaleDateString();
+            tableHTML += `
+              <tr>
+                <td>${date}</td>
+                <td>$${trade.tradeVolume.toFixed(2)}</td>
+                <td>$${trade.feeEarned.toFixed(4)}</td>
+                <td style="font-weight: bold; color: #667eea;">$${trade.influencerShare.toFixed(4)}</td>
+                <td>$${trade.platformShare.toFixed(4)}</td>
+                <td><span class="status-badge status-${trade.payoutStatus}">${trade.payoutStatus}</span></td>
+              </tr>
+            `;
+          });
+          
+          tableHTML += '</tbody></table>';
+        } else {
+          tableHTML = '<p style="text-align: center; color: #666; padding: 20px;">No pending trades found ✅</p>';
+        }
+        
+        resultsDiv.innerHTML = `
+          <h2>📝 Pending Trades for "${code}"</h2>
+          <div class="stat-card">
+            <h3>Total Amount to Pay</h3>
+            <div class="value">$${totalPending.toFixed(2)}</div>
+            <div class="label">${data.count} pending trades</div>
+          </div>
+          ${tableHTML}
+          <h3 style="margin-top: 20px; color: #333;">Full Response</h3>
+          <pre>${JSON.stringify(data, null, 2)}</pre>
+        `;
+      } catch (error) {
+        // Error already shown
+      }
+    }
+    
+    async function listAllAffiliates() {
+      try {
+        const data = await fetchAPI('/api/affiliates/list');
+        
+        let tableHTML = '';
+        
+        if (data.affiliates && data.affiliates.length > 0) {
+          tableHTML = `
+            <table class="trade-table">
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Name</th>
+                  <th>Total Earned</th>
+                  <th>Total Volume</th>
+                  <th>Trades</th>
+                  <th>Share %</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+          `;
+          
+          data.affiliates.forEach(aff => {
+            tableHTML += `
+              <tr>
+                <td><strong>${aff.code}</strong></td>
+                <td>${aff.name}</td>
+                <td>$${aff.totalEarned.toFixed(2)}</td>
+                <td>$${aff.totalVolume.toFixed(0)}</td>
+                <td>${aff.totalTrades}</td>
+                <td>${aff.sharePercentage}%</td>
+                <td>
+                  <button onclick="document.getElementById('affiliateCode').value='${aff.code}'; checkPendingEarnings();" style="padding: 5px 10px; font-size: 11px;">
+                    Check Pending
+                  </button>
+                </td>
+              </tr>
+            `;
+          });
+          
+          tableHTML += '</tbody></table>';
+        } else {
+          tableHTML = '<p style="text-align: center; color: #666; padding: 20px;">No affiliates found</p>';
+        }
+        
+        resultsDiv.innerHTML = `
+          <h2>👥 All Affiliates (${data.count})</h2>
+          ${tableHTML}
+        `;
+      } catch (error) {
+        // Error already shown
+      }
+    }
+    
+    async function viewAllTrades() {
+      try {
+        const data = await fetchAPI('/api/affiliates/trades/all?limit=50');
+        
+        let tableHTML = '';
+        
+        if (data.trades && data.trades.length > 0) {
+          tableHTML = `
+            <table class="trade-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Affiliate</th>
+                  <th>Volume</th>
+                  <th>Fee</th>
+                  <th>Influencer Share</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+          `;
+          
+          data.trades.forEach(trade => {
+            const date = new Date(trade.timestamp).toLocaleDateString();
+            tableHTML += `
+              <tr>
+                <td>${date}</td>
+                <td><strong>${trade.referralCode}</strong></td>
+                <td>$${trade.tradeVolume.toFixed(2)}</td>
+                <td>$${trade.feeEarned.toFixed(4)}</td>
+                <td style="font-weight: bold; color: #667eea;">$${trade.influencerShare.toFixed(4)}</td>
+                <td><span class="status-badge status-${trade.payoutStatus}">${trade.payoutStatus}</span></td>
+              </tr>
+            `;
+          });
+          
+          tableHTML += '</tbody></table>';
+        } else {
+          tableHTML = '<p style="text-align: center; color: #666; padding: 20px;">No trades found</p>';
+        }
+        
+        resultsDiv.innerHTML = `
+          <h2>📈 Recent Trades (Last 50)</h2>
+          ${tableHTML}
+        `;
+      } catch (error) {
+        // Error already shown
+      }
+    }
+    
+    function showCreateForm() {
+      resultsDiv.className = 'results show';
+      resultsDiv.innerHTML = `
+        <h2>🆕 Create New Affiliate</h2>
+        <div style="background: #f9f9f9; padding: 20px; border-radius: 8px;">
+          <label style="display: block; margin-bottom: 8px; font-weight: 600;">Affiliate Code</label>
+          <input type="text" id="newCode" placeholder="cryptoking" style="width: 100%; padding: 10px; margin-bottom: 15px; border: 2px solid #e0e0e0; border-radius: 6px;">
+          
+          <label style="display: block; margin-bottom: 8px; font-weight: 600;">Name</label>
+          <input type="text" id="newName" placeholder="Crypto King" style="width: 100%; padding: 10px; margin-bottom: 15px; border: 2px solid #e0e0e0; border-radius: 6px;">
+          
+          <label style="display: block; margin-bottom: 8px; font-weight: 600;">Wallet Address</label>
+          <input type="text" id="newWallet" placeholder="THEIR_SOLANA_WALLET_ADDRESS" style="width: 100%; padding: 10px; margin-bottom: 15px; border: 2px solid #e0e0e0; border-radius: 6px;">
+          
+          <label style="display: block; margin-bottom: 8px; font-weight: 600;">Share Percentage</label>
+          <input type="number" id="newShare" value="50" min="0" max="100" style="width: 100%; padding: 10px; margin-bottom: 15px; border: 2px solid #e0e0e0; border-radius: 6px;">
+          
+          <label style="display: block; margin-bottom: 8px; font-weight: 600;">Email (optional)</label>
+          <input type="email" id="newEmail" placeholder="influencer@email.com" style="width: 100%; padding: 10px; margin-bottom: 15px; border: 2px solid #e0e0e0; border-radius: 6px;">
+          
+          <button onclick="createAffiliate()" style="width: 100%; padding: 15px; font-size: 16px;">Create Affiliate</button>
+        </div>
+      `;
+    }
+    
+    async function createAffiliate() {
+      const code = document.getElementById('newCode').value.trim();
+      const name = document.getElementById('newName').value.trim();
+      const wallet = document.getElementById('newWallet').value.trim();
+      const share = parseInt(document.getElementById('newShare').value);
+      const email = document.getElementById('newEmail').value.trim();
+      
+      if (!code || !name || !wallet) {
+        alert('Please fill in code, name, and wallet address');
+        return;
+      }
+      
+      showLoading();
+      
+      try {
+        const response = await fetch(`${getApiUrl()}/api/affiliates/create`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            code,
+            name,
+            walletAddress: wallet,
+            sharePercentage: share,
+            email: email || undefined
+          })
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || 'Failed to create affiliate');
+        }
+        
+        const localUrl = `http://localhost:5173?ref=${code}`;
+        const prodUrl = `https://moonfeed.app?ref=${code}`;
+        
+        resultsDiv.innerHTML = `
+          <div class="success">
+            <h2>✅ Affiliate Created Successfully!</h2>
+            <h3 style="margin-top: 20px;">Referral Links:</h3>
+            <p style="margin: 10px 0;"><strong>Local:</strong> <code>${localUrl}</code></p>
+            <p style="margin: 10px 0;"><strong>Production:</strong> <code>${prodUrl}</code></p>
+            <h3 style="margin-top: 20px;">Affiliate Details:</h3>
+            <pre>${JSON.stringify(data.affiliate, null, 2)}</pre>
+          </div>
+        `;
+      } catch (error) {
+        showError(error.message);
+      }
+    }
+    
+    function showPayoutForm() {
+      resultsDiv.className = 'results show';
+      resultsDiv.innerHTML = `
+        <h2>💸 Record Payout</h2>
+        <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 20px; color: #856404;">
+          <strong>⚠️ Important:</strong> Only use this after you've already sent money from your Ultra wallet!
+        </div>
+        <div style="background: #f9f9f9; padding: 20px; border-radius: 8px;">
+          <label style="display: block; margin-bottom: 8px; font-weight: 600;">Affiliate Code</label>
+          <input type="text" id="payoutCode" placeholder="cryptoking" style="width: 100%; padding: 10px; margin-bottom: 15px; border: 2px solid #e0e0e0; border-radius: 6px;">
+          
+          <label style="display: block; margin-bottom: 8px; font-weight: 600;">Amount Paid ($)</label>
+          <input type="number" id="payoutAmount" placeholder="45.67" step="0.01" style="width: 100%; padding: 10px; margin-bottom: 15px; border: 2px solid #e0e0e0; border-radius: 6px;">
+          
+          <label style="display: block; margin-bottom: 8px; font-weight: 600;">Transaction Signature</label>
+          <input type="text" id="payoutTx" placeholder="4x9Z...abc123 (from Solana)" style="width: 100%; padding: 10px; margin-bottom: 15px; border: 2px solid #e0e0e0; border-radius: 6px;">
+          
+          <label style="display: block; margin-bottom: 8px; font-weight: 600;">Notes (optional)</label>
+          <input type="text" id="payoutNotes" placeholder="Payment for January 2024" style="width: 100%; padding: 10px; margin-bottom: 15px; border: 2px solid #e0e0e0; border-radius: 6px;">
+          
+          <button onclick="recordPayout()" style="width: 100%; padding: 15px; font-size: 16px;">Record Payout</button>
+          
+          <p style="margin-top: 15px; font-size: 12px; color: #666;">
+            💡 Tip: First check pending earnings to get trade IDs, then send payment, then record it here.
+          </p>
+        </div>
+      `;
+    }
+    
+    async function recordPayout() {
+      const code = document.getElementById('payoutCode').value.trim();
+      const amount = parseFloat(document.getElementById('payoutAmount').value);
+      const tx = document.getElementById('payoutTx').value.trim();
+      const notes = document.getElementById('payoutNotes').value.trim();
+      
+      if (!code || !amount || !tx) {
+        alert('Please fill in code, amount, and transaction signature');
+        return;
+      }
+      
+      showLoading();
+      
+      try {
+        // First get pending trades to get trade IDs
+        const pendingData = await fetch(`${getApiUrl()}/api/affiliates/${code}/pending-earnings`);
+        const pending = await pendingData.json();
+        
+        if (!pending.success || !pending.tradeIds || pending.tradeIds.length === 0) {
+          throw new Error('No pending trades found for this affiliate');
+        }
+        
+        // Now record the payout
+        const response = await fetch(`${getApiUrl()}/api/affiliates/payouts/create`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            referralCode: code,
+            amount: amount,
+            tradeIds: pending.tradeIds,
+            transactionSignature: tx,
+            notes: notes || undefined
+          })
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || 'Failed to record payout');
+        }
+        
+        resultsDiv.innerHTML = `
+          <div class="success">
+            <h2>✅ Payout Recorded Successfully!</h2>
+            <p style="margin: 10px 0;">Marked ${pending.tradeIds.length} trades as paid for ${code}</p>
+            <h3 style="margin-top: 20px;">Payout Details:</h3>
+            <pre>${JSON.stringify(data.payout, null, 2)}</pre>
+          </div>
+        `;
+      } catch (error) {
+        showError(error.message);
+      }
+    }
+  </script>
+</body>
+</html>

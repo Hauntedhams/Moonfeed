@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import TriggerOrderModal from './TriggerOrderModal';
 import { useWallet } from '../contexts/WalletContext';
+import ReferralTracker from '../utils/ReferralTracker';
 import './JupiterTradeModal.css';
 
 const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError }) => {
@@ -10,6 +11,46 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError }
   const [activeTab, setActiveTab] = useState('swap'); // 'swap' or 'limit'
   const [showTriggerModal, setShowTriggerModal] = useState(false);
   const { walletAddress } = useWallet();
+
+  // Track trade with affiliate system
+  const trackTradeWithAffiliate = async (txid, swapResult) => {
+    try {
+      console.log('📊 Attempting to track trade for affiliate system...');
+      
+      // Extract trade info from swapResult
+      const inputAmount = swapResult?.inputAmount || 0;
+      const outputAmount = swapResult?.outputAmount || 0;
+      
+      // Calculate approximate trade volume and fee
+      // Jupiter swaps show amounts in smallest units, need to convert
+      const tradeVolume = inputAmount / 1e9; // Assuming SOL input (9 decimals)
+      const feeEarned = tradeVolume * 0.01; // 1% fee
+      
+      const trackingData = {
+        userWallet: walletAddress || 'unknown',
+        tradeVolume: tradeVolume,
+        feeEarned: feeEarned,
+        tokenIn: swapResult?.inputMint || 'SOL',
+        tokenOut: swapResult?.outputMint || coin?.mintAddress,
+        transactionSignature: txid,
+        metadata: {
+          coinSymbol: coin?.symbol,
+          coinName: coin?.name,
+          timestamp: new Date().toISOString()
+        }
+      };
+      
+      const result = await ReferralTracker.trackTrade(trackingData);
+      
+      if (result.success) {
+        console.log('✅ Trade tracked successfully:', result.trade);
+      } else {
+        console.log('📊 Trade not tracked:', result.reason || result.error);
+      }
+    } catch (error) {
+      console.error('❌ Error tracking trade:', error);
+    }
+  };
 
   useEffect(() => {
     if (isOpen && coin && activeTab === 'swap') {
@@ -67,11 +108,21 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError }
         }
       }
 
-      // Initialize - Enable Jupiter's built-in swap arrow to work
+      // Initialize Jupiter Terminal v4
+      // NOTE: v4 automatically detects and uses connected wallets (Phantom/Solflare)
+      // No need to manually pass wallet - it uses Unified Wallet Kit
       window.Jupiter.init({
         displayMode: "integrated",
         integratedTargetId: "jupiter-container",
         endpoint: "https://api.mainnet-beta.solana.com",
+        
+        // 🔑 PLATFORM FEE CONFIGURATION (1%) - v4 syntax
+        platformFeeAndAccounts: {
+          feeBps: 100, // 1% = 100 basis points
+          feeAccounts: new Map([
+            ["42DqmQMZrVeZkP2Btj2cS96Ej81jVxFqwUZWazVvhUPt", 100] // 100% of fee to this wallet
+          ])
+        },
         
         formProps: {
           // Set default direction: Buy token with SOL
@@ -82,10 +133,6 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError }
           // This enables the built-in swap direction button in Jupiter UI
           fixedInputMint: false,
           fixedOutputMint: false,
-          
-          // 💰 REFERRAL FEE CONFIGURATION (1%)
-          referralAccount: "42DqmQMZrVeZkP2Btj2cS96Ej81jVxFqwUZWazVvhUPt",
-          referralFee: 100, // 100 BPS = 1%
         },
 
         strictTokenList: false,
@@ -97,6 +144,10 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError }
 
         onSuccess: ({ txid, swapResult }) => {
           console.log('✅ Swap success:', txid);
+          
+          // Track trade for affiliate system
+          trackTradeWithAffiliate(txid, swapResult);
+          
           onSwapSuccess?.({ txid, swapResult, coin });
         },
 

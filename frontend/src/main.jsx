@@ -22,6 +22,15 @@ const endpoint = clusterApiUrl(network);
 // Wallet configuration
 const wallets = [];
 
+// Register service worker for PWA and caching
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js')
+      .then(registration => console.log('✅ Service Worker registered'))
+      .catch(err => console.log('❌ Service Worker registration failed:', err));
+  });
+}
+
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <ConnectionProvider endpoint={endpoint}>

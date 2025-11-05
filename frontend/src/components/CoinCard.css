@@ -170,12 +170,25 @@
     display: none !important;
   }
 
-  /* Adjust banner to fit in left panel */
+  /* Adjust banner to fit in left panel with 3:1 aspect ratio */
   .coin-card-left-panel .coin-banner {
     position: relative !important;
     width: 100%;
-    height: 280px !important;
+    /* 3:1 aspect ratio: width / 3 = height */
+    height: 160px !important; /* 480px / 3 = 160px */
     flex-shrink: 0;
+    overflow: hidden;
+  }
+
+  /* Display banner image in full view without cropping on desktop */
+  .coin-card-left-panel .coin-banner img {
+    width: 100% !important; /* Full width, no overflow */
+    height: 100% !important;
+    object-fit: cover; /* Cover maintains aspect ratio while filling container */
+    object-position: center !important;
+    position: absolute !important;
+    left: 0 !important; /* No offset needed */
+    top: 0 !important;
   }
 
   .coin-card-left-panel .banner-text-overlay {
@@ -185,12 +198,14 @@
     right: 0;
   }
 
-  /* Adjust info layer positioning for left panel */
+  /* Adjust info layer positioning for left panel - NO overlap with banner */
   .coin-card-left-panel .coin-info-layer {
     position: relative !important;
-    margin-top: -60px;
+    margin-top: 0 !important; /* Remove negative margin - no overlap */
     height: auto !important;
-    transform: none !important;
+    /* Start mostly visible, slide up a bit when expanded */
+    transform: translateY(0) !important; /* Default: show full content */
+    transition: transform 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
     border-top-left-radius: 24px;
     border-top-right-radius: 24px;
   }
@@ -198,7 +213,8 @@
   .coin-card-left-panel .coin-info-layer.expanded {
     position: relative !important;
     height: auto !important;
-    transform: none !important;
+    /* When expanded, shift up slightly to maximize visible content */
+    transform: translateY(-50px) !important;
   }
 
   /* Make charts section smaller in left panel since main chart is on right */
@@ -248,12 +264,44 @@
   .coin-card-left-panel {
     width: 420px !important;
   }
+  
+  /* Maintain 3:1 aspect ratio for medium desktop */
+  .coin-card-left-panel .coin-banner {
+    height: 140px !important; /* 420px / 3 = 140px */
+  }
 }
 
 /* Large desktop - wider left panel for more comfortable reading */
 @media (min-width: 1600px) {
   .coin-card-left-panel {
     width: 540px !important;
+  }
+  
+  /* Maintain 3:1 aspect ratio for large desktop */
+  .coin-card-left-panel .coin-banner {
+    height: 180px !important; /* 540px / 3 = 180px */
+  }
+}
+
+/* Desktop mode - show desktop-coin-header, hide banner-text-overlay */
+@media (min-width: 1200px) {
+  .desktop-coin-header {
+    display: block !important;
+  }
+  
+  .banner-text-overlay {
+    display: none !important;
+  }
+}
+
+/* Mobile mode - show banner-text-overlay, hide desktop-coin-header */
+@media (max-width: 1199px) {
+  .banner-text-overlay {
+    display: block !important;
+  }
+  
+  .desktop-coin-header {
+    display: none !important;
   }
 }
 
@@ -538,6 +586,13 @@
    🔥 SCROLL BEHAVIOR: Info layer only scrollable when expanded.
       When collapsed, scroll/touch events pass through to parent scroller.
    ============================================================================= */
+
+/* Desktop-only coin header in info layer - hidden on mobile */
+.desktop-coin-header {
+  display: none; /* Hidden by default on mobile */
+  padding: 0 20px 16px 20px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
 
 .coin-info-layer {
   position: absolute;
@@ -1298,10 +1353,61 @@
 }
 
 /* Clickable elements */
-.chart-nav-content .nav-dot,
+.chart-nav-content .nav-button,
 .chart-nav-content .graduation-info-icon {
   pointer-events: auto;
   cursor: pointer;
+}
+
+/* Chart Navigation Buttons */
+.nav-button {
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  color: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.05);
+  border: none;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  flex-shrink: 0;
+  letter-spacing: 0.3px;
+}
+
+.nav-button:hover {
+  background: rgba(0, 0, 0, 0.08);
+  color: rgba(0, 0, 0, 0.7);
+  transform: translateY(-1px);
+}
+
+.nav-button:active {
+  transform: translateY(0px);
+}
+
+.nav-button.active {
+  background: rgba(0, 0, 0, 0.85);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* Dark Mode Navigation Buttons */
+.dark-mode .nav-button {
+  color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.dark-mode .nav-button:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.dark-mode .nav-button.active {
+  background: rgba(255, 255, 255, 0.95);
+  color: #000;
+  box-shadow: 0 2px 8px rgba(255, 255, 255, 0.2);
 }
 
 /* Progress bar - visual only, events pass through */
@@ -1438,35 +1544,6 @@
   min-height: 450px; /* Match parent height */
   overflow: hidden;
   position: relative; /* Contain the iframe */
-}
-
-/* Navigation Dots */
-.chart-nav-dots {
-  display: flex;
-  justify-content: center;
-  gap: 8px;
-}
-
-.nav-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.2);
-  transition: all 0.3s ease;
-  cursor: pointer;
-  flex-shrink: 0;
-  scroll-snap-align: center;
-}
-
-.nav-dot:hover {
-  background: rgba(0, 0, 0, 0.4);
-  transform: scale(1.2);
-}
-
-.nav-dot.active {
-  background: rgba(0, 0, 0, 0.7);
-  width: 20px;
-  border-radius: 4px;
 }
 
 /* =============================================================================

@@ -4,17 +4,23 @@ import ModernTokenScroller from './components/ModernTokenScroller'
 import FavoritesGrid from './components/FavoritesGrid'
 import BottomNavBar from './components/BottomNavBar'
 import TopTabs from './components/TopTabs'
-import WalletDebug from './components/WalletDebug'
-import CoinSearchModal from './components/CoinSearchModal'
-import CoinListModal from './components/CoinListModal'
-import ProfileView from './components/ProfileView'
-import OrdersView from './components/OrdersView'
-import JupiterTradeModal from './components/JupiterTradeModal'
-import AdvancedFilter from './components/AdvancedFilter'
 import { WalletProvider } from './contexts/WalletContext'
 import { TrackedWalletsProvider } from './contexts/TrackedWalletsContext'
 import { DarkModeProvider } from './contexts/DarkModeContext'
 import ReferralTracker from './utils/ReferralTracker'
+import MobileOptimizer from './utils/mobileOptimizer'
+
+// Lazy load heavy components that aren't needed immediately
+const WalletDebug = lazy(() => import('./components/WalletDebug'))
+const CoinSearchModal = lazy(() => import('./components/CoinSearchModal'))
+const CoinListModal = lazy(() => import('./components/CoinListModal'))
+const ProfileView = lazy(() => import('./components/ProfileView'))
+const OrdersView = lazy(() => import('./components/OrdersView'))
+const JupiterTradeModal = lazy(() => import('./components/JupiterTradeModal'))
+const AdvancedFilter = lazy(() => import('./components/AdvancedFilter'))
+
+// Import HelpBubble (not lazy loaded - it's lightweight)
+import HelpBubble from './components/HelpBubble'
 
 function App() {
   // Build timestamp - only log once on initial load
@@ -51,9 +57,15 @@ function App() {
   const [currentCoinIndex, setCurrentCoinIndex] = useState(0); // Current coin index in scroller
   const [totalCoinsInList, setTotalCoinsInList] = useState(0); // Total coins in current list
 
-  // Initialize referral tracking on app load
+  // Initialize referral tracking and mobile optimizer on app load
   useEffect(() => {
     ReferralTracker.initialize();
+    
+    // Log mobile optimizer status
+    if (MobileOptimizer.isMobile) {
+      console.log('📱 Mobile mode active - aggressive optimizations enabled');
+      console.log('💾 Memory:', MobileOptimizer.getMemoryStats());
+    }
   }, []);
 
   // Listen for favorites changes from TokenScroller
@@ -239,9 +251,13 @@ function App() {
           onFavoritesChange={handleFavoritesChange}
         />
       ) : activeTab === 'profile' ? (
-        <ProfileView />
+        <Suspense fallback={<div style={{ padding: '20px', textAlign: 'center' }}>Loading...</div>}>
+          <ProfileView />
+        </Suspense>
       ) : activeTab === 'orders' ? (
-        <OrdersView />
+        <Suspense fallback={<div style={{ padding: '20px', textAlign: 'center' }}>Loading...</div>}>
+          <OrdersView />
+        </Suspense>
       ) : activeTab === 'coin-detail' && selectedCoin ? (
         <div style={{ position: 'relative' }}>
           {/* Back button for coin detail view */}
@@ -323,40 +339,51 @@ function App() {
         onSearchClick={handleSearchClick}
         onOrdersClick={handleOrdersClick}
       />
-      <CoinSearchModal
-        visible={searchModalOpen}
-        onClose={handleSearchClose}
-        onCoinSelect={handleCoinFound}
-        onAdvancedFilterClick={() => setAdvancedFilterModalOpen(true)}
-      />
+      <Suspense fallback={null}>
+        <CoinSearchModal
+          visible={searchModalOpen}
+          onClose={handleSearchClose}
+          onCoinSelect={handleCoinFound}
+          onAdvancedFilterClick={() => setAdvancedFilterModalOpen(true)}
+        />
+      </Suspense>
       
       {/* Coin List Modal */}
-      <CoinListModal
-        visible={coinListModalOpen}
-        onClose={() => setCoinListModalOpen(false)}
-        filterType={coinListModalFilter}
-        onCoinSelect={handleCoinFromList}
-        currentCoinIndex={currentCoinIndex}
-        totalCoins={totalCoinsInList}
-      />
+      <Suspense fallback={null}>
+        <CoinListModal
+          visible={coinListModalOpen}
+          onClose={() => setCoinListModalOpen(false)}
+          filterType={coinListModalFilter}
+          onCoinSelect={handleCoinFromList}
+          currentCoinIndex={currentCoinIndex}
+          totalCoins={totalCoinsInList}
+        />
+      </Suspense>
       
       {/* Jupiter Trade Modal */}
-      <JupiterTradeModal
-        isOpen={tradeModalOpen}
-        onClose={handleTradeModalClose}
-        coin={coinToTrade}
-        onSwapSuccess={handleSwapSuccess}
-        onSwapError={handleSwapError}
-      />
+      <Suspense fallback={null}>
+        <JupiterTradeModal
+          isOpen={tradeModalOpen}
+          onClose={handleTradeModalClose}
+          coin={coinToTrade}
+          onSwapSuccess={handleSwapSuccess}
+          onSwapError={handleSwapError}
+        />
+      </Suspense>
       
       {/* Advanced Filter Modal */}
-      <AdvancedFilter
-        onFilter={handleAdvancedFilter}
-        isActive={isAdvancedFilterActive}
-        hideButton={true}
-        isModalOpen={advancedFilterModalOpen}
-        onModalClose={() => setAdvancedFilterModalOpen(false)}
-      />
+      <Suspense fallback={null}>
+        <AdvancedFilter
+          onFilter={handleAdvancedFilter}
+          isActive={isAdvancedFilterActive}
+          hideButton={true}
+          isModalOpen={advancedFilterModalOpen}
+          onModalClose={() => setAdvancedFilterModalOpen(false)}
+        />
+      </Suspense>
+      
+      {/* Help Bubble - Contextual help for each page */}
+      <HelpBubble currentPage={activeTab} />
         </div>
       </WalletProvider>
     </TrackedWalletsProvider>

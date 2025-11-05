@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jupiter Wallet Diagnostics</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+    
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 16px;
+      padding: 30px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    }
+    
+    h1 {
+      color: #333;
+      margin-bottom: 20px;
+    }
+    
+    .status-box {
+      background: #f5f5f5;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      border-left: 4px solid #667eea;
+    }
+    
+    .status-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid #e0e0e0;
+    }
+    
+    .status-item:last-child {
+      border-bottom: none;
+    }
+    
+    .status-label {
+      font-weight: 600;
+      color: #666;
+    }
+    
+    .status-value {
+      color: #333;
+      font-family: monospace;
+    }
+    
+    .status-ok {
+      color: #4caf50;
+      font-weight: bold;
+    }
+    
+    .status-error {
+      color: #f44336;
+      font-weight: bold;
+    }
+    
+    button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 12px 30px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 14px;
+      margin-right: 10px;
+      margin-top: 10px;
+    }
+    
+    button:hover {
+      opacity: 0.9;
+    }
+    
+    .code-box {
+      background: #1e1e1e;
+      color: #d4d4d4;
+      padding: 15px;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      margin-top: 10px;
+    }
+    
+    .warning {
+      background: #fff3cd;
+      border-left: 4px solid #ffc107;
+      padding: 15px;
+      border-radius: 8px;
+      color: #856404;
+      margin-top: 20px;
+    }
+    
+    .success {
+      background: #d4edda;
+      border-left: 4px solid #28a745;
+      padding: 15px;
+      border-radius: 8px;
+      color: #155724;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔍 Jupiter Wallet Diagnostics</h1>
+    <p style="color: #666; margin-bottom: 20px;">
+      This page helps diagnose why Jupiter swaps might be failing
+    </p>
+    
+    <div class="status-box">
+      <h3>Wallet Status</h3>
+      <div class="status-item">
+        <span class="status-label">Phantom Installed:</span>
+        <span class="status-value" id="phantomInstalled">Checking...</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Solflare Installed:</span>
+        <span class="status-value" id="solflareInstalled">Checking...</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Wallet Connected:</span>
+        <span class="status-value" id="walletConnected">Checking...</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Wallet Address:</span>
+        <span class="status-value" id="walletAddress">-</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Wallet Object:</span>
+        <span class="status-value" id="walletObject">-</span>
+      </div>
+    </div>
+    
+    <div class="status-box">
+      <h3>Jupiter Status</h3>
+      <div class="status-item">
+        <span class="status-label">Jupiter Loaded:</span>
+        <span class="status-value" id="jupiterLoaded">Checking...</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Jupiter Version:</span>
+        <span class="status-value" id="jupiterVersion">-</span>
+      </div>
+    </div>
+    
+    <div>
+      <button onclick="checkStatus()">🔄 Refresh Status</button>
+      <button onclick="connectWallet()">🔗 Connect Wallet</button>
+      <button onclick="testTransaction()">🧪 Test Transaction Setup</button>
+    </div>
+    
+    <div id="results"></div>
+    
+    <div class="warning">
+      <strong>⚠️ Common Issues:</strong>
+      <ul style="margin: 10px 0 0 20px;">
+        <li>Wallet not connected - Click "Connect Wallet" above</li>
+        <li>Wallet locked - Unlock your Phantom/Solflare extension</li>
+        <li>Insufficient SOL - Need ~0.001 SOL for transaction fees</li>
+        <li>Wrong network - Make sure you're on Solana mainnet</li>
+      </ul>
+    </div>
+  </div>
+
+  <script>
+    async function checkStatus() {
+      // Check Phantom
+      const hasPhantom = typeof window.solana !== 'undefined' && window.solana.isPhantom;
+      document.getElementById('phantomInstalled').innerHTML = hasPhantom 
+        ? '<span class="status-ok">✅ Yes</span>' 
+        : '<span class="status-error">❌ No</span>';
+      
+      // Check Solflare
+      const hasSolflare = typeof window.solflare !== 'undefined' && window.solflare.isSolflare;
+      document.getElementById('solflareInstalled').innerHTML = hasSolflare 
+        ? '<span class="status-ok">✅ Yes</span>' 
+        : '<span class="status-error">❌ No</span>';
+      
+      // Get active wallet
+      const wallet = window.solana || window.solflare;
+      
+      if (!wallet) {
+        document.getElementById('walletConnected').innerHTML = '<span class="status-error">❌ No wallet found</span>';
+        document.getElementById('walletAddress').textContent = '-';
+        document.getElementById('walletObject').textContent = '-';
+        return;
+      }
+      
+      // Check connection
+      const isConnected = wallet.isConnected;
+      document.getElementById('walletConnected').innerHTML = isConnected
+        ? '<span class="status-ok">✅ Connected</span>'
+        : '<span class="status-error">❌ Not connected</span>';
+      
+      // Check address
+      const address = wallet.publicKey?.toString() || 'Not available';
+      document.getElementById('walletAddress').textContent = address;
+      
+      // Check wallet object properties
+      const walletProps = {
+        isConnected: wallet.isConnected,
+        publicKey: wallet.publicKey ? 'Available' : 'null',
+        signTransaction: typeof wallet.signTransaction === 'function' ? 'Available' : 'Missing',
+        signAllTransactions: typeof wallet.signAllTransactions === 'function' ? 'Available' : 'Missing'
+      };
+      document.getElementById('walletObject').textContent = JSON.stringify(walletProps);
+      
+      // Check Jupiter
+      const hasJupiter = typeof window.Jupiter !== 'undefined';
+      document.getElementById('jupiterLoaded').innerHTML = hasJupiter
+        ? '<span class="status-ok">✅ Yes</span>'
+        : '<span class="status-error">❌ No</span>';
+      
+      document.getElementById('jupiterVersion').textContent = hasJupiter ? 'Available' : '-';
+    }
+    
+    async function connectWallet() {
+      const resultsDiv = document.getElementById('results');
+      resultsDiv.innerHTML = '<div style="margin-top: 20px; color: #666;">Connecting wallet...</div>';
+      
+      try {
+        const wallet = window.solana || window.solflare;
+        
+        if (!wallet) {
+          throw new Error('No wallet extension found. Please install Phantom or Solflare.');
+        }
+        
+        const response = await wallet.connect();
+        
+        resultsDiv.innerHTML = `
+          <div class="success">
+            <strong>✅ Wallet Connected!</strong>
+            <div class="code-box">
+              Address: ${response.publicKey.toString()}
+            </div>
+          </div>
+        `;
+        
+        checkStatus();
+      } catch (error) {
+        resultsDiv.innerHTML = `
+          <div class="warning">
+            <strong>❌ Connection Failed</strong>
+            <p style="margin-top: 10px;">${error.message}</p>
+          </div>
+        `;
+      }
+    }
+    
+    async function testTransaction() {
+      const resultsDiv = document.getElementById('results');
+      resultsDiv.innerHTML = '<div style="margin-top: 20px; color: #666;">Testing transaction setup...</div>';
+      
+      try {
+        const wallet = window.solana || window.solflare;
+        
+        if (!wallet) {
+          throw new Error('No wallet found');
+        }
+        
+        if (!wallet.isConnected) {
+          throw new Error('Wallet not connected. Click "Connect Wallet" first.');
+        }
+        
+        if (!wallet.publicKey) {
+          throw new Error('Wallet public key not available');
+        }
+        
+        if (typeof wallet.signTransaction !== 'function') {
+          throw new Error('Wallet does not support signTransaction');
+        }
+        
+        resultsDiv.innerHTML = `
+          <div class="success">
+            <strong>✅ Transaction Setup Valid!</strong>
+            <div style="margin-top: 10px;">
+              <p>✅ Wallet connected</p>
+              <p>✅ Public key available: ${wallet.publicKey.toString().substring(0, 8)}...</p>
+              <p>✅ signTransaction method available</p>
+              <p>✅ signAllTransactions method available</p>
+            </div>
+            <div class="code-box">
+// This is what Jupiter should receive:
+passThroughWallet: {
+  publicKey: "${wallet.publicKey.toString()}",
+  isConnected: ${wallet.isConnected},
+  signTransaction: function,
+  signAllTransactions: function
+}
+            </div>
+          </div>
+        `;
+      } catch (error) {
+        resultsDiv.innerHTML = `
+          <div class="warning">
+            <strong>❌ Transaction Setup Issue</strong>
+            <p style="margin-top: 10px;">${error.message}</p>
+            <p style="margin-top: 10px;"><strong>Solution:</strong> ${getSolution(error.message)}</p>
+          </div>
+        `;
+      }
+    }
+    
+    function getSolution(errorMsg) {
+      if (errorMsg.includes('not connected')) {
+        return 'Click the "Connect Wallet" button above.';
+      }
+      if (errorMsg.includes('No wallet found')) {
+        return 'Install Phantom or Solflare browser extension.';
+      }
+      if (errorMsg.includes('public key')) {
+        return 'Try disconnecting and reconnecting your wallet.';
+      }
+      if (errorMsg.includes('signTransaction')) {
+        return 'Your wallet extension may be outdated. Try updating it.';
+      }
+      return 'Try refreshing the page and reconnecting your wallet.';
+    }
+    
+    // Auto-check on load
+    checkStatus();
+    
+    // Auto-refresh every 2 seconds
+    setInterval(checkStatus, 2000);
+  </script>
+</body>
+</html>

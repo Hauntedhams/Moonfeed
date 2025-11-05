@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
+import MobileOptimizer from '../utils/mobileOptimizer';
 
 const DexScreenerChart = ({ coin, isPreview = false, autoLoad = false }) => {
   // 🔥 MOBILE PERFORMANCE FIX: Detect mobile device
-  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  const isMobile = MobileOptimizer.isMobile;
   
   // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURNS
   const [isLoading, setIsLoading] = useState(true);
@@ -13,6 +14,7 @@ const DexScreenerChart = ({ coin, isPreview = false, autoLoad = false }) => {
   const [showIframe, setShowIframe] = useState(!isMobile || autoLoad); 
   const iframeRef = useRef(null);
   const timeoutRef = useRef(null);
+  const cleanupRegisteredRef = useRef(false);
 
   // Optimize the URL for faster loading with full chart visibility
   const chartUrl = `https://dexscreener.com/${coin.chainId}/${coin.pairAddress || coin.tokenAddress}?embed=1&theme=dark&trades=0&info=0&interval=5m&chart=1&header=0&utm_source=moonfeed&utm_medium=embed&layout=base`;
@@ -56,16 +58,37 @@ const DexScreenerChart = ({ coin, isPreview = false, autoLoad = false }) => {
     };
   }, [chartUrl, isLoading, showIframe]);
 
-  // EFFECT 2: Mobile memory management - cleanup iframe when user navigates away
+  // EFFECT 2: Mobile memory management - aggressive cleanup
   useEffect(() => {
-    if (isMobile && showIframe) {
+    if (isMobile && showIframe && !cleanupRegisteredRef.current) {
       console.log('📊 DexScreener chart loaded for', coin.symbol);
       
+      // Register cleanup with optimizer
+      MobileOptimizer.registerCleanup(`Chart-${coin.symbol}`, () => {
+        if (iframeRef.current) {
+          MobileOptimizer.destroyIframe(iframeRef);
+        }
+      });
+      cleanupRegisteredRef.current = true;
+      
       return () => {
-        console.log('🧹 Cleaning up DexScreener chart for', coin.symbol);
+        console.log('🧹 Aggressively cleaning up DexScreener chart for', coin.symbol);
+        
+        // Destroy iframe immediately
+        if (iframeRef.current) {
+          MobileOptimizer.destroyIframe(iframeRef);
+        }
+        
+        // Clear timeout
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current);
+        }
+        
+        // Reset states
         setShowIframe(false);
         setIsLoading(true);
         setHasError(false);
+        cleanupRegisteredRef.current = false;
       };
     }
   }, [isMobile, showIframe, coin.symbol]);
