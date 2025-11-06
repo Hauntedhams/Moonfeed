@@ -953,6 +953,18 @@ const CoinCard = memo(({
     };
   }, []); // Empty deps - only run on mount/unmount
 
+  // Banner modal handlers
+  const handleBannerClick = (e) => {
+    if (coin.banner || coin.bannerImage || coin.header || coin.bannerUrl) {
+      e.stopPropagation(); // Prevent event bubbling
+      setShowBannerModal(true);
+    }
+  };
+
+  const closeBannerModal = () => {
+    setShowBannerModal(false);
+  };
+
   // Profile modal handlers
   const handleProfileClick = (e) => {
     e.preventDefault();
