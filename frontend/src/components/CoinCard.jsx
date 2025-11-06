@@ -16,6 +16,7 @@ import {
   getGraduationColor 
 } from '../utils/graduationCalculator.js';
 import debug from '../utils/debug.js';
+import { rafManager, eventListenerManager, cleanupManager } from '../utils/mobileOptimizations.js';
 
 const CoinCard = memo(({ 
   coin, 
@@ -30,6 +31,9 @@ const CoinCard = memo(({
   autoLoadTransactions = false, // NEW: auto-load transactions when true
   onEnrichmentComplete = null // Callback when enrichment completes
 }) => {
+  // Generate unique component ID for cleanup tracking
+  const componentId = useRef(`coincard-${coin.mintAddress || coin.address || Math.random()}`).current;
+  
   const [isExpanded, setIsExpanded] = useState(false);
   const [showBannerModal, setShowBannerModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -771,30 +775,25 @@ const CoinCard = memo(({
       });
     };
 
-    // Touch handling - Optimized for smooth mobile scrolling
+    // Touch handling - Optimized for smooth mobile scrolling with RAF manager
     let touchStartX = 0;
     let touchStartScrollLeft = 0;
     let isTouch = false;
-    let rafId = null;
+    const rafId = `${componentId}-touch`;
 
     const handleTouchStart = (e) => {
       isTouch = true;
       touchStartX = e.touches[0].clientX;
       touchStartScrollLeft = chartsContainer.scrollLeft;
       // Cancel any ongoing animation
-      if (rafId) {
-        cancelAnimationFrame(rafId);
-        rafId = null;
-      }
+      rafManager.cancel(rafId);
     };
 
     const handleTouchMove = (e) => {
       if (!isTouch) return;
       
-      // Use requestAnimationFrame for smoother scrolling
-      if (rafId) return; // Skip if animation frame is already pending
-      
-      rafId = requestAnimationFrame(() => {
+      // Use RAF manager for smoother scrolling and automatic cleanup
+      rafManager.request(() => {
         const deltaX = touchStartX - e.touches[0].clientX;
         const maxScrollLeft = chartsContainer.scrollWidth - chartsContainer.clientWidth;
         
@@ -802,9 +801,7 @@ const CoinCard = memo(({
           touchStartScrollLeft + deltaX,
           maxScrollLeft
         ));
-        
-        rafId = null;
-      });
+      }, rafId);
       
       // Only prevent default for horizontal swipes to allow native scrolling feel
       const deltaX = Math.abs(touchStartX - e.touches[0].clientX);
@@ -817,10 +814,10 @@ const CoinCard = memo(({
     const handleTouchEnd = () => {
       if (!isTouch) return;
       isTouch = false;
-      // Snap to page with smooth animation
-      requestAnimationFrame(() => {
+      // Snap to page with smooth animation using RAF manager
+      rafManager.request(() => {
         snapToNearestPage();
-      });
+      }, `${rafId}-snap`);
     };
 
     // Mouse drag handling - Optimized with RAF
@@ -828,6 +825,13 @@ const CoinCard = memo(({
     let dragStartX = 0;
     let dragStartScrollLeft = 0;
     let dragRafId = null;
+
+    const handleMouseDown = (e) => {
+    // Mouse drag handling - Optimized with RAF manager
+    let isDragging = false;
+    let dragStartX = 0;
+    let dragStartScrollLeft = 0;
+    const dragRafId = `${componentId}-drag`;
 
     const handleMouseDown = (e) => {
       isDragging = true;
@@ -840,10 +844,8 @@ const CoinCard = memo(({
     const handleMouseMove = (e) => {
       if (!isDragging) return;
       
-      // Use requestAnimationFrame for smooth dragging
-      if (dragRafId) return;
-      
-      dragRafId = requestAnimationFrame(() => {
+      // Use RAF manager for smooth dragging and automatic cleanup
+      rafManager.request(() => {
         const deltaX = dragStartX - e.clientX;
         const maxScrollLeft = chartsContainer.scrollWidth - chartsContainer.clientWidth;
         
@@ -851,9 +853,7 @@ const CoinCard = memo(({
           dragStartScrollLeft + deltaX,
           maxScrollLeft
         ));
-        
-        dragRafId = null;
-      });
+      }, dragRafId);
       
       e.preventDefault();
     };
@@ -862,18 +862,11 @@ const CoinCard = memo(({
       if (!isDragging) return;
       isDragging = false;
       navContainer.style.cursor = 'grab';
-      // Snap to page with smooth animation
-      requestAnimationFrame(() => {
+      // Snap to page with smooth animation using RAF manager
+      rafManager.request(() => {
         snapToNearestPage();
-      });
-    };
-
-    // Wheel/trackpad handling - clean and fast
-    const handleWheel = (e) => {
-      // Horizontal scroll (trackpad two-finger swipe left/right)
-      if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && Math.abs(e.deltaX) > 1) {
-        const maxScroll = chartsContainer.scrollWidth - chartsContainer.clientWidth;
-        chartsContainer.scrollLeft = Math.max(0, Math.min(
+      }, `${dragRafId}-snap`);
+    };  chartsContainer.scrollLeft = Math.max(0, Math.min(
           chartsContainer.scrollLeft + e.deltaX, 
           maxScroll
         ));
@@ -903,25 +896,51 @@ const CoinCard = memo(({
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
 
-    return () => {
-      // Clean up animation frames
-      if (rafId) cancelAnimationFrame(rafId);
-      if (dragRafId) cancelAnimationFrame(dragRafId);
-      
-      navContainer.removeEventListener('touchstart', handleTouchStart);
-      navContainer.removeEventListener('touchmove', handleTouchMove);
-      navContainer.removeEventListener('touchend', handleTouchEnd);
-      navContainer.removeEventListener('mousedown', handleMouseDown);
-      navContainer.removeEventListener('wheel', handleWheel);
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isVisible, isExpanded]);
+    // Attach listeners using event listener manager for automatic cleanup tracking
+    eventListenerManager.add(navContainer, 'touchstart', handleTouchStart, { passive: false }, componentId);
+    eventListenerManager.add(navContainer, 'touchmove', handleTouchMove, { passive: false }, componentId);
+    eventListenerManager.add(navContainer, 'touchend', handleTouchEnd, { passive: true }, componentId);
+    eventListenerManager.add(navContainer, 'mousedown', handleMouseDown, undefined, componentId);
+    eventListenerManager.add(navContainer, 'wheel', handleWheel, { passive: false }, componentId);
+    eventListenerManager.add(document, 'mousemove', handleMouseMove, undefined, componentId);
+    eventListenerManager.add(document, 'mouseup', handleMouseUp, undefined, componentId);
 
-  // Component cleanup on unmount
+    return () => {
+      // Clean up all RAF IDs for this component
+      rafManager.cancel(rafId);
+      rafManager.cancel(`${rafId}-snap`);
+      rafManager.cancel(dragRafId);
+      rafManager.cancel(`${dragRafId}-snap`);
+      
+      // Clean up all event listeners for this component
+      eventListenerManager.remove(componentId);
+    };
+      // Reset ALL state to free memory
+      setPriceFlash('');
+      setShowBannerModal(false);
+      setShowProfileModal(false);
+      setShowPriceChangeModal(false);
+      setShowLiveTransactions(false);
+      setShowTopTraders(false);
+  // Component cleanup on unmount - CRITICAL FOR MOBILE
   useEffect(() => {
+    // Register cleanup function
+    cleanupManager.register(componentId, () => {
+      // Cancel all RAF for this component
+      rafManager.cancel(`${componentId}-touch`);
+      rafManager.cancel(`${componentId}-touch-snap`);
+      rafManager.cancel(`${componentId}-drag`);
+      rafManager.cancel(`${componentId}-drag-snap`);
+      
+      // Remove all event listeners
+      eventListenerManager.remove(componentId);
+    });
+
     return () => {
       // 🔥 MOBILE PERFORMANCE: Aggressive cleanup on unmount
+      // Execute registered cleanup
+      cleanupManager.cleanup(componentId);
+      
       // Clear any remaining refs
       if (prevPriceRef.current !== null) {
         prevPriceRef.current = null;
@@ -943,23 +962,12 @@ const CoinCard = memo(({
         clearTransactions();
       }
       
-      // Log cleanup for debugging
+      // Log cleanup for debugging (dev only)
       if (import.meta.env.DEV) {
-        debug.log(`🗑️ CoinCard unmounted and cleaned up: ${coin.symbol}`);
+        console.log(`🧹 CoinCard cleanup: ${coin.symbol}`);
       }
     };
-  }, []);
-
-  // Banner modal handlers
-  const handleBannerClick = (e) => {
-    if (coin.banner || coin.bannerImage || coin.header || coin.bannerUrl) {
-      e.stopPropagation(); // Prevent event bubbling
-      setShowBannerModal(true);
-    }
-  };
-
-  const closeBannerModal = () => {
-    setShowBannerModal(false);
+  }, []); // Empty deps - only run on mount/unmount
   };
 
   // Profile modal handlers

@@ -9,6 +9,7 @@ import { TrackedWalletsProvider } from './contexts/TrackedWalletsContext'
 import { DarkModeProvider } from './contexts/DarkModeContext'
 import ReferralTracker from './utils/ReferralTracker'
 import MobileOptimizer from './utils/mobileOptimizer'
+import { initializePerformanceMonitoring } from './utils/mobileOptimizations'
 
 // Lazy load heavy components that aren't needed immediately
 const WalletDebug = lazy(() => import('./components/WalletDebug'))
@@ -57,14 +58,18 @@ function App() {
   const [currentCoinIndex, setCurrentCoinIndex] = useState(0); // Current coin index in scroller
   const [totalCoinsInList, setTotalCoinsInList] = useState(0); // Total coins in current list
 
-  // Initialize referral tracking and mobile optimizer on app load
+  // Initialize referral tracking, mobile optimizer, and performance monitoring on app load
   useEffect(() => {
     ReferralTracker.initialize();
+    
+    // Initialize performance monitoring for mobile
+    initializePerformanceMonitoring();
     
     // Log mobile optimizer status
     if (MobileOptimizer.isMobile) {
       console.log('📱 Mobile mode active - aggressive optimizations enabled');
       console.log('💾 Memory:', MobileOptimizer.getMemoryStats());
+      console.log('🔍 Performance monitoring initialized');
     }
   }, []);
 
