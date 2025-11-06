@@ -820,13 +820,6 @@ const CoinCard = memo(({
       }, `${rafId}-snap`);
     };
 
-    // Mouse drag handling - Optimized with RAF
-    let isDragging = false;
-    let dragStartX = 0;
-    let dragStartScrollLeft = 0;
-    let dragRafId = null;
-
-    const handleMouseDown = (e) => {
     // Mouse drag handling - Optimized with RAF manager
     let isDragging = false;
     let dragStartX = 0;
@@ -866,7 +859,14 @@ const CoinCard = memo(({
       rafManager.request(() => {
         snapToNearestPage();
       }, `${dragRafId}-snap`);
-    };  chartsContainer.scrollLeft = Math.max(0, Math.min(
+    };
+
+    // Wheel/trackpad handling - clean and fast
+    const handleWheel = (e) => {
+      // Horizontal scroll (trackpad two-finger swipe left/right)
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && Math.abs(e.deltaX) > 1) {
+        const maxScroll = chartsContainer.scrollWidth - chartsContainer.clientWidth;
+        chartsContainer.scrollLeft = Math.max(0, Math.min(
           chartsContainer.scrollLeft + e.deltaX, 
           maxScroll
         ));
@@ -884,17 +884,6 @@ const CoinCard = memo(({
         e.stopPropagation();
       }
     };
-
-    // Attach listeners - touchstart MUST be non-passive for preventDefault to work
-    navContainer.addEventListener('touchstart', handleTouchStart, { passive: false });
-    navContainer.addEventListener('touchmove', handleTouchMove, { passive: false });
-    navContainer.addEventListener('touchend', handleTouchEnd, { passive: true });
-    navContainer.addEventListener('mousedown', handleMouseDown);
-    navContainer.addEventListener('wheel', handleWheel, { passive: false });
-    
-    // Mouse move/up on document for reliable tracking
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
 
     // Attach listeners using event listener manager for automatic cleanup tracking
     eventListenerManager.add(navContainer, 'touchstart', handleTouchStart, { passive: false }, componentId);
@@ -915,13 +904,8 @@ const CoinCard = memo(({
       // Clean up all event listeners for this component
       eventListenerManager.remove(componentId);
     };
-      // Reset ALL state to free memory
-      setPriceFlash('');
-      setShowBannerModal(false);
-      setShowProfileModal(false);
-      setShowPriceChangeModal(false);
-      setShowLiveTransactions(false);
-      setShowTopTraders(false);
+  }, [isVisible, isExpanded]);
+
   // Component cleanup on unmount - CRITICAL FOR MOBILE
   useEffect(() => {
     // Register cleanup function
@@ -968,7 +952,6 @@ const CoinCard = memo(({
       }
     };
   }, []); // Empty deps - only run on mount/unmount
-  };
 
   // Profile modal handlers
   const handleProfileClick = (e) => {
