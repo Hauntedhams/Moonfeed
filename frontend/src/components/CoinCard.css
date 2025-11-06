@@ -1460,8 +1460,8 @@
   display: flex;
   overflow-x: auto;
   scroll-snap-type: x mandatory;
-  scroll-behavior: auto; /* Changed from smooth - let snap handle it */
-  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth; /* Smooth scrolling for better UX */
+  -webkit-overflow-scrolling: touch; /* Enable momentum scrolling on iOS */
   gap: 0;
   padding: 0;
   margin: 0;
@@ -1469,6 +1469,10 @@
   -ms-overflow-style: none; /* Internet Explorer 10+ */
   overflow-y: visible; /* Allow charts to use full height without clipping */
   position: relative; /* Establish stacking context */
+  /* Optimize scrolling performance on mobile */
+  will-change: scroll-position;
+  transform: translateZ(0); /* Force GPU acceleration */
+  -webkit-transform: translateZ(0);
 }
 
 .charts-horizontal-container::-webkit-scrollbar {
@@ -1478,11 +1482,17 @@
 .chart-page {
   flex: 0 0 100%;
   scroll-snap-align: start;
+  scroll-snap-stop: always; /* Ensure smooth snap behavior on mobile */
   padding: 0; /* 🔥 No padding needed - nav is above, not overlapping */
   box-sizing: border-box;
   min-height: 280px;
   overflow: visible; /* Allow chart to expand beyond container */
   position: relative; /* Establish stacking context */
+  /* Optimize rendering on mobile */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 .chart-page-header {
@@ -3351,6 +3361,7 @@
     height: 100% !important;
     min-height: 100vh !important;
     border-radius: 0 !important;
+    margin: 0 !important;
   }
 
   /* Hide the expand button on desktop split-screen mode */
@@ -3401,5 +3412,44 @@
 @media (min-width: 1600px) {
   .coin-card-left-panel {
     width: 540px;
+  }
+}
+
+/* Mobile-specific optimizations for chart scrolling */
+@media (max-width: 768px) {
+  .charts-horizontal-container {
+    /* Enhanced mobile scrolling */
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain; /* Prevent over-scroll bounce */
+    touch-action: pan-x; /* Only allow horizontal panning */
+  }
+  
+  .chart-nav-hot-area {
+    /* Improve touch responsiveness */
+    touch-action: pan-x;
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  .nav-button {
+    /* Larger touch targets on mobile */
+    min-width: 44px;
+    min-height: 44px;
+    padding: 8px 18px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  .chart-page {
+    /* Optimize page rendering on mobile */
+    will-change: transform;
+    contain: layout style paint; /* Improve rendering performance */
+  }
+}
+
+/* Very smooth scrolling on iOS */
+@supports (-webkit-touch-callout: none) {
+  .charts-horizontal-container {
+    -webkit-overflow-scrolling: touch;
+    scroll-padding: 0;
   }
 }

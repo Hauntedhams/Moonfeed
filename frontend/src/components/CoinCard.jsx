@@ -771,42 +771,63 @@ const CoinCard = memo(({
       });
     };
 
-    // Touch handling
+    // Touch handling - Optimized for smooth mobile scrolling
     let touchStartX = 0;
     let touchStartScrollLeft = 0;
     let isTouch = false;
+    let rafId = null;
 
     const handleTouchStart = (e) => {
       isTouch = true;
       touchStartX = e.touches[0].clientX;
       touchStartScrollLeft = chartsContainer.scrollLeft;
+      // Cancel any ongoing animation
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
     };
 
     const handleTouchMove = (e) => {
       if (!isTouch) return;
       
-      const deltaX = touchStartX - e.touches[0].clientX;
-      const maxScrollLeft = chartsContainer.scrollWidth - chartsContainer.clientWidth;
+      // Use requestAnimationFrame for smoother scrolling
+      if (rafId) return; // Skip if animation frame is already pending
       
-      chartsContainer.scrollLeft = Math.max(0, Math.min(
-        touchStartScrollLeft + deltaX,
-        maxScrollLeft
-      ));
+      rafId = requestAnimationFrame(() => {
+        const deltaX = touchStartX - e.touches[0].clientX;
+        const maxScrollLeft = chartsContainer.scrollWidth - chartsContainer.clientWidth;
+        
+        chartsContainer.scrollLeft = Math.max(0, Math.min(
+          touchStartScrollLeft + deltaX,
+          maxScrollLeft
+        ));
+        
+        rafId = null;
+      });
       
-      e.preventDefault();
-      e.stopPropagation();
+      // Only prevent default for horizontal swipes to allow native scrolling feel
+      const deltaX = Math.abs(touchStartX - e.touches[0].clientX);
+      if (deltaX > 10) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
     };
 
     const handleTouchEnd = () => {
       if (!isTouch) return;
       isTouch = false;
-      snapToNearestPage();
+      // Snap to page with smooth animation
+      requestAnimationFrame(() => {
+        snapToNearestPage();
+      });
     };
 
-    // Mouse drag handling
+    // Mouse drag handling - Optimized with RAF
     let isDragging = false;
     let dragStartX = 0;
     let dragStartScrollLeft = 0;
+    let dragRafId = null;
 
     const handleMouseDown = (e) => {
       isDragging = true;
@@ -819,13 +840,20 @@ const CoinCard = memo(({
     const handleMouseMove = (e) => {
       if (!isDragging) return;
       
-      const deltaX = dragStartX - e.clientX;
-      const maxScrollLeft = chartsContainer.scrollWidth - chartsContainer.clientWidth;
+      // Use requestAnimationFrame for smooth dragging
+      if (dragRafId) return;
       
-      chartsContainer.scrollLeft = Math.max(0, Math.min(
-        dragStartScrollLeft + deltaX,
-        maxScrollLeft
-      ));
+      dragRafId = requestAnimationFrame(() => {
+        const deltaX = dragStartX - e.clientX;
+        const maxScrollLeft = chartsContainer.scrollWidth - chartsContainer.clientWidth;
+        
+        chartsContainer.scrollLeft = Math.max(0, Math.min(
+          dragStartScrollLeft + deltaX,
+          maxScrollLeft
+        ));
+        
+        dragRafId = null;
+      });
       
       e.preventDefault();
     };
@@ -834,7 +862,10 @@ const CoinCard = memo(({
       if (!isDragging) return;
       isDragging = false;
       navContainer.style.cursor = 'grab';
-      snapToNearestPage();
+      // Snap to page with smooth animation
+      requestAnimationFrame(() => {
+        snapToNearestPage();
+      });
     };
 
     // Wheel/trackpad handling - clean and fast
@@ -873,6 +904,10 @@ const CoinCard = memo(({
     document.addEventListener('mouseup', handleMouseUp);
 
     return () => {
+      // Clean up animation frames
+      if (rafId) cancelAnimationFrame(rafId);
+      if (dragRafId) cancelAnimationFrame(dragRafId);
+      
       navContainer.removeEventListener('touchstart', handleTouchStart);
       navContainer.removeEventListener('touchmove', handleTouchMove);
       navContainer.removeEventListener('touchend', handleTouchEnd);
