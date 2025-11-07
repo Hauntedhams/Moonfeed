@@ -417,7 +417,7 @@
   color: white;
   /* Add top padding to account for TopTabs overlay */
   padding-top: 60px;
-  /* Allow clicks to pass through to banner underneath */
+  /* 🔥 FIX: Allow scroll events to pass through */
   pointer-events: none;
 }
 
@@ -426,7 +426,14 @@
   flex-direction: column;
   gap: 6px;
   margin-bottom: 8px;
-  /* Re-enable pointer events for interactive elements */
+  /* 🔥 FIX: Keep pointer events disabled to allow scrolling */
+  pointer-events: none;
+}
+
+/* 🔥 FIX: Only enable pointer events for clickable elements */
+.banner-coin-name.clickable-name,
+.banner-coin-ticker,
+.banner-social-link {
   pointer-events: auto;
 }
 
@@ -535,7 +542,8 @@
   margin: 0;
   flex: 1;
   min-width: 0;
-  pointer-events: auto;
+  /* 🔥 FIX: Allow scroll-through */
+  pointer-events: none;
   /* Single line with ellipsis */
   overflow: hidden;
   text-overflow: ellipsis;
@@ -582,8 +590,8 @@
   line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  /* Allow text to be selectable, but don't block banner clicks */
-  pointer-events: auto;
+  /* 🔥 FIX: Allow scroll-through */
+  pointer-events: none;
 }
 
 
@@ -619,11 +627,13 @@
   z-index: 50; /* Increased z-index to ensure it's above other elements */
   overflow: hidden;
   box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
-  /* Ensure pointer events work */
-  pointer-events: auto;
+  /* 🔥 FIX: Allow scroll-through when not expanded */
+  pointer-events: none;
 }
 
+/* 🔥 FIX: When expanded, enable pointer events for scrolling within */
 .coin-info-layer.expanded {
+  pointer-events: auto;
   transform: translateY(0%);
   height: calc(100dvh - 80px); /* Fill viewport minus bottom nav bar */
 }
@@ -637,15 +647,10 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  /* 🔥 CRITICAL: Don't block events from nav area below */
-  pointer-events: none;
+  /* 🔥 CRITICAL: Re-enable pointer events so expand button works */
+  pointer-events: auto;
   border-bottom: none;
   box-shadow: none;
-}
-
-/* 🔥 Re-enable pointer events for interactive children */
-.info-layer-header > * {
-  pointer-events: auto;
 }
 
 .header-top-row {
@@ -751,12 +756,16 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  /* 🔥 FIX: Inherit pointer-events from parent (pass through when collapsed) */
+  pointer-events: inherit;
 }
 
 .price-section {
   display: flex;
   align-items: flex-start; /* Changed from center - align charts to top */
   gap: 12px;
+  /* 🔥 FIX: Inherit pointer-events from parent (pass through when collapsed) */
+  pointer-events: inherit;
 }
 
 /* 🎓 GRADUATION PROGRESS DISPLAY */
@@ -1187,6 +1196,8 @@
 .social-links-section {
   margin-bottom: 12px;
   padding-top: 8px;
+  /* 🔥 FIX: Inherit pointer-events from parent (pass through when collapsed) */
+  pointer-events: inherit;
 }
 
 .social-links-grid {
@@ -1204,25 +1215,27 @@
   height: calc(100% - 80px);
   opacity: 1; /* Changed from 0.7 to 1 - no graying out */
   transition: opacity 0.3s ease;
-  /* 🔥 CRITICAL: Allow pointer events for clicks but prevent scroll capture */
-  pointer-events: auto;
+  /* 🔥 FIX: Inherit pointer-events from parent (none when collapsed, auto when expanded) */
+  pointer-events: inherit;
   /* Establish proper stacking context */
   position: relative;
   z-index: 55;
   /* 🔥 Prevent overscroll when collapsed - pass scroll to parent */
   overscroll-behavior: none;
   -webkit-overflow-scrolling: touch;
-  /* 🔥 Disable touch scrolling when not expanded - clicks/taps still work */
-  touch-action: none;
+  /* 🔥 FIX: Allow touch scrolling by default so parent can handle it */
+  touch-action: auto;
 }
 
 .coin-info-layer.expanded .info-layer-content {
   overflow-y: auto; /* 🔥 Enable scrolling when expanded */
   height: calc(100% - 80px); /* Allow scrolling through all content */
   opacity: 1;
-  /* 🔥 Re-enable vertical scrolling when expanded */
+  /* 🔥 Enable vertical scrolling when expanded */
   touch-action: pan-y;
   overscroll-behavior: contain;
+  /* 🔥 Ensure pointer events are enabled when expanded */
+  pointer-events: auto;
 }
 
 /* Scrollbar styling for info-layer-content */
@@ -1256,6 +1269,8 @@
   overflow-x: auto;
   padding-bottom: 4px;
   scroll-behavior: smooth;
+  /* 🔥 FIX: Inherit pointer-events from parent (pass through when collapsed) */
+  pointer-events: inherit;
 }
 
 .metrics-grid::-webkit-scrollbar {
@@ -1317,6 +1332,8 @@
   margin-left: -20px;
   margin-right: -20px;
   width: calc(100% + 40px);
+  /* 🔥 FIX: Inherit pointer-events from parent (pass through when collapsed) */
+  pointer-events: inherit;
 }
 
 /* 🔥 HOT SWIPE AREA - Full-width, fixed-height container for natural scroll/drag */
@@ -1329,7 +1346,8 @@
   cursor: grab;
   user-select: none;
   -webkit-user-select: none;
-  pointer-events: auto;
+  /* 🔥 FIX: Allow scroll-through by default, only capture for horizontal chart nav */
+  pointer-events: none;
 }
 
 .chart-nav-hot-area:active {
@@ -1349,6 +1367,13 @@
   background: transparent;
   border-radius: 12px;
   transition: background 0.2s ease;
+  /* 🔥 FIX: Enable pointer events only for child buttons */
+  pointer-events: none;
+}
+
+/* 🔥 FIX: Enable pointer events only for interactive elements */
+.chart-nav-content > .nav-button,
+.chart-nav-content > button {
   pointer-events: auto;
 }
 
@@ -1481,6 +1506,8 @@
   will-change: scroll-position;
   transform: translateZ(0); /* Force GPU acceleration */
   -webkit-transform: translateZ(0);
+  /* 🔥 FIX: Inherit pointer-events from parent (pass through when collapsed) */
+  pointer-events: inherit;
 }
 
 .charts-horizontal-container::-webkit-scrollbar {
@@ -1501,6 +1528,8 @@
   -webkit-transform: translateZ(0);
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
+  /* 🔥 FIX: Inherit pointer-events from parent (pass through when collapsed) */
+  pointer-events: inherit;
 }
 
 .chart-page-header {
@@ -1540,6 +1569,8 @@
   padding: 0; /* Remove any padding */
 
   position: relative; /* Establish stacking context */
+  /* 🔥 FIX: Inherit pointer-events from parent (pass through when collapsed) */
+  pointer-events: inherit;
 }
 
 .advanced-chart-wrapper {
@@ -1576,6 +1607,8 @@
   border-radius: 12px;
   padding: 0;
   transition: all 0.3s ease;
+  /* 🔥 FIX: Inherit pointer-events from parent (pass through when collapsed) */
+  pointer-events: inherit;
 }
 
 .transactions-section:hover {
@@ -1978,6 +2011,8 @@
   border-radius: 12px;
   padding: 0;
   transition: all 0.3s ease;
+  /* 🔥 FIX: Inherit pointer-events from parent (pass through when collapsed) */
+  pointer-events: inherit;
 }
 
 .top-traders-section:hover {
@@ -2054,6 +2089,8 @@
 
 .token-info-grid-section {
   margin-bottom: 24px;
+  /* 🔥 FIX: Inherit pointer-events from parent (pass through when collapsed) */
+  pointer-events: inherit;
 }
 
 .info-grid {
@@ -2061,6 +2098,8 @@
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 16px;
   margin-top: 12px;
+  /* 🔥 FIX: Inherit pointer-events from parent (pass through when collapsed) */
+  pointer-events: inherit;
 }
 
 .info-card {

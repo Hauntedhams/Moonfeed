@@ -1248,18 +1248,20 @@ app.get('/api/coins/custom', async (req, res) => {
   }
 });
 
-// GRADUATING endpoint - Returns Pump.fun tokens about to graduate (from Bitquery)
+// GRADUATING endpoint - Returns Pump.fun tokens about to graduate
+// 🆕 NOW USING MORALIS API (replaced BitQuery on Nov 7, 2025)
+// Returns tokens with 70-100% bonding curve progress, sorted by graduation score
 app.get('/api/coins/graduating', async (req, res) => {
   try {
-    console.log('🎓 /api/coins/graduating endpoint called');
+    console.log('🎓 /api/coins/graduating endpoint called (Moralis API)');
     
     const limit = req.query.limit ? Math.min(parseInt(req.query.limit), 100) : 100;
     
-    // Import bitquery service
-    const bitqueryService = require('./bitqueryService');
+    // Use Moralis service for graduating tokens
+    const moralisService = require('./moralisService');
     
-    // Fetch graduating tokens from Bitquery
-    const graduatingTokens = await bitqueryService.getGraduatingTokens();
+    // Fetch graduating tokens from Moralis
+    const graduatingTokens = await moralisService.getGraduatingTokens();
     
     if (graduatingTokens.length === 0) {
       console.log('⚠️ No graduating tokens found');
@@ -1306,8 +1308,8 @@ app.get('/api/coins/graduating', async (req, res) => {
       total: graduatingTokens.length,
       timestamp: new Date().toISOString(),
       criteria: {
-        source: 'Bitquery Pump.fun',
-        status: 'About to graduate',
+        source: 'Moralis Pump.fun',
+        status: 'About to graduate (>70% bonding progress)',
         sorting: 'Best to worst (by graduation score)',
         updateFrequency: '2 minutes'
       }
