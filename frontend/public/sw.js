@@ -1,11 +1,11 @@
 // Service Worker for Moonfeed PWA
-const CACHE_NAME = 'moonfeed-v1';
+const CACHE_NAME = 'moonfeed-v2'; // Updated version to force cache refresh
 const urlsToCache = [
   '/',
   '/index.html',
-  '/src/main.jsx',
   '/favicon-32x32.png',
   '/favicon-16x16.png'
+  // Removed /src/main.jsx as it doesn't exist in production build
 ];
 
 // Install event - cache static assets
