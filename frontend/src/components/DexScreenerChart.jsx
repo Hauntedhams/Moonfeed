@@ -16,8 +16,32 @@ const DexScreenerChart = ({ coin, isPreview = false, autoLoad = false }) => {
   const timeoutRef = useRef(null);
   const cleanupRegisteredRef = useRef(false);
 
-  // Optimize the URL for faster loading with full chart visibility
+  // 🚀 OPTIMIZED URL: Minimal params for fastest loading
+  // Remove unnecessary features to reduce load time
   const chartUrl = `https://dexscreener.com/${coin.chainId}/${coin.pairAddress || coin.tokenAddress}?embed=1&theme=dark&trades=0&info=0&interval=5m&chart=1&header=0&utm_source=moonfeed&utm_medium=embed&layout=base`;
+  
+  // 🆕 SPEED OPTIMIZATION: DNS prefetch and preconnect for DexScreener
+  useEffect(() => {
+    // Only run once on mount
+    const head = document.head;
+    
+    // DNS prefetch - resolve domain name early
+    if (!document.querySelector('link[rel="dns-prefetch"][href*="dexscreener"]')) {
+      const dnsPrefetch = document.createElement('link');
+      dnsPrefetch.rel = 'dns-prefetch';
+      dnsPrefetch.href = 'https://dexscreener.com';
+      head.appendChild(dnsPrefetch);
+    }
+    
+    // Preconnect - establish connection early (DNS + TCP + TLS)
+    if (!document.querySelector('link[rel="preconnect"][href*="dexscreener"]')) {
+      const preconnect = document.createElement('link');
+      preconnect.rel = 'preconnect';
+      preconnect.href = 'https://dexscreener.com';
+      preconnect.crossOrigin = 'anonymous';
+      head.appendChild(preconnect);
+    }
+  }, []); // Run once
 
   // 🆕 AUTO-LOAD EFFECT: When autoLoad becomes true, trigger iframe loading
   useEffect(() => {
@@ -28,33 +52,54 @@ const DexScreenerChart = ({ coin, isPreview = false, autoLoad = false }) => {
     }
   }, [autoLoad, isMobile, showIframe, coin.symbol]);
 
-  // EFFECT 1: Preload and timeout
+  // EFFECT 1: Aggressive preloading for faster iframe startup
   useEffect(() => {
     if (!showIframe) return; // Skip if iframe is not shown yet
     
-    // Preload the iframe URL to warm up the connection
-    const link = document.createElement('link');
-    link.rel = 'preload';
-    link.href = chartUrl;
-    link.as = 'document';
-    document.head.appendChild(link);
+    // 🚀 SPEED HACK: Preload critical resources
+    const head = document.head;
+    const resources = [];
+    
+    // Preload the main page
+    const pagePreload = document.createElement('link');
+    pagePreload.rel = 'preload';
+    pagePreload.href = chartUrl;
+    pagePreload.as = 'document';
+    head.appendChild(pagePreload);
+    resources.push(pagePreload);
+    
+    // Preconnect to chart data CDN
+    const cdnPreconnect = document.createElement('link');
+    cdnPreconnect.rel = 'preconnect';
+    cdnPreconnect.href = 'https://cdn.dexscreener.com';
+    head.appendChild(cdnPreconnect);
+    resources.push(cdnPreconnect);
+    
+    // Preconnect to API endpoints
+    const apiPreconnect = document.createElement('link');
+    apiPreconnect.rel = 'preconnect';
+    apiPreconnect.href = 'https://api.dexscreener.com';
+    head.appendChild(apiPreconnect);
+    resources.push(apiPreconnect);
 
-    // Set a timeout to show error if chart doesn't load within 8 seconds
+    // Set a timeout to show error if chart doesn't load within 6 seconds (reduced from 8)
     timeoutRef.current = setTimeout(() => {
       if (isLoading) {
         setHasError(true);
         setIsLoading(false);
       }
-    }, 8000);
+    }, 6000); // Reduced timeout
 
     return () => {
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
       }
-      // Clean up preload link
-      if (document.head.contains(link)) {
-        document.head.removeChild(link);
-      }
+      // Clean up all preload resources
+      resources.forEach(resource => {
+        if (head.contains(resource)) {
+          head.removeChild(resource);
+        }
+      });
     };
   }, [chartUrl, isLoading, showIframe]);
 
@@ -450,6 +495,8 @@ const DexScreenerChart = ({ coin, isPreview = false, autoLoad = false }) => {
         title={`${coin.symbol} Chart`}
         allow="fullscreen"
         loading="eager"
+        importance="high"
+        fetchpriority="high"
         frameBorder="0"
         onLoad={handleLoad}
         onError={handleError}

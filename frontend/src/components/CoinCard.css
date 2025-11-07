@@ -219,7 +219,8 @@
 
   /* Make charts section smaller in left panel since main chart is on right */
   .coin-card-left-panel .charts-section {
-    min-height: 180px !important;
+    /* Hide charts section completely in desktop mode - chart is on right panel */
+    display: none !important;
   }
 
   .coin-card-left-panel .price-history-wrapper,
@@ -249,13 +250,19 @@
     padding: 14px;
   }
 
+  /* Tighten spacing in desktop mode - bring header closer to profile/price */
+  .coin-card-left-panel .info-layer-header {
+    padding: 12px 20px 4px; /* Reduced top padding from 16px to 12px */
+  }
+
+  .coin-card-left-panel .desktop-coin-header {
+    padding: 4px 20px 8px 20px; /* Reduced top padding and margin */
+    margin-top: -4px; /* Pull even closer in desktop left panel */
+  }
+
   /* Make metrics more compact */
   .coin-card-left-panel .header-metrics {
     gap: 8px;
-  }
-
-  .coin-card-left-panel .header-metric {
-    padding: 8px 12px;
   }
 }
 
@@ -590,8 +597,9 @@
 /* Desktop-only coin header in info layer - hidden on mobile */
 .desktop-coin-header {
   display: none; /* Hidden by default on mobile */
-  padding: 0 20px 16px 20px;
+  padding: 0 20px 8px 20px; /* Reduced bottom padding from 16px to 8px */
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  margin-top: -8px; /* Pull up closer to the header */
 }
 
 .coin-info-layer {
@@ -3384,7 +3392,13 @@
 
   /* Make charts section take less space in left panel since main chart is on right */
   .coin-card-left-panel .charts-section {
-    min-height: 200px;
+    /* Hide charts section completely in desktop mode - chart is on right panel */
+    display: none !important;
+  }
+
+  .coin-card-left-panel .price-history-wrapper,
+  .coin-card-left-panel .advanced-chart-wrapper {
+    height: 150px !important;
   }
 
   /* Style the chart placeholder in left panel */

@@ -5,6 +5,23 @@
 
 const isDev = import.meta.env.DEV;
 
+// 🔇 Filter out third-party iframe warnings (e.g., from Dexscreener)
+if (isDev) {
+  const originalWarn = console.warn;
+  console.warn = (...args) => {
+    // Filter out Dexscreener iframe warnings
+    const message = args[0]?.toString() || '';
+    if (
+      message.includes('dexscreener.com') ||
+      message.includes('pages_catch-all') ||
+      message.includes('Encountered two children with the same key')
+    ) {
+      return; // Suppress third-party warnings
+    }
+    originalWarn.apply(console, args);
+  };
+}
+
 export const debug = {
   /**
    * Log only in development mode

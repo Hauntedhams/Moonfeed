@@ -532,7 +532,7 @@ const PriceHistoryChart = ({ coin, width, height = 200, onPriceHover }) => {
 
     // Calculate dimensions - Minimal padding (no left padding since we removed price labels)
     const padding = { top: 10, right: 10, bottom: 35, left: 10 }; // Reduced left from 55 to 10
-    const chartWidth = containerWidth - padding.left - padding.right;
+    const drawableWidth = containerWidth - padding.left - padding.right;
     const chartHeight = containerHeight - padding.top - padding.bottom;
 
     // Find min/max for scaling with slight padding
@@ -607,7 +607,7 @@ const PriceHistoryChart = ({ coin, width, height = 200, onPriceHover }) => {
     for (let i = 0; i <= numXLabels; i++) {
       const dataIndex = Math.floor((dataPoints.length - 1) * i / numXLabels);
       const point = dataPoints[dataIndex];
-      const xPos = padding.left + (chartWidth * i / numXLabels);
+      const xPos = padding.left + (drawableWidth * i / numXLabels);
       
       // Format time
       const date = new Date(point.timestamp);
@@ -618,14 +618,14 @@ const PriceHistoryChart = ({ coin, width, height = 200, onPriceHover }) => {
 
     // Build path points - Adjust for padding
     const points = dataPoints.map((point, index) => {
-      const x = padding.left + (index / (dataPoints.length - 1)) * chartWidth;
+      const x = padding.left + (index / (dataPoints.length - 1)) * drawableWidth;
       const y = padding.top + (1 - (point.price - minPrice) / priceRange) * chartHeight;
       return { x, y };
     });
 
     // Debug: Log actual drawing coordinates
     debugLog('📍 [CHART COORDINATES]', {
-      chartWidth,
+      drawableWidth,
       chartHeight, 
       padding,
       firstPoint: points[0],

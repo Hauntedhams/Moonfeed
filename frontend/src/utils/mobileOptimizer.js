@@ -85,7 +85,7 @@ export const MobileOptimizer = {
     }
   },
 
-  // Destroy iframe safely
+  // Destroy iframe safely - LET REACT HANDLE DOM REMOVAL
   destroyIframe(iframeRef) {
     if (!iframeRef || !iframeRef.current) return;
 
@@ -94,20 +94,25 @@ export const MobileOptimizer = {
       
       // Stop loading
       if (iframe.contentWindow) {
-        iframe.contentWindow.stop();
+        try {
+          iframe.contentWindow.stop();
+        } catch (e) {
+          // Cross-origin iframe, can't stop
+        }
       }
 
-      // Clear src
+      // Clear src to unload content and free memory
       iframe.src = 'about:blank';
       
-      // Remove from DOM
-      if (iframe.parentNode) {
-        iframe.parentNode.removeChild(iframe);
-      }
+      // ❌ DON'T REMOVE FROM DOM - Let React handle it
+      // This was causing: "Failed to execute 'removeChild' on 'Node'"
+      // if (iframe.parentNode) {
+      //   iframe.parentNode.removeChild(iframe);
+      // }
 
-      console.log('🧹 iframe destroyed');
+      console.log('🧹 iframe cleaned (React will remove from DOM)');
     } catch (err) {
-      console.error('Error destroying iframe:', err);
+      console.error('Error cleaning iframe:', err);
     }
   },
 

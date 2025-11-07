@@ -84,18 +84,6 @@ const CoinCard = memo(({
     if (isMobile || !isVisible || !address) return null;
     const data = coins?.get(address) || null;
     
-    // 🐛 DEBUG: Always log for coins with Jupiter live pricing
-    if (data?.jupiterLive) {
-      console.log(`🔄 [CoinCard] liveData computed for ${coin.symbol}:`, {
-        address: address?.substring(0, 8),
-        price: data.price,
-        jupiterLive: data.jupiterLive,
-        coinsMapSize: coins?.size,
-        updateCount,
-        timestamp: new Date().toISOString()
-      });
-    }
-    
     return data;
   }, [isMobile, isVisible, address, coins, coin.symbol, updateCount]); // ← Added updateCount
   
@@ -109,20 +97,6 @@ const CoinCard = memo(({
   const livePrice = liveData?.price;
   const fallbackPrice = coin.price_usd || coin.priceUsd || coin.price || 0;
   const displayPrice = livePrice || fallbackPrice;
-  
-  // 🐛 DEBUG: Log when displayPrice value changes (only when Jupiter live is active)
-  if (liveData?.jupiterLive && import.meta.env.DEV) {
-    console.log(`💰 [CoinCard] ${coin.symbol} displayPrice:`, {
-      address: address?.substring(0, 8),
-      livePrice,
-      fallbackPrice,
-      displayPrice,
-      hasLiveData: !!liveData,
-      jupiterLive: true,
-      updateCount,
-      timestamp: new Date().toISOString()
-    });
-  }
   
   // Helius live transactions - auto-load when autoLoadTransactions is true
   const mintAddress = coin.mintAddress || coin.mint || coin.address || coin.contract_address || coin.contractAddress || coin.tokenAddress;

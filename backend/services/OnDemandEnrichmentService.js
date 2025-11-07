@@ -8,12 +8,39 @@
  * - Priority queue for active coins
  * - Graceful degradation if APIs fail
  * - Minimal code, maximum efficiency
+ * 
+ * Performance Optimizations:
+ * - HTTP connection pooling for faster requests
+ * - Parallel rugcheck start (no blocking)
+ * - Aggressive timeouts (2s rugcheck wait, 3s fetch)
  */
 
 const fetch = require('node-fetch');
+const http = require('http');
+const https = require('https');
 const pumpFunService = require('./pumpFunService');
 const jupiterBatchService = require('./JupiterBatchService');
 const CompactCacheStorage = require('./CompactCacheStorage');
+
+// 🚀 PERFORMANCE: HTTP connection pooling for faster requests
+const httpAgent = new http.Agent({
+  keepAlive: true,
+  maxSockets: 50,
+  maxFreeSockets: 10,
+  timeout: 60000,
+  keepAliveMsecs: 30000
+});
+
+const httpsAgent = new https.Agent({
+  keepAlive: true,
+  maxSockets: 50,
+  maxFreeSockets: 10,
+  timeout: 60000,
+  keepAliveMsecs: 30000
+});
+
+// Helper to get appropriate agent for URL
+const getAgent = (url) => url.startsWith('https:') ? httpsAgent : httpAgent;
 
 class OnDemandEnrichmentService {
   constructor() {
@@ -87,16 +114,19 @@ class OnDemandEnrichmentService {
     this.stats.cacheMisses++;
     const startTime = Date.now();
 
-    console.log(`🔄 Enriching ${coin.symbol || mintAddress} on-demand (PROGRESSIVE MODE)...`);
+    console.log(`🔄 Enriching ${coin.symbol || mintAddress} on-demand (PARALLEL MODE)...`);
 
     try {
-      // � PHASE 1: Fast APIs (DexScreener, Jupiter, Pump.fun) - Return immediately
-      // These provide: price, chart, MC, liquidity, holders, description
+      // 🚀 PHASE 1: Fast APIs (DexScreener, Jupiter, Pump.fun) + Rugcheck (parallel start)
+      // Start ALL APIs in parallel, but only wait for fast ones
       const fastApis = {
         dex: this.fetchDexScreener(mintAddress),
         jupiter: jupiterBatchService.getTokenData(mintAddress),
         pumpfun: this.fetchPumpFunDescription(mintAddress)
       };
+
+      // 🆕 OPTIMIZATION: Start rugcheck immediately in parallel (don't wait for it yet)
+      const rugcheckPromise = this.fetchRugcheck(mintAddress);
 
       // Wait for fast APIs only (don't wait for rugcheck)
       const fastResults = await Promise.race([
@@ -179,16 +209,17 @@ class OnDemandEnrichmentService {
         console.warn(`⚠️ No valid price for ${coin.symbol}, cannot generate chart`);
       }
 
-      // 🚀 PHASE 2: Try to get rugcheck data quickly (with timeout)
-      // Give rugcheck 5 seconds to respond, otherwise return without it
-      console.log(`🔐 Phase 2: Fetching rugcheck for ${coin.symbol}...`);
+      // 🚀 PHASE 2: Wait for rugcheck with aggressive timeout
+      // 🆕 OPTIMIZATION: Only wait 2s for rugcheck (it already started in parallel)
+      // Rugcheck has 800ms head start from Phase 1, so effective timeout is ~2.8s
+      console.log(`🔐 Phase 2: Checking rugcheck for ${coin.symbol} (already started in parallel)...`);
       
       try {
-        const rugcheckPromise = this.fetchRugcheck(mintAddress);
         const rugcheckTimeout = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Rugcheck timeout')), 5000)
+          setTimeout(() => reject(new Error('Rugcheck timeout')), 2000)
         );
         
+        // Wait max 2 seconds for rugcheck (it already has ~800ms head start from Phase 1)
         const rugData = await Promise.race([rugcheckPromise, rugcheckTimeout]);
         
         if (rugData) {
@@ -326,7 +357,8 @@ class OnDemandEnrichmentService {
     try {
       const response = await fetch(`${this.apis.dexscreener}/dex/tokens/${mintAddress}`, {
         headers: { 'User-Agent': 'Moonfeed/1.0' },
-        timeout: 3000
+        timeout: 3000,
+        agent: getAgent(`${this.apis.dexscreener}/dex/tokens/${mintAddress}`)
       });
 
       if (!response.ok) {
@@ -368,13 +400,14 @@ class OnDemandEnrichmentService {
     try {
       console.log(`🔐 Fetching rugcheck for ${mintAddress}...`);
       
-      // Give rugcheck 5 seconds to respond
+      // 🆕 OPTIMIZATION: Reduced timeout from 5s to 3s for faster failure
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout
+      const timeoutId = setTimeout(() => controller.abort(), 3000); // 3s timeout (down from 5s)
       
       let response = await fetch(`${this.apis.rugcheck}/tokens/${mintAddress}/report`, {
         headers: { 'Accept': 'application/json' },
-        signal: controller.signal
+        signal: controller.signal,
+        agent: getAgent(`${this.apis.rugcheck}/tokens/${mintAddress}/report`)
       });
 
       clearTimeout(timeoutId);
@@ -385,11 +418,12 @@ class OnDemandEnrichmentService {
         // Fallback to alternative endpoint
         console.log(`🔐 Trying rugcheck fallback endpoint...`);
         const controller2 = new AbortController();
-        const timeoutId2 = setTimeout(() => controller2.abort(), 5000); // 5s timeout
+        const timeoutId2 = setTimeout(() => controller2.abort(), 3000); // 3s timeout (down from 5s)
         
         response = await fetch(`${this.apis.rugcheck}/tokens/${mintAddress}`, {
           headers: { 'Accept': 'application/json' },
-          signal: controller2.signal
+          signal: controller2.signal,
+          agent: getAgent(`${this.apis.rugcheck}/tokens/${mintAddress}`)
         });
         
         clearTimeout(timeoutId2);
@@ -417,7 +451,7 @@ class OnDemandEnrichmentService {
       return data;
     } catch (error) {
       if (error.name === 'AbortError') {
-        console.warn(`⏰ Rugcheck timeout for ${mintAddress} (took > 5s)`);
+        console.warn(`⏰ Rugcheck timeout for ${mintAddress} (took > 3s)`);
       } else {
         console.warn(`⚠️ Rugcheck failed for ${mintAddress}:`, error.message);
       }
@@ -443,16 +477,15 @@ class OnDemandEnrichmentService {
    */
   async fetchBirdeyePrice(mintAddress) {
     try {
-      const response = await fetch(
-        `${this.apis.birdeye}/defi/price?address=${mintAddress}`,
-        {
-          headers: {
-            'X-API-KEY': this.birdeyeKey,
-            'x-chain': 'solana'
-          },
-          timeout: 3000
-        }
-      );
+      const url = `${this.apis.birdeye}/defi/price?address=${mintAddress}`;
+      const response = await fetch(url, {
+        headers: {
+          'X-API-KEY': this.birdeyeKey,
+          'x-chain': 'solana'
+        },
+        timeout: 3000,
+        agent: getAgent(url)
+      });
 
       if (!response.ok) {
         throw new Error(`Birdeye API returned ${response.status}`);
@@ -472,14 +505,13 @@ class OnDemandEnrichmentService {
    */
   async fetchJupiterUltra(mintAddress) {
     try {
-      const response = await fetch(
-        `https://lite-api.jup.ag/ultra/v1/search?query=${mintAddress}`,
-        {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
-          timeout: 3000
-        }
-      );
+      const url = `https://lite-api.jup.ag/ultra/v1/search?query=${mintAddress}`;
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 3000,
+        agent: getAgent(url)
+      });
 
       if (!response.ok) {
         throw new Error(`Jupiter Ultra API returned ${response.status}`);

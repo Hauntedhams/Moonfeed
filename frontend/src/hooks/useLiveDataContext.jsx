@@ -29,11 +29,7 @@ export function LiveDataProvider({ children }) {
     coinsState = typeof updater === 'function' ? updater(coinsState) : updater;
     setCoins(new Map(coinsState));
     // 🔥 FORCE RE-RENDER: Increment counter to trigger dependent components
-    setUpdateCount(prev => {
-      const next = prev + 1;
-      console.log(`🔢 [LiveDataContext] updateCount incremented: ${prev} → ${next}, Map size: ${coinsState.size}`);
-      return next;
-    });
+    setUpdateCount(prev => prev + 1);
   }, []);
 
   const updateCharts = useCallback((updater) => {
@@ -104,13 +100,6 @@ export function LiveDataProvider({ children }) {
               break;
               
             case 'jupiter-prices-update':
-              // 🔥 ENHANCED LOGGING: Always log Jupiter updates to debug price display issue
-              const timestamp = new Date().toISOString();
-              console.log(`💰 [WebSocket ${timestamp}] Jupiter price update received:`, message.data?.length || 0, 'coins');
-              if (message.data && message.data.length > 0) {
-                console.log(`💰 [WebSocket ${timestamp}] Sample price:`, message.data[0].symbol, '=', `$${message.data[0].price}`);
-              }
-              
               updateCoins(prev => {
                 const updated = new Map(prev);
                 if (message.data) {
@@ -132,15 +121,9 @@ export function LiveDataProvider({ children }) {
                         source: 'jupiter-live'
                       };
                       updated.set(address, newData);
-                      
-                      // Debug log for first coin
-                      if (priceUpdate === message.data[0]) {
-                        console.log(`💰 [WebSocket ${timestamp}] Updated Map for`, priceUpdate.symbol, ':', newData.price);
-                      }
                     }
                   });
                 }
-                console.log(`💰 [WebSocket ${timestamp}] Coins Map updated, new size:`, updated.size);
                 return updated;
               });
               break;
