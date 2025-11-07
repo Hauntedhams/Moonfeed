@@ -21,12 +21,24 @@ export const useHeliusTransactions = (mintAddress, isActive) => {
   const connect = useCallback(() => {
     if (!mintAddress || !isActive) return;
 
+    // 🔥 MOBILE SAFETY: Don't create WebSocket on mobile devices
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    if (isMobile) {
+      console.log('📱 WebSocket disabled on mobile for memory safety');
+      return;
+    }
+
     console.log('🔌 Connecting to Helius WebSocket for:', mintAddress);
     
     try {
       // Close existing connection if any
       if (wsRef.current) {
-        wsRef.current.close();
+        try {
+          wsRef.current.close();
+        } catch (e) {
+          console.error('Error closing existing WebSocket:', e);
+        }
+        wsRef.current = null;
       }
 
       const ws = new WebSocket(HELIUS_WS_URL);
@@ -122,7 +134,7 @@ export const useHeliusTransactions = (mintAddress, isActive) => {
     
     if (wsRef.current) {
       // Unsubscribe if we have a subscription ID
-      if (subscriptionIdRef.current) {
+      if (subscriptionIdRef.current && wsRef.current.readyState === WebSocket.OPEN) {
         try {
           wsRef.current.send(JSON.stringify({
             jsonrpc: "2.0",
@@ -135,7 +147,13 @@ export const useHeliusTransactions = (mintAddress, isActive) => {
         }
       }
       
-      wsRef.current.close();
+      // Force close with cleanup
+      try {
+        wsRef.current.close();
+      } catch (err) {
+        console.error('Error closing WebSocket:', err);
+      }
+      
       wsRef.current = null;
       subscriptionIdRef.current = null;
     }

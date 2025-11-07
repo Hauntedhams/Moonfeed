@@ -98,11 +98,15 @@ const CoinCard = memo(({
   const fallbackPrice = coin.price_usd || coin.priceUsd || coin.price || 0;
   const displayPrice = livePrice || fallbackPrice;
   
+  // 🔥 MOBILE FIX: Disable WebSocket connections on mobile to prevent crashes
+  const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768;
+  
   // Helius live transactions - auto-load when autoLoadTransactions is true
+  // 🔥 DISABLED on mobile to prevent memory crashes from multiple WebSocket connections
   const mintAddress = coin.mintAddress || coin.mint || coin.address || coin.contract_address || coin.contractAddress || coin.tokenAddress;
   const { transactions, isConnected: txConnected, error: txError, clearTransactions } = useHeliusTransactions(
     mintAddress,
-    showLiveTransactions || autoLoadTransactions // Connect when manually shown OR auto-loaded
+    !isMobileDevice && (showLiveTransactions || autoLoadTransactions) // Only connect on desktop
   );
 
   // 🆕 ON-VIEW ENRICHMENT: Trigger enrichment when coin becomes visible
