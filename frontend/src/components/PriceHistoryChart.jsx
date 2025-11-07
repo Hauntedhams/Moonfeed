@@ -91,6 +91,28 @@ const PriceHistoryChart = ({ coin, width, height = 200, onPriceHover }) => {
   // Diagnostic logging - DISABLED in production for performance
   const DEBUG_MODE = false; // Set to true only for debugging
   
+  // 🔥 CRITICAL: Cleanup canvas on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      // Clear canvas before unmount
+      if (canvasRef.current) {
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          // Clear the canvas
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+        // Reset canvas dimensions to free memory
+        canvas.width = 0;
+        canvas.height = 0;
+      }
+      // Clear state to free memory
+      setChartData(null);
+      setHoveredPoint(null);
+      setCanvasReady(false);
+    };
+  }, []); // Empty deps = only run on unmount
+  
   useEffect(() => {
     if (DEBUG_MODE) {
       debugLog('🔍 [CHART DIAGNOSTIC] Component mounted at:', new Date().toISOString());
@@ -255,7 +277,8 @@ const PriceHistoryChart = ({ coin, width, height = 200, onPriceHover }) => {
     console.log(`[PriceHistoryChart] ✅ All conditions met, drawing chart for ${coin?.symbol} (${chartData.dataPoints.length} points)`);
     
     // Use requestAnimationFrame to ensure canvas is fully painted in DOM
-    requestAnimationFrame(() => {
+    let rafId = null;
+    rafId = requestAnimationFrame(() => {
       if (canvasRef.current && chartData && chartData.dataPoints) {
         drawTimeRef.current = Date.now();
         drawChart(chartData.dataPoints);
@@ -263,6 +286,13 @@ const PriceHistoryChart = ({ coin, width, height = 200, onPriceHover }) => {
         debugLog('🔍 [CHART DIAGNOSTIC] Chart drawn in', drawDuration, 'ms');
       }
     });
+
+    // 🔥 CRITICAL: Cancel animation frame on cleanup to prevent memory leaks
+    return () => {
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+      }
+    };
   }, [canvasReady, chartData, isDarkMode]); // Watch BOTH canvas readiness AND chart data AND dark mode
 
   // Generate blended 24-hour chart using multiple DexScreener price change anchors
