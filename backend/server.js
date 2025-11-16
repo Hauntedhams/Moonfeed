@@ -8,6 +8,9 @@ const CoinStorage = require('./coin-storage');
 const NewCoinStorage = require('./new-coin-storage');
 const priceEngine = require('./services/priceEngine');
 const WebSocketServer = require('./services/websocketServer');
+const BirdeyeWebSocketProxy = require('./birdeyeWebSocketProxy');
+const PriceWebSocketServer = require('./priceWebSocketServer');
+const WebSocketRouter = require('./websocketRouter');
 const JupiterLivePriceService = require('./jupiterLivePriceService');
 const dexscreenerService = require('./dexscreenerService');
 const dexpaprikaService = require('./dexpaprikaService');
@@ -26,6 +29,7 @@ const triggerRoutes = require('./routes/trigger');
 const searchRoutes = require('./routes/search');
 const affiliateRoutes = require('./routes/affiliates');
 const onDemandEnrichment = require('./services/OnDemandEnrichmentService');
+const geckoTerminalService = require('./geckoTerminalService');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -79,6 +83,66 @@ app.use('/api/search', searchRoutes);
 
 // Mount Affiliate routes
 app.use('/api/affiliates', affiliateRoutes);
+
+// 📊 GeckoTerminal Historical Price Data endpoint
+app.get('/api/coins/:tokenAddress/historical-prices', async (req, res) => {
+  try {
+    const { tokenAddress } = req.params;
+    const { 
+      timeframe = '5m', 
+      limit = 100,
+      network = 'solana' 
+    } = req.query;
+
+    console.log(`📊 [API] Historical prices requested for ${tokenAddress.substring(0, 8)}... (timeframe: ${timeframe}, limit: ${limit})`);
+
+    // Validate token address
+    if (!tokenAddress || tokenAddress.length < 32) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid token address'
+      });
+    }
+
+    // Fetch historical data from GeckoTerminal
+    const historicalData = await geckoTerminalService.getTokenHistoricalData(
+      network, 
+      tokenAddress, 
+      { 
+        timeframe: geckoTerminalService.mapTimeframe(timeframe), 
+        limit: parseInt(limit) 
+      }
+    );
+
+    // Format for chart consumption
+    const formattedData = geckoTerminalService.formatChartData(historicalData);
+
+    console.log(`✅ [API] Returning ${formattedData.length} historical price points`);
+
+    res.json({
+      success: true,
+      tokenAddress,
+      network,
+      timeframe,
+      dataPoints: formattedData.length,
+      poolUsed: historicalData.pool_used,
+      data: formattedData,
+      source: 'GeckoTerminal',
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error(`❌ [API] Error fetching historical prices:`, error.message);
+    
+    // Return a more helpful error response
+    res.status(error.message.includes('No pools found') ? 404 : 500).json({
+      success: false,
+      error: error.message,
+      tokenAddress: req.params.tokenAddress,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
 
 // ⭐ On-demand enrichment endpoint for single coins
 app.post('/api/coins/enrich-single', async (req, res) => {
@@ -1662,9 +1726,34 @@ function startDextrendingAutoRefresher() {
 // Create HTTP server for WebSocket support
 const server = http.createServer(app);
 
-// Initialize WebSocket server
-const wsServer = new WebSocketServer(server);
-console.log('✅ WebSocket server initialized');
+// Initialize WebSocket Router for clean path-based routing
+const wsRouter = new WebSocketRouter(server);
+console.log('✅ WebSocket Router initialized');
+
+// ⭐ Initialize Price WebSocket Server (Solana RPC only - for "Twelve" tab)
+try {
+  const priceWsServer = new PriceWebSocketServer();
+  wsRouter.register('/ws/price', priceWsServer.wss);
+  console.log('✅ Price WebSocket Server initialized and registered on /ws/price');
+} catch (error) {
+  console.error('❌ Failed to initialize Price WebSocket Server:', error.message);
+  console.error('   Stack:', error.stack);
+}
+
+// Initialize Birdeye WebSocket Proxy
+try {
+  const birdeyeProxy = new BirdeyeWebSocketProxy();
+  wsRouter.register('/birdeye-ws', birdeyeProxy.wss);
+  console.log('✅ Birdeye WebSocket Proxy initialized and registered on /birdeye-ws');
+} catch (error) {
+  console.error('❌ Failed to initialize Birdeye WebSocket Proxy:', error.message);
+  console.error('   Stack:', error.stack);
+}
+
+// Initialize main WebSocket server (Jupiter prices, etc.)
+const wsServer = new WebSocketServer();
+wsRouter.register('/ws', wsServer.wss);
+console.log('✅ Main WebSocket Server initialized and registered on /ws');
 
 server.listen(PORT, () => {
   console.log('\n🚀 ═══════════════════════════════════════════════════════════════');

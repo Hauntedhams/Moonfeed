@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Pump.fun Bonding Curve Test</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #1a1a1a; color: #00ff00; }
+        .log { margin: 5px 0; padding: 5px; border-left: 3px solid #00ff00; }
+        .error { border-color: #ff0000; color: #ff0000; }
+        .success { border-color: #00ff00; }
+        button { padding: 10px 20px; font-size: 16px; margin: 10px; cursor: pointer; }
+        input { width: 500px; padding: 10px; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <h1>🚀 Pump.fun Bonding Curve WebSocket Test</h1>
+    <p>Test token: <strong>2R5awbjoGYhzdXU5gErRtAQK3hyKmRfnJBeJeVvMpump</strong></p>
+    
+    <div>
+        <input id="tokenInput" value="2R5awbjoGYhzdXU5gErRtAQK3hyKmRfnJBeJeVvMpump" placeholder="Enter token mint address">
+        <button onclick="testToken()">Test Token</button>
+        <button onclick="clearLogs()">Clear Logs</button>
+    </div>
+    
+    <h2>Connection Status: <span id="status">Disconnected</span></h2>
+    <div id="logs"></div>
+
+    <script>
+        let ws = null;
+        
+        function log(message, isError = false) {
+            const div = document.createElement('div');
+            div.className = isError ? 'log error' : 'log success';
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            document.getElementById('logs').appendChild(div);
+            window.scrollTo(0, document.body.scrollHeight);
+        }
+        
+        function clearLogs() {
+            document.getElementById('logs').innerHTML = '';
+        }
+        
+        function updateStatus(status, color = '#00ff00') {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = status;
+            statusEl.style.color = color;
+        }
+        
+        function testToken() {
+            const token = document.getElementById('tokenInput').value.trim();
+            
+            if (!token) {
+                log('❌ Please enter a token mint address', true);
+                return;
+            }
+            
+            // Close existing connection
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+            
+            log(`🔌 Connecting to ws://localhost:3001/ws/price`);
+            ws = new WebSocket('ws://localhost:3001/ws/price');
+            
+            ws.onopen = () => {
+                log('✅ WebSocket connected');
+                updateStatus('Connected', '#00ff00');
+                
+                const subscribeMsg = {
+                    type: 'subscribe',
+                    token: token
+                };
+                
+                log(`📡 Subscribing to token: ${token}`);
+                ws.send(JSON.stringify(subscribeMsg));
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    
+                    if (data.type === 'error') {
+                        log(`❌ Error: ${data.error}`, true);
+                    } else if (data.type === 'price_update') {
+                        const price = data.data?.price || data.data?.priceUsd;
+                        const source = data.data?.source || 'unknown';
+                        log(`💰 Price update: $${price?.toFixed(8)} (source: ${source})`);
+                        
+                        if (data.data?.virtualSolReserves && data.data?.virtualTokenReserves) {
+                            log(`   📊 Reserves: ${data.data.virtualTokenReserves} tokens / ${data.data.virtualSolReserves} SOL`);
+                        }
+                    } else {
+                        log(`📨 Message: ${JSON.stringify(data)}`);
+                    }
+                } catch (e) {
+                    log(`⚠️ Failed to parse message: ${e.message}`, true);
+                }
+            };
+            
+            ws.onerror = (error) => {
+                log(`❌ WebSocket error: ${error.message || 'Unknown error'}`, true);
+                updateStatus('Error', '#ff0000');
+            };
+            
+            ws.onclose = () => {
+                log('🔌 WebSocket disconnected');
+                updateStatus('Disconnected', '#ffaa00');
+            };
+        }
+        
+        // Auto-connect on page load
+        window.addEventListener('load', () => {
+            setTimeout(testToken, 1000);
+        });
+    </script>
+</body>
+</html>

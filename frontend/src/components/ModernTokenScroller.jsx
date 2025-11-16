@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import CoinCard from './CoinCard';
-import DexScreenerManager from './DexScreenerManager';
 import MoonfeedInfoButton from './MoonfeedInfoModal';
 import { API_CONFIG, getApiUrl, getFullApiUrl } from '../config/api';
 import './ModernTokenScroller.css';
@@ -43,7 +42,6 @@ const ModernTokenScroller = ({
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   
   const scrollerRef = useRef(null);
-  const dexManagerRef = useRef(null);
   const isScrollLocked = useRef(false);
   
   // API base configuration
@@ -840,12 +838,6 @@ const ModernTokenScroller = ({
     // Use enriched coin data if available
     const enrichedCoin = getEnrichedCoin(coin);
     
-    // Get chart component from DexScreener manager (only for visible coins)
-    let chartComponent = null;
-    if (shouldShowChart && dexManagerRef.current) {
-      chartComponent = dexManagerRef.current.getChartForCoin(enrichedCoin, index);
-    }
-    
     return (
       <div 
         key={coin.mintAddress || coin.tokenAddress || index}
@@ -859,7 +851,6 @@ const ModernTokenScroller = ({
           onTradeClick={onTradeClick}
           isGraduating={coin.status === 'graduating'}
           isTrending={coin.source?.includes('trending')}
-          chartComponent={chartComponent}
           isVisible={isVisible}
           onExpandChange={(isExpanded) => handleCoinExpandChange(isExpanded, coin.mintAddress || coin.tokenAddress)}
           autoLoadTransactions={shouldAutoLoadTransactions}
@@ -992,15 +983,6 @@ const ModernTokenScroller = ({
           </button>
         )}
       </div>
-      
-      {/* DexScreener Manager */}
-      <DexScreenerManager
-        ref={dexManagerRef}
-        visibleCoins={coins}
-        currentCoinIndex={currentIndex}
-        preloadCount={3}
-        cleanupThreshold={2}
-      />
       
       {/* Scrollable container */}
       <div 

@@ -2,11 +2,15 @@ const WebSocket = require('ws');
 const priceEngine = require('./priceEngine');
 
 class WebSocketServer {
-  constructor(server) {
-    this.wss = new WebSocket.Server({ server });
+  constructor() {
+    // Use noServer mode - will be connected via WebSocketRouter
+    this.wss = new WebSocket.Server({ 
+      noServer: true,
+      perMessageDeflate: false 
+    });
     this.clients = new Map();
     this.setupWebSocket();
-    console.log('🌐 WebSocket server initialized');
+    console.log('🌐 WebSocket server initialized (noServer mode)');
   }
 
   setupWebSocket() {

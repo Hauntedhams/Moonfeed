@@ -145,7 +145,15 @@ class GeckoTerminalService {
       }
 
       console.log(`[GeckoTerminal] Using pool: ${bestPool.id} with liquidity: $${bestPool.attributes.reserve_in_usd}`);
-      return bestPool;
+      
+      // Extract pool address from ID (format: "solana_ADDRESS")
+      const poolAddress = bestPool.attributes.address || bestPool.id.split('_')[1] || bestPool.id;
+      console.log(`[GeckoTerminal] Using pool address: ${poolAddress}`);
+      
+      return {
+        ...bestPool,
+        poolAddress: poolAddress // Add clean pool address for OHLCV calls
+      };
       
     } catch (error) {
       console.error(`[GeckoTerminal] Error finding best pool:`, error.message);
@@ -166,8 +174,10 @@ class GeckoTerminalService {
       // Find the best pool for this token
       const bestPool = await this.getBestPool(network, tokenAddress);
       
-      // Get OHLCV data from the best pool
-      const ohlcvData = await this.getPoolOHLCV(network, bestPool.id, timeframe, limit);
+      // Get OHLCV data from the best pool using the cleaned pool address
+      const poolAddress = bestPool.poolAddress || bestPool.attributes.address;
+      console.log(`[GeckoTerminal] Fetching OHLCV for pool address: ${poolAddress}`);
+      const ohlcvData = await this.getPoolOHLCV(network, poolAddress, timeframe, limit);
       
       if (!ohlcvData || ohlcvData.length === 0) {
         throw new Error('No OHLCV data found');

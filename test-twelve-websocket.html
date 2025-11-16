@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Test Twelve WebSocket</title>
+  <style>
+    body {
+      font-family: monospace;
+      background: #000;
+      color: #0f0;
+      padding: 20px;
+    }
+    .log {
+      margin: 5px 0;
+      padding: 5px;
+      background: #111;
+      border-left: 3px solid #0f0;
+    }
+    .error {
+      border-left-color: #f00;
+      color: #f00;
+    }
+    .success {
+      border-left-color: #0ff;
+      color: #0ff;
+    }
+    button {
+      background: #0f0;
+      color: #000;
+      border: none;
+      padding: 10px 20px;
+      margin: 10px 5px;
+      cursor: pointer;
+      font-family: monospace;
+      font-weight: bold;
+    }
+    button:hover {
+      background: #0ff;
+    }
+    input {
+      background: #111;
+      color: #0f0;
+      border: 1px solid #0f0;
+      padding: 8px;
+      font-family: monospace;
+      width: 500px;
+    }
+  </style>
+</head>
+<body>
+  <h1>🧪 Twelve WebSocket Tester</h1>
+  <div>
+    <input type="text" id="tokenAddress" 
+           value="DKAN3tyxnvgUrgGHAHsorBGgVGDVt9uEiRUybHrs77P3" 
+           placeholder="Enter token mint address">
+    <button onclick="connect()">Connect</button>
+    <button onclick="disconnect()">Disconnect</button>
+    <button onclick="clearLogs()">Clear Logs</button>
+  </div>
+  <hr>
+  <div id="logs"></div>
+
+  <script>
+    let ws = null;
+    let priceCount = 0;
+
+    function log(message, type = 'log') {
+      const logDiv = document.createElement('div');
+      logDiv.className = `log ${type}`;
+      logDiv.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+      document.getElementById('logs').appendChild(logDiv);
+      // Auto-scroll
+      window.scrollTo(0, document.body.scrollHeight);
+    }
+
+    function clearLogs() {
+      document.getElementById('logs').innerHTML = '';
+      priceCount = 0;
+    }
+
+    function disconnect() {
+      if (ws) {
+        ws.close();
+        ws = null;
+        log('🔌 Disconnected', 'log');
+      }
+    }
+
+    function connect() {
+      const tokenAddress = document.getElementById('tokenAddress').value.trim();
+      if (!tokenAddress) {
+        log('❌ Please enter a token address', 'error');
+        return;
+      }
+
+      disconnect();
+      priceCount = 0;
+
+      log(`🚀 Connecting to ws://localhost:3001/ws/price...`, 'log');
+      
+      ws = new WebSocket('ws://localhost:3001/ws/price');
+
+      ws.onopen = () => {
+        log('✅ WebSocket OPEN', 'success');
+        
+        const subscribeMsg = JSON.stringify({
+          type: 'subscribe',
+          token: tokenAddress
+        });
+        
+        log(`📤 Sending: ${subscribeMsg}`, 'log');
+        ws.send(subscribeMsg);
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          
+          if (message.type === 'price_update') {
+            priceCount++;
+            log(`💰 PRICE UPDATE #${priceCount}: $${message.data.price} (${message.data.priceUsd})`, 'success');
+          } else if (message.type === 'error') {
+            log(`❌ ERROR: ${message.message || message.error}`, 'error');
+          } else {
+            log(`📨 ${message.type}: ${JSON.stringify(message)}`, 'log');
+          }
+        } catch (err) {
+          log(`⚠️  Parse error: ${event.data}`, 'error');
+        }
+      };
+
+      ws.onerror = (error) => {
+        log(`❌ WebSocket ERROR: ${error}`, 'error');
+      };
+
+      ws.onclose = (event) => {
+        log(`🔌 WebSocket CLOSED (code: ${event.code})`, 'log');
+        ws = null;
+      };
+    }
+
+    // Auto-connect on load
+    window.onload = () => {
+      log('👋 Ready! Click Connect to start monitoring', 'log');
+    };
+  </script>
+</body>
+</html>

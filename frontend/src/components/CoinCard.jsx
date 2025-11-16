@@ -1,8 +1,7 @@
 import React, { memo, useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import './CoinCard.css';
-import DexScreenerChart from './DexScreenerChart';
-import PriceHistoryChart from './PriceHistoryChart';
+import TwelveDataChart from './TwelveDataChart';
 import LiquidityLockIndicator from './LiquidityLockIndicator';
 import TopTradersList from './TopTradersList';
 import WalletPopup from './WalletPopup';
@@ -27,7 +26,6 @@ const CoinCard = memo(({
   isGraduating = false, // NEW: Is this a graduating Pump.fun token?
   onExpandChange,
   isVisible = true,
-  chartComponent, // optional preloaded chart from manager
   autoLoadTransactions = false, // NEW: auto-load transactions when true
   onEnrichmentComplete = null // Callback when enrichment completes
 }) => {
@@ -38,7 +36,6 @@ const CoinCard = memo(({
   const [showBannerModal, setShowBannerModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showPriceChangeModal, setShowPriceChangeModal] = useState(false);
-  const [currentChartPage, setCurrentChartPage] = useState(0);
   const [hoveredMetric, setHoveredMetric] = useState(null);
   const [showGraduationInfo, setShowGraduationInfo] = useState(false);
   const [graduationIconPosition, setGraduationIconPosition] = useState(null);
@@ -684,52 +681,6 @@ const CoinCard = memo(({
   const handleChartPriceHover = (hoveredPrice) => {
     setChartHoveredPrice(hoveredPrice);
   };
-
-  // Chart navigation functions
-  const handleChartScroll = () => {
-    if (!chartsContainerRef.current) return;
-    
-    const container = chartsContainerRef.current;
-    const scrollLeft = container.scrollLeft;
-    const containerWidth = container.clientWidth;
-    const currentPage = Math.round(scrollLeft / containerWidth);
-    
-    setCurrentChartPage(currentPage);
-  };
-
-  const navigateToChartPage = (pageIndex) => {
-    if (!chartsContainerRef.current) {
-      return;
-    }
-    
-    const container = chartsContainerRef.current;
-    const containerWidth = container.clientWidth;
-    const targetScrollLeft = pageIndex * containerWidth;
-    
-    container.scrollTo({
-      left: targetScrollLeft,
-      behavior: 'smooth'
-    });
-    
-    setCurrentChartPage(pageIndex);
-  };
-
-  // Add scroll listener for chart navigation (disabled when card not visible)
-  useEffect(() => {
-    if (!isVisible) return; // Don't attach listeners if card not visible
-    
-    const container = chartsContainerRef.current;
-    if (!container) return;
-
-    container.addEventListener('scroll', handleChartScroll, { passive: true });
-    return () => container.removeEventListener('scroll', handleChartScroll);
-  }, [isVisible]);
-
-  // 🎉 No more custom touch/mouse handlers needed!
-  // The nav dots are now inside the scroll container as an overlay with pointer-events:none,
-  // so native browser scrolling works perfectly everywhere - just swipe/drag and the browser handles it!
-
-  // Handle touch/swipe on nav dots area to control chart navigation
   // � INSTANT RESPONSE: Zero thresholds, zero detection, just pure scroll
   useEffect(() => {
     // 🔥 MOBILE PERFORMANCE: Only attach heavy event listeners when card is visible AND expanded
@@ -1511,154 +1462,14 @@ const CoinCard = memo(({
         </div>
 
         <div className="info-layer-content">
-          {/* Price Charts - Horizontal Scrollable with Snap */}
+          {/* Price Charts - TwelveData Only */}
           <div className="charts-section">
-            {/* 🔥 HOT SWIPE AREA - Full-width container for natural scroll/drag */}
-            <div 
-              className="chart-nav-hot-area" 
-              ref={chartNavRef}
-            >
-              {/* Visual nav elements inside the hot area */}
-              <div className="chart-nav-content">
-                <div 
-                  className={`nav-button ${currentChartPage === 0 ? 'active' : ''}`}
-                  onClick={() => navigateToChartPage(0)}
-                >
-                  Clean
-                </div>
-                <div 
-                  className={`nav-button ${currentChartPage === 1 ? 'active' : ''}`}
-                  onClick={() => navigateToChartPage(1)}
-                >
-                  Advanced
-                </div>
-                  
-                  {/* 🎓 GRADUATION PROGRESS BAR - Show for graduating tokens */}
-                  {graduationPercentage !== null && (
-                    <div className="graduation-progress-bar-container">
-                      <div className="graduation-percentage-text" style={{
-                        fontSize: '12px',
-                        fontWeight: 700,
-                        color: graduationColor,
-                        whiteSpace: 'nowrap',
-                        minWidth: '45px',
-                        textAlign: 'right'
-                      }}>
-                        {formatGraduationPercentage(graduationPercentage, 1)}
-                      </div>
-                      
-                      <div className="graduation-progress-track">
-                        <div 
-                          className="graduation-progress-fill"
-                          style={{
-                            background: `linear-gradient(90deg, ${graduationColor}, ${graduationColor}dd)`,
-                            width: `${graduationPercentage}%`,
-                            boxShadow: graduationPercentage >= 95 ? `0 0 10px ${graduationColor}88` : 'none',
-                            animation: graduationPercentage >= 95 ? 'pulse 2s ease-in-out infinite' : 'none'
-                          }}
-                        />
-                      </div>
-                      
-                      {/* Graduation Info Icon */}
-                      <div 
-                        ref={graduationIconRef}
-                        className="graduation-info-icon"
-                        onClick={() => setShowGraduationInfo(!showGraduationInfo)}
-                        onMouseEnter={(e) => {
-                          const rect = e.currentTarget.getBoundingClientRect();
-                          setGraduationIconPosition({
-                            top: rect.bottom + window.scrollY,
-                            right: window.innerWidth - rect.right - window.scrollX
-                          });
-                          setShowGraduationInfo(true);
-                        }}
-                        onMouseLeave={() => {
-                          setShowGraduationInfo(false);
-                          setGraduationIconPosition(null);
-                        }}
-                      >
-                        ?
-                      </div>
-                    </div>
-                  )}
-              </div>
-            </div>
-
-            <div className="charts-horizontal-container" ref={chartsContainerRef}>
-              {/* Graph Page */}
-              <div className="chart-page">
-                <div className="price-history-wrapper">
-                  {currentChartPage === 0 ? (
-                    isVisible ? (
-                      <PriceHistoryChart 
-                        key={`${coin.mintAddress || coin.tokenAddress}-${coin.cleanChartData ? 'enriched' : 'basic'}`}
-                        coin={coin} 
-                        width="100%" 
-                        height={200}
-                        onPriceHover={handleChartPriceHover}
-                      />
-                    ) : (
-                      <div className="chart-placeholder" style={{ 
-                        background: 'white', 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        justifyContent: 'center',
-                        color: '#666',
-                        fontSize: '14px'
-                      }}>
-                        {/* Chart not rendered for off-screen coin */}
-                      </div>
-                    )
-                  ) : (
-                    <div className="chart-placeholder" style={{ 
-                      background: 'white', 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      justifyContent: 'center',
-                      color: '#666',
-                      fontSize: '14px'
-                    }}>
-                      Chart will load when tab is selected
-                    </div>
-                  )}
-                </div>
-              </div>
-              
-              {/* Advanced View Page */}
-              <div className="chart-page">
-                <div className="advanced-chart-wrapper">
-                  {currentChartPage === 1 ? (
-                    coin.pairAddress || coin.tokenAddress ? (
-                      <DexScreenerChart 
-                        coin={{
-                          ...coin,
-                          chainId: coin.chainId || 'solana',
-                          pairAddress: coin.pairAddress || coin.tokenAddress || coin.mintAddress,
-                          tokenAddress: coin.tokenAddress || coin.mintAddress || coin.pairAddress,
-                          symbol: coin.symbol || coin.baseToken?.symbol
-                        }} 
-                        isPreview={false}
-                        autoLoad={enrichmentCompleted} // 🆕 Auto-load chart after enrichment
-                      />
-                    ) : chartComponent ? (
-                      chartComponent
-                    ) : (
-                      <div className="chart-placeholder">Chart data unavailable</div>
-                    )
-                  ) : (
-                    <div className="chart-placeholder" style={{ 
-                      background: 'white', 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      justifyContent: 'center',
-                      color: '#666',
-                      fontSize: '14px'
-                    }}>
-                      Advanced chart will load when tab is selected
-                    </div>
-                  )}
-                </div>
-              </div>
+            {/* Twelve Data Live Chart - Always showing */}
+            <div className="twelve-chart-section">
+              <TwelveDataChart 
+                coin={coin}
+                isActive={isExpanded && isVisible}
+              />
             </div>
           </div> {/* Close charts-section */}
 
@@ -2130,30 +1941,12 @@ const CoinCard = memo(({
       </div>
       </div> {/* Close coin-card-left-panel */}
 
-      {/* Right Panel - DexScreener Chart (Desktop Only) */}
+      {/* Right Panel - Twelve Data Chart (Desktop Only) */}
       <div className="coin-card-right-panel">
-        {coin.pairAddress || coin.tokenAddress ? (
-          <DexScreenerChart 
-            coin={{
-              ...coin,
-              chainId: coin.chainId || 'solana',
-              pairAddress: coin.pairAddress || coin.tokenAddress || coin.mintAddress,
-              tokenAddress: coin.tokenAddress || coin.mintAddress || coin.pairAddress,
-              symbol: coin.symbol || coin.baseToken?.symbol
-            }} 
-            isPreview={false}
-            autoLoad={true}
-          />
-        ) : (
-          <div style={{ 
-            color: '#64748b', 
-            fontSize: '16px',
-            textAlign: 'center',
-            padding: '40px 20px'
-          }}>
-            Chart data unavailable
-          </div>
-        )}
+        <TwelveDataChart 
+          coin={coin}
+          isActive={true}
+        />
       </div>
 
       {/* Banner Modal - Use Portal to render at document root */}

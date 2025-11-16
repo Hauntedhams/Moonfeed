@@ -1,0 +1,511 @@
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { useDarkMode } from '../contexts/DarkModeContext';
+import { twelveWSManager } from '../utils/twelveWebSocketManager';
+import './TwelveDataChart.css';
+
+// Twelve Data API Configuration
+const TWELVE_API_KEY = '5bbbe353245a4b0795eed57ad93e72cc';
+const TWELVE_REST_URL = 'https://api.twelvedata.com';
+
+/**
+ * TwelveDataChart - Live WebSocket price chart with historical data
+ * 
+ * IMPORTANT: Free plan has only 1 WebSocket connection available
+ * This component manages the connection carefully to avoid exceeding limits
+ * 
+ * NOTE: Using Canvas for chart rendering (more reliable than lightweight-charts)
+ */
+const TwelveDataChart = ({ coin, isActive = false }) => {
+  const { isDarkMode } = useDarkMode();
+  const canvasRef = useRef(null);
+  const chartDataRef = useRef([]);
+  const wsCleanupRef = useRef(null);
+  const reconnectTimeoutRef = useRef(null);
+  const [status, setStatus] = useState('idle'); // idle, loading, connected, error
+  const [error, setError] = useState(null);
+  const [currentPrice, setCurrentPrice] = useState(null);
+  const [priceChange, setPriceChange] = useState(null);
+  const mountedRef = useRef(true);
+
+  // Get token symbol - Twelve Data requires proper symbol format
+  const getSymbolForTwelve = useCallback(() => {
+    // For Solana tokens, we need to map to a tradeable pair
+    // Most meme coins aren't on Twelve Data, so we'll use SOL/USD as fallback
+    const symbol = coin?.symbol || 'SOL';
+    
+    // Check if this is a major token that Twelve Data supports
+    const supportedTokens = ['SOL', 'BTC', 'ETH', 'USDT', 'USDC', 'BNB', 'ADA', 'DOGE', 'MATIC'];
+    const upperSymbol = symbol.toUpperCase();
+    
+    if (supportedTokens.includes(upperSymbol)) {
+      return `${upperSymbol}/USD`;
+    }
+    
+    // For unknown tokens, default to SOL/USD
+    return 'SOL/USD';
+  }, [coin?.symbol]);
+
+  // Cleanup function
+  const cleanup = useCallback(() => {
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+
+    if (wsCleanupRef.current) {
+      wsCleanupRef.current();
+      wsCleanupRef.current = null;
+    }
+
+    // Clear canvas
+    if (canvasRef.current) {
+      const ctx = canvasRef.current.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+      }
+    }
+  }, []);
+
+  // Fetch historical data
+  const fetchHistoricalData = useCallback(async (symbol) => {
+    try {
+      console.log(`📊 Twelve: Fetching historical data for ${symbol}`);
+      setStatus('loading');
+      
+      // Fetch 1-day historical data with 1-minute intervals
+      const endpoint = `${TWELVE_REST_URL}/time_series`;
+      const params = new URLSearchParams({
+        symbol: symbol,
+        interval: '1min',
+        apikey: TWELVE_API_KEY,
+        outputsize: 390, // ~6.5 hours of data (1 trading day)
+        format: 'JSON'
+      });
+
+      const url = `${endpoint}?${params}`;
+      console.log(`📊 Twelve: Requesting ${url}`);
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        throw new Error(`API Error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log(`📊 Twelve: Received data:`, data);
+
+      if (data.status === 'error') {
+        console.error(`📊 Twelve: API Error:`, data.message);
+        throw new Error(data.message || 'Failed to fetch historical data');
+      }
+
+      if (!data.values || !Array.isArray(data.values)) {
+        console.error(`📊 Twelve: Invalid data format:`, data);
+        throw new Error('Invalid data format received');
+      }
+
+      // Convert to chart format
+      const chartData = data.values
+        .map(item => ({
+          time: Math.floor(new Date(item.datetime).getTime() / 1000),
+          value: parseFloat(item.close)
+        }))
+        .reverse(); // Twelve Data returns newest first, we need oldest first
+
+      console.log(`📊 Twelve: Processed ${chartData.length} data points`);
+      return chartData;
+    } catch (err) {
+      console.error('📊 Twelve: Error fetching historical data:', err);
+      throw err;
+    }
+  }, []);
+
+  // Draw chart on canvas
+  const drawChart = useCallback(() => {
+    if (!canvasRef.current || chartDataRef.current.length === 0) return;
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const width = canvas.width;
+    const height = canvas.height;
+    const padding = { top: 20, right: 20, bottom: 40, left: 50 };
+    const chartWidth = width - padding.left - padding.right;
+    const chartHeight = height - padding.top - padding.bottom;
+
+    // Clear canvas
+    ctx.clearRect(0, 0, width, height);
+
+    // Background
+    ctx.fillStyle = isDarkMode ? '#1a1a1a' : '#ffffff';
+    ctx.fillRect(0, 0, width, height);
+
+    const data = chartDataRef.current;
+    if (data.length < 2) return;
+
+    // Calculate min/max
+    const prices = data.map(d => d.value);
+    const minPrice = Math.min(...prices);
+    const maxPrice = Math.max(...prices);
+    const priceRange = maxPrice - minPrice || 1;
+
+    // Draw grid lines
+    ctx.strokeStyle = isDarkMode ? '#2a2e39' : '#e1e3e8';
+    ctx.lineWidth = 1;
+    
+    // Horizontal grid lines
+    for (let i = 0; i <= 4; i++) {
+      const y = padding.top + (chartHeight / 4) * i;
+      ctx.beginPath();
+      ctx.moveTo(padding.left, y);
+      ctx.lineTo(width - padding.right, y);
+      ctx.stroke();
+    }
+
+    // Draw area chart
+    ctx.beginPath();
+    ctx.moveTo(padding.left, height - padding.bottom);
+
+    data.forEach((point, i) => {
+      const x = padding.left + (i / (data.length - 1)) * chartWidth;
+      const y = padding.top + chartHeight - ((point.value - minPrice) / priceRange) * chartHeight;
+      
+      if (i === 0) {
+        ctx.lineTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    });
+
+    ctx.lineTo(width - padding.right, height - padding.bottom);
+    ctx.closePath();
+
+    // Gradient fill
+    const gradient = ctx.createLinearGradient(0, padding.top, 0, height - padding.bottom);
+    gradient.addColorStop(0, isDarkMode ? 'rgba(41, 98, 255, 0.4)' : 'rgba(41, 98, 255, 0.3)');
+    gradient.addColorStop(1, isDarkMode ? 'rgba(41, 98, 255, 0.05)' : 'rgba(41, 98, 255, 0.1)');
+    ctx.fillStyle = gradient;
+    ctx.fill();
+
+    // Draw line
+    ctx.beginPath();
+    data.forEach((point, i) => {
+      const x = padding.left + (i / (data.length - 1)) * chartWidth;
+      const y = padding.top + chartHeight - ((point.value - minPrice) / priceRange) * chartHeight;
+      
+      if (i === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    });
+    ctx.strokeStyle = '#2962FF';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Draw Y-axis labels
+    ctx.fillStyle = isDarkMode ? '#d1d4dc' : '#191919';
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'right';
+    
+    for (let i = 0; i <= 4; i++) {
+      const price = minPrice + (priceRange / 4) * (4 - i);
+      const y = padding.top + (chartHeight / 4) * i;
+      const priceText = price < 0.01 ? price.toFixed(6) : price < 1 ? price.toFixed(4) : price.toFixed(2);
+      ctx.fillText(`$${priceText}`, padding.left - 5, y + 4);
+    }
+
+    // Draw X-axis labels (time)
+    ctx.textAlign = 'center';
+    const timeLabels = [0, Math.floor(data.length / 2), data.length - 1];
+    timeLabels.forEach(i => {
+      if (data[i]) {
+        const x = padding.left + (i / (data.length - 1)) * chartWidth;
+        const date = new Date(data[i].time * 1000);
+        const timeText = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        ctx.fillText(timeText, x, height - padding.bottom + 20);
+      }
+    });
+  }, [isDarkMode]);
+
+  // Connect to WebSocket using the manager
+  const connectWebSocket = useCallback((symbol) => {
+    if (wsCleanupRef.current) {
+      console.log(`📊 Twelve: WebSocket cleanup already exists, skipping connect`);
+      return;
+    }
+
+    try {
+      console.log(`📊 Twelve: Attempting to connect WebSocket for ${symbol}`);
+      
+      // Use the centralized WebSocket manager
+      const cleanup = twelveWSManager.connect(
+        symbol,
+        (data) => {
+          // Handle message
+          if (!mountedRef.current) return;
+
+          console.log(`📊 Twelve: Received message:`, data);
+
+          // Handle heartbeat
+          if (data.event === 'heartbeat') {
+            console.log(`📊 Twelve: Heartbeat received`);
+            return;
+          }
+
+          // Handle price update
+          if (data.event === 'price' && data.price) {
+            const price = parseFloat(data.price);
+            const timestamp = Math.floor(Date.now() / 1000);
+
+            console.log(`📊 Twelve: Price update: $${price}`);
+            setCurrentPrice(price);
+
+            // Update chart data
+            if (chartDataRef.current.length > 0) {
+              chartDataRef.current = [...chartDataRef.current, { time: timestamp, value: price }];
+              // Keep last 390 points
+              if (chartDataRef.current.length > 390) {
+                chartDataRef.current = chartDataRef.current.slice(-390);
+              }
+              drawChart();
+            }
+
+            // Update status to connected on first price update
+            if (status !== 'connected') {
+              setStatus('connected');
+              setError(null);
+            }
+          }
+
+          // Handle subscription status
+          if (data.event === 'subscribe-status') {
+            console.log('📊 Twelve: Subscription status:', data);
+            if (data.status === 'ok') {
+              setStatus('connected');
+              setError(null);
+            }
+          }
+        },
+        (error) => {
+          // Handle error
+          if (!mountedRef.current) return;
+          console.error('📊 Twelve: WebSocket error:', error);
+          setStatus('error');
+          setError('Connection error');
+        }
+      );
+
+      wsCleanupRef.current = cleanup;
+      console.log(`📊 Twelve: WebSocket connection initiated`);
+
+    } catch (err) {
+      console.error('📊 Twelve: Failed to connect WebSocket:', err);
+      if (mountedRef.current) {
+        setStatus('error');
+        setError('Failed to connect to live data');
+      }
+    }
+  }, [status, drawChart]);
+
+  // Main initialization effect
+  useEffect(() => {
+    console.log(`📊 Twelve: Effect triggered - isActive: ${isActive}`);
+    
+    if (!isActive) {
+      console.log(`📊 Twelve: Not active, cleaning up`);
+      cleanup();
+      return;
+    }
+
+    // Set mounted flag to true when effect runs
+    mountedRef.current = true;
+
+    const symbol = getSymbolForTwelve();
+    console.log(`📊 Twelve: Initializing for symbol: ${symbol}`);
+    
+    // Load historical data and connect WebSocket
+    const initialize = async () => {
+      try {
+        console.log(`📊 Twelve: Starting initialization...`);
+        const historicalData = await fetchHistoricalData(symbol);
+        
+        if (!mountedRef.current) {
+          console.log(`📊 Twelve: Component unmounted during fetch`);
+          return;
+        }
+
+        console.log(`📊 Twelve: Still mounted, proceeding with ${historicalData.length} data points`);
+
+        if (historicalData.length > 0) {
+          chartDataRef.current = historicalData;
+          
+          // Set initial price and calculate change
+          const latestPrice = historicalData[historicalData.length - 1].value;
+          const firstPrice = historicalData[0].value;
+          setCurrentPrice(latestPrice);
+          setPriceChange(((latestPrice - firstPrice) / firstPrice) * 100);
+
+          console.log(`📊 Twelve: Drawing initial chart with ${historicalData.length} points`);
+          
+          // Use requestAnimationFrame to ensure canvas is ready
+          requestAnimationFrame(() => {
+            if (mountedRef.current) {
+              drawChart();
+              console.log(`📊 Twelve: Chart drawn successfully`);
+            }
+          });
+        }
+
+        // Connect to WebSocket for live updates
+        // IMPORTANT: Only connect if this is the active chart
+        if (isActive && mountedRef.current) {
+          console.log(`📊 Twelve: Connecting WebSocket...`);
+          connectWebSocket(symbol);
+        }
+
+      } catch (err) {
+        console.error('📊 Twelve: Initialization error:', err);
+        if (mountedRef.current) {
+          // Check if it's a rate limit error
+          if (err.message && err.message.includes('API credits')) {
+            setStatus('error');
+            setError('Rate limit exceeded. Please wait a minute and try again.');
+          } else {
+            setStatus('error');
+            setError(err.message || 'Failed to load chart data');
+          }
+        }
+      }
+    };
+
+    initialize();
+
+    return () => {
+      console.log(`📊 Twelve: Cleanup called`);
+      cleanup();
+    };
+  }, [isActive, getSymbolForTwelve, fetchHistoricalData, connectWebSocket, cleanup, drawChart]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+      cleanup();
+    };
+  }, [cleanup]);
+
+  // Format price for display
+  const formatPrice = (price) => {
+    if (!price) return '$0.00';
+    if (price < 0.01) return `$${price.toFixed(6)}`;
+    if (price < 1) return `$${price.toFixed(4)}`;
+    return `$${price.toFixed(2)}`;
+  };
+
+  // Render status indicator
+  const renderStatus = () => {
+    if (status === 'loading') {
+      return (
+        <div className="twelve-status loading">
+          <span className="status-dot"></span>
+          Loading...
+        </div>
+      );
+    }
+
+    if (status === 'connected') {
+      return (
+        <div className="twelve-status connected">
+          <span className="status-dot"></span>
+          Live
+        </div>
+      );
+    }
+
+    if (status === 'error') {
+      return (
+        <div className="twelve-status error">
+          <span className="status-dot"></span>
+          {error || 'Error'}
+        </div>
+      );
+    }
+
+    return null;
+  };
+
+  return (
+    <div className="twelve-data-chart">
+      <div className="twelve-header">
+        <div className="twelve-info">
+          <div className="twelve-symbol">
+            {getSymbolForTwelve()}
+          </div>
+          {currentPrice && (
+            <div className="twelve-price-info">
+              <div className="twelve-price">
+                {formatPrice(currentPrice)}
+              </div>
+              {priceChange !== null && (
+                <div className={`twelve-change ${priceChange >= 0 ? 'positive' : 'negative'}`}>
+                  {priceChange >= 0 ? '+' : ''}{priceChange.toFixed(2)}%
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        {renderStatus()}
+      </div>
+      
+      <div className="twelve-canvas-wrapper" style={{ position: 'relative', width: '100%', height: '250px' }}>
+        <canvas 
+          ref={canvasRef}
+          className="twelve-chart-canvas"
+          width={800}
+          height={250}
+        />
+        
+        {status === 'loading' && (
+          <div style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            textAlign: 'center',
+            color: isDarkMode ? '#d1d4dc' : '#666'
+          }}>
+            <div style={{ fontSize: '14px', marginBottom: '8px' }}>Loading chart data...</div>
+            <div style={{ fontSize: '12px', opacity: 0.7 }}>Fetching historical prices</div>
+          </div>
+        )}
+      </div>
+
+      {status === 'error' && (
+        <div className="twelve-error-message">
+          <p style={{ fontWeight: 600, marginBottom: '8px' }}>{error || 'Failed to load chart'}</p>
+          {error && error.includes('Rate limit') ? (
+            <p className="twelve-error-hint">
+              ⏳ You've hit the API rate limit (8 requests/minute).
+              <br />
+              Wait 60 seconds and refresh the page, or try a different tab.
+            </p>
+          ) : (
+            <p className="twelve-error-hint">
+              Note: Most meme coins aren't available on Twelve Data. 
+              Showing {getSymbolForTwelve()} as fallback.
+            </p>
+          )}
+        </div>
+      )}
+
+      {!isActive && (
+        <div className="twelve-inactive-overlay">
+          <p>Switch to Twelve tab to load live data</p>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default TwelveDataChart;

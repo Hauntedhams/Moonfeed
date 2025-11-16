@@ -165,6 +165,36 @@
     border-radius: 0 !important;
   }
 
+  /* TwelveDataChart specific styling in right panel */
+  .coin-card-right-panel .twelve-data-chart {
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 100vh !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+  }
+
+  .coin-card-right-panel .twelve-data-chart .chart-container {
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 100vh !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+  }
+
+  .coin-card-right-panel .twelve-data-chart .latest-price {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    background: rgba(0, 0, 0, 0.8);
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #00ff41;
+    z-index: 10;
+  }
+
   /* Hide the expand button on desktop split-screen mode */
   .coin-card-left-panel .expand-btn {
     display: none !important;
@@ -1558,6 +1588,7 @@
 
 .clean-chart-wrapper,
 .advanced-chart-wrapper,
+.twelve-chart-wrapper,
 .price-history-wrapper {
   display: flex;
   justify-content: center;
@@ -1579,6 +1610,13 @@
   overflow: visible; /* Allow DexScreener iframe to expand wider */
 }
 
+.twelve-chart-wrapper {
+  width: 100%;
+  min-height: 300px;
+  overflow: hidden;
+  background: white;
+}
+
 .price-history-wrapper {
   width: 100%;
   height: 300px;
@@ -1588,7 +1626,9 @@
 }
 
 .advanced-chart-wrapper .chart-container,
-.advanced-chart-wrapper .chart-placeholder {
+.advanced-chart-wrapper .chart-placeholder,
+.twelve-chart-wrapper .chart-container,
+.twelve-chart-wrapper .chart-placeholder {
   width: 100%;
   min-height: 450px; /* Match parent height */
   overflow: hidden;
@@ -3408,7 +3448,36 @@
     height: 100% !important;
     min-height: 100vh !important;
     border-radius: 0 !important;
-    margin: 0 !important;
+  }
+
+  /* TwelveDataChart specific styling in right panel */
+  .coin-card-right-panel .twelve-data-chart {
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 100vh !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+  }
+
+  .coin-card-right-panel .twelve-data-chart .chart-container {
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 100vh !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+  }
+
+  .coin-card-right-panel .twelve-data-chart .latest-price {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    background: rgba(0, 0, 0, 0.8);
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #00ff41;
+    z-index: 10;
   }
 
   /* Hide the expand button on desktop split-screen mode */
@@ -3416,20 +3485,54 @@
     display: none !important;
   }
 
-  /* Adjust banner to fit in left panel */
+  /* Adjust banner to fit in left panel with 3:1 aspect ratio */
   .coin-card-left-panel .coin-banner {
     position: relative !important;
     width: 100%;
-    height: 300px;
+    /* 3:1 aspect ratio: width / 3 = height */
+    height: 160px !important; /* 480px / 3 = 160px */
+    flex-shrink: 0;
+    overflow: hidden;
   }
 
-  /* Adjust info layer positioning for left panel */
-  .coin-card-left-panel .info-layer {
-    position: relative;
-    margin-top: -80px;
+  /* Display banner image in full view without cropping on desktop */
+  .coin-card-left-panel .coin-banner img {
+    width: 100% !important; /* Full width, no overflow */
+    height: 100% !important;
+    object-fit: cover; /* Cover maintains aspect ratio while filling container */
+    object-position: center !important;
+    position: absolute !important;
+    left: 0 !important; /* No offset needed */
+    top: 0 !important;
   }
 
-  /* Make charts section take less space in left panel since main chart is on right */
+  .coin-card-left-panel .banner-text-overlay {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+  }
+
+  /* Adjust info layer positioning for left panel - NO overlap with banner */
+  .coin-card-left-panel .coin-info-layer {
+    position: relative !important;
+    margin-top: 0 !important; /* Remove negative margin - no overlap */
+    height: auto !important;
+    /* Start mostly visible, slide up a bit when expanded */
+    transform: translateY(0) !important; /* Default: show full content */
+    transition: transform 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    border-top-left-radius: 24px;
+    border-top-right-radius: 24px;
+  }
+
+  .coin-card-left-panel .coin-info-layer.expanded {
+    position: relative !important;
+    height: auto !important;
+    /* When expanded, shift up slightly to maximize visible content */
+    transform: translateY(-50px) !important;
+  }
+
+  /* Make charts section smaller in left panel since main chart is on right */
   .coin-card-left-panel .charts-section {
     /* Hide charts section completely in desktop mode - chart is on right panel */
     display: none !important;
@@ -3442,15 +3545,39 @@
 
   /* Style the chart placeholder in left panel */
   .coin-card-left-panel .chart-placeholder {
-    padding: 40px 20px;
+    padding: 30px 20px;
     text-align: center;
     color: #64748b;
-    font-size: 14px;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   /* Add a subtle border between panels */
   .coin-card-left-panel {
-    border-right: 1px solid rgba(255, 255, 255, 0.05);
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.3);
+  }
+
+  /* Reduce padding in sections for more compact left panel */
+  .coin-card-left-panel .section-content {
+    padding: 14px;
+  }
+
+  /* Tighten spacing in desktop mode - bring header closer to profile/price */
+  .coin-card-left-panel .info-layer-header {
+    padding: 12px 20px 4px; /* Reduced top padding from 16px to 12px */
+  }
+
+  .coin-card-left-panel .desktop-coin-header {
+    padding: 4px 20px 8px 20px; /* Reduced top padding and margin */
+    margin-top: -4px; /* Pull even closer in desktop left panel */
+  }
+
+  /* Make metrics more compact */
+  .coin-card-left-panel .header-metrics {
+    gap: 8px;
   }
 }
 
@@ -3459,6 +3586,11 @@
   .coin-card-left-panel {
     width: 420px;
   }
+  
+  /* Maintain 3:1 aspect ratio for medium desktop */
+  .coin-card-left-panel .coin-banner {
+    height: 140px !important; /* 420px / 3 = 140px */
+  }
 }
 
 /* Large desktop - wider left panel for more comfortable reading */
@@ -3466,43 +3598,964 @@
   .coin-card-left-panel {
     width: 540px;
   }
-}
-
-/* Mobile-specific optimizations for chart scrolling */
-@media (max-width: 768px) {
-  .charts-horizontal-container {
-    /* Enhanced mobile scrolling */
-    scroll-behavior: smooth;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior-x: contain; /* Prevent over-scroll bounce */
-    touch-action: pan-x; /* Only allow horizontal panning */
-  }
   
-  .chart-nav-hot-area {
-    /* Improve touch responsiveness */
-    touch-action: pan-x;
-    -webkit-tap-highlight-color: transparent;
-  }
-  
-  .nav-button {
-    /* Larger touch targets on mobile */
-    min-width: 44px;
-    min-height: 44px;
-    padding: 8px 18px;
-    -webkit-tap-highlight-color: transparent;
-  }
-  
-  .chart-page {
-    /* Optimize page rendering on mobile */
-    will-change: transform;
-    contain: layout style paint; /* Improve rendering performance */
+  /* Maintain 3:1 aspect ratio for large desktop */
+  .coin-card-left-panel .coin-banner {
+    height: 180px !important; /* 540px / 3 = 180px */
   }
 }
 
-/* Very smooth scrolling on iOS */
-@supports (-webkit-touch-callout: none) {
-  .charts-horizontal-container {
-    -webkit-overflow-scrolling: touch;
-    scroll-padding: 0;
+/* Desktop mode - show desktop-coin-header, hide banner-text-overlay */
+@media (min-width: 1200px) {
+  .desktop-coin-header {
+    display: block !important;
+  }
+  
+  .banner-text-overlay {
+    display: none !important;
   }
 }
+
+/* Mobile mode - show banner-text-overlay, hide desktop-coin-header */
+@media (max-width: 1199px) {
+  .banner-text-overlay {
+    display: block !important;
+  }
+  
+  .desktop-coin-header {
+    display: none !important;
+  }
+}
+
+/* =============================================================================
+   BASE COIN CARD STYLES
+   ============================================================================= */
+
+.coin-card {
+  position: relative;
+  width: 100%;
+  /* Use dynamic viewport height that adapts to mobile browsers */
+  height: 100dvh; /* dvh = dynamic viewport height */
+  background: linear-gradient(135deg, #0b1220 0%, #0e1426 50%, #0b1220 100%);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  color: white;
+  /* Ensure interactions work */
+  pointer-events: auto;
+  /* Prevent overscroll behavior */
+  overscroll-behavior: none;
+}
+
+/* =============================================================================
+   BASE LAYER - Static Content (Banner, Profile, Name, Symbol, Description)
+   ============================================================================= */
+
+.coin-banner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  /* Shorter height to show more of the banner sides */
+  height: clamp(180px, 30vh, 250px);
+  background: linear-gradient(45deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  align-items: flex-start; /* Changed from center - align charts to top */
+  justify-content: center;
+  overflow: hidden;
+  z-index: 1;
+}
+
+.coin-banner::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 1;
+}
+
+.coin-banner img {
+  width: 120%; /* Make image wider than container */
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  position: absolute;
+  left: -10%; /* Center the wider image */
+  top: 0;
+  background: linear-gradient(45deg, #667eea 0%, #764ba2 100%); /* Fallback background */
+}
+
+.banner-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: flex-start; /* Changed from center - align charts to top */
+  justify-content: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+  position: relative;
+  z-index: 2;
+  overflow: hidden;
+}
+
+/* Decorative pattern overlay */
+.banner-placeholder::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: 
+    repeating-linear-gradient(45deg, transparent, transparent 35px, rgba(255, 255, 255, 0.05) 35px, rgba(255, 255, 255, 0.05) 70px),
+    repeating-linear-gradient(-45deg, transparent, transparent 35px, rgba(255, 255, 255, 0.03) 35px, rgba(255, 255, 255, 0.03) 70px);
+  pointer-events: none;
+}
+
+.banner-placeholder-text {
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 1.1rem;
+  font-weight: 600;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  text-align: center;
+  padding: 0 20px;
+  line-height: 1.4;
+  position: relative;
+  z-index: 1;
+}
+
+.banner-text-overlay {
+  position: absolute;
+  bottom: -12px;
+  left: 0;
+  right: 0;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.6));
+  padding: 20px;
+  z-index: 10;
+  color: white;
+  /* Add top padding to account for TopTabs overlay */
+  padding-top: 60px;
+  /* 🔥 FIX: Allow scroll events to pass through */
+  pointer-events: none;
+}
+
+.banner-coin-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+  /* 🔥 FIX: Keep pointer events disabled to allow scrolling */
+  pointer-events: none;
+}
+
+/* 🔥 FIX: Only enable pointer events for clickable elements */
+.banner-coin-name.clickable-name,
+.banner-coin-ticker,
+.banner-social-link {
+  pointer-events: auto;
+}
+
+.banner-coin-name {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: #ffffff;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+  margin: 0;
+}
+
+.banner-coin-name.clickable-name {
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+  position: relative;
+}
+
+.banner-coin-name.clickable-name:hover {
+  color: #f0f9ff;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+  transform: translateY(-1px);
+}
+
+.banner-coin-name.clickable-name:active {
+  transform: translateY(0);
+}
+
+.banner-symbol-row {
+  display: flex;
+  align-items: flex-start; /* Changed from center - align charts to top */
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.banner-coin-symbol {
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.85);
+  font-weight: 600;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  margin: 0;
+}
+
+.banner-lock-indicator {
+  margin-left: 8px;
+}
+
+/* Banner Follow Button */
+.banner-follow-button {
+  background: rgba(0, 0, 0, 0.05); /* Light gray for light mode */
+  border: 1.5px solid rgba(0, 0, 0, 0.2); /* Dark border for light mode */
+  color: rgba(0, 0, 0, 0.8); /* Dark text for light mode */
+  cursor: pointer;
+  padding: 6px 14px;
+  border-radius: 20px;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: flex-start; /* Changed from center - align charts to top */
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 600;
+  flex-shrink: 0;
+  white-space: nowrap;
+  text-transform: capitalize;
+  letter-spacing: 0.3px;
+}
+
+.banner-follow-button:hover {
+  background: rgba(0, 0, 0, 0.1); /* Slightly darker on hover */
+  border-color: rgba(0, 0, 0, 0.3);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.banner-follow-button.following {
+  background: rgba(0, 0, 0, 0.85); /* Dark background when following */
+  border-color: rgba(0, 0, 0, 0.85);
+  color: rgba(255, 255, 255, 0.95); /* White text when following */
+}
+
+.banner-follow-button.following:hover {
+  background: rgba(255, 80, 80, 0.9);
+  border-color: rgba(255, 80, 80, 0.9);
+  color: white;
+}
+
+.banner-follow-button.following:hover::after {
+  content: 'Unfollow';
+  position: absolute;
+}
+
+.banner-follow-button.following:hover {
+  color: transparent;
+}
+
+.banner-follow-button.following:hover::after {
+  color: white;
+}
+
+/* Inline description styling - single line with ellipsis */
+.banner-coin-description-inline {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.85);
+  line-height: 1.3;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  /* 🔥 FIX: Allow scroll-through */
+  pointer-events: none;
+  /* Single line with ellipsis */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Read more button */
+.read-more-button {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: lowercase;
+  transition: all 0.2s ease;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(4px);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.read-more-button:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.05);
+}
+
+.read-more-button:active {
+  transform: scale(0.98);
+}
+
+/* Legacy description styling (if still used elsewhere) */
+.banner-coin-description {
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1.4;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  /* 🔥 FIX: Allow scroll-through */
+  pointer-events: none;
+}
+
+
+
+/* =============================================================================
+   INFO LAYER - Expandable/Scrollable Content
+   🔥 SCROLL BEHAVIOR: Info layer only scrollable when expanded.
+      When collapsed, scroll/touch events pass through to parent scroller.
+   ============================================================================= */
+
+/* Desktop-only coin header in info layer - hidden on mobile */
+.desktop-coin-header {
+  display: none; /* Hidden by default on mobile */
+  padding: 0 20px 8px 20px; /* Reduced bottom padding from 16px to 8px */
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  margin-top: -8px; /* Pull up closer to the header */
+}
+
+.coin-info-layer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #ffffff;
+  backdrop-filter: blur(20px);
+  border-top-left-radius: 24px;
+  border-top-right-radius: 24px;
+  transition: transform 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94), 
+              height 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  transform: translateY(0%);
+  /* Adjust height to work with the new shorter banner size */
+  height: calc(100dvh - clamp(180px, 30vh, 250px));
+  z-index: 50; /* Increased z-index to ensure it's above other elements */
+  overflow: hidden;
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
+  /* 🔥 FIX: Allow scroll-through when not expanded */
+  pointer-events: none;
+}
+
+/* 🔥 FIX: When expanded, enable pointer events for scrolling within */
+.coin-info-layer.expanded {
+  pointer-events: auto;
+  transform: translateY(0%);
+  height: calc(100dvh - 80px); /* Fill viewport minus bottom nav bar */
+}
+
+.info-layer-header {
+  padding: 16px 20px 4px;
+  background: rgba(255, 255, 255, 0.98);
+  position: sticky;
+  top: 0;
+  z-index: 60; /* Increased z-index to ensure header stays on top */
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* 🔥 CRITICAL: Re-enable pointer events so expand button works */
+  pointer-events: auto;
+  border-bottom: none;
+  box-shadow: none;
+}
+
+.header-top-row {
+  display: flex;
+  align-items: flex-start; /* Changed from center - align charts to top */
+  justify-content: space-between;
+  width: 100%;
+}
+
+.header-right {
+  display: flex;
+  align-items: flex-start; /* Changed from center - align charts to top */
+  gap: 16px;
+}
+
+.expand-handle {
+  width: 32px;
+  height: 32px;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+  position: relative;
+  display: flex;
+  align-items: flex-start; /* Changed from center - align charts to top */
+  justify-content: center;
+  /* Ensure clickability */
+  pointer-events: auto;
+  z-index: 70; /* High z-index to ensure it's clickable */
+  /* Better touch target */
+  min-width: 44px;
+  min-height: 44px;
+  /* Prevent text selection */
+  user-select: none;
+  -webkit-user-select: none;
+  /* Ensure it's always on top */
+  isolation: isolate;
+  /* Prevent touch gestures from causing scroll */
+  touch-action: none;
+  -webkit-touch-callout: none;
+}
+
+.expand-handle::before {
+  content: '';
+  width: 12px;
+  height: 12px;
+  border-bottom: 2px solid rgba(0, 0, 0, 0.6);
+  border-right: 2px solid rgba(0, 0, 0, 0.6);
+  transform: rotate(-135deg);
+  transition: all 0.2s ease;
+}
+
+.expand-handle:hover {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 50%;
+  transform: scale(1.1);
+}
+
+.expand-handle:hover::before {
+  border-bottom-color: rgba(0, 0, 0, 0.8);
+  border-right-color: rgba(0, 0, 0, 0.8);
+}
+
+.expand-handle:active {
+  transform: scale(0.95);
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.trade-button {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+}
+
+.trade-button:hover {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+}
+
+.trade-button:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);
+}
+
+.coin-info-layer.expanded .expand-handle::before {
+  transform: rotate(45deg);
+}
+
+.header-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  flex: 1;
+}
+
+.price-and-social-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* 🔥 FIX: Inherit pointer-events from parent (pass through when collapsed) */
+  pointer-events: inherit;
+}
+
+.price-section {
+  display: flex;
+  align-items: flex-start; /* Changed from center - align charts to top */
+  gap: 12px;
+  /* 🔥 FIX: Inherit pointer-events from parent (pass through when collapsed) */
+  pointer-events: inherit;
+}
+
+/* 🎓 GRADUATION PROGRESS DISPLAY */
+.graduation-progress-display {
+  margin-top: 6px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  backdrop-filter: blur(10px);
+  transition: all 0.3s ease;
+}
+
+.graduation-progress-display:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+@keyframes pulse {
+  0%, 100% { 
+    opacity: 1; 
+    transform: scale(1);
+  }
+  50% { 
+    opacity: 0.85;
+    transform: scale(1.02);
+  }
+}
+
+.header-social-icons {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start; /* Changed from center - align charts to top */
+  flex-shrink: 0;
+  min-width: fit-content;
+}
+
+.header-metrics-row {
+  display: flex;
+  width: 100%;
+}
+
+/* Header Metrics Grid - Full width row */
+.header-metrics-grid {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0 4px 4px 4px;
+  scroll-behavior: smooth;
+  flex: 1;
+  width: 100%;
+  position: relative;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent; /* Firefox dark mode */
+}
+
+.header-metrics-grid::-webkit-scrollbar {
+  height: 4px;
+}
+
+.header-metrics-grid::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 2px;
+}
+
+.header-metrics-grid::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+}
+
+.header-metrics-grid::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.header-metric {
+  background: transparent;
+  border-radius: 0;
+  padding: 8px 16px;
+  text-align: center;
+  border: none;
+  border-right: 1px solid rgba(0, 0, 0, 0.1);
+  flex: 0 0 auto;
+  min-width: 90px;
+  transition: all 0.2s ease;
+  position: relative;
+  cursor: help;
+}
+
+.header-metric:last-child {
+  border-right: none;
+}
+
+.header-metric:hover {
+  background: rgba(0, 0, 0, 0.04);
+  transform: translateY(-1px);
+  border-radius: 6px;
+}
+
+.header-metric-label {
+  font-size: 0.7rem;
+  color: rgba(0, 0, 0, 0.6);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 2px;
+  display: flex;
+  align-items: flex-start; /* Changed from center - align charts to top */
+  gap: 4px;
+}
+
+.header-metric-value {
+  font-size: 0.85rem;
+  color: #000000;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.header-metric-value-with-icon {
+  font-size: 0.85rem;
+  color: #000000;
+  font-weight: 700;
+  line-height: 1.1;
+  display: flex;
+  align-items: flex-start; /* Changed from center - align charts to top */
+  gap: 4px;
+}
+
+/* Metric Tooltip Styles */
+.metric-tooltip {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(255, 255, 255, 0.98);
+  color: #000000;
+  padding: 12px;
+  border-radius: 12px;
+  width: 360px; /* Slightly smaller */
+  max-width: 92vw;
+  max-height: 90vh; /* Constrain to viewport but allow expansion */
+  font-size: 0.8rem; /* Slightly smaller text */
+  line-height: 1.35;
+  z-index: 999999; /* Maximum z-index for mobile compatibility */
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  pointer-events: none;
+  overflow-y: auto; /* Only show scroll if content exceeds 90vh */
+  /* Ensure it's above everything on mobile */
+  isolation: isolate;
+}
+
+.metric-tooltip::before {
+  display: none;
+}
+
+.tooltip-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #000000;
+  margin-bottom: 5px;
+}
+
+.tooltip-exact {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #22c55e;
+  margin-bottom: 7px;
+  font-family: 'Inter', monospace;
+}
+
+.tooltip-description {
+  font-size: 0.78rem;
+  color: #333333;
+  margin-bottom: 7px;
+  line-height: 1.4;
+}
+
+.tooltip-example {
+  font-size: 0.72rem;
+  color: #666666;
+  font-style: italic;
+  padding-top: 5px;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+  line-height: 1.35;
+}
+
+/* Enhanced hover effect for metrics */
+.header-metric {
+  cursor: help;
+  transition: all 0.2s ease;
+}
+
+.header-metric:hover {
+  background: rgba(0, 0, 0, 0.02);
+  transform: translateY(-1px);
+  border-radius: 6px;
+}
+
+/* Social Icon Base Styles */
+.header-social-icon {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: flex-start; /* Changed from center - align charts to top */
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: rgba(0, 0, 0, 0.6);
+  text-decoration: none;
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  box-shadow: none; /* Remove any shadows */
+}
+
+.header-social-icon svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+  transition: all 0.2s ease;
+}
+
+.header-social-icon:hover {
+  background: transparent;
+  transform: translateY(-1px);
+}
+
+/* Platform-specific icon styling with brand colors on hover */
+.header-social-icon.twitter-icon {
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.header-social-icon.twitter-icon:hover {
+  color: #000000;
+  background: transparent;
+}
+
+.header-social-icon.telegram-icon {
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.header-social-icon.telegram-icon:hover {
+  color: #0088cc;
+  background: transparent;
+}
+
+.header-social-icon.discord-icon {
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.header-social-icon.discord-icon:hover {
+  color: #5865F2;
+  background: transparent;
+}
+
+.header-social-icon.tiktok-icon {
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.header-social-icon.tiktok-icon:hover {
+  color: #000000;
+  background: transparent;
+}
+
+.header-social-icon.website-icon {
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.header-social-icon.website-icon:hover {
+  color: rgba(0, 0, 0, 0.9);
+  background: transparent;
+}
+
+.info-layer-profile-image {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  background: rgba(0, 0, 0, 0.04);
+  display: flex;
+  align-items: flex-start; /* Changed from center - align charts to top */
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.info-layer-profile-image:hover {
+  transform: scale(1.05);
+  border-color: rgba(0, 0, 0, 0.2);
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.info-layer-profile-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.info-layer-profile-placeholder {
+  color: rgba(0, 0, 0, 0.6);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.price-row {
+  display: flex;
+  align-items: flex-start; /* Changed from center - align charts to top */
+  gap: 12px;
+}
+
+.coin-price {
+  font-size: 1.7rem;
+  font-weight: 800;
+  color: #000000;
+  text-shadow: none;
+}
+
+.price-change {
+  font-size: 0.95rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: flex-start; /* Changed from center - align charts to top */
+  gap: 6px;
+}
+
+.price-change.positive {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+}
+
+.price-change.negative {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+/* Live price indicators */
+.live-indicators {
+  display: flex;
+  align-items: flex-start; /* Changed from center - align charts to top */
+  gap: 4px;
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  z-index: 10;
+}
+
+.live-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  position: relative;
+  display: flex;
+  align-items: flex-start; /* Changed from center - align charts to top */
+  justify-content: center;
+}
+
+.live-indicator.connected .live-dot {
+  background: #22c55e;
+  animation: pulse-green 2s ease-in-out infinite;
+}
+
+.live-indicator.disconnected .live-dot {
+  background: #ef4444;
+  animation: pulse-red 2s ease-in-out infinite;
+}
+
+.live-dot {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+}
+
+.jupiter-live-indicator {
+  font-size: 10px;
+  animation: rotate 3s linear infinite;
+  filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.8));
+}
+
+@keyframes pulse-green {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.3); opacity: 0.7; }
+}
+
+@keyframes pulse-red {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.3); opacity: 0.7; }
+}
+
+@keyframes rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Price flash animations for live updates */
+.coin-price.price-up {
+  animation: flash-green 0.6s ease-out;
+}
+
+.coin-price.price-down {
+  animation: flash-red 0.6s ease-out;
+}
+
+@keyframes flash-green {
+  0% { background-color: transparent; }
+  50% { background-color: rgba(34, 197, 94, 0.3); border-radius: 8px; }
+  100% { background-color: transparent; }
+}
+
+@keyframes flash-red {
+  0% { background-color: transparent; }
+  50% { background-color: rgba(239, 68, 68, 0.3); border-radius: 8px; }
+  100% { background-color: transparent; }
+}
+
+/* =============================================================================
+   SOCIAL LINKS SECTION - Between price and metrics
+   ============================================================================= */
+
+.social-links-section {
+  margin-bottom: 12px;
+  padding-top: 8px;
+  /* 🔥 FIX: Inherit pointer-events from parent (pass through when collapsed) */
+  pointer-events: inherit;
+}
+
+.social-links-grid {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start; /* Changed from center - align charts to top */
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.info-layer-content {
+  padding: 0 20px 100px; /* Increased bottom padding to clear the bottom nav bar */
+  padding-top: 0; /* Remove top padding to move charts up */
+  overflow-y: hidden; /* 🔥 DISABLED by default - only scrollable when expanded */
+  height: calc(100% - 80px);
+  opacity: 1; /* Changed from 0.7 to 1 - no graying out */
+  transition: opacity 0.3s ease;
+  /* 🔥 FIX: Inherit pointer-events from parent (none when collapsed, auto when expanded) */
+  pointer-events: inherit;
+  /* Establish proper stacking context */
+  position: relative;
+  z-index: 55;
+  /* 🔥 Prevent overscroll when collapsed - pass scroll to parent */
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
+  /* 🔥 FIX: Allow touch scrolling by default so parent can handle it */
+  touch-action: auto;
+}
+
+.coin-info-layer.expanded .info-layer-content {
+  overflow-y: auto; /* 🔥 Enable scrolling when expanded */
+  height: calc(100% - 80px); /* Allow scrolling through all content */
+  opacity: 1;
+  /* 🔥 Enable vertical scrolling when expanded */
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+  /* 🔥 Ensure pointer events are enabled when expanded */
+  pointer-events: auto;
+}
+
+/* Scrollbar styling for info-layer-content */
+.info-layer-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.info-layer
