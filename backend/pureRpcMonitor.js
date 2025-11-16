@@ -96,8 +96,16 @@ class PureRpcMonitor {
           console.log(`✅ [Monitor] Found ${pool.dexId} pool: ${pool.pairAddress.substring(0, 8)}...`);
           console.log(`   Liquidity: $${pool.liquidity?.usd || 0}`);
           
+          // Determine pool type based on DEX ID
+          let poolType = 'raydium'; // default
+          if (pool.dexId.toLowerCase().includes('orca')) {
+            poolType = 'orca';
+          } else if (pool.dexId.toLowerCase().includes('raydium')) {
+            poolType = 'raydium';
+          }
+          
           return {
-            type: 'raydium', // Generalized to work for any DEX
+            type: poolType,
             poolAddress: pool.pairAddress,
             tokenMint: tokenMint,
             baseToken: pool.baseToken?.address,
@@ -344,7 +352,7 @@ class PureRpcMonitor {
 
   /**
    * Parse price from Raydium pool reserves
-   * This reads the pool account data directly from Solana RPC
+   * This reads the pool account data AND the actual token vaults
    */
   async getRaydiumPrice(poolData) {
     try {
@@ -357,32 +365,161 @@ class PureRpcMonitor {
         return null;
       }
 
-      // Parse Raydium AMM data structure
-      // Offsets are based on Raydium's AMM program layout
+      // Raydium AMM V4 Layout:
+      // The pool account contains vault addresses, not actual balances
+      // We need to read the actual token vault accounts
+      
       const data = poolAccount.data;
       
-      // Pool coin vault (token A) - offset 192
-      const poolCoinAmount = data.readBigUInt64LE(192);
+      // Read vault addresses from pool account
+      // Base vault (token) - offset 64 (32 bytes pubkey)
+      const baseVaultAddress = new PublicKey(data.slice(64, 96));
+      // Quote vault (SOL/USDC) - offset 96 (32 bytes pubkey)
+      const quoteVaultAddress = new PublicKey(data.slice(96, 128));
       
-      // Pool pc vault (token B, usually SOL/USDC) - offset 200
-      const poolPcAmount = data.readBigUInt64LE(200);
+      console.log(`🔍 [Monitor] Reading Raydium vaults:`);
+      console.log(`   Base vault: ${baseVaultAddress.toString().substring(0, 8)}...`);
+      console.log(`   Quote vault: ${quoteVaultAddress.toString().substring(0, 8)}...`);
       
-      // Calculate price: pcAmount / coinAmount * SOL price
-      const price = (Number(poolPcAmount) / Number(poolCoinAmount)) * this.solPrice;
+      // Read the actual token account balances from the vaults
+      const [baseVaultAccount, quoteVaultAccount] = await Promise.all([
+        this.connection.getAccountInfo(baseVaultAddress),
+        this.connection.getAccountInfo(quoteVaultAddress)
+      ]);
       
-      console.log(`💰 [Monitor] Raydium reserves: ${poolCoinAmount} token / ${poolPcAmount} SOL`);
-      console.log(`💰 [Monitor] Calculated price: $${price.toFixed(8)}`);
+      if (!baseVaultAccount || !quoteVaultAccount) {
+        console.log(`⚠️  [Monitor] Could not read vault accounts`);
+        return null;
+      }
+      
+      // SPL Token Account layout:
+      // Amount is stored at offset 64 as u64 (8 bytes)
+      const baseAmount = baseVaultAccount.data.readBigUInt64LE(64);
+      const quoteAmount = quoteVaultAccount.data.readBigUInt64LE(64);
+      
+      console.log(`💰 [Monitor] Raydium vault balances:`);
+      console.log(`   Base (token): ${baseAmount.toString()}`);
+      console.log(`   Quote (SOL): ${quoteAmount.toString()}`);
+      
+      // Check if this is the correct pair orientation
+      // If baseToken matches our token mint, price = quote/base
+      // Otherwise price = base/quote
+      let price;
+      
+      if (baseAmount === 0n || quoteAmount === 0n) {
+        console.log(`⚠️  [Monitor] Zero balance in vault`);
+        return null;
+      }
+      
+      // Assume standard: base is token, quote is SOL/USDC
+      // Price = (quote / 10^9) / (base / 10^6) * SOL_price
+      // Simplified: (quote / base) * (10^6 / 10^9) * SOL_price
+      const quoteAmountNum = Number(quoteAmount) / 1e9; // SOL has 9 decimals
+      const baseAmountNum = Number(baseAmount) / 1e6;   // Most tokens have 6-9 decimals, using 6 as default
+      
+      price = (quoteAmountNum / baseAmountNum) * this.solPrice;
+      
+      // Sanity check: price should be reasonable (not $0.0000001 or $1,000,000)
+      if (price < 0.00000001 || price > 1000000) {
+        console.log(`⚠️  [Monitor] Unreasonable price detected: $${price}, trying different decimal assumption`);
+        // Try with 9 decimals for token
+        const baseAmountNum9 = Number(baseAmount) / 1e9;
+        price = (quoteAmountNum / baseAmountNum9) * this.solPrice;
+      }
+      
+      console.log(`💰 [Monitor] Calculated Raydium price: $${price.toFixed(8)}`);
       
       return {
         price: price,
         priceUsd: price,
         timestamp: Date.now(),
         source: 'raydium-rpc',
-        poolCoinAmount: poolCoinAmount.toString(),
-        poolPcAmount: poolPcAmount.toString()
+        baseAmount: baseAmount.toString(),
+        quoteAmount: quoteAmount.toString()
       };
     } catch (error) {
       console.error(`❌ [Monitor] Error parsing Raydium pool:`, error.message);
+      console.error(`   Stack:`, error.stack);
+      return null;
+    }
+  }
+
+  /**
+   * Parse price from Orca Whirlpool
+   * Similar to Raydium but different data layout
+   */
+  async getOrcaPrice(poolData) {
+    try {
+      const poolAccount = await this.connection.getAccountInfo(
+        new PublicKey(poolData.poolAddress)
+      );
+      
+      if (!poolAccount) {
+        console.log(`⚠️  [Monitor] Orca pool account not found`);
+        return null;
+      }
+
+      // Orca Whirlpool layout (simplified)
+      // Vault addresses are at different offsets than Raydium
+      const data = poolAccount.data;
+      
+      // Token vault A - offset 101 (32 bytes)
+      const vaultAAddress = new PublicKey(data.slice(101, 133));
+      // Token vault B - offset 133 (32 bytes)
+      const vaultBAddress = new PublicKey(data.slice(133, 165));
+      
+      console.log(`🔍 [Monitor] Reading Orca vaults:`);
+      console.log(`   Vault A: ${vaultAAddress.toString().substring(0, 8)}...`);
+      console.log(`   Vault B: ${vaultBAddress.toString().substring(0, 8)}...`);
+      
+      // Read vault balances
+      const [vaultAAccount, vaultBAccount] = await Promise.all([
+        this.connection.getAccountInfo(vaultAAddress),
+        this.connection.getAccountInfo(vaultBAddress)
+      ]);
+      
+      if (!vaultAAccount || !vaultBAccount) {
+        console.log(`⚠️  [Monitor] Could not read Orca vault accounts`);
+        return null;
+      }
+      
+      // Read amounts from SPL token accounts (offset 64)
+      const amountA = vaultAAccount.data.readBigUInt64LE(64);
+      const amountB = vaultBAccount.data.readBigUInt64LE(64);
+      
+      console.log(`💰 [Monitor] Orca vault balances:`);
+      console.log(`   Vault A: ${amountA.toString()}`);
+      console.log(`   Vault B: ${amountB.toString()}`);
+      
+      if (amountA === 0n || amountB === 0n) {
+        console.log(`⚠️  [Monitor] Zero balance in Orca vault`);
+        return null;
+      }
+      
+      // Calculate price (similar logic to Raydium)
+      const amountANum = Number(amountA) / 1e9;
+      const amountBNum = Number(amountB) / 1e6;
+      
+      let price = (amountANum / amountBNum) * this.solPrice;
+      
+      // Sanity check
+      if (price < 0.00000001 || price > 1000000) {
+        const amountBNum9 = Number(amountB) / 1e9;
+        price = (amountANum / amountBNum9) * this.solPrice;
+      }
+      
+      console.log(`💰 [Monitor] Calculated Orca price: $${price.toFixed(8)}`);
+      
+      return {
+        price: price,
+        priceUsd: price,
+        timestamp: Date.now(),
+        source: 'orca-rpc',
+        amountA: amountA.toString(),
+        amountB: amountB.toString()
+      };
+    } catch (error) {
+      console.error(`❌ [Monitor] Error parsing Orca pool:`, error.message);
       return null;
     }
   }
@@ -413,14 +550,18 @@ class PureRpcMonitor {
         currentPrice = await this.getPumpfunPrice({ type: 'pumpfun', poolAddress: sub.poolAddress, tokenMint });
       } else if (sub.type === 'raydium') {
         currentPrice = await this.getRaydiumPrice({ type: 'raydium', poolAddress: sub.poolAddress, tokenMint });
+      } else if (sub.type === 'orca') {
+        currentPrice = await this.getOrcaPrice({ type: 'orca', poolAddress: sub.poolAddress, tokenMint });
       }
       
       if (currentPrice && client.readyState === 1) {
         console.log(`📤 [Monitor] Sending current price to new client: $${currentPrice.price.toFixed(8)}`);
         client.send(JSON.stringify({
-          type: 'price_update',
+          type: 'price-update',
           token: tokenMint,
-          data: currentPrice
+          price: currentPrice.price || currentPrice.priceUsd,
+          timestamp: currentPrice.timestamp || Date.now(),
+          source: currentPrice.source || 'rpc'
         }));
       }
       
@@ -435,7 +576,28 @@ class PureRpcMonitor {
         throw new Error('No trading pool found for this token');
       }
 
-      // Subscribe to pool account changes
+      // Get initial price to check if token has graduated
+      let initialPrice;
+      if (poolData.type === 'pumpfun') {
+        initialPrice = await this.getPumpfunPrice(poolData);
+      } else if (poolData.type === 'raydium') {
+        initialPrice = await this.getRaydiumPrice(poolData);
+      } else if (poolData.type === 'orca') {
+        initialPrice = await this.getOrcaPrice(poolData);
+      }
+
+      // If RPC price is null (graduated/zero reserves), fall back to Dexscreener
+      if (!initialPrice) {
+        console.log(`⚠️  [Monitor] RPC price unavailable (token may have graduated), using Dexscreener...`);
+        this.startDexscreenerPolling(tokenMint);
+        return;
+      }
+
+      // Send initial price
+      console.log(`📤 [Monitor] Sending initial price: $${initialPrice.price.toFixed(8)}`);
+      this.broadcastPrice(tokenMint, initialPrice);
+
+      // Subscribe to pool account changes for real-time RPC updates
       const subscriptionId = this.connection.onAccountChange(
         new PublicKey(poolData.poolAddress),
         async (accountInfo, context) => {
@@ -447,9 +609,18 @@ class PureRpcMonitor {
             priceData = await this.getPumpfunPrice(poolData);
           } else if (poolData.type === 'raydium') {
             priceData = await this.getRaydiumPrice(poolData);
+          } else if (poolData.type === 'orca') {
+            priceData = await this.getOrcaPrice(poolData);
           }
           
-          if (priceData) {
+          // If RPC fails (graduated), switch to Dexscreener
+          if (!priceData) {
+            console.log(`⚠️  [Monitor] RPC price failed, switching to Dexscreener...`);
+            // Unsubscribe from RPC
+            this.connection.removeAccountChangeListener(subscriptionId);
+            // Start Dexscreener polling
+            this.startDexscreenerPolling(tokenMint);
+          } else {
             console.log(`💰 [Monitor] New price: $${priceData.price.toFixed(8)}`);
             this.broadcastPrice(tokenMint, priceData);
           }
@@ -467,20 +638,7 @@ class PureRpcMonitor {
         startTime: Date.now()
       });
 
-      // Get and send initial price
-      let initialPrice;
-      if (poolData.type === 'pumpfun') {
-        initialPrice = await this.getPumpfunPrice(poolData);
-      } else if (poolData.type === 'raydium') {
-        initialPrice = await this.getRaydiumPrice(poolData);
-      }
-
-      if (initialPrice) {
-        console.log(`📤 [Monitor] Sending initial price: $${initialPrice.price.toFixed(8)}`);
-        this.broadcastPrice(tokenMint, initialPrice);
-      }
-
-      // Start polling as backup (every 10 seconds)
+      // Start polling as backup (every 3 seconds)
       this.startPolling(tokenMint, poolData);
 
     } catch (error) {
@@ -504,6 +662,14 @@ class PureRpcMonitor {
         priceData = await this.getPumpfunPrice(poolData);
       } else if (poolData.type === 'raydium') {
         priceData = await this.getRaydiumPrice(poolData);
+      } else if (poolData.type === 'orca') {
+        priceData = await this.getOrcaPrice(poolData);
+      }
+
+      // If RPC fails, try Dexscreener as backup
+      if (!priceData) {
+        console.log(`⚠️  [Monitor] RPC polling failed, trying Dexscreener...`);
+        priceData = await this.getDexscreenerPrice(tokenMint);
       }
 
       if (priceData) {
@@ -524,9 +690,11 @@ class PureRpcMonitor {
     if (!clients || clients.size === 0) return;
 
     const message = JSON.stringify({
-      type: 'price_update',
+      type: 'price-update',  // Changed to match frontend expectation
       token: tokenMint,
-      data: priceData
+      price: priceData.price || priceData.priceUsd,  // Direct price value
+      timestamp: priceData.timestamp || Date.now(),  // Timestamp
+      source: priceData.source || 'rpc'  // Source
     });
 
     let sentCount = 0;
@@ -538,7 +706,7 @@ class PureRpcMonitor {
     });
 
     if (sentCount > 0) {
-      console.log(`📤 [Monitor] Broadcasted price to ${sentCount} client(s)`);
+      console.log(`📤 [Monitor] Broadcasted price $${(priceData.price || priceData.priceUsd).toFixed(8)} to ${sentCount} client(s)`);
     }
   }
 
@@ -565,6 +733,93 @@ class PureRpcMonitor {
   }
 
   /**
+   * Get price from Dexscreener API (for graduated tokens and DEX pools)
+   */
+  async getDexscreenerPrice(tokenMint) {
+    try {
+      const response = await axios.get(
+        `https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`,
+        { timeout: 5000 }
+      );
+
+      if (response.data && response.data.pairs && response.data.pairs.length > 0) {
+        // Get the pool with highest liquidity
+        const pools = response.data.pairs
+          .filter(p => p.chainId === 'solana')
+          .sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0));
+        
+        if (pools.length > 0) {
+          const pool = pools[0];
+          const price = parseFloat(pool.priceUsd) || 0;
+          
+          console.log(`💰 [Monitor] Dexscreener price: $${price.toFixed(8)} (${pool.dexId})`);
+          
+          return {
+            price: price,
+            priceUsd: price,
+            timestamp: Date.now(),
+            source: 'dexscreener',
+            dexId: pool.dexId,
+            liquidity: pool.liquidity?.usd,
+            volume24h: pool.volume?.h24
+          };
+        }
+      }
+
+      console.log(`⚠️  [Monitor] No Dexscreener data available`);
+      return null;
+    } catch (error) {
+      console.log(`⚠️  [Monitor] Dexscreener API error:`, error.message);
+      return null;
+    }
+  }
+
+  /**
+   * Start Dexscreener polling for graduated tokens or when RPC fails
+   */
+  startDexscreenerPolling(tokenMint) {
+    console.log(`🔄 [Monitor] Starting Dexscreener polling for ${tokenMint.substring(0, 8)}...`);
+    
+    // Clear any existing polling
+    const existingSub = this.subscriptions.get(tokenMint);
+    if (existingSub?.pollingInterval) {
+      clearInterval(existingSub.pollingInterval);
+    }
+
+    // Poll Dexscreener every 2 seconds for sub-second-like updates
+    const intervalId = setInterval(async () => {
+      if (!this.clients.has(tokenMint) || this.clients.get(tokenMint).size === 0) {
+        clearInterval(intervalId);
+        return;
+      }
+
+      const priceData = await this.getDexscreenerPrice(tokenMint);
+      if (priceData) {
+        this.broadcastPrice(tokenMint, priceData);
+      }
+    }, 2000); // 2 second polling
+
+    // Update subscription info
+    if (this.subscriptions.has(tokenMint)) {
+      this.subscriptions.get(tokenMint).pollingInterval = intervalId;
+      this.subscriptions.get(tokenMint).type = 'dexscreener';
+    } else {
+      this.subscriptions.set(tokenMint, {
+        type: 'dexscreener',
+        pollingInterval: intervalId,
+        startTime: Date.now()
+      });
+    }
+
+    // Send initial price immediately
+    this.getDexscreenerPrice(tokenMint).then(priceData => {
+      if (priceData) {
+        this.broadcastPrice(tokenMint, priceData);
+      }
+    });
+  }
+
+  /**
    * Unsubscribe a client from a token
    */
   unsubscribe(tokenMint, client) {
@@ -575,7 +830,9 @@ class PureRpcMonitor {
       if (clients.size === 0) {
         const sub = this.subscriptions.get(tokenMint);
         if (sub) {
-          this.connection.removeAccountChangeListener(sub.subscriptionId);
+          if (sub.subscriptionId) {
+            this.connection.removeAccountChangeListener(sub.subscriptionId);
+          }
           if (sub.pollingInterval) {
             clearInterval(sub.pollingInterval);
           }

@@ -1,9 +1,109 @@
+/* ============================================
+   MODERN ANIMATED CHART - TikTok Style
+   ============================================ */
+
+/* CSS Variables for Theme Colors */
+:root {
+  /* Dark mode (default) */
+  --chart-bg-from: #000000;
+  --chart-bg-to: #0a0a0a;
+  --chart-line-color: #00ff41;
+  --chart-flash-color: rgba(0, 255, 65, 0.5);
+  --live-indicator-color: #00ff41;
+  --live-indicator-bg: linear-gradient(135deg, rgba(0, 255, 65, 0.15) 0%, rgba(0, 255, 65, 0.05) 100%);
+  --live-indicator-border: rgba(0, 255, 65, 0.4);
+}
+
+/* Light mode theme */
+@media (prefers-color-scheme: light) {
+  :root {
+    --chart-bg-from: #ffffff;
+    --chart-bg-to: #f5f5f7;
+    --chart-line-color: #007AFF;
+    --chart-flash-color: rgba(0, 122, 255, 0.5);
+    --live-indicator-color: #007AFF;
+    --live-indicator-bg: linear-gradient(135deg, rgba(0, 122, 255, 0.15) 0%, rgba(0, 122, 255, 0.05) 100%);
+    --live-indicator-border: rgba(0, 122, 255, 0.4);
+  }
+
+  /* Light mode flash animations */
+  @keyframes flashGreen {
+    0% {
+      box-shadow: 0 0 0 0 rgba(0, 122, 255, 0);
+    }
+    30% {
+      box-shadow: 0 0 40px 10px rgba(0, 200, 83, 0.5),
+                  inset 0 0 40px rgba(0, 200, 83, 0.1);
+    }
+    100% {
+      box-shadow: 0 0 0 0 rgba(0, 122, 255, 0);
+    }
+  }
+
+  @keyframes flashRed {
+    0% {
+      box-shadow: 0 0 0 0 rgba(255, 59, 59, 0);
+    }
+    30% {
+      box-shadow: 0 0 40px 10px rgba(255, 59, 59, 0.6),
+                  inset 0 0 40px rgba(255, 59, 59, 0.15);
+    }
+    100% {
+      box-shadow: 0 0 0 0 rgba(255, 59, 59, 0);
+    }
+  }
+}
+
+/* Price Flash Animations */
+.chart-container {
+  transition: box-shadow 0.3s ease-out; /* Smooth transition for flash effects */
+  /* Enable hardware acceleration for smooth animations */
+  will-change: box-shadow;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-font-smoothing: subpixel-antialiased;
+}
+
+.chart-container.price-flash-up {
+  animation: flashGreen 0.6s ease-out;
+}
+
+.chart-container.price-flash-down {
+  animation: flashRed 0.6s ease-out;
+}
+
+@keyframes flashGreen {
+  0% {
+    box-shadow: 0 0 0 0 rgba(0, 255, 65, 0);
+  }
+  30% {
+    box-shadow: 0 0 40px 10px rgba(0, 255, 65, 0.5),
+                inset 0 0 40px rgba(0, 255, 65, 0.1);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(0, 255, 65, 0);
+  }
+}
+
+@keyframes flashRed {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 59, 59, 0);
+  }
+  30% {
+    box-shadow: 0 0 40px 10px rgba(255, 59, 59, 0.5),
+                inset 0 0 40px rgba(255, 59, 59, 0.1);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 59, 59, 0);
+  }
+}
+
 .twelve-data-chart {
   position: relative;
   width: 100%;
   height: 100%;
   min-height: 320px;
-  background: #0a0a0a;
+  background: linear-gradient(180deg, var(--chart-bg-from) 0%, var(--chart-bg-to) 100%);
   border-radius: 0;
   overflow: hidden;
   display: flex;
@@ -11,52 +111,170 @@
   padding: 0;
   box-shadow: none;
   border: none;
+  /* Enable hardware acceleration for chart rendering */
+  will-change: transform;
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
 }
 
+/* LIVE Indicator - Enhanced with Glow */
+.live-indicator {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: var(--live-indicator-bg);
+  border: 2px solid var(--live-indicator-border);
+  padding: 8px 16px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--live-indicator-color);
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  z-index: 100;
+  animation: livePulseGlow 2s ease-in-out infinite;
+  box-shadow: 
+    0 0 20px var(--chart-flash-color),
+    0 0 40px rgba(var(--live-indicator-border), 0.1),
+    inset 0 0 10px rgba(var(--live-indicator-border), 0.05);
+  backdrop-filter: blur(10px);
+}
+
+.live-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--live-indicator-color);
+  border-radius: 50%;
+  animation: liveDotPulse 1.5s ease-in-out infinite;
+  box-shadow: 
+    0 0 10px var(--chart-flash-color),
+    0 0 20px rgba(var(--live-indicator-border), 0.4);
+}
+
+@keyframes livePulseGlow {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 
+      0 0 20px rgba(0, 255, 65, 0.3),
+      0 0 40px rgba(0, 255, 65, 0.1),
+      inset 0 0 10px rgba(0, 255, 65, 0.05);
+  }
+  50% {
+    opacity: 0.85;
+    box-shadow: 
+      0 0 30px rgba(0, 255, 65, 0.5),
+      0 0 60px rgba(0, 255, 65, 0.2),
+      inset 0 0 15px rgba(0, 255, 65, 0.08);
+  }
+}
+
+@keyframes liveDotPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+    box-shadow: 
+      0 0 10px rgba(0, 255, 65, 0.8),
+      0 0 20px rgba(0, 255, 65, 0.4);
+  }
+  50% {
+    transform: scale(1.4);
+    opacity: 0.7;
+    box-shadow: 
+      0 0 20px rgba(0, 255, 65, 1),
+      0 0 40px rgba(0, 255, 65, 0.6);
+  }
+}
+
+.live-badge {
+  color: #00ff41;
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: 8px;
+  padding: 2px 6px;
+  background: rgba(0, 255, 65, 0.1);
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Chart Header - Redesigned */
 .chart-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  padding: 0 16px 12px 16px;
-  margin-bottom: 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  align-items: flex-start;
+  padding: 20px 24px 16px 24px;
+  margin-bottom: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.5) 0%, transparent 100%);
+  z-index: 10;
+  position: relative;
 }
 
 .price-info {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .current-price {
-  font-size: 32px;
-  font-weight: 800;
-  color: #00ff41;
-  letter-spacing: -0.8px;
-  text-shadow: 0 0 20px rgba(0, 255, 65, 0.3);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  font-size: 42px;
+  font-weight: 900;
+  color: #ffffff;
+  letter-spacing: -1.5px;
+  text-shadow: 
+    0 0 30px rgba(0, 255, 65, 0.4),
+    0 2px 10px rgba(0, 0, 0, 0.8);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', system-ui, sans-serif;
+  animation: priceFlicker 0.15s ease-in-out;
+  line-height: 1;
+}
+
+/* Animate price changes */
+@keyframes priceFlicker {
+  0% { opacity: 1; }
+  50% { opacity: 0.95; }
+  100% { opacity: 1; }
 }
 
 .price-change {
-  font-size: 15px;
-  font-weight: 700;
-  padding: 6px 12px;
-  border-radius: 8px;
-  display: inline-block;
+  font-size: 16px;
+  font-weight: 800;
+  padding: 6px 14px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   width: fit-content;
   letter-spacing: 0.3px;
+  animation: slideIn 0.3s ease-out;
 }
 
 .price-change.positive {
   color: #00ff41;
-  background: rgba(0, 255, 65, 0.1);
-  border: 1px solid rgba(0, 255, 65, 0.2);
+  background: linear-gradient(135deg, rgba(0, 255, 65, 0.15) 0%, rgba(0, 255, 65, 0.08) 100%);
+  border: 1px solid rgba(0, 255, 65, 0.3);
+  box-shadow: 0 2px 10px rgba(0, 255, 65, 0.2);
 }
 
 .price-change.negative {
   color: #ff3b3b;
-  background: rgba(255, 59, 59, 0.1);
-  border: 1px solid rgba(255, 59, 59, 0.2);
+  background: linear-gradient(135deg, rgba(255, 59, 59, 0.15) 0%, rgba(255, 59, 59, 0.08) 100%);
+  border: 1px solid rgba(255, 59, 59, 0.3);
+  box-shadow: 0 2px 10px rgba(255, 59, 59, 0.2);
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .status-badge {
@@ -71,8 +289,10 @@
   letter-spacing: 1.2px;
   background: rgba(0, 255, 65, 0.1);
   color: #00ff41;
-  border: 1px solid rgba(0, 255, 65, 0.3);
-  box-shadow: 0 0 10px rgba(0, 255, 65, 0.1);
+  border: 2px solid rgba(0, 255, 65, 0.3);
+  box-shadow: 0 0 20px rgba(0, 255, 65, 0.2);
+  backdrop-filter: blur(10px);
+  animation: fadeIn 0.3s ease-out;
 }
 
 .status-badge[data-status="loading"],
@@ -80,35 +300,46 @@
 .status-badge[data-status="connected"] {
   background: rgba(251, 191, 36, 0.1);
   color: #fbbf24;
-  border-color: rgba(251, 191, 36, 0.3);
-  box-shadow: 0 0 10px rgba(251, 191, 36, 0.1);
+  border-color: rgba(251, 191, 36, 0.4);
+  box-shadow: 0 0 20px rgba(251, 191, 36, 0.2);
 }
 
 .status-badge[data-status="error"],
 .status-badge[data-status="disconnected"] {
   background: rgba(255, 59, 59, 0.1);
   color: #ff3b3b;
-  border-color: rgba(255, 59, 59, 0.3);
-  box-shadow: 0 0 10px rgba(255, 59, 59, 0.1);
+  border-color: rgba(255, 59, 59, 0.4);
+  box-shadow: 0 0 20px rgba(255, 59, 59, 0.2);
 }
 
 .status-dot {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: currentColor;
-  animation: pulse-dot 2s ease-in-out infinite;
-  box-shadow: 0 0 6px currentColor;
+  animation: statusDotPulse 2s ease-in-out infinite;
+  box-shadow: 0 0 8px currentColor;
 }
 
-@keyframes pulse-dot {
+@keyframes statusDotPulse {
   0%, 100% {
     opacity: 1;
     transform: scale(1);
   }
   50% {
     opacity: 0.6;
-    transform: scale(1.3);
+    transform: scale(1.4);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
   }
 }
 
@@ -131,6 +362,7 @@
   position: relative;
 }
 
+/* Loading & Error States - Enhanced */
 .chart-loading {
   position: absolute;
   top: 50%;
@@ -139,10 +371,27 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
+  gap: 20px;
   color: rgba(255, 255, 255, 0.6);
   font-size: 14px;
-  z-index: 10;
+  font-weight: 600;
+  z-index: 50;
+}
+
+.chart-loading::before {
+  content: '';
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(0, 255, 65, 0.2);
+  border-top-color: #00ff41;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .chart-error {
@@ -154,15 +403,18 @@
   flex-direction: column;
   align-items: center;
   gap: 12px;
-  padding: 20px;
-  background: rgba(255, 59, 59, 0.1);
-  border: 1px solid rgba(255, 59, 59, 0.3);
-  border-radius: 12px;
+  padding: 24px 32px;
+  background: linear-gradient(135deg, rgba(255, 59, 59, 0.15) 0%, rgba(255, 59, 59, 0.08) 100%);
+  border: 2px solid rgba(255, 59, 59, 0.3);
+  border-radius: 16px;
   color: #ff3b3b;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   text-align: center;
-  z-index: 10;
+  z-index: 50;
+  box-shadow: 0 4px 20px rgba(255, 59, 59, 0.2);
+  backdrop-filter: blur(10px);
+  max-width: 80%;
 }
 
 .chart-price-badge {
@@ -181,14 +433,16 @@
   z-index: 5;
 }
 
-/* Match other charts' container naming */
+/* Chart Container with Enhanced Background */
 .chart-container {
   flex: 1;
   width: 100%;
   height: 100%;
-  min-height: 320px;
+  min-height: 380px;
   position: relative;
-  background: #000;
+  background: 
+    radial-gradient(ellipse at 50% 0%, rgba(0, 255, 65, 0.03) 0%, transparent 50%),
+    linear-gradient(180deg, #000000 0%, #050505 100%);
   border-radius: 0;
   overflow: hidden;
   padding: 0;
@@ -196,11 +450,71 @@
   flex-direction: column;
 }
 
+.chart-wrapper {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Add subtle grid pattern */
+.chart-wrapper::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: 
+    linear-gradient(rgba(255, 255, 255, 0.01) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.01) 1px, transparent 1px);
+  background-size: 50px 50px;
+  pointer-events: none;
+  opacity: 0.3;
+  z-index: 1;
+}
+
 .price-chart-canvas {
   width: 100%;
   height: 100%;
-  min-height: 320px;
+  min-height: 380px;
   display: block;
+  position: relative;
+  z-index: 2;
+}
+
+/* Chart animation on price changes */
+.chart-container.price-up {
+  animation: chartGlowGreen 0.3s ease-out;
+}
+
+.chart-container.price-down {
+  animation: chartGlowRed 0.3s ease-out;
+}
+
+@keyframes chartGlowGreen {
+  0% {
+    box-shadow: inset 0 0 0 rgba(0, 255, 65, 0);
+  }
+  50% {
+    box-shadow: inset 0 0 60px rgba(0, 255, 65, 0.1);
+  }
+  100% {
+    box-shadow: inset 0 0 0 rgba(0, 255, 65, 0);
+  }
+}
+
+@keyframes chartGlowRed {
+  0% {
+    box-shadow: inset 0 0 0 rgba(255, 59, 59, 0);
+  }
+  50% {
+    box-shadow: inset 0 0 60px rgba(255, 59, 59, 0.1);
+  }
+  100% {
+    box-shadow: inset 0 0 0 rgba(255, 59, 59, 0);
+  }
 }
 
 .twelve-error-message {
@@ -393,6 +707,134 @@
   margin-left: 12px;
   font-style: italic;
   color: rgba(255, 255, 255, 0.3);
+}
+
+/* ============================================
+   SMOOTH SCROLL & PERFORMANCE OPTIMIZATIONS
+   ============================================ */
+.twelve-data-chart * {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Hardware acceleration for smooth animations */
+.chart-container,
+.live-indicator,
+.current-price,
+.price-change,
+.status-badge {
+  will-change: transform, opacity;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  perspective: 1000px;
+}
+
+/* Smooth chart line rendering */
+.price-chart-canvas {
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+}
+
+/* ============================================
+   RESPONSIVE DESIGN
+   ============================================ */
+@media (max-width: 768px) {
+  .current-price {
+    font-size: 32px;
+    letter-spacing: -1px;
+  }
+  
+  .chart-header {
+    padding: 16px 16px 12px 16px;
+  }
+  
+  .live-indicator {
+    top: 12px;
+    right: 12px;
+    padding: 6px 12px;
+    font-size: 10px;
+  }
+  
+  .chart-container {
+    min-height: 300px;
+  }
+  
+  .price-chart-canvas {
+    min-height: 300px;
+  }
+  
+  .price-change {
+    font-size: 14px;
+    padding: 5px 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .current-price {
+    font-size: 28px;
+  }
+  
+  .chart-header {
+    padding: 12px 12px 10px 12px;
+  }
+  
+  .chart-container {
+    min-height: 280px;
+  }
+  
+  .price-chart-canvas {
+    min-height: 280px;
+  }
+}
+
+/* ============================================
+   ADDITIONAL UTILITY CLASSES
+   ============================================ */
+.chart-price-tooltip {
+  position: absolute;
+  padding: 10px 16px;
+  background: rgba(0, 0, 0, 0.95);
+  border: 2px solid rgba(0, 255, 65, 0.5);
+  border-radius: 10px;
+  color: #00ff41;
+  font-size: 16px;
+  font-weight: 800;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+  backdrop-filter: blur(15px);
+  box-shadow: 
+    0 0 20px rgba(0, 255, 65, 0.3),
+    0 4px 15px rgba(0, 0, 0, 0.5);
+  z-index: 100;
+  pointer-events: none;
+  animation: tooltipAppear 0.2s ease-out;
+}
+
+@keyframes tooltipAppear {
+  from {
+    opacity: 0;
+    transform: scale(0.9) translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Continuous motion effect on chart update */
+@keyframes chartPulse {
+  0% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.05);
+  }
+  100% {
+    filter: brightness(1);
+  }
+}
+
+.chart-container.updating {
+  animation: chartPulse 0.3s ease-out;
 }
 
 /* Dark mode support */

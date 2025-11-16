@@ -9,11 +9,11 @@ class JupiterLivePriceService extends EventEmitter {
     this.updateInterval = null;
     this.isRunning = false;
     this.batchSize = 100; // Jupiter allows 100 tokens per request
-    this.updateFrequency = 10000; // Update every 10 seconds (was 1s - too aggressive, caused rate limiting)
+    this.updateFrequency = 2000; // Update every 2 seconds (5x faster than before!)
     this.retryAttempts = 3;
-    this.batchDelay = 1000; // 1 second delay between batches to avoid rate limits
+    this.batchDelay = 500; // 500ms delay between batches to avoid rate limits
     
-    console.log('🪐 Jupiter Live Price Service initialized (10-second intervals)');
+    console.log('🪐 Jupiter Live Price Service initialized (2-second intervals for near real-time)');
   }
 
   /**

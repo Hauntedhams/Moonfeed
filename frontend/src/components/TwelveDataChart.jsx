@@ -13,10 +13,141 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
   const lineSeriesRef = useRef(null);
   const wsRef = useRef(null);
   const pollingIntervalRef = useRef(null);
+  const animationFrameRef = useRef(null);
+  const lastUpdateTimeRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [latestPrice, setLatestPrice] = useState(null);
   const [usePolling, setUsePolling] = useState(false);
+  const [isLiveConnected, setIsLiveConnected] = useState(false); // Track RPC WebSocket status
+  const [isDarkMode, setIsDarkMode] = useState(
+    window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+  );
+
+  // Listen for theme changes
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleThemeChange = (e) => {
+      setIsDarkMode(e.matches);
+      // Update chart colors when theme changes
+      if (chartRef.current) {
+        updateChartTheme(e.matches);
+      }
+    };
+    
+    mediaQuery.addEventListener('change', handleThemeChange);
+    return () => mediaQuery.removeEventListener('change', handleThemeChange);
+  }, []);
+
+  // Function to update chart theme
+  const updateChartTheme = (dark) => {
+    if (!chartRef.current || !lineSeriesRef.current) return;
+    
+    const theme = getChartTheme(dark);
+    
+    chartRef.current.applyOptions({
+      layout: theme.layout,
+      grid: theme.grid,
+      timeScale: {
+        borderColor: theme.timeScale.borderColor,
+      },
+      rightPriceScale: {
+        borderColor: theme.rightPriceScale.borderColor,
+      },
+      crosshair: theme.crosshair,
+    });
+    
+    lineSeriesRef.current.applyOptions(theme.lineSeries);
+  };
+
+  // Get theme configuration
+  const getChartTheme = (dark = isDarkMode) => {
+    if (dark) {
+      // Dark mode theme (current green theme)
+      return {
+        layout: {
+          background: { color: 'transparent' },
+          textColor: 'rgba(255, 255, 255, 0.6)',
+        },
+        grid: {
+          vertLines: { color: 'rgba(255, 255, 255, 0.05)', style: 1 },
+          horzLines: { color: 'rgba(255, 255, 255, 0.05)', style: 1 },
+        },
+        timeScale: {
+          borderColor: 'rgba(255, 255, 255, 0.1)',
+        },
+        rightPriceScale: {
+          borderColor: 'rgba(255, 255, 255, 0.1)',
+        },
+        crosshair: {
+          mode: 1,
+          vertLine: {
+            color: 'rgba(0, 255, 65, 0.3)',
+            width: 1,
+            style: 2,
+            labelBackgroundColor: 'rgba(0, 255, 65, 0.8)',
+          },
+          horzLine: {
+            color: 'rgba(0, 255, 65, 0.3)',
+            width: 1,
+            style: 2,
+            labelBackgroundColor: 'rgba(0, 255, 65, 0.8)',
+          },
+        },
+        lineSeries: {
+          color: '#00ff41',
+          lineWidth: 3,
+          priceLineColor: 'rgba(0, 255, 65, 0.5)',
+          topColor: 'rgba(0, 255, 65, 0.3)',
+          bottomColor: 'rgba(0, 255, 65, 0.01)',
+          crosshairMarkerBorderColor: '#00ff41',
+          crosshairMarkerBackgroundColor: '#00ff41',
+        }
+      };
+    } else {
+      // Light mode theme (blue/teal for better contrast)
+      return {
+        layout: {
+          background: { color: 'transparent' },
+          textColor: 'rgba(0, 0, 0, 0.7)',
+        },
+        grid: {
+          vertLines: { color: 'rgba(0, 0, 0, 0.08)', style: 1 },
+          horzLines: { color: 'rgba(0, 0, 0, 0.08)', style: 1 },
+        },
+        timeScale: {
+          borderColor: 'rgba(0, 0, 0, 0.15)',
+        },
+        rightPriceScale: {
+          borderColor: 'rgba(0, 0, 0, 0.15)',
+        },
+        crosshair: {
+          mode: 1,
+          vertLine: {
+            color: 'rgba(0, 122, 255, 0.4)',
+            width: 1,
+            style: 2,
+            labelBackgroundColor: 'rgba(0, 122, 255, 0.9)',
+          },
+          horzLine: {
+            color: 'rgba(0, 122, 255, 0.4)',
+            width: 1,
+            style: 2,
+            labelBackgroundColor: 'rgba(0, 122, 255, 0.9)',
+          },
+        },
+        lineSeries: {
+          color: '#007AFF',
+          lineWidth: 3,
+          priceLineColor: 'rgba(0, 122, 255, 0.6)',
+          topColor: 'rgba(0, 122, 255, 0.4)',
+          bottomColor: 'rgba(0, 122, 255, 0.02)',
+          crosshairMarkerBorderColor: '#007AFF',
+          crosshairMarkerBackgroundColor: '#007AFF',
+        }
+      };
+    }
+  };
 
   // Extract pairAddress for historical data and tokenMint for real-time subscription
   const pairAddress = coin?.pairAddress || 
@@ -26,9 +157,80 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
                       null;
   
   const tokenMint = coin?.mintAddress || 
+                    coin?.mint ||
                     coin?.address || 
                     coin?.baseToken?.address ||
                     null;
+  
+  // 🔍 DEBUG: Log what we're working with
+  useEffect(() => {
+    console.log('🎯 TwelveDataChart received coin:', {
+      symbol: coin?.symbol,
+      name: coin?.name,
+      pairAddress,
+      tokenMint,
+      allKeys: Object.keys(coin || {})
+    });
+  }, [coin]);
+
+  /**
+   * Smooth price animation function
+   * Interpolates between current and target price over a duration
+   */
+  const animatePriceUpdate = (lineSeries, fromPrice, toPrice, timestamp, duration = 400) => {
+    if (!lineSeries || !chartRef.current) return;
+    
+    const startTime = performance.now();
+    const priceDiff = toPrice - fromPrice;
+    
+    const animate = (currentTime) => {
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      
+      // Ease-out function for smooth deceleration
+      const easeOutQuad = (t) => t * (2 - t);
+      const easedProgress = easeOutQuad(progress);
+      
+      // Calculate interpolated price
+      const currentPrice = fromPrice + (priceDiff * easedProgress);
+      
+      try {
+        // Update chart with interpolated value
+        lineSeries.update({
+          time: timestamp,
+          value: currentPrice
+        });
+        
+        // Continue animation if not complete
+        if (progress < 1) {
+          animationFrameRef.current = requestAnimationFrame(animate);
+        } else {
+          // Animation complete, ensure final value is set
+          lineSeries.update({
+            time: timestamp,
+            value: toPrice
+          });
+          setLatestPrice(toPrice);
+          
+          // Auto-scroll smoothly to show new data
+          if (chartRef.current) {
+            const timeScale = chartRef.current.timeScale();
+            timeScale.scrollToRealTime();
+          }
+        }
+      } catch (error) {
+        console.error('❌ Animation error:', error);
+      }
+    };
+    
+    // Cancel any existing animation
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+    
+    // Start animation
+    animationFrameRef.current = requestAnimationFrame(animate);
+  };
 
   // Fetch historical OHLCV data from GeckoTerminal
   const fetchHistoricalData = async (poolAddress) => {
@@ -92,17 +294,20 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
 
   // Initialize chart and load data (only once)
   useEffect(() => {
+    // Initialize chart when pairAddress is available (works in both collapsed and expanded views)
     if (!pairAddress || chartRef.current) return;
     
     let mounted = true;
     
     const initialize = async () => {
+      console.log('🎯 Starting chart initialization...');
+      
       // Wait for DOM to be ready and retry if dimensions aren't available
       let retries = 0;
-      const maxRetries = 10;
+      const maxRetries = 20; // Increased retries
       
       while (retries < maxRetries) {
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise(resolve => setTimeout(resolve, 150)); // Longer wait
         
         if (!mounted || !chartContainerRef.current) return;
 
@@ -110,13 +315,21 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
         const width = container.clientWidth;
         const height = container.clientHeight;
         
-        if (width && height) {
+        console.log(`🔍 [Retry ${retries + 1}/${maxRetries}] Container dimensions: ${width}x${height}`);
+        
+        if (width && height && width > 100 && height > 100) {
+          console.log(`✅ Container ready with dimensions: ${width}x${height}`);
           break; // Dimensions are ready
         }
         
         retries++;
         if (retries >= maxRetries) {
-          console.warn('⚠️ Chart container has no dimensions after retries');
+          console.error('❌ Chart container has no dimensions after retries');
+          console.error('   Container:', container);
+          console.error('   Parent:', container?.parentElement);
+          console.error('   Computed style:', window.getComputedStyle(container));
+          setError('Chart container failed to initialize. Please try reopening the chart.');
+          setLoading(false);
           return;
         }
       }
@@ -130,40 +343,68 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
       try {
         console.log('📊 Initializing chart for:', pairAddress);
         
-        // Create chart
+        // Get theme configuration
+        const theme = getChartTheme(isDarkMode);
+        
+        // Create chart with theme-aware styling
         const chart = createChart(container, {
-          layout: {
-            background: { color: '#000000' },
-            textColor: '#DDD',
-          },
-          grid: {
-            vertLines: { color: '#1a1a1a' },
-            horzLines: { color: '#1a1a1a' },
-          },
+          layout: theme.layout,
+          grid: theme.grid,
           width: width,
           height: height,
           timeScale: {
             timeVisible: true,
             secondsVisible: false,
-            borderColor: '#333',
+            borderColor: theme.timeScale.borderColor,
+            rightOffset: 12, // More space on the right for smooth scrolling
+            barSpacing: 12, // Slightly wider spacing for smoother animation
+            minBarSpacing: 8,
+            lockVisibleTimeRangeOnResize: true,
+            rightBarStaysOnScroll: true,
+            shiftVisibleRangeOnNewBar: true, // Auto-scroll to show new data
+            fixLeftEdge: false, // Allow smooth scrolling
+            fixRightEdge: false, // Allow smooth scrolling
           },
           rightPriceScale: {
-            borderColor: '#333',
+            borderColor: theme.rightPriceScale.borderColor,
+            scaleMargins: {
+              top: 0.1,
+              bottom: 0.1,
+            },
           },
-          crosshair: {
-            mode: 1,
+          crosshair: theme.crosshair,
+          // Enable smooth animations
+          handleScroll: {
+            mouseWheel: true,
+            pressedMouseMove: true,
+            horzTouchDrag: true,
+            vertTouchDrag: true,
+          },
+          handleScale: {
+            axisPressedMouseMove: true,
+            mouseWheel: true,
+            pinch: true,
           },
         });
 
-        // Create line series
+        // Create line series with theme-aware glowing effect and smooth animations
         const lineSeries = chart.addSeries(LineSeries, {
-          color: '#2962FF',
-          lineWidth: 2,
+          ...theme.lineSeries,
+          lineStyle: 0,
+          lineType: 2, // Curved line for smooth appearance
           priceFormat: {
             type: 'price',
             precision: 8,
             minMove: 0.00000001,
           },
+          lastValueVisible: true,
+          priceLineVisible: true,
+          priceLineWidth: 2,
+          priceLineStyle: 2,
+          lineVisible: true,
+          // Enable smooth crosshair movement
+          crosshairMarkerVisible: true,
+          crosshairMarkerRadius: 4,
         });
 
         chartRef.current = chart;
@@ -195,12 +436,18 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
 
         // Try WebSocket first, fall back to polling if it fails
         // Use tokenMint for real-time subscription (baseTokenMint parameter)
+        console.log('🔌 Attempting RPC WebSocket connection...');
+        console.log('   Token Mint:', tokenMint);
+        console.log('   Pair Address:', pairAddress);
+        
         const wsConnected = await setupWebSocket(tokenMint, lineSeries);
         
         if (!wsConnected) {
           console.log('⚠️ WebSocket failed, using polling fallback');
           setUsePolling(true);
           setupPricePolling(pairAddress, lineSeries);
+        } else {
+          console.log('✅ RPC WebSocket connected successfully!');
         }
 
         // Handle resize
@@ -239,9 +486,21 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
             wsRef.current.close();
           }
 
-          console.log('🔌 Attempting WebSocket connection for token mint:', tokenMint);
+          if (!tokenMint) {
+            console.log('⚠️ No token mint provided, skipping WebSocket');
+            resolve(false);
+            return;
+          }
+
+          // Use our backend's RPC price WebSocket
+          const wsUrl = import.meta.env.PROD 
+            ? 'wss://api.moonfeed.app/ws/price'
+            : 'ws://localhost:3001/ws/price';
+
+          console.log('🔌 Connecting to RPC Price WebSocket:', wsUrl);
+          console.log('🎯 Subscribing to token:', tokenMint);
           
-          const ws = new WebSocket(SOLANASTREAM_WS);
+          const ws = new WebSocket(wsUrl);
           wsRef.current = ws;
           
           let connectionTimeout = setTimeout(() => {
@@ -252,20 +511,16 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
 
           ws.onopen = () => {
             clearTimeout(connectionTimeout);
-            console.log('🔌 SolanaStream WebSocket connected');
+            console.log('✅ RPC Price WebSocket connected');
+            setIsLiveConnected(true);
             
+            // Subscribe to token price updates
             const subscribeMessage = {
-              jsonrpc: '2.0',
-              id: 1,
-              method: 'swapSubscribe',
-              params: {
-                include: {
-                  baseTokenMint: [tokenMint]  // Subscribe to token mint, not pool
-                }
-              }
+              type: 'subscribe',
+              token: tokenMint
             };
             
-            console.log('📤 Sending subscription message:', subscribeMessage);
+            console.log('📤 Subscribing to token:', tokenMint);
             ws.send(JSON.stringify(subscribeMessage));
             resolve(true);
           };
@@ -273,47 +528,102 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
           ws.onmessage = (event) => {
             try {
               const message = JSON.parse(event.data);
-              console.log('📨 Received WebSocket message:', message);
               
-              // Check for subscription confirmation (has jsonrpc and result)
-              if (message.jsonrpc && message.result !== undefined) {
-                console.log('✅ Subscription confirmed:', message.result);
-                return;
-              }
+              console.log('🔔 [Chart] Received WebSocket message:', message.type, message);
               
-              // Check for error response
-              if (message.error) {
-                console.error('❌ WebSocket subscription error:', message.error);
-                return;
-              }
-              
-              // Handle swap notification (from documentation: has slot, signature, blockTime, swap)
-              if (message.swap && message.blockTime) {
-                const swap = message.swap;
-                console.log('💱 Swap notification received:', swap);
-                
-                // Extract price from quotePrice field (string format, may be in e-notation)
-                const price = parseFloat(swap.quotePrice);
-                const timestamp = message.blockTime;
-                
-                console.log('💰 Extracted price:', price, 'timestamp:', timestamp);
-                
-                if (price && !isNaN(price) && timestamp && lineSeries) {
-                  lineSeries.update({ 
-                    time: timestamp, 
-                    value: price 
+              // Handle different message types
+              switch (message.type) {
+                case 'connected':
+                  console.log('✅ RPC WebSocket connected:', message.message);
+                  break;
+                  
+                case 'subscribed':
+                  console.log('✅ Subscribed to token:', message.token);
+                  break;
+                  
+                case 'price-update':
+                  // Real-time price update from Solana RPC!
+                  const { price, timestamp, source } = message;
+                  
+                  console.log('📨 Received price-update:', { 
+                    token: message.token,
+                    price, 
+                    timestamp,
+                    source,
+                    hasLineSeries: !!lineSeries,
+                    chartExists: !!chartRef.current
                   });
                   
-                  setLatestPrice(price);
-                  console.log('✅ Chart updated with live price:', price);
-                } else {
-                  console.warn('⚠️ Invalid price data:', { price, timestamp });
-                }
-                return;
+                  if (price && !isNaN(price) && timestamp && lineSeries) {
+                    // Convert timestamp to seconds if needed
+                    const timeInSeconds = timestamp > 1e12 ? Math.floor(timestamp / 1000) : timestamp;
+                    
+                    console.log('📊 Adding point to chart:', { 
+                      time: timeInSeconds, 
+                      value: price,
+                      source,
+                      readableTime: new Date(timeInSeconds * 1000).toLocaleTimeString()
+                    });
+                    
+                    // Determine if price went up or down for animation
+                    const previousPrice = latestPrice || price;
+                    const priceDirection = previousPrice ? (price > previousPrice ? 'up' : (price < previousPrice ? 'down' : 'same')) : null;
+                    
+                    // Smooth animated update
+                    try {
+                      // Calculate animation duration based on price change magnitude
+                      const priceDiffPercent = Math.abs((price - previousPrice) / previousPrice) * 100;
+                      // Shorter duration for small changes, longer for big moves (200-600ms range)
+                      const animDuration = Math.min(Math.max(priceDiffPercent * 50, 200), 600);
+                      
+                      console.log('🎬 Animating price change:', {
+                        from: previousPrice,
+                        to: price,
+                        change: priceDiffPercent.toFixed(2) + '%',
+                        duration: animDuration + 'ms'
+                      });
+                      
+                      // Animate the price update smoothly
+                      animatePriceUpdate(lineSeries, previousPrice, price, timeInSeconds, animDuration);
+                      
+                      console.log('✅ Chart animation started! New price: $' + price.toFixed(8) + ' (source: ' + source + ')');
+                    } catch (error) {
+                      console.error('❌ Error updating chart:', error);
+                      // Fallback to immediate update if animation fails
+                      lineSeries.update({ 
+                        time: timeInSeconds, 
+                        value: price 
+                      });
+                      setLatestPrice(price);
+                    }
+                    
+                    // Trigger visual feedback animation
+                    if (priceDirection && priceDirection !== 'same' && chartContainerRef.current) {
+                      const container = chartContainerRef.current;
+                      // Remove existing animation classes
+                      container.classList.remove('price-flash-up', 'price-flash-down');
+                      // Trigger reflow to restart animation
+                      void container.offsetWidth;
+                      // Add animation class based on direction
+                      container.classList.add(`price-flash-${priceDirection}`);
+                      
+                      // Remove class after animation completes
+                      setTimeout(() => {
+                        container.classList.remove('price-flash-up', 'price-flash-down');
+                      }, 600);
+                    }
+                    
+                    console.log(`💰 LIVE Price Update: $${price.toFixed(8)} ${priceDirection && priceDirection !== 'same' ? `(${priceDirection === 'up' ? '📈' : '📉'})` : ''} [${source}]`);
+                  }
+                  break;
+                  
+                case 'error':
+                  console.error('❌ RPC WebSocket error:', message.message);
+                  break;
+                  
+                default:
+                  console.log('📨 RPC message:', message);
               }
-              
-              // Log unhandled message types
-              console.log('ℹ️ Unhandled message type:', message);
             } catch (err) {
               console.error('❌ WebSocket message parsing error:', err);
               console.error('Raw message:', event.data);
@@ -322,15 +632,17 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
 
           ws.onerror = (error) => {
             clearTimeout(connectionTimeout);
-            console.error('❌ WebSocket connection error:', error);
+            console.error('❌ RPC WebSocket connection error:', error);
             resolve(false);
           };
 
           ws.onclose = (event) => {
             clearTimeout(connectionTimeout);
-            console.log('🔌 WebSocket disconnected. Code:', event.code, 'Reason:', event.reason);
+            setIsLiveConnected(false);
+            console.log('🔌 RPC WebSocket disconnected. Code:', event.code, 'Reason:', event.reason);
+            
             if (event.code === 1006) {
-              console.log('⚠️ WebSocket failed to connect (Code 1006 - Network error)');
+              console.log('⚠️ WebSocket failed to connect - falling back to polling');
             }
           };
         } catch (err) {
@@ -373,6 +685,12 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
     return () => {
       mounted = false;
       
+      // Cancel any ongoing animations
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+      
       if (wsRef.current) {
         wsRef.current.close();
         wsRef.current = null;
@@ -393,7 +711,7 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
       
       lineSeriesRef.current = null;
     };
-  }, [pairAddress]); // Only re-initialize if pairAddress changes
+  }, [pairAddress]); // Re-initialize if pairAddress changes (removed isActive dependency)
 
   if (error) {
     return <div className="error-message">{error}</div>;
@@ -401,12 +719,31 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
 
   return (
     <div className="twelve-data-chart">
-      <div className="chart-container" ref={chartContainerRef}>
+      <div 
+        className="chart-container" 
+        ref={chartContainerRef}
+        style={{ 
+          minHeight: '380px',
+          width: '100%',
+          position: 'relative',
+          flex: 1
+        }}
+      >
         {loading && <div className="loading-overlay">Loading chart data...</div>}
+        {error && <div className="chart-error">{error}</div>}
+        {isLiveConnected && !loading && !error && (
+          <div className="live-indicator">
+            <span className="live-dot"></span>
+            LIVE
+          </div>
+        )}
       </div>
-      <div className="latest-price">
-        Latest Price: {latestPrice !== null ? `$${latestPrice.toFixed(2)}` : 'N/A'}
-      </div>
+      {latestPrice !== null && (
+        <div className="latest-price">
+          Latest Price: ${latestPrice.toFixed(8)}
+          {isLiveConnected && <span className="live-badge"> • Real-Time</span>}
+        </div>
+      )}
     </div>
   );
 };

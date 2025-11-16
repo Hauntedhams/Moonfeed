@@ -1358,12 +1358,24 @@
   margin: 0 0 12px 0; /* Reduced bottom margin from 16px to 12px */
   margin-top: 0; /* Reset margin - keep nav area in normal position */
   position: relative;
+  min-height: 450px; /* Add minimum height for chart rendering */
   /* Break out of parent padding to allow full-width charts */
   margin-left: -20px;
   margin-right: -20px;
   width: calc(100% + 40px);
   /* 🔥 FIX: Inherit pointer-events from parent (pass through when collapsed) */
   pointer-events: inherit;
+}
+
+/* Twelve Chart Section - Ensure dimensions for chart rendering */
+.twelve-chart-section {
+  width: 100%;
+  min-height: 420px;
+  height: 420px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  background: #000;
 }
 
 /* 🔥 HOT SWIPE AREA - Full-width, fixed-height container for natural scroll/drag */
@@ -4558,4 +4570,4 @@
   width: 8px;
 }
 
-.info-layer
+.info-layer {}
