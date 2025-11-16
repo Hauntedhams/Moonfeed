@@ -1,5 +1,5 @@
 // Service Worker for Moonfeed PWA
-const CACHE_NAME = 'moonfeed-v2'; // Updated version to force cache refresh
+const CACHE_NAME = 'moonfeed-v3-charts-unified'; // Updated version to force cache refresh after chart cleanup
 const urlsToCache = [
   '/',
   '/index.html',
