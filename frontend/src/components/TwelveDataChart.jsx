@@ -20,134 +20,10 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
   const [latestPrice, setLatestPrice] = useState(null);
   const [usePolling, setUsePolling] = useState(false);
   const [isLiveConnected, setIsLiveConnected] = useState(false); // Track RPC WebSocket status
-  const [isDarkMode, setIsDarkMode] = useState(
-    window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
-  );
-
-  // Listen for theme changes
-  useEffect(() => {
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    const handleThemeChange = (e) => {
-      setIsDarkMode(e.matches);
-      // Update chart colors when theme changes
-      if (chartRef.current) {
-        updateChartTheme(e.matches);
-      }
-    };
-    
-    mediaQuery.addEventListener('change', handleThemeChange);
-    return () => mediaQuery.removeEventListener('change', handleThemeChange);
-  }, []);
-
-  // Function to update chart theme
-  const updateChartTheme = (dark) => {
-    if (!chartRef.current || !lineSeriesRef.current) return;
-    
-    const theme = getChartTheme(dark);
-    
-    chartRef.current.applyOptions({
-      layout: theme.layout,
-      grid: theme.grid,
-      timeScale: {
-        borderColor: theme.timeScale.borderColor,
-      },
-      rightPriceScale: {
-        borderColor: theme.rightPriceScale.borderColor,
-      },
-      crosshair: theme.crosshair,
-    });
-    
-    lineSeriesRef.current.applyOptions(theme.lineSeries);
-  };
-
-  // Get theme configuration
-  const getChartTheme = (dark = isDarkMode) => {
-    if (dark) {
-      // Dark mode theme (current green theme)
-      return {
-        layout: {
-          background: { color: 'transparent' },
-          textColor: 'rgba(255, 255, 255, 0.6)',
-        },
-        grid: {
-          vertLines: { color: 'rgba(255, 255, 255, 0.05)', style: 1 },
-          horzLines: { color: 'rgba(255, 255, 255, 0.05)', style: 1 },
-        },
-        timeScale: {
-          borderColor: 'rgba(255, 255, 255, 0.1)',
-        },
-        rightPriceScale: {
-          borderColor: 'rgba(255, 255, 255, 0.1)',
-        },
-        crosshair: {
-          mode: 1,
-          vertLine: {
-            color: 'rgba(0, 255, 65, 0.3)',
-            width: 1,
-            style: 2,
-            labelBackgroundColor: 'rgba(0, 255, 65, 0.8)',
-          },
-          horzLine: {
-            color: 'rgba(0, 255, 65, 0.3)',
-            width: 1,
-            style: 2,
-            labelBackgroundColor: 'rgba(0, 255, 65, 0.8)',
-          },
-        },
-        lineSeries: {
-          color: '#00ff41',
-          lineWidth: 3,
-          priceLineColor: 'rgba(0, 255, 65, 0.5)',
-          topColor: 'rgba(0, 255, 65, 0.3)',
-          bottomColor: 'rgba(0, 255, 65, 0.01)',
-          crosshairMarkerBorderColor: '#00ff41',
-          crosshairMarkerBackgroundColor: '#00ff41',
-        }
-      };
-    } else {
-      // Light mode theme (blue/teal for better contrast)
-      return {
-        layout: {
-          background: { color: 'transparent' },
-          textColor: 'rgba(0, 0, 0, 0.7)',
-        },
-        grid: {
-          vertLines: { color: 'rgba(0, 0, 0, 0.08)', style: 1 },
-          horzLines: { color: 'rgba(0, 0, 0, 0.08)', style: 1 },
-        },
-        timeScale: {
-          borderColor: 'rgba(0, 0, 0, 0.15)',
-        },
-        rightPriceScale: {
-          borderColor: 'rgba(0, 0, 0, 0.15)',
-        },
-        crosshair: {
-          mode: 1,
-          vertLine: {
-            color: 'rgba(0, 122, 255, 0.4)',
-            width: 1,
-            style: 2,
-            labelBackgroundColor: 'rgba(0, 122, 255, 0.9)',
-          },
-          horzLine: {
-            color: 'rgba(0, 122, 255, 0.4)',
-            width: 1,
-            style: 2,
-            labelBackgroundColor: 'rgba(0, 122, 255, 0.9)',
-          },
-        },
-        lineSeries: {
-          color: '#007AFF',
-          lineWidth: 3,
-          priceLineColor: 'rgba(0, 122, 255, 0.6)',
-          topColor: 'rgba(0, 122, 255, 0.4)',
-          bottomColor: 'rgba(0, 122, 255, 0.02)',
-          crosshairMarkerBorderColor: '#007AFF',
-          crosshairMarkerBackgroundColor: '#007AFF',
-        }
-      };
-    }
-  };
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    // Initialize based on actual DOM state
+    return document.documentElement.classList.contains('dark-mode');
+  }); // Track theme mode
 
   // Extract pairAddress for historical data and tokenMint for real-time subscription
   const pairAddress = coin?.pairAddress || 
@@ -172,6 +48,116 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
       allKeys: Object.keys(coin || {})
     });
   }, [coin]);
+
+  // Detect and track theme changes
+  useEffect(() => {
+    const detectTheme = () => {
+      // Check if dark-mode class exists on documentElement
+      // If the class exists, it's dark mode; otherwise it's light mode (the default)
+      const isDark = document.documentElement.classList.contains('dark-mode');
+      
+      console.log('🎨 Theme detected:', isDark ? 'dark' : 'light');
+      console.log('   documentElement classes:', document.documentElement.className);
+      setIsDarkMode(isDark);
+      
+      // Update chart colors if chart exists
+      if (chartRef.current) {
+        updateChartTheme(isDark);
+      }
+    };
+
+    // Initial detection
+    detectTheme();
+
+    // Watch for theme changes on documentElement
+    const observer = new MutationObserver(detectTheme);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
+  // Function to update chart theme dynamically
+  const updateChartTheme = (isDark) => {
+    if (!chartRef.current || !lineSeriesRef.current) return;
+
+    const colors = getThemeColors(isDark);
+
+    chartRef.current.applyOptions({
+      layout: {
+        background: colors.background,
+        textColor: colors.text,
+      },
+      grid: {
+        vertLines: { 
+          color: colors.gridLines,
+          style: 1,
+        },
+        horzLines: { 
+          color: colors.gridLines,
+          style: 1,
+        },
+      },
+      timeScale: {
+        borderColor: colors.border,
+      },
+      rightPriceScale: {
+        borderColor: colors.border,
+      },
+      crosshair: {
+        vertLine: {
+          color: colors.crosshair,
+          labelBackgroundColor: colors.crosshairLabel,
+        },
+        horzLine: {
+          color: colors.crosshair,
+          labelBackgroundColor: colors.crosshairLabel,
+        },
+      },
+    });
+
+    lineSeriesRef.current.applyOptions({
+      color: colors.lineColor,
+      priceLineColor: colors.priceLine,
+      topColor: colors.areaTop,
+      bottomColor: colors.areaBottom,
+      crosshairMarkerBorderColor: colors.lineColor,
+      crosshairMarkerBackgroundColor: colors.lineColor,
+    });
+  };
+
+  // Get theme-specific colors
+  const getThemeColors = (isDark) => {
+    if (isDark) {
+      return {
+        background: { type: 'solid', color: 'transparent' },
+        text: 'rgba(255, 255, 255, 0.6)',
+        gridLines: 'rgba(255, 255, 255, 0.05)',
+        border: 'rgba(255, 255, 255, 0.1)',
+        crosshair: 'rgba(0, 255, 65, 0.3)',
+        crosshairLabel: 'rgba(0, 255, 65, 0.8)',
+        lineColor: '#00ff41',
+        priceLine: 'rgba(0, 255, 65, 0.5)',
+        areaTop: 'rgba(0, 255, 65, 0.3)',
+        areaBottom: 'rgba(0, 255, 65, 0.01)',
+      };
+    } else {
+      return {
+        background: { type: 'solid', color: '#ffffff' },
+        text: 'rgba(0, 0, 0, 0.7)',
+        gridLines: 'rgba(0, 0, 0, 0.08)',
+        border: 'rgba(0, 0, 0, 0.15)',
+        crosshair: 'rgba(0, 150, 40, 0.4)',
+        crosshairLabel: 'rgba(0, 150, 40, 0.9)',
+        lineColor: '#00cc33',
+        priceLine: 'rgba(0, 150, 40, 0.6)',
+        areaTop: 'rgba(0, 150, 40, 0.2)',
+        areaBottom: 'rgba(0, 150, 40, 0.01)',
+      };
+    }
+  };
 
   /**
    * Smooth price animation function
@@ -343,19 +329,31 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
       try {
         console.log('📊 Initializing chart for:', pairAddress);
         
-        // Get theme configuration
-        const theme = getChartTheme(isDarkMode);
+        // Get theme colors
+        const colors = getThemeColors(isDarkMode);
         
         // Create chart with theme-aware styling
         const chart = createChart(container, {
-          layout: theme.layout,
-          grid: theme.grid,
+          layout: {
+            background: colors.background,
+            textColor: colors.text,
+          },
+          grid: {
+            vertLines: { 
+              color: colors.gridLines,
+              style: 1,
+            },
+            horzLines: { 
+              color: colors.gridLines,
+              style: 1,
+            },
+          },
           width: width,
           height: height,
           timeScale: {
             timeVisible: true,
             secondsVisible: false,
-            borderColor: theme.timeScale.borderColor,
+            borderColor: colors.border,
             rightOffset: 12, // More space on the right for smooth scrolling
             barSpacing: 12, // Slightly wider spacing for smoother animation
             minBarSpacing: 8,
@@ -366,13 +364,27 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
             fixRightEdge: false, // Allow smooth scrolling
           },
           rightPriceScale: {
-            borderColor: theme.rightPriceScale.borderColor,
+            borderColor: colors.border,
             scaleMargins: {
               top: 0.1,
               bottom: 0.1,
             },
           },
-          crosshair: theme.crosshair,
+          crosshair: {
+            mode: 1,
+            vertLine: {
+              color: colors.crosshair,
+              width: 1,
+              style: 2,
+              labelBackgroundColor: colors.crosshairLabel,
+            },
+            horzLine: {
+              color: colors.crosshair,
+              width: 1,
+              style: 2,
+              labelBackgroundColor: colors.crosshairLabel,
+            },
+          },
           // Enable smooth animations
           handleScroll: {
             mouseWheel: true,
@@ -387,9 +399,10 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
           },
         });
 
-        // Create line series with theme-aware glowing effect and smooth animations
+        // Create line series with glowing effect and theme-aware colors
         const lineSeries = chart.addSeries(LineSeries, {
-          ...theme.lineSeries,
+          color: colors.lineColor,
+          lineWidth: 3,
           lineStyle: 0,
           lineType: 2, // Curved line for smooth appearance
           priceFormat: {
@@ -400,11 +413,17 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
           lastValueVisible: true,
           priceLineVisible: true,
           priceLineWidth: 2,
+          priceLineColor: colors.priceLine,
           priceLineStyle: 2,
+          // Area under the line with gradient
+          topColor: colors.areaTop,
+          bottomColor: colors.areaBottom,
           lineVisible: true,
           // Enable smooth crosshair movement
           crosshairMarkerVisible: true,
           crosshairMarkerRadius: 4,
+          crosshairMarkerBorderColor: colors.lineColor,
+          crosshairMarkerBackgroundColor: colors.lineColor,
         });
 
         chartRef.current = chart;
