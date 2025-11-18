@@ -1079,29 +1079,38 @@ const CoinCard = memo(({
         
         {/* Enhanced Banner with DexScreener support */}
         <div className="coin-banner" onClick={handleBannerClick} style={{ cursor: coin.banner || coin.bannerImage || coin.header || coin.bannerUrl ? 'pointer' : 'default' }}>
-        {coin.banner || coin.bannerImage || coin.header || coin.bannerUrl ? (
-          <img 
-            src={coin.banner || coin.bannerImage || coin.header || coin.bannerUrl}
-            alt={coin.name || 'Token banner'}
-            loading="lazy"
-            decoding="async"
-            onError={(e) => { 
-              // Image error logging (dev only)
-              debug.log(`Banner image failed to load for ${coin.symbol}:`, e.currentTarget.src);
-              e.currentTarget.style.display = 'none'; 
-            }}
-            onLoad={() => {
-              // Image load logging (dev only)
-              debug.log(`✅ Banner loaded successfully for ${coin.symbol}`);
-            }}
-          />
-        ) : (
-          <div className="banner-placeholder">
-            <div className="banner-placeholder-text">
-              {coin.name || 'Meme coin discovery'}
+        {(() => {
+          // 🐮 Hardcoded banner for $MOO token
+          const MOO_ADDRESS = 'FeqAiLPejhkTJ2nEiCCL7JdtJkZdPNTYSm8vAjrZmoon';
+          const isMooToken = coin.mintAddress === MOO_ADDRESS || coin.address === MOO_ADDRESS;
+          const bannerUrl = isMooToken 
+            ? '/assets/moonfeed banner.png' 
+            : (coin.banner || coin.bannerImage || coin.header || coin.bannerUrl);
+          
+          return bannerUrl ? (
+            <img 
+              src={bannerUrl}
+              alt={coin.name || 'Token banner'}
+              loading="lazy"
+              decoding="async"
+              onError={(e) => { 
+                // Image error logging (dev only)
+                debug.log(`Banner image failed to load for ${coin.symbol}:`, e.currentTarget.src);
+                e.currentTarget.style.display = 'none'; 
+              }}
+              onLoad={() => {
+                // Image load logging (dev only)
+                debug.log(`✅ Banner loaded successfully for ${coin.symbol}${isMooToken ? ' (custom $MOO banner)' : ''}`);
+              }}
+            />
+          ) : (
+            <div className="banner-placeholder">
+              <div className="banner-placeholder-text">
+                {coin.name || 'Meme coin discovery'}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
         
         {/* Banner Text Overlay */}
         <div className="banner-text-overlay">

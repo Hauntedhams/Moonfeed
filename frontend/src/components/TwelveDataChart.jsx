@@ -15,6 +15,8 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
   const pollingIntervalRef = useRef(null);
   const animationFrameRef = useRef(null);
   const lastUpdateTimeRef = useRef(null);
+  const heartbeatIntervalRef = useRef(null); // For live timeline animation
+  const currentIntervalRef = useRef(null); // Track current 5-minute interval
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [latestPrice, setLatestPrice] = useState(null);
@@ -24,6 +26,7 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
     // Initialize based on actual DOM state
     return document.documentElement.classList.contains('dark-mode');
   }); // Track theme mode
+  const [selectedTimeframe, setSelectedTimeframe] = useState('5m'); // Track selected timeframe
 
   // Extract pairAddress for historical data and tokenMint for real-time subscription
   const pairAddress = coin?.pairAddress || 
@@ -160,72 +163,183 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
   };
 
   /**
-   * Smooth price animation function
-   * Interpolates between current and target price over a duration
+   * Round timestamp to nearest interval based on selected timeframe
    */
-  const animatePriceUpdate = (lineSeries, fromPrice, toPrice, timestamp, duration = 400) => {
-    if (!lineSeries || !chartRef.current) return;
+  const roundToInterval = (timestamp, timeframeKey = selectedTimeframe) => {
+    const config = TIMEFRAME_CONFIG[timeframeKey];
+    const intervalSeconds = config?.intervalSeconds || 300; // Default to 5 minutes
+    return Math.floor(timestamp / intervalSeconds) * intervalSeconds;
+  };
+
+  /**
+   * Start live heartbeat animation - makes chart flow to the right immediately
+   * Updates the current 5-minute interval point instead of adding new points
+   */
+  const startLiveHeartbeat = (lineSeries) => {
+    if (!lineSeries || heartbeatIntervalRef.current) return;
     
-    const startTime = performance.now();
-    const priceDiff = toPrice - fromPrice;
+    console.log('💓 Starting live heartbeat animation');
     
-    const animate = (currentTime) => {
-      const elapsed = currentTime - startTime;
-      const progress = Math.min(elapsed / duration, 1);
+    // Update the current interval point every second to keep the chart alive
+    heartbeatIntervalRef.current = setInterval(() => {
+      if (!lineSeries || !chartRef.current) return;
       
-      // Ease-out function for smooth deceleration
-      const easeOutQuad = (t) => t * (2 - t);
-      const easedProgress = easeOutQuad(progress);
+      const currentPrice = latestPrice;
+      if (!currentPrice) return;
       
-      // Calculate interpolated price
-      const currentPrice = fromPrice + (priceDiff * easedProgress);
+      const currentTime = Math.floor(Date.now() / 1000);
+      const currentInterval = roundToInterval(currentTime);
       
-      try {
-        // Update chart with interpolated value
-        lineSeries.update({
-          time: timestamp,
-          value: currentPrice
-        });
-        
-        // Continue animation if not complete
-        if (progress < 1) {
-          animationFrameRef.current = requestAnimationFrame(animate);
-        } else {
-          // Animation complete, ensure final value is set
+      // Check if we have a recent update (within last 2 seconds)
+      const lastUpdateTime = lastUpdateTimeRef.current || 0;
+      const timeSinceUpdate = currentTime - lastUpdateTime;
+      
+      // If no recent price update, update the current interval point to keep chart alive
+      if (timeSinceUpdate >= 2) {
+        try {
+          // Update the current interval point (not add a new one)
           lineSeries.update({
-            time: timestamp,
-            value: toPrice
+            time: currentInterval,
+            value: currentPrice
           });
-          setLatestPrice(toPrice);
+          lastUpdateTimeRef.current = currentTime;
           
-          // Auto-scroll smoothly to show new data
+          // Smooth scroll to show latest data
           if (chartRef.current) {
-            const timeScale = chartRef.current.timeScale();
-            timeScale.scrollToRealTime();
+            chartRef.current.timeScale().scrollToRealTime();
           }
+          
+          console.log('💓 Heartbeat: keeping chart alive at $' + currentPrice.toFixed(8));
+        } catch (error) {
+          console.error('❌ Heartbeat error:', error);
         }
-      } catch (error) {
-        console.error('❌ Animation error:', error);
       }
-    };
+    }, 1000); // Every second
+  };
+  
+  /**
+   * Stop live heartbeat animation
+   */
+  const stopLiveHeartbeat = () => {
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
+      heartbeatIntervalRef.current = null;
+      console.log('💓 Stopped live heartbeat');
+    }
+  };
+
+  /**
+   * Smooth price animation function
+   * Updates the current interval point with smooth interpolation
+   * Only adds a new point when crossing into a new interval
+   */
+  const animatePriceUpdate = (lineSeries, fromPrice, toPrice, actualTime) => {
+    if (!lineSeries || !chartRef.current) return;
     
     // Cancel any existing animation
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
     }
     
+    // Round to current interval based on selected timeframe
+    const currentInterval = roundToInterval(actualTime);
+    
+    // Check if we've moved to a new interval
+    const previousInterval = currentIntervalRef.current;
+    const isNewInterval = previousInterval !== null && currentInterval > previousInterval;
+    
+    if (isNewInterval) {
+      const config = TIMEFRAME_CONFIG[selectedTimeframe];
+      console.log(`🆕 New ${config?.label || 'interval'} detected:`, {
+        previous: new Date(previousInterval * 1000).toLocaleTimeString(),
+        current: new Date(currentInterval * 1000).toLocaleTimeString()
+      });
+    }
+    
+    // Update the current interval tracker
+    currentIntervalRef.current = currentInterval;
+    
+    const now = performance.now();
+    const duration = 1000; // 1 second smooth animation
+    const frameRate = 60; // 60fps for ultra smooth
+    const totalFrames = Math.ceil((duration / 1000) * frameRate);
+    let currentFrame = 0;
+    
+    const animate = (currentTime) => {
+      const elapsed = currentTime - now;
+      const progress = Math.min(elapsed / duration, 1);
+      
+      // Ease-out function for natural deceleration
+      const easeOutQuart = (t) => 1 - Math.pow(1 - t, 4);
+      const easedProgress = easeOutQuart(progress);        try {
+          // Calculate interpolated price
+          const interpolatedPrice = fromPrice + ((toPrice - fromPrice) * easedProgress);
+          
+          // Update the current interval point (not add a new one)
+          // This keeps historical data in place while smoothly animating the current price
+          lineSeries.update({
+            time: currentInterval,
+            value: interpolatedPrice
+          });
+        
+        currentFrame++;
+        
+        // Continue animation if not complete
+        if (progress < 1 && currentFrame < totalFrames) {
+          animationFrameRef.current = requestAnimationFrame(animate);
+        } else {
+          // Animation complete - set final price for current interval
+          lineSeries.update({
+            time: currentInterval,
+            value: toPrice
+          });
+          setLatestPrice(toPrice);
+          lastUpdateTimeRef.current = actualTime;
+          
+          // Smooth scroll to show latest data
+          if (chartRef.current) {
+            chartRef.current.timeScale().scrollToRealTime();
+          }
+        }
+      } catch (error) {
+        console.error('❌ Animation error:', error);
+        // Fallback: just update the current interval point
+        lineSeries.update({
+          time: currentInterval,
+          value: toPrice
+        });
+        setLatestPrice(toPrice);
+        lastUpdateTimeRef.current = actualTime;
+      }
+    };
+    
     // Start animation
     animationFrameRef.current = requestAnimationFrame(animate);
   };
 
+  // Timeframe configuration for GeckoTerminal API
+  const TIMEFRAME_CONFIG = {
+    '1m': { timeframe: 'minute', aggregate: 1, limit: 100, label: '1m', intervalSeconds: 60 },
+    '5m': { timeframe: 'minute', aggregate: 5, limit: 100, label: '5m', intervalSeconds: 300 },
+    '15m': { timeframe: 'minute', aggregate: 15, limit: 100, label: '15m', intervalSeconds: 900 },
+    '1h': { timeframe: 'hour', aggregate: 1, limit: 100, label: '1h', intervalSeconds: 3600 },
+    '4h': { timeframe: 'hour', aggregate: 4, limit: 100, label: '4h', intervalSeconds: 14400 },
+    '1d': { timeframe: 'day', aggregate: 1, limit: 100, label: '1D', intervalSeconds: 86400 },
+  };
+
   // Fetch historical OHLCV data from GeckoTerminal
-  const fetchHistoricalData = async (poolAddress) => {
+  const fetchHistoricalData = async (poolAddress, timeframeKey = '5m') => {
     try {
-      const timeframe = 'minute';
-      const aggregate = 5;
-      const limit = 100;
+      const config = TIMEFRAME_CONFIG[timeframeKey];
+      if (!config) {
+        throw new Error(`Invalid timeframe: ${timeframeKey}`);
+      }
+
+      const { timeframe, aggregate, limit } = config;
       
       const url = `${GECKOTERMINAL_API}/networks/solana/pools/${poolAddress}/ohlcv/${timeframe}?aggregate=${aggregate}&limit=${limit}&currency=usd`;
+      
+      console.log('📊 Fetching historical data:', { timeframeKey, timeframe, aggregate, limit, url });
       
       const response = await fetch(url);
       if (!response.ok) {
@@ -243,6 +357,8 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
         time: candle[0], // Unix timestamp
         value: candle[4], // Close price
       })).reverse(); // Reverse to get chronological order
+      
+      console.log('✅ Historical data fetched:', chartData.length, 'candles');
       
       return chartData;
     } catch (err) {
@@ -354,14 +470,16 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
             timeVisible: true,
             secondsVisible: false,
             borderColor: colors.border,
-            rightOffset: 12, // More space on the right for smooth scrolling
-            barSpacing: 12, // Slightly wider spacing for smoother animation
-            minBarSpacing: 8,
+            rightOffset: 15, // More space on the right for smooth scrolling
+            barSpacing: 15, // Wider spacing for smoother flowing animation
+            minBarSpacing: 10,
             lockVisibleTimeRangeOnResize: true,
-            rightBarStaysOnScroll: true,
+            rightBarStaysOnScroll: false, // Allow smooth auto-scroll
             shiftVisibleRangeOnNewBar: true, // Auto-scroll to show new data
             fixLeftEdge: false, // Allow smooth scrolling
             fixRightEdge: false, // Allow smooth scrolling
+            // Enable smooth scrolling animations
+            animateTime: true,
           },
           rightPriceScale: {
             borderColor: colors.border,
@@ -433,7 +551,7 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
         
         // Fetch and set historical data
         setLoading(true);
-        const historicalData = await fetchHistoricalData(pairAddress);
+        const historicalData = await fetchHistoricalData(pairAddress, selectedTimeframe);
         
         if (!mounted) return;
         
@@ -443,8 +561,12 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
 
         lineSeries.setData(historicalData);
         
-        const lastPrice = historicalData[historicalData.length - 1].value;
-        setLatestPrice(lastPrice);
+        const lastDataPoint = historicalData[historicalData.length - 1];
+        setLatestPrice(lastDataPoint.value);
+        lastUpdateTimeRef.current = lastDataPoint.time; // Track last timestamp
+        
+        // Initialize current interval tracker with the last historical data point's interval
+        currentIntervalRef.current = roundToInterval(lastDataPoint.time);
         
         chart.timeScale().fitContent();
         
@@ -453,6 +575,10 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
 
         console.log('✅ Chart initialized with', historicalData.length, 'data points');
 
+        // 🚀 START LIVE HEARTBEAT IMMEDIATELY - Chart will flow to the right!
+        startLiveHeartbeat(lineSeries);
+        setIsLiveConnected(true); // Show LIVE indicator immediately
+        
         // Try WebSocket first, fall back to polling if it fails
         // Use tokenMint for real-time subscription (baseTokenMint parameter)
         console.log('🔌 Attempting RPC WebSocket connection...');
@@ -576,44 +702,43 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
                   if (price && !isNaN(price) && timestamp && lineSeries) {
                     // Convert timestamp to seconds if needed
                     const timeInSeconds = timestamp > 1e12 ? Math.floor(timestamp / 1000) : timestamp;
+                    const currentInterval = roundToInterval(timeInSeconds);
+                    const config = TIMEFRAME_CONFIG[selectedTimeframe];
                     
-                    console.log('📊 Adding point to chart:', { 
-                      time: timeInSeconds, 
+                    console.log(`📊 Updating chart for current ${config?.label || 'interval'}:`, { 
+                      actualTime: new Date(timeInSeconds * 1000).toLocaleTimeString(),
+                      intervalTime: new Date(currentInterval * 1000).toLocaleTimeString(),
                       value: price,
-                      source,
-                      readableTime: new Date(timeInSeconds * 1000).toLocaleTimeString()
+                      source
                     });
                     
                     // Determine if price went up or down for animation
                     const previousPrice = latestPrice || price;
                     const priceDirection = previousPrice ? (price > previousPrice ? 'up' : (price < previousPrice ? 'down' : 'same')) : null;
                     
-                    // Smooth animated update
+                    // Smooth animated update within current 5-minute interval
                     try {
-                      // Calculate animation duration based on price change magnitude
-                      const priceDiffPercent = Math.abs((price - previousPrice) / previousPrice) * 100;
-                      // Shorter duration for small changes, longer for big moves (200-600ms range)
-                      const animDuration = Math.min(Math.max(priceDiffPercent * 50, 200), 600);
-                      
-                      console.log('🎬 Animating price change:', {
+                      console.log('🎬 Animating price change within current interval:', {
                         from: previousPrice,
                         to: price,
-                        change: priceDiffPercent.toFixed(2) + '%',
-                        duration: animDuration + 'ms'
+                        interval: new Date(currentInterval * 1000).toLocaleTimeString(),
+                        change: (((price - previousPrice) / previousPrice) * 100).toFixed(2) + '%'
                       });
                       
-                      // Animate the price update smoothly
-                      animatePriceUpdate(lineSeries, previousPrice, price, timeInSeconds, animDuration);
+                      // Animate price update within the current 5-minute interval
+                      animatePriceUpdate(lineSeries, previousPrice, price, timeInSeconds);
                       
                       console.log('✅ Chart animation started! New price: $' + price.toFixed(8) + ' (source: ' + source + ')');
                     } catch (error) {
                       console.error('❌ Error updating chart:', error);
                       // Fallback to immediate update if animation fails
                       lineSeries.update({ 
-                        time: timeInSeconds, 
+                        time: currentInterval, 
                         value: price 
                       });
                       setLatestPrice(price);
+                      lastUpdateTimeRef.current = timeInSeconds;
+                      currentIntervalRef.current = currentInterval;
                     }
                     
                     // Trigger visual feedback animation
@@ -679,15 +804,13 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
         
         if (priceData && lineSeries) {
           const { price, timestamp } = priceData;
+          const currentInterval = roundToInterval(timestamp);
           
-          console.log('🔄 Polling update - Price:', price, 'at', new Date(timestamp * 1000).toLocaleTimeString());
+          console.log('🔄 Polling update - Price:', price, 'at', new Date(timestamp * 1000).toLocaleTimeString(), 'interval:', new Date(currentInterval * 1000).toLocaleTimeString());
           
-          lineSeries.update({
-            time: timestamp,
-            value: price,
-          });
-          
-          setLatestPrice(price);
+          // Update the current 5-minute interval point
+          const previousPrice = latestPrice || price;
+          animatePriceUpdate(lineSeries, previousPrice, price, timestamp);
         }
       };
       
@@ -700,9 +823,12 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
 
     initialize();
 
-    // Cleanup only on unmount or pair change
+    // Cleanup only on unmount, pair change, or timeframe change
     return () => {
       mounted = false;
+      
+      // Stop heartbeat animation
+      stopLiveHeartbeat();
       
       // Cancel any ongoing animations
       if (animationFrameRef.current) {
@@ -730,7 +856,14 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
       
       lineSeriesRef.current = null;
     };
-  }, [pairAddress]); // Re-initialize if pairAddress changes (removed isActive dependency)
+  }, [pairAddress, selectedTimeframe]); // Re-initialize if pairAddress or timeframe changes
+
+  // Handle timeframe change
+  const handleTimeframeChange = (newTimeframe) => {
+    console.log('🕐 Changing timeframe to:', newTimeframe);
+    setSelectedTimeframe(newTimeframe);
+    // The useEffect will handle re-initialization
+  };
 
   if (error) {
     return <div className="error-message">{error}</div>;
@@ -738,11 +871,25 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
 
   return (
     <div className="twelve-data-chart">
+      {/* Timeframe Selector */}
+      <div className="timeframe-selector">
+        {Object.keys(TIMEFRAME_CONFIG).map(key => (
+          <button
+            key={key}
+            className={`timeframe-button ${selectedTimeframe === key ? 'active' : ''}`}
+            onClick={() => handleTimeframeChange(key)}
+            disabled={loading}
+          >
+            {TIMEFRAME_CONFIG[key].label}
+          </button>
+        ))}
+      </div>
+
       <div 
         className="chart-container" 
         ref={chartContainerRef}
         style={{ 
-          minHeight: '380px',
+          minHeight: '320px',
           width: '100%',
           position: 'relative',
           flex: 1

@@ -21,6 +21,7 @@ const https = require('https');
 const pumpFunService = require('./pumpFunService');
 const jupiterBatchService = require('./JupiterBatchService');
 const CompactCacheStorage = require('./CompactCacheStorage');
+const moonshotMetadataService = require('./moonshotMetadataService');
 
 // 🚀 PERFORMANCE: HTTP connection pooling for faster requests
 const httpAgent = new http.Agent({
@@ -117,12 +118,13 @@ class OnDemandEnrichmentService {
     console.log(`🔄 Enriching ${coin.symbol || mintAddress} on-demand (PARALLEL MODE)...`);
 
     try {
-      // 🚀 PHASE 1: Fast APIs (DexScreener, Jupiter, Pump.fun) + Rugcheck (parallel start)
+      // 🚀 PHASE 1: Fast APIs (DexScreener, Jupiter, Pump.fun, Moonshot) + Rugcheck (parallel start)
       // Start ALL APIs in parallel, but only wait for fast ones
       const fastApis = {
         dex: this.fetchDexScreener(mintAddress),
         jupiter: jupiterBatchService.getTokenData(mintAddress),
-        pumpfun: this.fetchPumpFunDescription(mintAddress)
+        pumpfun: this.fetchPumpFunDescription(mintAddress),
+        moonshot: moonshotMetadataService.getMetadata(mintAddress) // 🌙 Fetch Moonshot metadata
       };
 
       // 🆕 OPTIMIZATION: Start rugcheck immediately in parallel (don't wait for it yet)
@@ -136,7 +138,7 @@ class OnDemandEnrichmentService {
         )
       ]);
 
-      const [dexResult, jupiterResult, pumpfunResult] = fastResults;
+      const [dexResult, jupiterResult, pumpfunResult, moonshotResult] = fastResults;
       
       const enrichedData = {
         ...coin,
@@ -151,6 +153,43 @@ class OnDemandEnrichmentService {
         Object.assign(enrichedData, this.processDexScreenerData(dexResult.value, coin));
         hasDexScreenerData = true;
         console.log(`✅ Phase 1: DexScreener applied (${Date.now() - startTime}ms)`);
+      }
+
+      // 🌙 Apply Moonshot metadata (high priority for images)
+      if (moonshotResult.status === 'fulfilled' && moonshotResult.value) {
+        const moonshotData = moonshotResult.value;
+        
+        // Override with Moonshot images if available (they're usually higher quality)
+        if (moonshotData.profileImage) {
+          enrichedData.profileImage = moonshotData.profileImage;
+          enrichedData.image = moonshotData.profileImage;
+          enrichedData.logo = moonshotData.profileImage;
+        }
+        
+        if (moonshotData.banner) {
+          enrichedData.banner = moonshotData.banner;
+        }
+        
+        // Add Moonshot socials if not already present
+        if (moonshotData.socials) {
+          if (moonshotData.socials.twitter && !enrichedData.twitter) {
+            enrichedData.twitter = moonshotData.socials.twitter;
+          }
+          if (moonshotData.socials.telegram && !enrichedData.telegram) {
+            enrichedData.telegram = moonshotData.socials.telegram;
+          }
+          if (moonshotData.socials.website && !enrichedData.website) {
+            enrichedData.website = moonshotData.socials.website;
+          }
+        }
+        
+        // Add Moonshot description if available and no Pump.fun description
+        if (moonshotData.description && !enrichedData.description) {
+          enrichedData.description = moonshotData.description;
+          enrichedData.descriptionSource = 'moonshot';
+        }
+        
+        console.log(`✅ Phase 1: Moonshot metadata applied (${Date.now() - startTime}ms)`);
       }
 
       // ✅ Apply Jupiter Ultra data for holderCount
@@ -172,15 +211,15 @@ class OnDemandEnrichmentService {
         }
       }
 
-      // Apply Pump.fun description
+      // Apply Pump.fun description (highest priority for descriptions)
       if (pumpfunResult.status === 'fulfilled' && pumpfunResult.value) {
         enrichedData.description = pumpfunResult.value;
         enrichedData.descriptionSource = 'pump.fun';
         console.log(`✅ Phase 1: Pump.fun description applied (${Date.now() - startTime}ms)`);
-      } else {
-        // Remove description entirely if no Pump.fun description (don't use generic fallback)
+      } else if (!enrichedData.description) {
+        // Remove description entirely if no Pump.fun or Moonshot description
         delete enrichedData.description;
-        console.log(`ℹ️ No Pump.fun description for ${coin.symbol}, leaving blank`);
+        console.log(`ℹ️ No description for ${coin.symbol}, leaving blank`);
       }
 
       // ✨ ALWAYS GENERATE CHART with LIVE JUPITER PRICE
