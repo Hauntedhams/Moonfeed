@@ -172,24 +172,36 @@ app.get('/api/geckoterminal/ohlcv/:network/:poolAddress/:timeframe', async (req,
       headers: {
         'Accept': 'application/json',
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
-      }
+      },
+      timeout: 15000
     });
 
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ [Proxy] GeckoTerminal API error: ${response.status} - ${errorText}`);
       throw new Error(`GeckoTerminal API error: ${response.status} ${response.statusText}`);
     }
 
     const data = await response.json();
     
-    console.log(`✅ [Proxy] Returning OHLCV data for ${poolAddress}`);
+    // Validate the response structure
+    if (!data || !data.data || !data.data.attributes || !data.data.attributes.ohlcv_list) {
+      console.error(`❌ [Proxy] Invalid response structure from GeckoTerminal:`, JSON.stringify(data).substring(0, 200));
+      throw new Error('Invalid OHLCV data format from GeckoTerminal');
+    }
+    
+    console.log(`✅ [Proxy] Returning ${data.data.attributes.ohlcv_list.length} OHLCV data points for ${poolAddress}`);
     
     // Return the raw GeckoTerminal response
     res.json(data);
 
   } catch (error) {
     console.error(`❌ [Proxy] Error fetching OHLCV data:`, error.message);
+    console.error(`   Stack:`, error.stack);
     res.status(500).json({
+      success: false,
       error: error.message,
+      details: 'Failed to fetch OHLCV data from GeckoTerminal',
       timestamp: new Date().toISOString()
     });
   }

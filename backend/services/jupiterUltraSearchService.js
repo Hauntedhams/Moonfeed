@@ -3,11 +3,140 @@
  * Enhanced token search with rich metadata and stats
  */
 
+const fetch = require('node-fetch');
 const JUPITER_ULTRA_API = 'https://lite-api.jup.ag/ultra/v1';
 
 class JupiterUltraSearchService {
   constructor() {
     this.apiUrl = JUPITER_ULTRA_API;
+    this.searchCache = new Map(); // Cache search results
+    this.CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache
+    this.lastRequestTime = 0;
+    this.MIN_REQUEST_INTERVAL = 1000; // Minimum 1 second between requests
+  }
+
+  /**
+   * Get cached search results
+   */
+  getCachedSearch(query) {
+    const normalizedQuery = query.toLowerCase().trim();
+    const cached = this.searchCache.get(normalizedQuery);
+    
+    if (cached && (Date.now() - cached.timestamp) < this.CACHE_DURATION) {
+      console.log(`📦 Using cached results for "${query}"`);
+      return cached.results;
+    }
+    
+    return null;
+  }
+
+  /**
+   * Store search results in cache
+   */
+  setCachedSearch(query, results) {
+    const normalizedQuery = query.toLowerCase().trim();
+    this.searchCache.set(normalizedQuery, {
+      results,
+      timestamp: Date.now()
+    });
+    
+    // Limit cache size to 100 entries
+    if (this.searchCache.size > 100) {
+      const firstKey = this.searchCache.keys().next().value;
+      this.searchCache.delete(firstKey);
+    }
+  }
+
+  /**
+   * Rate limit requests
+   */
+  async waitForRateLimit() {
+    const now = Date.now();
+    const timeSinceLastRequest = now - this.lastRequestTime;
+    
+    if (timeSinceLastRequest < this.MIN_REQUEST_INTERVAL) {
+      const waitTime = this.MIN_REQUEST_INTERVAL - timeSinceLastRequest;
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
+    
+    this.lastRequestTime = Date.now();
+  }
+
+  /**
+   * Fallback search using DexScreener API (reliable, no rate limits for search)
+   */
+  async searchDexScreener(query) {
+    try {
+      console.log(`🔍 Fallback: Searching DexScreener for "${query}"`);
+      
+      // Use DexScreener's search endpoint
+      const response = await fetch(`https://api.dexscreener.com/latest/dex/search?q=${encodeURIComponent(query)}`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`DexScreener API error: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      if (!data.pairs || data.pairs.length === 0) {
+        return {
+          success: true,
+          results: [],
+          total: 0,
+          source: 'dexscreener-fallback'
+        };
+      }
+      
+      // Filter for Solana tokens only and deduplicate by base token
+      const solanaTokens = new Map();
+      
+      data.pairs.forEach(pair => {
+        if (pair.chainId === 'solana' && pair.baseToken) {
+          const address = pair.baseToken.address;
+          // Only add if we haven't seen this token or if this pair has more liquidity
+          if (!solanaTokens.has(address) || 
+              (pair.liquidity?.usd || 0) > (solanaTokens.get(address).liquidity || 0)) {
+            solanaTokens.set(address, {
+              mintAddress: address,
+              symbol: pair.baseToken.symbol,
+              name: pair.baseToken.name,
+              image: pair.info?.imageUrl,
+              priceUsd: parseFloat(pair.priceUsd) || null,
+              marketCap: pair.fdv || pair.marketCap || null,
+              liquidity: pair.liquidity?.usd || null,
+              priceChange24h: pair.priceChange?.h24 || null,
+              volume24h: pair.volume?.h24 || null,
+              source: 'dexscreener',
+              pairAddress: pair.pairAddress,
+              dexId: pair.dexId
+            });
+          }
+        }
+      });
+      
+      const transformedResults = Array.from(solanaTokens.values()).slice(0, 20);
+      
+      console.log(`✅ Found ${transformedResults.length} Solana tokens from DexScreener`);
+      
+      return {
+        success: true,
+        results: transformedResults,
+        total: transformedResults.length,
+        source: 'dexscreener-fallback'
+      };
+    } catch (error) {
+      console.error('❌ Error with DexScreener fallback:', error);
+      return {
+        success: false,
+        error: 'Search temporarily unavailable. Please try again.',
+        results: []
+      };
+    }
   }
 
   /**
@@ -26,7 +155,16 @@ class JupiterUltraSearchService {
         };
       }
 
+      // Check cache first
+      const cached = this.getCachedSearch(query);
+      if (cached) {
+        return cached;
+      }
+
       console.log(`🔍 Searching Jupiter Ultra for: "${query}"`);
+
+      // Rate limit requests
+      await this.waitForRateLimit();
 
       const response = await fetch(`${this.apiUrl}/search?query=${encodeURIComponent(query)}`, {
         method: 'GET',
@@ -36,28 +174,40 @@ class JupiterUltraSearchService {
       });
 
       if (!response.ok) {
-        const error = await response.text();
-        throw new Error(`Jupiter Ultra API error: ${error}`);
+        const errorText = await response.text();
+        
+        // Check if rate limited
+        if (response.status === 429 || errorText.includes('Rate limit')) {
+          console.log('⚠️ Jupiter Ultra rate limited, falling back to DexScreener...');
+          return await this.searchDexScreener(query);
+        }
+        
+        throw new Error(`Jupiter Ultra API error: ${errorText}`);
       }
 
       const results = await response.json();
-      console.log(`✅ Found ${results.length} tokens`);
+      console.log(`✅ Found ${results.length} tokens from Jupiter Ultra`);
 
       // Transform results to Moonfeed format
       const transformedResults = results.map(token => this.transformTokenData(token));
 
-      return {
+      const successResult = {
         success: true,
         results: transformedResults,
-        total: results.length
+        total: results.length,
+        source: 'jupiter-ultra'
       };
+
+      // Cache successful results
+      this.setCachedSearch(query, successResult);
+
+      return successResult;
     } catch (error) {
       console.error('❌ Error searching tokens:', error);
-      return {
-        success: false,
-        error: error.message,
-        results: []
-      };
+      
+      // Try DexScreener fallback on any error
+      console.log('⚠️ Falling back to DexScreener search...');
+      return await this.searchDexScreener(query);
     }
   }
 

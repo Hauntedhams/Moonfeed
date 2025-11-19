@@ -35,3 +35,4 @@ Thumbs.db
 
 # Keep markdown docs
 !*.md
+backend/.env

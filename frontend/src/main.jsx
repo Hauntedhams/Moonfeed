@@ -1,26 +1,80 @@
-import { StrictMode } from 'react'
+import { StrictMode, useMemo } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
 
-// Wallet imports
-import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
-import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
-import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
-import { clusterApiUrl } from '@solana/web3.js';
+// Jupiter Wallet Kit imports (replaces old wallet adapter)
+import { UnifiedWalletProvider } from '@jup-ag/wallet-adapter';
+import { useWrappedReownAdapter } from '@jup-ag/jup-mobile-adapter';
 
 // WebSocket context for singleton connection
 import { LiveDataProvider } from './hooks/useLiveDataContext.jsx';
 
-// Default styles for wallet adapter
-import '@solana/wallet-adapter-react-ui/styles.css';
+// Wallet notification handler
+import { WalletNotification } from './components/WalletNotification.jsx';
 
-// Solana network (mainnet-beta for production)
-const network = WalletAdapterNetwork.Mainnet;
-const endpoint = clusterApiUrl(network);
+// Solana RPC endpoint (mainnet-beta for production)
+const RPC_ENDPOINT = 'https://api.mainnet-beta.solana.com';
 
-// Wallet configuration
-const wallets = [];
+// Root component that provides wallet context
+function RootApp() {
+  // Initialize Jupiter Mobile Adapter with WalletConnect/Reown configuration
+  // This adapter enables mobile wallet connections through WalletConnect protocol
+  const { jupiterAdapter } = useWrappedReownAdapter({
+    appKitOptions: {
+      metadata: {
+        name: 'Moonfeed',
+        description: 'Discover trending meme coins on Solana with TikTok-style scrolling',
+        url: typeof window !== 'undefined' ? window.location.origin : 'https://moonfeed.app',
+        icons: ['https://moonfeed.app/favicon.ico'],
+      },
+      // TODO: Get your project ID from https://dashboard.reown.com/
+      // This is required for WalletConnect functionality
+      projectId: 'YOUR_REOWN_PROJECT_ID', // Replace with your Reown project ID
+      features: {
+        analytics: false,
+        socials: ['google', 'x', 'apple'],
+        email: false,
+      },
+      // Disable built-in wallet list to use only Jupiter Mobile Adapter
+      enableWallets: false,
+    },
+  });
+  
+  // Configure wallet adapters for the UnifiedWalletProvider
+  // This memoized array includes the Jupiter Mobile Adapter and filters out any invalid adapters
+  const wallets = useMemo(() => {
+    return [
+      jupiterAdapter, // Jupiter Mobile Adapter with WalletConnect integration
+    ].filter((item) => item && item.name && item.icon);
+  }, [jupiterAdapter]);
+
+  return (
+    <UnifiedWalletProvider
+      wallets={wallets}
+      config={{
+        autoConnect: false,
+        env: "mainnet-beta",
+        metadata: {
+          name: "Moonfeed",
+          description: "Discover trending meme coins on Solana",
+          url: typeof window !== 'undefined' ? window.location.origin : 'https://moonfeed.app',
+          iconUrls: ['https://moonfeed.app/favicon.ico'],
+        },
+        notificationCallback: WalletNotification,
+        walletlistExplanation: {
+          href: "https://jup.ag",
+        },
+        theme: "dark",
+        lang: "en",
+      }}
+    >
+      <LiveDataProvider>
+        <App />
+      </LiveDataProvider>
+    </UnifiedWalletProvider>
+  );
+}
 
 // Register service worker for PWA and caching
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
@@ -33,14 +87,6 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <ConnectionProvider endpoint={endpoint}>
-      <WalletProvider wallets={wallets} autoConnect>
-        <WalletModalProvider>
-          <LiveDataProvider>
-            <App />
-          </LiveDataProvider>
-        </WalletModalProvider>
-      </WalletProvider>
-    </ConnectionProvider>
+    <RootApp />
   </StrictMode>,
 )

@@ -182,6 +182,7 @@ function App() {
 
   // Handle search modal
   const handleSearchClick = () => {
+    console.log('🔍 APP: handleSearchClick called!');
     setSearchModalOpen(true);
   };
 

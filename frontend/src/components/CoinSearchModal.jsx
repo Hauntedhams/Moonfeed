@@ -61,26 +61,25 @@ function CoinSearchModal({ visible, onClose, onCoinSelect, onAdvancedFilterClick
 
       const response = await fetch(`${API_ROOT}/api/search?${params.toString()}`);
       
-      if (!response.ok) {
-        throw new Error('Search failed. Please try again.');
-      }
-
       const data = await response.json();
       
       if (data.success && data.results) {
-        console.log(`✅ Found ${data.results.length} tokens`);
+        console.log(`✅ Found ${data.results.length} tokens${data.source ? ` (${data.source})` : ''}`);
         setSearchResults(data.results);
         
         if (data.results.length === 0) {
           setError('No tokens found. Try a different search term.');
         }
       } else {
-        throw new Error(data.error || 'Search failed');
+        // Show specific error message from backend
+        throw new Error(data.error || 'Search failed. Please try again.');
       }
 
     } catch (err) {
       console.error('❌ Search error:', err);
-      setError(err.message || 'Search failed');
+      // More helpful error messages
+      const errorMessage = err.message || 'Search failed. Please check your connection and try again.';
+      setError(errorMessage);
       setSearchResults([]);
     } finally {
       setLoading(false);

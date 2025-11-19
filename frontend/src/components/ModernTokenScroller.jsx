@@ -28,6 +28,11 @@ const ModernTokenScroller = ({
   isAdvancedFilterActive = false,
   onSearchClick = null // Add search click handler
 }) => {
+  // Debug: Log if onSearchClick is passed
+  useEffect(() => {
+    console.log('🔍 ModernTokenScroller: onSearchClick prop =', !!onSearchClick);
+  }, [onSearchClick]);
+  
   const [coins, setCoins] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(false);
