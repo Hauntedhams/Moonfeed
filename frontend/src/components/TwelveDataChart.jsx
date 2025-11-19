@@ -347,32 +347,77 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
       
       const response = await fetch(url);
       if (!response.ok) {
-        throw new Error(`Backend proxy error: ${response.status}`);
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('❌ Backend proxy error:', response.status, errorData);
+        throw new Error(`Backend proxy error: ${response.status} - ${errorData.error || response.statusText}`);
       }
       
       const data = await response.json();
       
-      if (!data?.data?.attributes?.ohlcv_list) {
-        throw new Error('Invalid OHLCV data format');
+      // Enhanced validation with better error messages
+      if (!data) {
+        throw new Error('No data received from backend');
+      }
+      
+      if (!data.data) {
+        console.error('❌ Missing data.data in response:', data);
+        throw new Error('Invalid response structure: missing data object');
+      }
+      
+      if (!data.data.attributes) {
+        console.error('❌ Missing data.data.attributes in response:', data);
+        throw new Error('Invalid response structure: missing attributes');
+      }
+      
+      if (!data.data.attributes.ohlcv_list || !Array.isArray(data.data.attributes.ohlcv_list)) {
+        console.error('❌ Missing or invalid ohlcv_list in response:', data.data.attributes);
+        throw new Error('Invalid response structure: missing or invalid ohlcv_list');
+      }
+      
+      if (data.data.attributes.ohlcv_list.length === 0) {
+        throw new Error('No OHLCV data available for this pool');
       }
       
       // Convert OHLCV to line chart data (using close prices)
-      const chartData = data.data.attributes.ohlcv_list.map(candle => ({
-        time: candle[0], // Unix timestamp
-        value: candle[4], // Close price
-      }));
+      const chartData = data.data.attributes.ohlcv_list.map((candle, index) => {
+        if (!Array.isArray(candle) || candle.length < 5) {
+          console.error(`❌ Invalid candle format at index ${index}:`, candle);
+          throw new Error(`Invalid candle data at index ${index}`);
+        }
+        
+        return {
+          time: candle[0], // Unix timestamp
+          value: parseFloat(candle[4]), // Close price
+        };
+      });
       
       // CRITICAL: Ensure data is sorted in ascending order by timestamp
       // The chart library requires strictly ascending time order
       chartData.sort((a, b) => a.time - b.time);
       
+      // Validate that data is now properly sorted
+      for (let i = 1; i < chartData.length; i++) {
+        if (chartData[i].time <= chartData[i - 1].time) {
+          console.error('❌ Duplicate or out-of-order timestamps detected:', {
+            index: i,
+            prev: { time: chartData[i - 1].time, date: new Date(chartData[i - 1].time * 1000).toISOString() },
+            current: { time: chartData[i].time, date: new Date(chartData[i].time * 1000).toISOString() }
+          });
+          // Remove duplicate timestamp entries
+          chartData.splice(i, 1);
+          i--; // Recheck this index
+        }
+      }
+      
       console.log('✅ Historical data fetched:', chartData.length, 'candles (sorted ascending)');
-      console.log('   First candle time:', new Date(chartData[0].time * 1000).toISOString());
-      console.log('   Last candle time:', new Date(chartData[chartData.length - 1].time * 1000).toISOString());
+      if (chartData.length > 0) {
+        console.log('   First candle time:', new Date(chartData[0].time * 1000).toISOString());
+        console.log('   Last candle time:', new Date(chartData[chartData.length - 1].time * 1000).toISOString());
+      }
       
       return chartData;
     } catch (err) {
-      console.error('Error fetching historical data:', err);
+      console.error('❌ Error fetching historical data:', err);
       throw err;
     }
   };
@@ -888,49 +933,54 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
     // The useEffect will handle re-initialization
   };
 
-  if (error) {
-    return <div className="error-message">{error}</div>;
-  }
 
   return (
-    <div className="twelve-data-chart">
+    <div className="twelve-data-chart-wrapper" style={{ width: '100%', height: '100%', position: 'relative' }}>
+      {/* Loading State */}
+      {loading && (
+        <div className="chart-loading-overlay">
+          <div className="loading-spinner"></div>
+          <p>Loading chart...</p>
+        </div>
+      )}
+
+      {/* Error State */}
+      {error && (
+        <div className="chart-error-overlay">
+          <p className="error-message">⚠️ {error}</p>
+          <button 
+            className="retry-button"
+            onClick={() => {
+              setError(null);
+              window.location.reload();
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {/* Chart Container */}
+      <div ref={chartContainerRef} style={{ width: '100%', height: '100%' }} />
+
       {/* Timeframe Selector */}
       <div className="timeframe-selector">
-        {Object.keys(TIMEFRAME_CONFIG).map(key => (
+        {Object.entries(TIMEFRAME_CONFIG).map(([key, { label }]) => (
           <button
             key={key}
-            className={`timeframe-button ${selectedTimeframe === key ? 'active' : ''}`}
+            className={`timeframe-btn ${selectedTimeframe === key ? 'active' : ''}`}
             onClick={() => handleTimeframeChange(key)}
-            disabled={loading}
           >
-            {TIMEFRAME_CONFIG[key].label}
+            {label}
           </button>
         ))}
       </div>
 
-      <div 
-        className="chart-container" 
-        ref={chartContainerRef}
-        style={{ 
-          minHeight: '320px',
-          width: '100%',
-          position: 'relative',
-          flex: 1
-        }}
-      >
-        {loading && <div className="loading-overlay">Loading chart data...</div>}
-        {error && <div className="chart-error">{error}</div>}
-        {isLiveConnected && !loading && !error && (
-          <div className="live-indicator">
-            <span className="live-dot"></span>
-            LIVE
-          </div>
-        )}
-      </div>
-      {latestPrice !== null && (
-        <div className="latest-price">
-          Latest Price: ${latestPrice.toFixed(8)}
-          {isLiveConnected && <span className="live-badge"> • Real-Time</span>}
+      {/* Live Indicator */}
+      {isLiveConnected && (
+        <div className="live-indicator">
+          <span className="live-dot"></span>
+          LIVE
         </div>
       )}
     </div>
