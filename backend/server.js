@@ -4,6 +4,7 @@ const cors = require('cors');
 const compression = require('compression'); // Add compression
 const fetch = require('node-fetch');
 const http = require('http');
+const { connectDB } = require('./config/database'); // MongoDB connection
 const CoinStorage = require('./coin-storage');
 const NewCoinStorage = require('./new-coin-storage');
 const priceEngine = require('./services/priceEngine');
@@ -28,6 +29,8 @@ const walletRoutes = require('./routes/walletRoutes');
 const triggerRoutes = require('./routes/trigger');
 const searchRoutes = require('./routes/search');
 const affiliateRoutes = require('./routes/affiliates');
+const commentsRoutes = require('./routes/comments');
+const commentsAdminRoutes = require('./routes/comments-admin');
 const onDemandEnrichment = require('./services/OnDemandEnrichmentService');
 const geckoTerminalService = require('./geckoTerminalService');
 
@@ -83,6 +86,12 @@ app.use('/api/search', searchRoutes);
 
 // Mount Affiliate routes
 app.use('/api/affiliates', affiliateRoutes);
+
+// Mount Comments routes
+app.use('/api/comments', commentsRoutes);
+
+// Mount Comments Admin routes (for monitoring)
+app.use('/api/comments-admin', commentsAdminRoutes);
 
 // 📊 GeckoTerminal Historical Price Data endpoint
 app.get('/api/coins/:tokenAddress/historical-prices', async (req, res) => {
@@ -1203,9 +1212,6 @@ app.get('/api/coins/trending', async (req, res) => {
       onDemandEnrichment.enrichCoins(
         limitedCoins.slice(0, TOP_COINS_TO_ENRICH),
         { maxConcurrent: 3, timeout: 2000 }
-      ).then(enrichedCoins => {
-        // Update the cache with enriched data
-        enrichedCoins.forEach((enriched, index) => {
           if (enriched.enriched && currentCoins[index]) {
             Object.assign(currentCoins[index], enriched);
           }
@@ -1841,10 +1847,13 @@ const wsServer = new WebSocketServer();
 wsRouter.register('/ws', wsServer.wss);
 console.log('✅ Main WebSocket Server initialized and registered on /ws');
 
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
   console.log('\n🚀 ═══════════════════════════════════════════════════════════════');
   console.log(`🚀 MoonFeed Backend Server running on port ${PORT}`);
   console.log('🚀 ═══════════════════════════════════════════════════════════════\n');
+  
+  // Connect to MongoDB for comments feature
+  await connectDB();
   
   // Initialize feeds and start auto-refreshers
   initializeWithLatestBatch();

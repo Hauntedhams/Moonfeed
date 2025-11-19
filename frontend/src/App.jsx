@@ -20,8 +20,8 @@ const OrdersView = lazy(() => import('./components/OrdersView'))
 const JupiterTradeModal = lazy(() => import('./components/JupiterTradeModal'))
 const AdvancedFilter = lazy(() => import('./components/AdvancedFilter'))
 
-// Import HelpBubble (not lazy loaded - it's lightweight)
-import HelpBubble from './components/HelpBubble'
+// Import CommentsSection (not lazy loaded - it's lightweight)
+import CommentsSection from './components/CommentsSection'
 
 function App() {
   // Build timestamp - only log once on initial load
@@ -387,8 +387,11 @@ function App() {
         />
       </Suspense>
       
-      {/* Help Bubble - Contextual help for each page */}
-      <HelpBubble currentPage={activeTab} />
+      {/* Comments Section - Coin-specific comments */}
+      <CommentsSection 
+        coinAddress={currentViewedCoin?.mintAddress || currentViewedCoin?.address}
+        coinSymbol={currentViewedCoin?.symbol || currentViewedCoin?.ticker}
+      />
         </div>
       </WalletProvider>
     </TrackedWalletsProvider>
