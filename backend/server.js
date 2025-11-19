@@ -30,7 +30,6 @@ const triggerRoutes = require('./routes/trigger');
 const searchRoutes = require('./routes/search');
 const affiliateRoutes = require('./routes/affiliates');
 const commentsRoutes = require('./routes/comments');
-const commentsAdminRoutes = require('./routes/comments-admin');
 const onDemandEnrichment = require('./services/OnDemandEnrichmentService');
 const geckoTerminalService = require('./geckoTerminalService');
 
@@ -89,9 +88,6 @@ app.use('/api/affiliates', affiliateRoutes);
 
 // Mount Comments routes
 app.use('/api/comments', commentsRoutes);
-
-// Mount Comments Admin routes (for monitoring)
-app.use('/api/comments-admin', commentsAdminRoutes);
 
 // 📊 GeckoTerminal Historical Price Data endpoint
 app.get('/api/coins/:tokenAddress/historical-prices', async (req, res) => {
@@ -1212,6 +1208,9 @@ app.get('/api/coins/trending', async (req, res) => {
       onDemandEnrichment.enrichCoins(
         limitedCoins.slice(0, TOP_COINS_TO_ENRICH),
         { maxConcurrent: 3, timeout: 2000 }
+      ).then(enrichedCoins => {
+        // Update the cache with enriched data
+        enrichedCoins.forEach((enriched, index) => {
           if (enriched.enriched && currentCoins[index]) {
             Object.assign(currentCoins[index], enriched);
           }
