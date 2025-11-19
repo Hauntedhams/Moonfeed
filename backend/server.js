@@ -144,6 +144,92 @@ app.get('/api/coins/:tokenAddress/historical-prices', async (req, res) => {
   }
 });
 
+// 📊 GeckoTerminal OHLCV Proxy endpoint (for chart data)
+app.get('/api/geckoterminal/ohlcv/:network/:poolAddress/:timeframe', async (req, res) => {
+  try {
+    const { network, poolAddress, timeframe } = req.params;
+    const { aggregate = 1, limit = 100 } = req.query;
+
+    console.log(`📊 [Proxy] OHLCV data requested: ${network}/${poolAddress}/${timeframe} (aggregate: ${aggregate}, limit: ${limit})`);
+
+    // Construct GeckoTerminal API URL
+    const url = `https://api.geckoterminal.com/api/v2/networks/${network}/pools/${poolAddress}/ohlcv/${timeframe}`;
+    const params = new URLSearchParams({
+      aggregate: aggregate.toString(),
+      limit: limit.toString(),
+      currency: 'usd'
+    });
+
+    // Fetch from GeckoTerminal with proper headers
+    const fetch = require('node-fetch');
+    const response = await fetch(`${url}?${params}`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`GeckoTerminal API error: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    
+    console.log(`✅ [Proxy] Returning OHLCV data for ${poolAddress}`);
+    
+    // Return the raw GeckoTerminal response
+    res.json(data);
+
+  } catch (error) {
+    console.error(`❌ [Proxy] Error fetching OHLCV data:`, error.message);
+    res.status(500).json({
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// 📊 GeckoTerminal Pool Info Proxy endpoint
+app.get('/api/geckoterminal/pool/:network/:poolAddress', async (req, res) => {
+  try {
+    const { network, poolAddress } = req.params;
+
+    console.log(`📊 [Proxy] Pool info requested: ${network}/${poolAddress}`);
+
+    // Construct GeckoTerminal API URL
+    const url = `https://api.geckoterminal.com/api/v2/networks/${network}/pools/${poolAddress}`;
+
+    // Fetch from GeckoTerminal with proper headers
+    const fetch = require('node-fetch');
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`GeckoTerminal API error: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    
+    console.log(`✅ [Proxy] Returning pool info for ${poolAddress}`);
+    
+    // Return the raw GeckoTerminal response
+    res.json(data);
+
+  } catch (error) {
+    console.error(`❌ [Proxy] Error fetching pool info:`, error.message);
+    res.status(500).json({
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 // ⭐ On-demand enrichment endpoint for single coins
 app.post('/api/coins/enrich-single', async (req, res) => {
   try {

@@ -2,7 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createChart, LineSeries } from 'lightweight-charts';
 import './TwelveDataChart.css';
 
-const GECKOTERMINAL_API = 'https://api.geckoterminal.com/api/v2';
+// Use backend proxy to avoid CORS errors
+const BACKEND_API = import.meta.env.PROD 
+  ? 'https://api.moonfeed.app'
+  : 'http://localhost:3001';
 const SOLANASTREAM_API_KEY = '011b8a15bb61a3cd81bfa19fd7a52ea3';
 const SOLANASTREAM_WS = `wss://api.solanastreaming.com/v1/stream?apiKey=${SOLANASTREAM_API_KEY}`;
 const PRICE_UPDATE_INTERVAL = 10000; // Poll for price updates every 10 seconds (fallback only)
@@ -327,7 +330,7 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
     '1d': { timeframe: 'day', aggregate: 1, limit: 100, label: '1D', intervalSeconds: 86400 },
   };
 
-  // Fetch historical OHLCV data from GeckoTerminal
+  // Fetch historical OHLCV data from GeckoTerminal via backend proxy
   const fetchHistoricalData = async (poolAddress, timeframeKey = '5m') => {
     try {
       const config = TIMEFRAME_CONFIG[timeframeKey];
@@ -337,13 +340,14 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
 
       const { timeframe, aggregate, limit } = config;
       
-      const url = `${GECKOTERMINAL_API}/networks/solana/pools/${poolAddress}/ohlcv/${timeframe}?aggregate=${aggregate}&limit=${limit}&currency=usd`;
+      // Use backend proxy to avoid CORS errors
+      const url = `${BACKEND_API}/api/geckoterminal/ohlcv/solana/${poolAddress}/${timeframe}?aggregate=${aggregate}&limit=${limit}`;
       
-      console.log('📊 Fetching historical data:', { timeframeKey, timeframe, aggregate, limit, url });
+      console.log('📊 Fetching historical data via proxy:', { timeframeKey, timeframe, aggregate, limit, url });
       
       const response = await fetch(url);
       if (!response.ok) {
-        throw new Error(`GeckoTerminal API error: ${response.status}`);
+        throw new Error(`Backend proxy error: ${response.status}`);
       }
       
       const data = await response.json();
@@ -356,9 +360,15 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
       const chartData = data.data.attributes.ohlcv_list.map(candle => ({
         time: candle[0], // Unix timestamp
         value: candle[4], // Close price
-      })).reverse(); // Reverse to get chronological order
+      }));
       
-      console.log('✅ Historical data fetched:', chartData.length, 'candles');
+      // CRITICAL: Ensure data is sorted in ascending order by timestamp
+      // The chart library requires strictly ascending time order
+      chartData.sort((a, b) => a.time - b.time);
+      
+      console.log('✅ Historical data fetched:', chartData.length, 'candles (sorted ascending)');
+      console.log('   First candle time:', new Date(chartData[0].time * 1000).toISOString());
+      console.log('   Last candle time:', new Date(chartData[chartData.length - 1].time * 1000).toISOString());
       
       return chartData;
     } catch (err) {
@@ -367,14 +377,15 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
     }
   };
 
-  // Fetch latest price from GeckoTerminal
+  // Fetch latest price from GeckoTerminal via backend proxy
   const fetchLatestPrice = async (poolAddress) => {
     try {
-      const url = `${GECKOTERMINAL_API}/networks/solana/pools/${poolAddress}`;
+      // Use backend proxy to avoid CORS errors
+      const url = `${BACKEND_API}/api/geckoterminal/pool/solana/${poolAddress}`;
       
       const response = await fetch(url);
       if (!response.ok) {
-        throw new Error(`GeckoTerminal API error: ${response.status}`);
+        throw new Error(`Backend proxy error: ${response.status}`);
       }
       
       const data = await response.json();
@@ -557,6 +568,18 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
         
         if (historicalData.length === 0) {
           throw new Error('No historical data available');
+        }
+        
+        // CRITICAL: Validate data is in ascending order before passing to chart
+        for (let i = 1; i < historicalData.length; i++) {
+          if (historicalData[i].time <= historicalData[i - 1].time) {
+            console.error('❌ Data not in ascending order!', {
+              index: i,
+              prev: historicalData[i - 1].time,
+              current: historicalData[i].time
+            });
+            throw new Error('Historical data is not properly sorted');
+          }
         }
 
         lineSeries.setData(historicalData);
