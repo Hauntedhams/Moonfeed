@@ -3,11 +3,12 @@ const axios = require('axios');
 class GeckoTerminalService {
   constructor() {
     this.baseURL = 'https://api.geckoterminal.com/api/v2';
-    this.rateLimitDelay = 200; // 200ms between requests to respect rate limits
+    this.rateLimitDelay = 300; // 300ms between requests to respect rate limits
     this.cache = new Map();
-    this.cacheTimeout = 5 * 60 * 1000; // 5 minutes cache
+    this.cacheTimeout = 15 * 60 * 1000; // 15 minutes cache (increased from 5)
     this.requestCount = 0;
     this.lastRequestTime = 0;
+    this.pendingRequests = new Map(); // Deduplicate concurrent requests
   }
 
   async delay(ms) {
@@ -15,6 +16,21 @@ class GeckoTerminalService {
   }
 
   async makeRequest(endpoint, params = {}) {
+    const cacheKey = `${endpoint}_${JSON.stringify(params)}`;
+    
+    // Check cache first (before any delays)
+    const cached = this.cache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < this.cacheTimeout) {
+      console.log(`[GeckoTerminal] ✅ Cache hit for ${endpoint} (age: ${Math.round((Date.now() - cached.timestamp) / 1000)}s)`);
+      return cached.data;
+    }
+
+    // Check if there's already a pending request for this exact key
+    if (this.pendingRequests.has(cacheKey)) {
+      console.log(`[GeckoTerminal] 🔄 Deduplicating concurrent request for ${endpoint}`);
+      return this.pendingRequests.get(cacheKey);
+    }
+
     // Rate limiting
     const now = Date.now();
     if (now - this.lastRequestTime < this.rateLimitDelay) {
@@ -22,68 +38,91 @@ class GeckoTerminalService {
     }
     this.lastRequestTime = Date.now();
 
-    // Check cache
-    const cacheKey = `${endpoint}_${JSON.stringify(params)}`;
-    const cached = this.cache.get(cacheKey);
-    if (cached && Date.now() - cached.timestamp < this.cacheTimeout) {
-      console.log(`[GeckoTerminal] Cache hit for ${endpoint}`);
-      return cached.data;
-    }
-
-    try {
-      const url = `${this.baseURL}${endpoint}`;
-      console.log(`[GeckoTerminal] Making request to: ${url}`);
-      
-      // Use node-fetch with browser-like headers to bypass Cloudflare
-      const fetch = require('node-fetch');
-      const response = await fetch(url + (Object.keys(params).length > 0 ? '?' + new URLSearchParams(params) : ''), {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json, text/plain, */*',
-          'Accept-Language': 'en-US,en;q=0.9',
-          'Accept-Encoding': 'gzip, deflate, br',
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-          'Referer': 'https://www.geckoterminal.com/',
-          'Origin': 'https://www.geckoterminal.com',
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache',
-          'Sec-Fetch-Dest': 'empty',
-          'Sec-Fetch-Mode': 'cors',
-          'Sec-Fetch-Site': 'same-site'
-        },
-        timeout: 15000
-      });
-      
-      this.requestCount++;
-      
-      if (response.ok) {
-        const data = await response.json();
+    // Create the request promise
+    const requestPromise = (async () => {
+      try {
+        const url = `${this.baseURL}${endpoint}`;
+        console.log(`[GeckoTerminal] 🌐 Making request to: ${url}`);
         
-        // Cache the response
-        this.cache.set(cacheKey, { 
-          data: data, 
-          timestamp: Date.now() 
+        // Use node-fetch with browser-like headers to bypass Cloudflare
+        const fetch = require('node-fetch');
+        const response = await fetch(url + (Object.keys(params).length > 0 ? '?' + new URLSearchParams(params) : ''), {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json, text/plain, */*',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+            'Referer': 'https://www.geckoterminal.com/',
+            'Origin': 'https://www.geckoterminal.com',
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache',
+            'Sec-Fetch-Dest': 'empty',
+            'Sec-Fetch-Mode': 'cors',
+            'Sec-Fetch-Site': 'same-site'
+          },
+          timeout: 15000
         });
         
-        // Limit cache size
-        if (this.cache.size > 100) {
-          const firstKey = this.cache.keys().next().value;
-          this.cache.delete(firstKey);
+        this.requestCount++;
+        
+        if (response.ok) {
+          const data = await response.json();
+          
+          // Cache the response with longer TTL for OHLCV data
+          const cacheDuration = endpoint.includes('/ohlcv/') ? this.cacheTimeout * 2 : this.cacheTimeout;
+          this.cache.set(cacheKey, { 
+            data: data, 
+            timestamp: Date.now() 
+          });
+          
+          // Limit cache size (increased from 100)
+          if (this.cache.size > 500) {
+            const firstKey = this.cache.keys().next().value;
+            this.cache.delete(firstKey);
+          }
+          
+          console.log(`[GeckoTerminal] ✅ Success: ${response.status} (cached for ${Math.round(cacheDuration / 60000)}min)`);
+          return data;
+        } else {
+          const errorText = await response.text();
+          
+          // If rate limited, use stale cache if available
+          if (response.status === 429) {
+            console.warn(`[GeckoTerminal] ⚠️ Rate limited (429), checking for stale cache...`);
+            const staleCache = this.cache.get(cacheKey);
+            if (staleCache) {
+              console.log(`[GeckoTerminal] 📦 Using stale cache (age: ${Math.round((Date.now() - staleCache.timestamp) / 60000)}min)`);
+              return staleCache.data;
+            }
+          }
+          
+          throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorText}`);
+        }
+      } catch (error) {
+        console.error(`[GeckoTerminal] ❌ Error fetching ${endpoint}:`, error.message);
+        
+        // On any error, try to return stale cache
+        const staleCache = this.cache.get(cacheKey);
+        if (staleCache) {
+          console.log(`[GeckoTerminal] 📦 Returning stale cache due to error (age: ${Math.round((Date.now() - staleCache.timestamp) / 60000)}min)`);
+          return staleCache.data;
         }
         
-        console.log(`[GeckoTerminal] ✅ Success: ${response.status}`);
-        return data;
-      } else {
-        const errorText = await response.text();
-        throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorText}`);
+        if (error.code === 'ENOTFOUND') {
+          throw new Error('Network error: Unable to reach GeckoTerminal API');
+        }
+        throw error;
+      } finally {
+        // Remove from pending requests
+        this.pendingRequests.delete(cacheKey);
       }
-    } catch (error) {
-      console.error(`[GeckoTerminal] ❌ Error fetching ${endpoint}:`, error.message);
-      if (error.code === 'ENOTFOUND') {
-        throw new Error('Network error: Unable to reach GeckoTerminal API');
-      }
-      throw error;
-    }
+    })();
+
+    // Store the promise to deduplicate concurrent requests
+    this.pendingRequests.set(cacheKey, requestPromise);
+    
+    return requestPromise;
   }
 
   // Get pools for a token

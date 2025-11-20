@@ -149,11 +149,25 @@ app.get('/api/coins/:tokenAddress/historical-prices', async (req, res) => {
   }
 });
 
+// In-memory cache for GeckoTerminal data
+const geckoCache = new Map();
+const GECKO_CACHE_DURATION = 10 * 60 * 1000; // 10 minutes for OHLCV data
+const GECKO_POOL_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes for pool info
+
 // 📊 GeckoTerminal OHLCV Proxy endpoint (for chart data)
 app.get('/api/geckoterminal/ohlcv/:network/:poolAddress/:timeframe', async (req, res) => {
   try {
     const { network, poolAddress, timeframe } = req.params;
     const { aggregate = 1, limit = 100 } = req.query;
+
+    const cacheKey = `ohlcv_${network}_${poolAddress}_${timeframe}_${aggregate}_${limit}`;
+    
+    // Check cache first
+    const cached = geckoCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < GECKO_CACHE_DURATION) {
+      console.log(`📊 [Proxy] ✅ Cache hit for OHLCV: ${poolAddress}/${timeframe} (age: ${Math.round((Date.now() - cached.timestamp) / 1000)}s)`);
+      return res.json(cached.data);
+    }
 
     console.log(`📊 [Proxy] OHLCV data requested: ${network}/${poolAddress}/${timeframe} (aggregate: ${aggregate}, limit: ${limit})`);
 
@@ -179,6 +193,13 @@ app.get('/api/geckoterminal/ohlcv/:network/:poolAddress/:timeframe', async (req,
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`❌ [Proxy] GeckoTerminal API error: ${response.status} - ${errorText}`);
+      
+      // If rate limited and we have stale cache, use it
+      if (response.status === 429 && cached) {
+        console.log(`⚠️ [Proxy] Rate limited, using stale cache (age: ${Math.round((Date.now() - cached.timestamp) / 60000)}min)`);
+        return res.json(cached.data);
+      }
+      
       throw new Error(`GeckoTerminal API error: ${response.status} ${response.statusText}`);
     }
 
@@ -190,6 +211,18 @@ app.get('/api/geckoterminal/ohlcv/:network/:poolAddress/:timeframe', async (req,
       throw new Error('Invalid OHLCV data format from GeckoTerminal');
     }
     
+    // Cache the response
+    geckoCache.set(cacheKey, {
+      data,
+      timestamp: Date.now()
+    });
+    
+    // Clean up old cache entries (keep last 200)
+    if (geckoCache.size > 200) {
+      const firstKey = geckoCache.keys().next().value;
+      geckoCache.delete(firstKey);
+    }
+    
     console.log(`✅ [Proxy] Returning ${data.data.attributes.ohlcv_list.length} OHLCV data points for ${poolAddress}`);
     
     // Return the raw GeckoTerminal response
@@ -197,7 +230,6 @@ app.get('/api/geckoterminal/ohlcv/:network/:poolAddress/:timeframe', async (req,
 
   } catch (error) {
     console.error(`❌ [Proxy] Error fetching OHLCV data:`, error.message);
-    console.error(`   Stack:`, error.stack);
     res.status(500).json({
       success: false,
       error: error.message,
@@ -211,6 +243,15 @@ app.get('/api/geckoterminal/ohlcv/:network/:poolAddress/:timeframe', async (req,
 app.get('/api/geckoterminal/pool/:network/:poolAddress', async (req, res) => {
   try {
     const { network, poolAddress } = req.params;
+    
+    const cacheKey = `pool_${network}_${poolAddress}`;
+    
+    // Check cache first
+    const cached = geckoCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < GECKO_POOL_CACHE_DURATION) {
+      console.log(`📊 [Proxy] ✅ Cache hit for pool: ${poolAddress} (age: ${Math.round((Date.now() - cached.timestamp) / 1000)}s)`);
+      return res.json(cached.data);
+    }
 
     console.log(`📊 [Proxy] Pool info requested: ${network}/${poolAddress}`);
 
@@ -228,10 +269,22 @@ app.get('/api/geckoterminal/pool/:network/:poolAddress', async (req, res) => {
     });
 
     if (!response.ok) {
+      // If rate limited and we have stale cache, use it
+      if (response.status === 429 && cached) {
+        console.log(`⚠️ [Proxy] Rate limited, using stale cache (age: ${Math.round((Date.now() - cached.timestamp) / 60000)}min)`);
+        return res.json(cached.data);
+      }
+      
       throw new Error(`GeckoTerminal API error: ${response.status} ${response.statusText}`);
     }
 
     const data = await response.json();
+    
+    // Cache the response
+    geckoCache.set(cacheKey, {
+      data,
+      timestamp: Date.now()
+    });
     
     console.log(`✅ [Proxy] Returning pool info for ${poolAddress}`);
     

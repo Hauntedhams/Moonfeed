@@ -10,6 +10,11 @@ const SOLANASTREAM_API_KEY = '011b8a15bb61a3cd81bfa19fd7a52ea3';
 const SOLANASTREAM_WS = `wss://api.solanastreaming.com/v1/stream?apiKey=${SOLANASTREAM_API_KEY}`;
 const PRICE_UPDATE_INTERVAL = 10000; // Poll for price updates every 10 seconds (fallback only)
 
+// Client-side cache for chart data (shared across all chart instances)
+const chartDataCache = new Map();
+const CHART_CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
+const pendingFetches = new Map(); // Deduplicate concurrent fetches
+
 const TwelveDataChart = ({ coin, isActive = false }) => {
   const chartContainerRef = useRef(null);
   const chartRef = useRef(null);
@@ -332,94 +337,131 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
 
   // Fetch historical OHLCV data from GeckoTerminal via backend proxy
   const fetchHistoricalData = async (poolAddress, timeframeKey = '5m') => {
-    try {
-      const config = TIMEFRAME_CONFIG[timeframeKey];
-      if (!config) {
-        throw new Error(`Invalid timeframe: ${timeframeKey}`);
-      }
+    const config = TIMEFRAME_CONFIG[timeframeKey];
+    if (!config) {
+      throw new Error(`Invalid timeframe: ${timeframeKey}`);
+    }
 
-      const { timeframe, aggregate, limit } = config;
-      
-      // Use backend proxy to avoid CORS errors
-      const url = `${BACKEND_API}/api/geckoterminal/ohlcv/solana/${poolAddress}/${timeframe}?aggregate=${aggregate}&limit=${limit}`;
-      
-      console.log('📊 Fetching historical data via proxy:', { timeframeKey, timeframe, aggregate, limit, url });
-      
-      const response = await fetch(url);
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        console.error('❌ Backend proxy error:', response.status, errorData);
-        throw new Error(`Backend proxy error: ${response.status} - ${errorData.error || response.statusText}`);
-      }
-      
-      const data = await response.json();
-      
-      // Enhanced validation with better error messages
-      if (!data) {
-        throw new Error('No data received from backend');
-      }
-      
-      if (!data.data) {
-        console.error('❌ Missing data.data in response:', data);
-        throw new Error('Invalid response structure: missing data object');
-      }
-      
-      if (!data.data.attributes) {
-        console.error('❌ Missing data.data.attributes in response:', data);
-        throw new Error('Invalid response structure: missing attributes');
-      }
-      
-      if (!data.data.attributes.ohlcv_list || !Array.isArray(data.data.attributes.ohlcv_list)) {
-        console.error('❌ Missing or invalid ohlcv_list in response:', data.data.attributes);
-        throw new Error('Invalid response structure: missing or invalid ohlcv_list');
-      }
-      
-      if (data.data.attributes.ohlcv_list.length === 0) {
-        throw new Error('No OHLCV data available for this pool');
-      }
-      
-      // Convert OHLCV to line chart data (using close prices)
-      const chartData = data.data.attributes.ohlcv_list.map((candle, index) => {
-        if (!Array.isArray(candle) || candle.length < 5) {
-          console.error(`❌ Invalid candle format at index ${index}:`, candle);
-          throw new Error(`Invalid candle data at index ${index}`);
+    const { timeframe, aggregate, limit } = config;
+    const cacheKey = `${poolAddress}-${timeframeKey}`;
+    const now = Date.now();
+    
+    // Check cache first
+    const cachedData = chartDataCache.get(cacheKey);
+    if (cachedData && now - cachedData.timestamp < CHART_CACHE_DURATION) {
+      console.log(`📊 ✅ Cache hit: ${cacheKey} (age: ${Math.round((now - cachedData.timestamp) / 1000)}s)`);
+      return cachedData.data;
+    }
+    
+    // Check if there's already a pending fetch for this data
+    if (pendingFetches.has(cacheKey)) {
+      console.log(`📊 � Deduplicating fetch: ${cacheKey}`);
+      return pendingFetches.get(cacheKey);
+    }
+    
+    // Create the fetch promise
+    const fetchPromise = (async () => {
+      try {
+        // Use backend proxy to avoid CORS errors
+        const url = `${BACKEND_API}/api/geckoterminal/ohlcv/solana/${poolAddress}/${timeframe}?aggregate=${aggregate}&limit=${limit}`;
+        
+        console.log('📊 Fetching historical data:', { timeframeKey, timeframe, aggregate, limit });
+        
+        const response = await fetch(url);
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+          console.error('❌ Backend proxy error:', response.status, errorData);
+          throw new Error(`Backend proxy error: ${response.status} - ${errorData.error || response.statusText}`);
         }
         
-        return {
-          time: candle[0], // Unix timestamp
-          value: parseFloat(candle[4]), // Close price
-        };
-      });
-      
-      // CRITICAL: Ensure data is sorted in ascending order by timestamp
-      // The chart library requires strictly ascending time order
-      chartData.sort((a, b) => a.time - b.time);
-      
-      // Validate that data is now properly sorted
-      for (let i = 1; i < chartData.length; i++) {
-        if (chartData[i].time <= chartData[i - 1].time) {
-          console.error('❌ Duplicate or out-of-order timestamps detected:', {
-            index: i,
-            prev: { time: chartData[i - 1].time, date: new Date(chartData[i - 1].time * 1000).toISOString() },
-            current: { time: chartData[i].time, date: new Date(chartData[i].time * 1000).toISOString() }
-          });
-          // Remove duplicate timestamp entries
-          chartData.splice(i, 1);
-          i--; // Recheck this index
+        const data = await response.json();
+        
+        // Enhanced validation with better error messages
+        if (!data) {
+          throw new Error('No data received from backend');
         }
+        
+        if (!data.data) {
+          console.error('❌ Missing data.data in response:', data);
+          throw new Error('Invalid response structure: missing data object');
+        }
+        
+        if (!data.data.attributes) {
+          console.error('❌ Missing data.data.attributes in response:', data);
+          throw new Error('Invalid response structure: missing attributes');
+        }
+        
+        if (!data.data.attributes.ohlcv_list || !Array.isArray(data.data.attributes.ohlcv_list)) {
+          console.error('❌ Missing or invalid ohlcv_list in response:', data.data.attributes);
+          throw new Error('Invalid response structure: missing or invalid ohlcv_list');
+        }
+        
+        if (data.data.attributes.ohlcv_list.length === 0) {
+          throw new Error('No OHLCV data available for this pool');
+        }
+        
+        // Convert OHLCV to line chart data (using close prices)
+        const chartData = data.data.attributes.ohlcv_list.map((candle, index) => {
+          if (!Array.isArray(candle) || candle.length < 5) {
+            console.error(`❌ Invalid candle format at index ${index}:`, candle);
+            throw new Error(`Invalid candle data at index ${index}`);
+          }
+          
+          return {
+            time: candle[0], // Unix timestamp
+            value: parseFloat(candle[4]), // Close price
+          };
+        });
+        
+        // CRITICAL: Ensure data is sorted in ascending order by timestamp
+        // The chart library requires strictly ascending time order
+        chartData.sort((a, b) => a.time - b.time);
+        
+        // Validate that data is now properly sorted
+        for (let i = 1; i < chartData.length; i++) {
+          if (chartData[i].time <= chartData[i - 1].time) {
+            console.error('❌ Duplicate or out-of-order timestamps detected:', {
+              index: i,
+              prev: { time: chartData[i - 1].time, date: new Date(chartData[i - 1].time * 1000).toISOString() },
+              current: { time: chartData[i].time, date: new Date(chartData[i].time * 1000).toISOString() }
+            });
+            // Remove duplicate timestamp entries
+            chartData.splice(i, 1);
+            i--; // Recheck this index
+          }
+        }
+        
+        console.log('✅ Historical data fetched:', chartData.length, 'candles');
+        if (chartData.length > 0) {
+          console.log('   Time range:', 
+            new Date(chartData[0].time * 1000).toLocaleTimeString(), 
+            '→', 
+            new Date(chartData[chartData.length - 1].time * 1000).toLocaleTimeString()
+          );
+        }
+        
+        // Cache the fetched data
+        chartDataCache.set(cacheKey, { data: chartData, timestamp: Date.now() });
+        
+        // Clean up old cache entries (keep last 100)
+        if (chartDataCache.size > 100) {
+          const firstKey = chartDataCache.keys().next().value;
+          chartDataCache.delete(firstKey);
+        }
+        
+        return chartData;
+      } catch (err) {
+        console.error('❌ Error fetching historical data:', err);
+        throw err;
+      } finally {
+        // Always remove from pending fetches
+        pendingFetches.delete(cacheKey);
       }
-      
-      console.log('✅ Historical data fetched:', chartData.length, 'candles (sorted ascending)');
-      if (chartData.length > 0) {
-        console.log('   First candle time:', new Date(chartData[0].time * 1000).toISOString());
-        console.log('   Last candle time:', new Date(chartData[chartData.length - 1].time * 1000).toISOString());
-      }
-      
-      return chartData;
-    } catch (err) {
-      console.error('❌ Error fetching historical data:', err);
-      throw err;
-    }
+    })();
+    
+    // Store the promise to deduplicate concurrent requests
+    pendingFetches.set(cacheKey, fetchPromise);
+    return fetchPromise;
   };
 
   // Fetch latest price from GeckoTerminal via backend proxy
