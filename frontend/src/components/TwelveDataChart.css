@@ -4,12 +4,12 @@
 
 .timeframe-selector {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   padding: 12px 8px 8px 8px;
   background: var(--chart-bg);
   border-bottom: 1px solid var(--chart-border);
   flex-wrap: wrap;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: center;
   position: relative;
   z-index: 10;
@@ -17,7 +17,8 @@
 
 .timeframe-btn,
 .timeframe-button {
-  padding: 6px 14px;
+  min-width: 50px;
+  padding: 8px 12px;
   font-size: 12px;
   font-weight: 600;
   border: 1px solid var(--chart-border);
@@ -30,6 +31,8 @@
   outline: none;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
+  text-align: center;
+  flex-shrink: 0;
 }
 
 .timeframe-btn:hover:not(:disabled),
