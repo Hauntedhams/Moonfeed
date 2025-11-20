@@ -1034,10 +1034,7 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
         </div>
       )}
 
-      {/* Chart Container */}
-      <div ref={chartContainerRef} style={{ width: '100%', height: '100%' }} />
-
-      {/* Timeframe Selector */}
+      {/* Timeframe Selector - Moved above chart */}
       <div className="timeframe-selector">
         {Object.entries(TIMEFRAME_CONFIG).map(([key, { label }]) => (
           <button
@@ -1049,6 +1046,9 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
           </button>
         ))}
       </div>
+
+      {/* Chart Container */}
+      <div ref={chartContainerRef} style={{ width: '100%', height: '100%' }} />
 
       {/* Live Indicator */}
       {isLiveConnected && (

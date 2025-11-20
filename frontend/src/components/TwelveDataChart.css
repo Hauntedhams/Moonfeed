@@ -5,14 +5,17 @@
 .timeframe-selector {
   display: flex;
   gap: 6px;
-  padding: 8px;
+  padding: 12px 8px 8px 8px;
   background: var(--chart-bg);
   border-bottom: 1px solid var(--chart-border);
   flex-wrap: wrap;
   justify-content: center;
   align-items: center;
+  position: relative;
+  z-index: 10;
 }
 
+.timeframe-btn,
 .timeframe-button {
   padding: 6px 14px;
   font-size: 12px;
@@ -29,6 +32,7 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+.timeframe-btn:hover:not(:disabled),
 .timeframe-button:hover:not(:disabled) {
   background: var(--chart-green-bg);
   border-color: var(--chart-green-border);
@@ -37,6 +41,7 @@
   box-shadow: 0 2px 8px var(--chart-green-glow);
 }
 
+.timeframe-btn.active,
 .timeframe-button.active {
   background: var(--chart-green);
   border-color: var(--chart-green);
@@ -45,11 +50,13 @@
   box-shadow: 0 2px 12px var(--chart-green-glow);
 }
 
+.timeframe-btn:disabled,
 .timeframe-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
+.timeframe-btn:active:not(:disabled),
 .timeframe-button:active:not(:disabled) {
   transform: translateY(0);
 }
