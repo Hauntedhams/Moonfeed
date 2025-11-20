@@ -3,12 +3,15 @@ const axios = require('axios');
 class GeckoTerminalService {
   constructor() {
     this.baseURL = 'https://api.geckoterminal.com/api/v2';
-    this.rateLimitDelay = 300; // 300ms between requests to respect rate limits
+    this.rateLimitDelay = 1000; // 1 second between requests to respect rate limits
     this.cache = new Map();
-    this.cacheTimeout = 15 * 60 * 1000; // 15 minutes cache (increased from 5)
+    this.cacheTimeout = 30 * 60 * 1000; // 30 minutes cache for OHLCV data
+    this.poolCacheTimeout = 60 * 60 * 1000; // 1 hour for pool data
     this.requestCount = 0;
     this.lastRequestTime = 0;
     this.pendingRequests = new Map(); // Deduplicate concurrent requests
+    this.requestQueue = []; // Queue for rate limiting
+    this.isProcessingQueue = false;
   }
 
   async delay(ms) {
@@ -18,10 +21,21 @@ class GeckoTerminalService {
   async makeRequest(endpoint, params = {}) {
     const cacheKey = `${endpoint}_${JSON.stringify(params)}`;
     
+    // Determine cache timeout based on endpoint type
+    const isOHLCV = endpoint.includes('/ohlcv/');
+    const isPoolInfo = endpoint.includes('/pools') && !isOHLCV;
+    const effectiveCacheTimeout = isOHLCV ? this.cacheTimeout : (isPoolInfo ? this.poolCacheTimeout : this.cacheTimeout);
+    
     // Check cache first (before any delays)
     const cached = this.cache.get(cacheKey);
-    if (cached && Date.now() - cached.timestamp < this.cacheTimeout) {
+    if (cached && Date.now() - cached.timestamp < effectiveCacheTimeout) {
       console.log(`[GeckoTerminal] ✅ Cache hit for ${endpoint} (age: ${Math.round((Date.now() - cached.timestamp) / 1000)}s)`);
+      return cached.data;
+    }
+
+    // AGGRESSIVE: Also use stale cache if it's less than 2 hours old for OHLCV
+    if (cached && isOHLCV && Date.now() - cached.timestamp < (2 * 60 * 60 * 1000)) {
+      console.log(`[GeckoTerminal] 📦 Using slightly stale cache to avoid rate limits (age: ${Math.round((Date.now() - cached.timestamp) / 60000)}min)`);
       return cached.data;
     }
 
@@ -31,10 +45,13 @@ class GeckoTerminalService {
       return this.pendingRequests.get(cacheKey);
     }
 
-    // Rate limiting
+    // Strict rate limiting - ensure 1 second between requests
     const now = Date.now();
-    if (now - this.lastRequestTime < this.rateLimitDelay) {
-      await this.delay(this.rateLimitDelay - (now - this.lastRequestTime));
+    const timeSinceLastRequest = now - this.lastRequestTime;
+    if (timeSinceLastRequest < this.rateLimitDelay) {
+      const waitTime = this.rateLimitDelay - timeSinceLastRequest;
+      console.log(`[GeckoTerminal] ⏳ Rate limiting: waiting ${waitTime}ms before request`);
+      await this.delay(waitTime);
     }
     this.lastRequestTime = Date.now();
 
@@ -69,15 +86,18 @@ class GeckoTerminalService {
         if (response.ok) {
           const data = await response.json();
           
-          // Cache the response with longer TTL for OHLCV data
-          const cacheDuration = endpoint.includes('/ohlcv/') ? this.cacheTimeout * 2 : this.cacheTimeout;
+          // Determine cache duration based on endpoint type
+          const isOHLCV = endpoint.includes('/ohlcv/');
+          const isPoolInfo = endpoint.includes('/pools') && !isOHLCV;
+          const cacheDuration = isOHLCV ? this.cacheTimeout : (isPoolInfo ? this.poolCacheTimeout : this.cacheTimeout);
+          
           this.cache.set(cacheKey, { 
             data: data, 
             timestamp: Date.now() 
           });
           
-          // Limit cache size (increased from 100)
-          if (this.cache.size > 500) {
+          // Limit cache size (increased to 1000 to hold more timeframe variations)
+          if (this.cache.size > 1000) {
             const firstKey = this.cache.keys().next().value;
             this.cache.delete(firstKey);
           }

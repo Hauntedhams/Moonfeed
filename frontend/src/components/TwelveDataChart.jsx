@@ -12,8 +12,12 @@ const PRICE_UPDATE_INTERVAL = 10000; // Poll for price updates every 10 seconds 
 
 // Client-side cache for chart data (shared across all chart instances)
 const chartDataCache = new Map();
-const CHART_CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
+const CHART_CACHE_DURATION = 30 * 60 * 1000; // 30 minutes (increased to reduce API calls)
 const pendingFetches = new Map(); // Deduplicate concurrent fetches
+
+// Debounce timer for timeframe changes
+let timeframeChangeTimer = null;
+const TIMEFRAME_DEBOUNCE_MS = 800; // Wait 800ms after last click before fetching (increased from 500ms)
 
 const TwelveDataChart = ({ coin, isActive = false }) => {
   const chartContainerRef = useRef(null);
@@ -370,6 +374,18 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
         const response = await fetch(url);
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+          
+          // Special handling for rate limiting
+          if (response.status === 429 || response.status === 503 || errorData.status === 429) {
+            console.warn('⚠️ Rate limited, using cached data or waiting...');
+            // Don't throw error, just use cached data if available
+            if (chartDataCache.has(cacheKey)) {
+              console.log('📦 Using cached data due to rate limit');
+              return chartDataCache.get(cacheKey);
+            }
+            throw new Error('Chart data temporarily unavailable. Please wait a moment.');
+          }
+          
           console.error('❌ Backend proxy error:', response.status, errorData);
           throw new Error(`Backend proxy error: ${response.status} - ${errorData.error || response.statusText}`);
         }
@@ -971,8 +987,24 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
   // Handle timeframe change
   const handleTimeframeChange = (newTimeframe) => {
     console.log('🕐 Changing timeframe to:', newTimeframe);
+    
+    // Update UI immediately for better UX
     setSelectedTimeframe(newTimeframe);
-    // The useEffect will handle re-initialization
+    
+    // Debounce the actual data fetch to avoid rate limiting
+    if (timeframeChangeTimer) {
+      clearTimeout(timeframeChangeTimer);
+      console.log('⏳ Debouncing timeframe change...');
+    }
+    
+    // Set loading state to show user we're processing
+    setLoading(true);
+    
+    timeframeChangeTimer = setTimeout(() => {
+      console.log('✅ Executing debounced timeframe change to:', newTimeframe);
+      // Force re-render to trigger useEffect with new timeframe
+      setSelectedTimeframe(newTimeframe + ''); // Ensure state update triggers
+    }, TIMEFRAME_DEBOUNCE_MS);
   };
 
 

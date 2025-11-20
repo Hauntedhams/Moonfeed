@@ -151,8 +151,9 @@ app.get('/api/coins/:tokenAddress/historical-prices', async (req, res) => {
 
 // In-memory cache for GeckoTerminal data
 const geckoCache = new Map();
-const GECKO_CACHE_DURATION = 10 * 60 * 1000; // 10 minutes for OHLCV data
-const GECKO_POOL_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes for pool info
+const GECKO_CACHE_DURATION = 30 * 60 * 1000; // 30 minutes for OHLCV data (prevent rate limits)
+const GECKO_POOL_CACHE_DURATION = 60 * 60 * 1000; // 60 minutes for pool info
+const GECKO_STALE_CACHE_MAX = 2 * 60 * 60 * 1000; // Use stale cache up to 2 hours old if rate limited
 
 // 📊 GeckoTerminal OHLCV Proxy endpoint (for chart data)
 app.get('/api/geckoterminal/ohlcv/:network/:poolAddress/:timeframe', async (req, res) => {
@@ -166,6 +167,12 @@ app.get('/api/geckoterminal/ohlcv/:network/:poolAddress/:timeframe', async (req,
     const cached = geckoCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < GECKO_CACHE_DURATION) {
       console.log(`📊 [Proxy] ✅ Cache hit for OHLCV: ${poolAddress}/${timeframe} (age: ${Math.round((Date.now() - cached.timestamp) / 1000)}s)`);
+      return res.json(cached.data);
+    }
+
+    // Use stale cache if available and not too old (prevent unnecessary API calls)
+    if (cached && Date.now() - cached.timestamp < GECKO_STALE_CACHE_MAX) {
+      console.log(`📊 [Proxy] 📦 Using slightly stale cache to avoid rate limits: ${poolAddress}/${timeframe} (age: ${Math.round((Date.now() - cached.timestamp) / 60000)}min)`);
       return res.json(cached.data);
     }
 
@@ -194,10 +201,19 @@ app.get('/api/geckoterminal/ohlcv/:network/:poolAddress/:timeframe', async (req,
       const errorText = await response.text();
       console.error(`❌ [Proxy] GeckoTerminal API error: ${response.status} - ${errorText}`);
       
-      // If rate limited and we have stale cache, use it
-      if (response.status === 429 && cached) {
-        console.log(`⚠️ [Proxy] Rate limited, using stale cache (age: ${Math.round((Date.now() - cached.timestamp) / 60000)}min)`);
+      // If rate limited or any error and we have ANY cache (even very old), use it
+      if (cached && (response.status === 429 || response.status >= 500)) {
+        console.log(`⚠️ [Proxy] API error (${response.status}), using stale cache (age: ${Math.round((Date.now() - cached.timestamp) / 60000)}min)`);
         return res.json(cached.data);
+      }
+      
+      // Return a more user-friendly error message
+      if (response.status === 429) {
+        return res.status(503).json({ 
+          error: 'Chart data temporarily unavailable due to rate limiting. Please try again in a moment.',
+          status: 429,
+          retryAfter: 60 // seconds
+        });
       }
       
       throw new Error(`GeckoTerminal API error: ${response.status} ${response.statusText}`);
@@ -211,14 +227,14 @@ app.get('/api/geckoterminal/ohlcv/:network/:poolAddress/:timeframe', async (req,
       throw new Error('Invalid OHLCV data format from GeckoTerminal');
     }
     
-    // Cache the response
+    // Cache the response with current timestamp
     geckoCache.set(cacheKey, {
       data,
       timestamp: Date.now()
     });
     
-    // Clean up old cache entries (keep last 200)
-    if (geckoCache.size > 200) {
+    // Clean up old cache entries (keep last 500 to support multiple timeframes)
+    if (geckoCache.size > 500) {
       const firstKey = geckoCache.keys().next().value;
       geckoCache.delete(firstKey);
     }
