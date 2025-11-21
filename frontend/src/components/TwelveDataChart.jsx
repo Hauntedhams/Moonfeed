@@ -38,7 +38,10 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
     // Initialize based on actual DOM state
     return document.documentElement.classList.contains('dark-mode');
   }); // Track theme mode
-  const [selectedTimeframe, setSelectedTimeframe] = useState('5m'); // Track selected timeframe
+  const [selectedTimeframe, setSelectedTimeframe] = useState('1m'); // Track selected timeframe
+  const [isInView, setIsInView] = useState(false); // Track if chart is in viewport
+  const [shouldLoad, setShouldLoad] = useState(false); // Track if chart should load
+  const [showAdvanced, setShowAdvanced] = useState(false); // Toggle between clean and advanced chart
 
   // Extract pairAddress for historical data and tokenMint for real-time subscription
   const pairAddress = coin?.pairAddress || 
@@ -60,6 +63,8 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
       name: coin?.name,
       pairAddress,
       tokenMint,
+      hasChartData: !!coin?.chartData,
+      chartDataLength: coin?.chartData?.length,
       allKeys: Object.keys(coin || {})
     });
   }, [coin]);
@@ -93,6 +98,40 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
 
     return () => observer.disconnect();
   }, []);
+
+  // 🚀 LAZY LOADING: Only load chart when near viewport
+  useEffect(() => {
+    const container = chartContainerRef.current;
+    if (!container) return;
+
+    // Create intersection observer with 200% rootMargin (load before visible)
+    // This means charts load when they're within 2 screen heights of viewport
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            console.log('👁️ Chart entering viewport:', coin?.symbol);
+            setIsInView(true);
+            setShouldLoad(true);
+          } else {
+            setIsInView(false);
+            // Keep shouldLoad true once loaded - don't unload already loaded charts
+          }
+        });
+      },
+      {
+        root: null, // viewport
+        rootMargin: '200% 0px', // Start loading 2 screen heights before visible
+        threshold: 0.01 // Trigger when even 1% is visible
+      }
+    );
+
+    observer.observe(container);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [coin?.symbol]);
 
   // Function to update chart theme dynamically
   const updateChartTheme = (isDark) => {
@@ -350,6 +389,22 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
     const cacheKey = `${poolAddress}-${timeframeKey}`;
     const now = Date.now();
     
+    // 🚀 OPTIMIZATION: Check if coin already has preloaded chart data from backend
+    if (coin?.chartData && timeframeKey === '1m' && Array.isArray(coin.chartData)) {
+      console.log(`📦 Using preloaded chart data for ${coin.symbol} (${coin.chartData.length} candles)`);
+      
+      // Convert preloaded OHLCV to chart format
+      const chartData = coin.chartData.map(candle => ({
+        time: candle[0],
+        value: parseFloat(candle[4]) // Close price
+      })).sort((a, b) => a.time - b.time);
+      
+      // Cache it for future timeframe changes
+      chartDataCache.set(cacheKey, { data: chartData, timestamp: now });
+      
+      return chartData;
+    }
+    
     // Check cache first
     const cachedData = chartDataCache.get(cacheKey);
     if (cachedData && now - cachedData.timestamp < CHART_CACHE_DURATION) {
@@ -375,15 +430,20 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
           
-          // Special handling for rate limiting
-          if (response.status === 429 || response.status === 503 || errorData.status === 429) {
-            console.warn('⚠️ Rate limited, using cached data or waiting...');
-            // Don't throw error, just use cached data if available
-            if (chartDataCache.has(cacheKey)) {
-              console.log('📦 Using cached data due to rate limit');
-              return chartDataCache.get(cacheKey);
+          // Special handling for rate limiting or service unavailable
+          if (response.status === 429 || response.status === 503 || errorData.status === 429 || errorData.status === 403) {
+            console.warn('⚠️ API temporarily unavailable (status:', response.status, ')');
+            
+            // Check if we have cached data for this coin
+            if (cachedData) {
+              console.log('📦 Using stale cached data (age:', Math.round((now - cachedData.timestamp) / 60000), 'min)');
+              return cachedData.data;
             }
-            throw new Error('Chart data temporarily unavailable. Please wait a moment.');
+            
+            // No cache available - return empty array to show placeholder
+            // Don't throw error, just defer loading
+            console.log('💤 No cache available, chart will retry when scrolled to');
+            return []; // Return empty array instead of throwing
           }
           
           console.error('❌ Backend proxy error:', response.status, errorData);
@@ -511,7 +571,8 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
   // Initialize chart and load data (only once)
   useEffect(() => {
     // Initialize chart when pairAddress is available (works in both collapsed and expanded views)
-    if (!pairAddress || chartRef.current) return;
+    // Skip initialization if in advanced mode or chart already exists
+    if (!pairAddress || chartRef.current || showAdvanced) return;
     
     let mounted = true;
     
@@ -669,8 +730,35 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
         
         if (!mounted) return;
         
+        // If no data available (API rate limited and no cache), show friendly message
         if (historicalData.length === 0) {
-          throw new Error('No historical data available');
+          console.log('📊 No data available yet, will auto-retry in 5 seconds');
+          setLoading(false);
+          setError('Chart data loading... Auto-retry in 5s');
+          
+          // Clean up chart since we can't display anything
+          if (chartRef.current) {
+            chartRef.current.remove();
+            chartRef.current = null;
+          }
+          lineSeriesRef.current = null;
+          
+          // Auto-retry after 5 seconds
+          setTimeout(() => {
+            if (mounted) {
+              console.log('🔄 Auto-retrying chart load...');
+              setError(null);
+              setShouldLoad(false);
+              // Re-trigger lazy load on next scroll
+              setTimeout(() => {
+                if (mounted) {
+                  setShouldLoad(true);
+                }
+              }, 100);
+            }
+          }, 5000);
+          
+          return;
         }
         
         // CRITICAL: Validate data is in ascending order before passing to chart
@@ -947,7 +1035,14 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
       pollingIntervalRef.current = setInterval(pollPrice, PRICE_UPDATE_INTERVAL);
     };
 
-    initialize();
+    // 🚀 LAZY LOADING: Only initialize chart when shouldLoad is true AND not in advanced mode
+    if (shouldLoad && !showAdvanced) {
+      console.log('🎯 Lazy loading chart for:', coin?.symbol);
+      initialize();
+    } else {
+      console.log('⏸️ Deferring chart load for:', coin?.symbol, '(showAdvanced:', showAdvanced, ')');
+      setLoading(false); // Don't show loading spinner for deferred charts
+    }
 
     // Cleanup only on unmount, pair change, or timeframe change
     return () => {
@@ -982,7 +1077,18 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
       
       lineSeriesRef.current = null;
     };
-  }, [pairAddress, selectedTimeframe]); // Re-initialize if pairAddress or timeframe changes
+  }, [pairAddress, selectedTimeframe, shouldLoad, showAdvanced]); // Re-initialize if pairAddress, timeframe, shouldLoad, or showAdvanced changes
+
+  // Handle switching between clean and advanced modes
+  useEffect(() => {
+    if (showAdvanced) {
+      // Switching to advanced mode - clean up chart to free resources
+      console.log('🔄 Switching to advanced mode, cleaning up chart');
+    } else if (shouldLoad && !chartRef.current) {
+      // Returning to clean mode - chart needs to be reinitialized
+      console.log('🔄 Returning to clean mode, chart will reinitialize');
+    }
+  }, [showAdvanced]);
 
   // Handle timeframe change
   const handleTimeframeChange = (newTimeframe) => {
@@ -1010,8 +1116,21 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
 
   return (
     <div className="twelve-data-chart-wrapper" style={{ width: '100%', height: '100%', position: 'relative' }}>
+      {/* Lazy Load Placeholder - Show when chart hasn't loaded yet */}
+      {!shouldLoad && (
+        <div className="chart-lazy-placeholder">
+          <div className="placeholder-content">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M3 3v18h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="m19 9-5 5-4-4-5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            <p style={{ margin: '8px 0 0 0', fontSize: '12px', opacity: 0.6 }}>Chart loading soon...</p>
+          </div>
+        </div>
+      )}
+
       {/* Loading State */}
-      {loading && (
+      {shouldLoad && loading && (
         <div className="chart-loading-overlay">
           <div className="loading-spinner"></div>
           <p>Loading chart...</p>
@@ -1021,34 +1140,65 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
       {/* Error State */}
       {error && (
         <div className="chart-error-overlay">
-          <p className="error-message">⚠️ {error}</p>
-          <button 
-            className="retry-button"
-            onClick={() => {
-              setError(null);
-              window.location.reload();
-            }}
-          >
-            Retry
-          </button>
+          <p className="error-message">
+            {error.includes('loading') ? '📊' : '⚠️'} {error}
+          </p>
+          {!error.includes('Scroll away') && (
+            <button 
+              className="retry-button"
+              onClick={() => {
+                setError(null);
+                setShouldLoad(true); // Retry loading
+              }}
+            >
+              Retry
+            </button>
+          )}
         </div>
       )}
 
-      {/* Timeframe Selector - Moved above chart */}
-      <div className="timeframe-selector">
-        {Object.entries(TIMEFRAME_CONFIG).map(([key, { label }]) => (
-          <button
-            key={key}
-            className={`timeframe-btn ${selectedTimeframe === key ? 'active' : ''}`}
-            onClick={() => handleTimeframeChange(key)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      {/* Chart Container - Show clean chart when not in advanced mode */}
+      {!showAdvanced && (
+        <div ref={chartContainerRef} style={{ width: '100%', height: '100%' }} />
+      )}
 
-      {/* Chart Container */}
-      <div ref={chartContainerRef} style={{ width: '100%', height: '100%' }} />
+      {/* Advanced Dexscreener Chart - Show when in advanced mode */}
+      {showAdvanced && (
+        <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+          <iframe
+            src={`https://dexscreener.com/solana/${pairAddress}?embed=1&theme=dark&trades=0&info=0`}
+            style={{
+              width: '100%',
+              height: '100%',
+              border: 'none',
+              borderRadius: '12px',
+            }}
+            title="Dexscreener Advanced Chart"
+          />
+        </div>
+      )}
+
+      {/* Timeframe Selector - Only show when chart is loaded or loading */}
+      {shouldLoad && (
+        <div className="timeframe-selector">
+          {!showAdvanced && Object.entries(TIMEFRAME_CONFIG).map(([key, { label }]) => (
+            <button
+              key={key}
+              className={`timeframe-btn ${selectedTimeframe === key ? 'active' : ''}`}
+              onClick={() => handleTimeframeChange(key)}
+            >
+              {label}
+            </button>
+          ))}
+          <button
+            className={`timeframe-btn ${showAdvanced ? 'clean-btn' : 'advanced-btn'}`}
+            onClick={() => setShowAdvanced(!showAdvanced)}
+            title={showAdvanced ? "Switch to clean chart" : "Switch to advanced chart"}
+          >
+            {showAdvanced ? 'Clean' : 'Advanced'}
+          </button>
+        </div>
+      )}
 
       {/* Live Indicator */}
       {isLiveConnected && (

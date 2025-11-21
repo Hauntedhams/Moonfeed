@@ -6,7 +6,7 @@ import LiquidityLockIndicator from './LiquidityLockIndicator';
 import TopTradersList from './TopTradersList';
 import WalletPopup from './WalletPopup';
 import { useLiveData } from '../hooks/useLiveDataContext.jsx';
-import { useHeliusTransactions } from '../hooks/useHeliusTransactions.jsx';
+import { useSolanaTransactions } from '../hooks/useSolanaTransactions.jsx';
 import { API_CONFIG } from '../config/api.js';
 import { 
   calculateGraduationPercentage, 
@@ -98,10 +98,10 @@ const CoinCard = memo(({
   // 🔥 MOBILE FIX: Disable WebSocket connections on mobile to prevent crashes
   const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768;
   
-  // Helius live transactions - auto-load when autoLoadTransactions is true
+  // Solana RPC live transactions - auto-load when autoLoadTransactions is true
   // 🔥 DISABLED on mobile to prevent memory crashes from multiple WebSocket connections
   const mintAddress = coin.mintAddress || coin.mint || coin.address || coin.contract_address || coin.contractAddress || coin.tokenAddress;
-  const { transactions, isConnected: txConnected, error: txError, clearTransactions } = useHeliusTransactions(
+  const { transactions, isConnected: txConnected, error: txError, clearTransactions } = useSolanaTransactions(
     mintAddress,
     !isMobileDevice && (showLiveTransactions || autoLoadTransactions) // Only connect on desktop
   );
@@ -1513,45 +1513,110 @@ const CoinCard = memo(({
                     ) : (
                       transactions.map((tx, index) => (
                         <div key={`${tx.signature}-${index}`} className="transaction-item" style={{
-                          animation: index === 0 ? 'slideIn 0.3s ease-out' : 'none'
+                          animation: index === 0 ? 'slideIn 0.3s ease-out' : 'none',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '6px',
+                          padding: '10px',
+                          borderBottom: '1px solid rgba(255,255,255,0.05)'
                         }}>
-                          <div className="tx-wallet">
-                            <span 
-                              onClick={() => tx.feePayer && setSelectedWallet(tx.feePayer)}
-                              style={{ 
-                                cursor: tx.feePayer ? 'pointer' : 'default',
-                                color: tx.feePayer ? '#4FC3F7' : 'inherit',
-                                textDecoration: tx.feePayer ? 'underline' : 'none',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px'
-                              }}
-                              title={tx.feePayer ? 'Click to view wallet details' : ''}
-                            >
-                              {tx.feePayer && <span style={{ fontSize: '10px' }}>👛</span>}
-                              {tx.feePayer ? `${tx.feePayer.substring(0, 4)}..${tx.feePayer.substring(tx.feePayer.length - 4)}` : 'Unknown'}
-                            </span>
+                          {/* First Row: Wallet + Type + Time */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div className="tx-wallet">
+                              <span 
+                                onClick={() => tx.feePayer && setSelectedWallet(tx.feePayer)}
+                                style={{ 
+                                  cursor: tx.feePayer ? 'pointer' : 'default',
+                                  color: tx.feePayer ? '#4FC3F7' : 'inherit',
+                                  textDecoration: tx.feePayer ? 'underline' : 'none',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  fontSize: '12px',
+                                  fontWeight: '500'
+                                }}
+                                title={tx.feePayer ? `Fee Payer: ${tx.feePayer}` : ''}
+                              >
+                                {tx.feePayer && <span style={{ fontSize: '10px' }}>👛</span>}
+                                {tx.feePayer ? `${tx.feePayer.substring(0, 4)}...${tx.feePayer.substring(tx.feePayer.length - 4)}` : 'Unknown'}
+                              </span>
+                            </div>
+                            <div className="tx-type-col">
+                              <span className="tx-type" style={{ 
+                                fontSize: '11px',
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                backgroundColor: tx.type === 'SWAP' ? 'rgba(76, 175, 80, 0.2)' : 'rgba(33, 150, 243, 0.2)',
+                                color: tx.type === 'SWAP' ? '#4CAF50' : '#2196F3'
+                              }}>
+                                {tx.type}
+                              </span>
+                            </div>
+                            <div className="tx-time-col">
+                              <a 
+                                href={`https://solscan.io/tx/${tx.signature}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="tx-link"
+                                title="View on Solscan"
+                                style={{ fontSize: '11px', color: '#999' }}
+                              >
+                                {new Date(tx.timestamp).toLocaleTimeString()}
+                                <span className="external-icon" style={{ marginLeft: '4px' }}>↗</span>
+                              </a>
+                            </div>
                           </div>
-                          <div className="tx-type-col">
-                            <span className="tx-type">{tx.type}</span>
+                          
+                          {/* Second Row: Program + Amount + Error */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: '#999' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              {tx.program && tx.program !== 'Unknown' && (
+                                <span style={{ color: '#FFB74D' }}>
+                                  📊 {tx.program}
+                                </span>
+                              )}
+                              {tx.amount && (
+                                <span style={{ color: '#66BB6A' }}>
+                                  💰 {tx.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                                </span>
+                              )}
+                            </div>
+                            {tx.err && (
+                              <span className="tx-error-badge" style={{ 
+                                fontSize: '10px',
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                backgroundColor: 'rgba(244, 67, 54, 0.2)',
+                                color: '#F44336'
+                              }}>
+                                Failed
+                              </span>
+                            )}
                           </div>
-                          {tx.err && (
-                            <div className="tx-error-col">
-                              <span className="tx-error-badge">Failed</span>
+                          
+                          {/* Third Row: Additional Wallets (if any) */}
+                          {tx.walletAddresses && tx.walletAddresses.length > 1 && (
+                            <div style={{ fontSize: '10px', color: '#666', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                              <span>Other wallets:</span>
+                              {tx.walletAddresses.slice(1, 4).map((addr, i) => (
+                                <span 
+                                  key={i}
+                                  onClick={() => setSelectedWallet(addr)}
+                                  style={{ 
+                                    cursor: 'pointer',
+                                    color: '#4FC3F7',
+                                    textDecoration: 'underline'
+                                  }}
+                                  title={addr}
+                                >
+                                  {addr.substring(0, 4)}...{addr.substring(addr.length - 4)}
+                                </span>
+                              ))}
+                              {tx.walletAddresses.length > 4 && (
+                                <span>+{tx.walletAddresses.length - 4} more</span>
+                              )}
                             </div>
                           )}
-                          <div className="tx-time-col">
-                            <a 
-                              href={`https://solscan.io/tx/${tx.signature}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="tx-link"
-                              title="View on Solscan"
-                            >
-                              {new Date(tx.timestamp).toLocaleTimeString()}
-                              <span className="external-icon" style={{ marginLeft: '4px' }}>↗</span>
-                                                       </a>
-                          </div>
                         </div>
                       ))
                     )}

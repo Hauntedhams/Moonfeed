@@ -108,60 +108,91 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError }
         }
       }
 
+      // Fetch referral configuration from backend
+      let referralConfig = null;
+      try {
+        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+        const response = await fetch(`${backendUrl}/api/jupiter/referral/config/${coin.mintAddress}`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success) {
+            referralConfig = data;
+            console.log('✅ Loaded referral config:', {
+              feeAccount: data.feeAccount,
+              feeBps: data.feeBps
+            });
+          }
+        }
+      } catch (error) {
+        console.warn('⚠️ Could not load referral config:', error.message);
+      }
+
       // Initialize Jupiter Terminal v4
       // NOTE: v4 automatically detects and uses connected wallets (Phantom/Solflare)
       // No need to manually pass wallet - it uses Unified Wallet Kit
-      window.Jupiter.init({
+      const jupiterConfig = {
         displayMode: "integrated",
         integratedTargetId: "jupiter-container",
         endpoint: "https://api.mainnet-beta.solana.com",
         
-        // 🔑 PLATFORM FEE CONFIGURATION (1%) - v4 syntax
-        platformFeeAndAccounts: {
-          feeBps: 100, // 1% = 100 basis points
+        // 🔑 REFERRAL FEE CONFIGURATION
+        // Platform fees are collected to your referral token account
+        // Fee account is dynamically generated based on the output token mint
+        platformFeeAndAccounts: referralConfig ? {
+          feeBps: referralConfig.feeBps, // 100 BPS = 1%
           feeAccounts: new Map([
-            ["42DqmQMZrVeZkP2Btj2cS96Ej81jVxFqwUZWazVvhUPt", 100] // 100% of fee to this wallet
+            [referralConfig.feeAccount, 100] // 100% of fee goes to your token account
           ])
-        },
+        } : {
+          // Fallback to hardcoded referral account if backend is unavailable
+          feeBps: 100,
+          feeAccounts: new Map([
+            ["42DqmQMZrVeZkP2Btj2cS96Ej81jVxFqwUZWazVvhUPt", 100]
+          ])
+        }
+      };
+      
+      // Add formProps
+      jupiterConfig.formProps = {
+        // Set default direction: Buy token with SOL
+        initialInputMint: "So11111111111111111111111111111111111111112", // SOL
+        initialOutputMint: coin.mintAddress, // Meme token
         
-        formProps: {
-          // Set default direction: Buy token with SOL
-          initialInputMint: "So11111111111111111111111111111111111111112", // SOL
-          initialOutputMint: coin.mintAddress, // Meme token
-          
-          // 🔑 KEY FIX: Don't fix the mints - allow Jupiter's swap arrow to work
-          // This enables the built-in swap direction button in Jupiter UI
-          fixedInputMint: false,
-          fixedOutputMint: false,
-        },
+        // 🔑 KEY FIX: Don't fix the mints - allow Jupiter's swap arrow to work
+        // This enables the built-in swap direction button in Jupiter UI
+        fixedInputMint: false,
+        fixedOutputMint: false,
+      };
 
-        strictTokenList: false,
+      jupiterConfig.strictTokenList = false;
+      
+      jupiterConfig.containerStyles = {
+        borderRadius: '16px',
+        backgroundColor: 'rgba(16, 23, 31, 0.95)',
+      };
+
+      jupiterConfig.onSuccess = ({ txid, swapResult }) => {
+        console.log('✅ Swap success:', txid);
         
-        containerStyles: {
-          borderRadius: '16px',
-          backgroundColor: 'rgba(16, 23, 31, 0.95)',
-        },
+        // Track trade for affiliate system
+        trackTradeWithAffiliate(txid, swapResult);
+        
+        onSwapSuccess?.({ txid, swapResult, coin });
+      };
 
-        onSuccess: ({ txid, swapResult }) => {
-          console.log('✅ Swap success:', txid);
-          
-          // Track trade for affiliate system
-          trackTradeWithAffiliate(txid, swapResult);
-          
-          onSwapSuccess?.({ txid, swapResult, coin });
-        },
+      jupiterConfig.onError = ({ error }) => {
+        console.error('❌ Swap error:', error);
+        onSwapError?.({ error, coin });
+      };
 
-        onError: ({ error }) => {
-          console.error('❌ Swap error:', error);
-          onSwapError?.({ error, coin });
-        },
+      jupiterConfig.onScreenUpdate = (screen) => {
+        if (screen) {
+          setIsLoading(false);
+        }
+      };
 
-        onScreenUpdate: (screen) => {
-          if (screen) {
-            setIsLoading(false);
-          }
-        },
-      });
+      // Initialize Jupiter with the config
+      window.Jupiter.init(jupiterConfig);
 
       jupiterInitialized.current = true;
       

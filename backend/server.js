@@ -32,6 +32,7 @@ const affiliateRoutes = require('./routes/affiliates');
 const commentsRoutes = require('./routes/comments');
 const onDemandEnrichment = require('./services/OnDemandEnrichmentService');
 const geckoTerminalService = require('./geckoTerminalService');
+const { getJupiterReferralService } = require('./services/jupiterReferralService');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -88,6 +89,152 @@ app.use('/api/affiliates', affiliateRoutes);
 
 // Mount Comments routes
 app.use('/api/comments', commentsRoutes);
+
+// ═══════════════════════════════════════════════════════════════
+// 🪐 JUPITER REFERRAL API ENDPOINTS
+// ═══════════════════════════════════════════════════════════════
+
+const jupiterReferral = getJupiterReferralService();
+
+// Get referral configuration for a specific token
+// Frontend can use this to get the feeAccount for Jupiter swaps
+app.get('/api/jupiter/referral/config/:tokenMint', async (req, res) => {
+  try {
+    const { tokenMint } = req.params;
+    
+    if (!tokenMint || tokenMint.length < 32) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid token mint address'
+      });
+    }
+
+    const config = await jupiterReferral.getReferralConfig(tokenMint);
+    
+    if (!config) {
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to generate referral config'
+      });
+    }
+
+    res.json({
+      success: true,
+      referralAccount: config.referralAccount,
+      feeAccount: config.feeAccount,
+      feeBps: config.feeBps,
+      feePercentage: (config.feeBps / 100).toFixed(2) + '%'
+    });
+  } catch (error) {
+    console.error('❌ Error getting referral config:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Get referral account information
+app.get('/api/jupiter/referral/info', async (req, res) => {
+  try {
+    const info = await jupiterReferral.getReferralAccountInfo();
+    
+    res.json({
+      success: true,
+      ...info
+    });
+  } catch (error) {
+    console.error('❌ Error getting referral account info:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Check if fee token account exists for a mint
+app.get('/api/jupiter/referral/token-account/:tokenMint', async (req, res) => {
+  try {
+    const { tokenMint } = req.params;
+    
+    if (!tokenMint || tokenMint.length < 32) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid token mint address'
+      });
+    }
+
+    const accountInfo = await jupiterReferral.checkTokenAccountExists(tokenMint);
+    
+    res.json({
+      success: true,
+      ...accountInfo
+    });
+  } catch (error) {
+    console.error('❌ Error checking token account:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Get accumulated fees for a token
+app.get('/api/jupiter/referral/fees/:tokenMint', async (req, res) => {
+  try {
+    const { tokenMint } = req.params;
+    
+    if (!tokenMint || tokenMint.length < 32) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid token mint address'
+      });
+    }
+
+    const fees = await jupiterReferral.getAccumulatedFees(tokenMint);
+    
+    res.json({
+      success: true,
+      ...fees
+    });
+  } catch (error) {
+    console.error('❌ Error getting accumulated fees:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Get referral link for Jupiter swap UI
+app.get('/api/jupiter/referral/link/:tokenMint', (req, res) => {
+  try {
+    const { tokenMint } = req.params;
+    
+    if (!tokenMint || tokenMint.length < 32) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid token mint address'
+      });
+    }
+
+    const link = jupiterReferral.getReferralLink(tokenMint);
+    
+    res.json({
+      success: true,
+      referralLink: link,
+      tokenMint
+    });
+  } catch (error) {
+    console.error('❌ Error generating referral link:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
 
 // 📊 GeckoTerminal Historical Price Data endpoint
 app.get('/api/coins/:tokenAddress/historical-prices', async (req, res) => {
@@ -153,7 +300,130 @@ app.get('/api/coins/:tokenAddress/historical-prices', async (req, res) => {
 const geckoCache = new Map();
 const GECKO_CACHE_DURATION = 30 * 60 * 1000; // 30 minutes for OHLCV data (prevent rate limits)
 const GECKO_POOL_CACHE_DURATION = 60 * 60 * 1000; // 60 minutes for pool info
-const GECKO_STALE_CACHE_MAX = 2 * 60 * 60 * 1000; // Use stale cache up to 2 hours old if rate limited
+const GECKO_STALE_CACHE_MAX = 24 * 60 * 60 * 1000; // Use stale cache up to 24 hours old if rate limited (very aggressive caching)
+
+// Request deduplication - prevent multiple simultaneous requests to same endpoint
+const pendingGeckoRequests = new Map();
+
+/**
+ * 📊 Preload chart data for multiple coins in batches
+ * This eliminates frontend rate limiting by fetching all chart data upfront
+ */
+async function preloadChartData(coins, options = {}) {
+  const {
+    batchSize = 2, // Process 2 coins at a time to avoid rate limits
+    batchDelay = 2000, // 2 seconds between batches to be more conservative
+    timeframe = 'minute',
+    aggregate = 1,
+    limit = 100
+  } = options;
+
+  console.log(`📊 Preloading chart data for ${coins.length} coins (batches of ${batchSize}, ${batchDelay}ms delay)...`);
+  
+  const startTime = Date.now();
+  let successCount = 0;
+  let cacheHits = 0;
+  let staleCacheHits = 0;
+  let failCount = 0;
+
+  // Process coins in batches
+  for (let i = 0; i < coins.length; i += batchSize) {
+    const batch = coins.slice(i, i + batchSize);
+    
+    // Fetch chart data for this batch in parallel
+    await Promise.all(batch.map(async (coin) => {
+      try {
+        const poolAddress = coin.pairAddress || coin.poolAddress || coin.address;
+        if (!poolAddress) {
+          console.log(`⚠️ No pool address for ${coin.symbol}, skipping chart preload`);
+          failCount++;
+          return;
+        }
+
+        const cacheKey = `ohlcv_solana_${poolAddress}_${timeframe}_${aggregate}_${limit}`;
+        
+        // Check cache - use ANY cached data if available (even if stale)
+        const cached = geckoCache.get(cacheKey);
+        if (cached) {
+          const cacheAge = Date.now() - cached.timestamp;
+          const isFresh = cacheAge < GECKO_CACHE_DURATION;
+          
+          if (isFresh) {
+            cacheHits++;
+            console.log(`✅ Fresh cache for ${coin.symbol} (${Math.round(cacheAge / 1000)}s old)`);
+          } else {
+            staleCacheHits++;
+            console.log(`📦 Using stale cache for ${coin.symbol} (${Math.round(cacheAge / 60000)}min old, skipping API call)`);
+          }
+          
+          // Add chart data to coin object from cache (fresh or stale)
+          coin.chartData = cached.data?.data?.attributes?.ohlcv_list;
+          
+          // If fresh cache, no need to fetch API
+          if (isFresh) {
+            return;
+          }
+          // If stale but exists, use it and skip API to avoid rate limits
+          return;
+        }
+
+        // Only fetch from API if NO cache exists at all
+        console.log(`🌐 Fetching fresh data for ${coin.symbol} (no cache)...`);
+        const url = `https://api.geckoterminal.com/api/v2/networks/solana/pools/${poolAddress}/ohlcv/${timeframe}`;
+        const params = new URLSearchParams({
+          aggregate: aggregate.toString(),
+          limit: limit.toString(),
+          currency: 'usd'
+        });
+
+        const fetch = require('node-fetch');
+        const response = await fetch(`${url}?${params}`, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+          },
+          timeout: 10000
+        });
+
+        if (!response.ok) {
+          console.warn(`⚠️ GeckoTerminal API error for ${coin.symbol}: ${response.status}`);
+          failCount++;
+          return;
+        }
+
+        const data = await response.json();
+        
+        // Cache the response
+        geckoCache.set(cacheKey, {
+          data,
+          timestamp: Date.now()
+        });
+
+        // Add chart data to coin object
+        coin.chartData = data?.data?.attributes?.ohlcv_list;
+        successCount++;
+        console.log(`✅ Successfully fetched and cached data for ${coin.symbol}`);
+        
+      } catch (error) {
+        console.warn(`⚠️ Failed to preload chart for ${coin.symbol}:`, error.message);
+        failCount++;
+      }
+    }));
+
+    // Wait between batches to avoid rate limiting
+    if (i + batchSize < coins.length) {
+      console.log(`⏳ Waiting ${batchDelay}ms before next batch...`);
+      await new Promise(resolve => setTimeout(resolve, batchDelay));
+    }
+  }
+
+  const duration = Date.now() - startTime;
+  console.log(`✅ Chart preload complete: ${successCount} API calls, ${cacheHits} fresh cache, ${staleCacheHits} stale cache, ${failCount} failed (${duration}ms)`);
+  console.log(`📊 ${coins.filter(c => c.chartData).length}/${coins.length} coins have chart data embedded`);
+  
+  return coins;
+}
 
 // 📊 GeckoTerminal OHLCV Proxy endpoint (for chart data)
 app.get('/api/geckoterminal/ohlcv/:network/:poolAddress/:timeframe', async (req, res) => {
@@ -168,6 +438,18 @@ app.get('/api/geckoterminal/ohlcv/:network/:poolAddress/:timeframe', async (req,
     if (cached && Date.now() - cached.timestamp < GECKO_CACHE_DURATION) {
       console.log(`📊 [Proxy] ✅ Cache hit for OHLCV: ${poolAddress}/${timeframe} (age: ${Math.round((Date.now() - cached.timestamp) / 1000)}s)`);
       return res.json(cached.data);
+    }
+
+    // Request deduplication: if same request is already in flight, wait for it
+    if (pendingGeckoRequests.has(cacheKey)) {
+      console.log(`⏳ [Proxy] Waiting for pending request: ${poolAddress}/${timeframe}`);
+      try {
+        const result = await pendingGeckoRequests.get(cacheKey);
+        return res.json(result);
+      } catch (error) {
+        // If the pending request failed, continue to try again
+        console.log(`⚠️ [Proxy] Pending request failed, retrying: ${poolAddress}/${timeframe}`);
+      }
     }
 
     // Use stale cache if available and not too old (prevent unnecessary API calls)
@@ -199,20 +481,29 @@ app.get('/api/geckoterminal/ohlcv/:network/:poolAddress/:timeframe', async (req,
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`❌ [Proxy] GeckoTerminal API error: ${response.status} - ${errorText}`);
+      console.error(`❌ [Proxy] GeckoTerminal API error: ${response.status} - ${errorText.substring(0, 200)}`);
       
-      // If rate limited or any error and we have ANY cache (even very old), use it
-      if (cached && (response.status === 429 || response.status >= 500)) {
+      // If rate limited, forbidden, or any error and we have ANY cache (even very old), use it
+      if (cached && (response.status === 403 || response.status === 429 || response.status >= 500)) {
         console.log(`⚠️ [Proxy] API error (${response.status}), using stale cache (age: ${Math.round((Date.now() - cached.timestamp) / 60000)}min)`);
         return res.json(cached.data);
       }
       
-      // Return a more user-friendly error message
+      // Return a more user-friendly error message for rate limits
       if (response.status === 429) {
         return res.status(503).json({ 
           error: 'Chart data temporarily unavailable due to rate limiting. Please try again in a moment.',
           status: 429,
           retryAfter: 60 // seconds
+        });
+      }
+      
+      // Handle 403 Forbidden (often from GeckoTerminal blocking)
+      if (response.status === 403) {
+        return res.status(503).json({ 
+          error: 'Chart data temporarily unavailable. Using cached data when available.',
+          status: 403,
+          retryAfter: 120 // seconds
         });
       }
       
@@ -1181,7 +1472,17 @@ app.get('/api/coins/new', async (req, res) => {
     // Apply live Jupiter prices before returning
     const coinsWithLivePrices = applyLivePrices(limitedCoins);
     
-    console.log(`✅ Returning ${coinsWithLivePrices.length}/${newCoins.length} new coins (limit: ${limit === 9999 ? 'ALL' : limit}, auto-refreshed every 30 min)`);
+    // 📊 Preload chart data for ALL coins (WAIT for completion before returning)
+    console.log(`📊 Preloading chart data for ${coinsWithLivePrices.length} coins...`);
+    await preloadChartData(coinsWithLivePrices, {
+      batchSize: 2, // Process 2 at a time (very conservative)
+      batchDelay: 2000 // 2 seconds between batches
+    }).catch(err => {
+      console.warn('Chart preload error:', err.message);
+      // Continue even if preloading fails
+    });
+    
+    console.log(`✅ Returning ${coinsWithLivePrices.length}/${newCoins.length} new coins WITH chart data (limit: ${limit === 9999 ? 'ALL' : limit})`);
     
     res.json({
       success: true,
@@ -1305,7 +1606,17 @@ app.get('/api/coins/trending', async (req, res) => {
     // Apply live Jupiter prices before returning
     const coinsWithLivePrices = applyLivePrices(limitedCoins);
     
-    console.log(`✅ Returning ${coinsWithLivePrices.length}/${trendingCoins.length} trending coins (limit: ${limit === 9999 ? 'ALL' : limit})`);
+    // 📊 Preload chart data for ALL trending coins (WAIT for completion before returning)
+    console.log(`📊 Preloading chart data for ${coinsWithLivePrices.length} coins...`);
+    await preloadChartData(coinsWithLivePrices, {
+      batchSize: 2, // Process 2 at a time (very conservative)
+      batchDelay: 2000 // 2 seconds between batches
+    }).catch(err => {
+      console.warn('Chart preload error:', err.message);
+      // Continue even if preloading fails
+    });
+    
+    console.log(`✅ Returning ${coinsWithLivePrices.length}/${trendingCoins.length} trending coins WITH chart data (limit: ${limit === 9999 ? 'ALL' : limit})`);
     
     res.json({
       success: true,
@@ -1497,6 +1808,7 @@ app.get('/api/coins/graduating', async (req, res) => {
     const moralisService = require('./moralisService');
     
     // Fetch graduating tokens from Moralis
+   
     const graduatingTokens = await moralisService.getGraduatingTokens();
     
     if (graduatingTokens.length === 0) {
@@ -1531,24 +1843,17 @@ app.get('/api/coins/graduating', async (req, res) => {
       });
     }
     
-    // Apply live Jupiter prices before returning
-    const coinsWithLivePrices = applyLivePrices(limitedCoins);
+    // Apply live prices from Jupiter before serving
+    const coinsWithPrices = applyLivePrices(limitedCoins);
     
-    console.log(`✅ Returning ${coinsWithLivePrices.length}/${graduatingTokens.length} graduating tokens (limit: ${limit})`);
-    console.log(`📊 Top token: ${coinsWithLivePrices[0]?.symbol} (${coinsWithLivePrices[0]?.bondingCurveProgress}% complete)`);
+    console.log(`✅ Returning ${limitedCoins.length}/${graduatingTokens.length} graduating coins (limit: ${limit}, on-demand enrichment only)`);
     
     res.json({
       success: true,
-      coins: coinsWithLivePrices,
-      count: coinsWithLivePrices.length,
+      coins: coinsWithPrices,
+      count: coinsWithPrices.length,
       total: graduatingTokens.length,
-      timestamp: new Date().toISOString(),
-      criteria: {
-        source: 'Moralis Pump.fun',
-        status: 'About to graduate (>70% bonding progress)',
-        sorting: 'Best to worst (by graduation score)',
-        updateFrequency: '2 minutes'
-      }
+      timestamp: new Date().toISOString()
     });
     
   } catch (error) {
@@ -1556,66 +1861,6 @@ app.get('/api/coins/graduating', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to fetch graduating coins',
-      details: error.message
-    });
-  }
-});
-
-// ADMIN endpoint - Manually trigger trending feed refresh
-app.post('/api/admin/refresh-trending', async (req, res) => {
-  try {
-    console.log('🔧 Manual trending refresh requested');
-    
-    const result = await trendingAutoRefresher.triggerRefresh();
-    
-    if (result.success) {
-      res.json({
-        success: true,
-        message: 'Trending feed refresh triggered successfully',
-        status: trendingAutoRefresher.getStatus()
-      });
-    } else {
-      res.status(429).json({
-        success: false,
-        message: result.message
-      });
-    }
-    
-  } catch (error) {
-    console.error('❌ Error triggering trending refresh:', error.message);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to trigger trending refresh',
-      details: error.message
-    });
-  }
-});
-
-// ADMIN endpoint - Manually trigger NEW feed refresh
-app.post('/api/admin/refresh-new', async (req, res) => {
-  try {
-    console.log('🔧 Manual NEW feed refresh requested');
-    
-    const result = await newFeedAutoRefresher.triggerRefresh();
-    
-    if (result.success) {
-      res.json({
-        success: true,
-        message: 'NEW feed refresh triggered successfully',
-        status: newFeedAutoRefresher.getStatus()
-      });
-    } else {
-      res.status(429).json({
-        success: false,
-        message: result.message
-      });
-    }
-    
-  } catch (error) {
-    console.error('❌ Error triggering NEW feed refresh:', error.message);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to trigger NEW feed refresh',
       details: error.message
     });
   }
@@ -1949,3 +2194,6 @@ server.listen(PORT, async () => {
     console.log('⚠️ Jupiter Live Price Service started with empty list (will update when coins are fetched)');
   }
 });
+
+// Export the server for testing
+module.exports = server;

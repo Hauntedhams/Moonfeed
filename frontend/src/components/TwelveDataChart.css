@@ -4,26 +4,28 @@
 
 .timeframe-selector {
   display: flex;
-  gap: 8px;
-  padding: 12px 8px 8px 8px;
+  gap: 6px;
+  padding: 10px 8px 8px 8px;
   background: var(--chart-bg);
   border-bottom: 1px solid var(--chart-border);
-  flex-wrap: wrap;
+  flex-wrap: nowrap; /* Keep all buttons on one line */
   justify-content: flex-start;
   align-items: center;
   position: relative;
   z-index: 10;
+  overflow-x: auto; /* Allow horizontal scroll if needed on small screens */
+  overflow-y: hidden;
 }
 
 .timeframe-btn,
 .timeframe-button {
-  min-width: 50px;
-  padding: 8px 12px;
-  font-size: 12px;
+  min-width: 42px;
+  padding: 7px 10px;
+  font-size: 11px;
   font-weight: 600;
-  border: 1px solid var(--chart-border);
-  background: transparent;
-  color: var(--chart-text-dim);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: #f3f4f6;
+  color: #222;
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -37,20 +39,20 @@
 
 .timeframe-btn:hover:not(:disabled),
 .timeframe-button:hover:not(:disabled) {
-  background: var(--chart-green-bg);
-  border-color: var(--chart-green-border);
-  color: var(--chart-green);
+  background: #e5e7eb;
+  border-color: rgba(0, 0, 0, 0.15);
+  color: #111;
   transform: translateY(-1px);
-  box-shadow: 0 2px 8px var(--chart-green-glow);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 .timeframe-btn.active,
 .timeframe-button.active {
-  background: var(--chart-green);
-  border-color: var(--chart-green);
-  color: #000;
+  background: linear-gradient(135deg, #22c55e 0%, #7b61ff 100%);
+  border-color: transparent;
+  color: #fff;
   font-weight: 700;
-  box-shadow: 0 2px 12px var(--chart-green-glow);
+  box-shadow: 0 2px 12px rgba(123, 97, 255, 0.3);
 }
 
 .timeframe-btn:disabled,
@@ -62,6 +64,102 @@
 .timeframe-btn:active:not(:disabled),
 .timeframe-button:active:not(:disabled) {
   transform: translateY(0);
+}
+
+/* Advanced button styling */
+.timeframe-btn.advanced-btn {
+  background: linear-gradient(135deg, #7b61ff 0%, #22c55e 100%);
+  border: 1px solid rgba(123, 97, 255, 0.3);
+  color: #fff;
+  font-weight: 600;
+  min-width: 70px;
+  position: relative;
+  overflow: hidden;
+}
+
+.timeframe-btn.advanced-btn::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  transform: translate(-50%, -50%);
+  transition: width 0.4s ease, height 0.4s ease;
+}
+
+.timeframe-btn.advanced-btn:hover {
+  background: linear-gradient(135deg, #6b51ef 0%, #1eaa47 100%);
+  border-color: rgba(123, 97, 255, 0.5);
+  box-shadow: 0 4px 16px rgba(123, 97, 255, 0.4);
+  transform: translateY(-2px);
+}
+
+.timeframe-btn.advanced-btn:hover::before {
+  width: 300px;
+  height: 300px;
+}
+
+.timeframe-btn.advanced-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(123, 97, 255, 0.3);
+}
+
+/* Dark mode adjustments */
+html.dark-mode .timeframe-btn.advanced-btn,
+body.dark-mode .timeframe-btn.advanced-btn {
+  background: linear-gradient(135deg, #7b61ff 0%, #22c55e 100%);
+  box-shadow: 0 2px 12px rgba(123, 97, 255, 0.3);
+}
+
+/* Clean button styling (when returning from advanced view) */
+.timeframe-btn.clean-btn {
+  background: linear-gradient(135deg, #22c55e 0%, #10b981 100%);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: #fff;
+  font-weight: 600;
+  min-width: 70px;
+  position: relative;
+  overflow: hidden;
+}
+
+.timeframe-btn.clean-btn::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  transform: translate(-50%, -50%);
+  transition: width 0.4s ease, height 0.4s ease;
+}
+
+.timeframe-btn.clean-btn:hover {
+  background: linear-gradient(135deg, #16a34a 0%, #059669 100%);
+  border-color: rgba(34, 197, 94, 0.5);
+  box-shadow: 0 4px 16px rgba(34, 197, 94, 0.4);
+  transform: translateY(-2px);
+}
+
+.timeframe-btn.clean-btn:hover::before {
+  width: 300px;
+  height: 300px;
+}
+
+.timeframe-btn.clean-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.3);
+}
+
+/* Dark mode adjustments for clean button */
+html.dark-mode .timeframe-btn.clean-btn,
+body.dark-mode .timeframe-btn.clean-btn {
+  background: linear-gradient(135deg, #22c55e 0%, #10b981 100%);
+  box-shadow: 0 2px 12px rgba(34, 197, 94, 0.3);
 }
 
 /* ============================================
@@ -1003,5 +1101,45 @@ body.light-mode .twelve-data-chart,
   .chart-price-badge {
     font-size: 16px;
     padding: 8px 16px;
+  }
+}
+
+/* ============================================
+   LAZY LOADING PLACEHOLDER
+   ============================================ */
+
+.chart-lazy-placeholder {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--chart-bg);
+  z-index: 5;
+}
+
+.chart-lazy-placeholder .placeholder-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  opacity: 0.6;
+}
+
+.chart-lazy-placeholder svg {
+  opacity: 0.5;
+  animation: pulse-fade 2s ease-in-out infinite;
+}
+
+@keyframes pulse-fade {
+  0%, 100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 0.7;
   }
 }

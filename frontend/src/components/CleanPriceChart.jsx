@@ -13,9 +13,12 @@ const CleanPriceChart = memo(({ coin, width, height = 220 }) => {
   const [hasLoadedData, setHasLoadedData] = useState(false); // Track if real data has been loaded
   const [jupiterPrice, setJupiterPrice] = useState(null); // Live Jupiter price
   const [isLiveMode, setIsLiveMode] = useState(false); // Track if we're in 1-second live mode
+  const [isPaused, setIsPaused] = useState(false); // Track if user has paused auto-scrolling
+  const [showBackToLive, setShowBackToLive] = useState(false); // Show "Back to Live" button
   const canvasRef = useRef(null);
   const liveUpdateIntervalRef = useRef(null); // For 1-second updates
   const lastJupiterFetchRef = useRef(0); // For throttling Jupiter API calls
+  const isUserInteractingRef = useRef(false); // Track if user is currently interacting
   
   // Cache for generated chart data to prevent regeneration
   const chartDataCache = useRef(new Map());
@@ -196,6 +199,12 @@ const CleanPriceChart = memo(({ coin, width, height = 220 }) => {
       
       // Start price updates at appropriate interval
       liveUpdateIntervalRef.current = setInterval(async () => {
+        // Skip updates if user has paused the chart
+        if (isPaused) {
+          console.log('[CleanChart] ⏸️ Skipping update - chart is paused');
+          return;
+        }
+        
         const newPrice = await fetchJupiterPrice(tokenAddress);
         if (newPrice) {
           updateLivePriceData(newPrice, updateInterval, dataPoints);
@@ -886,10 +895,19 @@ const CleanPriceChart = memo(({ coin, width, height = 220 }) => {
       return;
     }
 
-    // Find the closest data point based on X position
+    // Pause auto-scrolling when user hovers over chart (not at the latest data point)
     const dataPointWidth = (containerWidth - padding.left - padding.right) / (priceData.length - 1);
     const relativeX = mouseX - padding.left;
     const dataIndex = Math.round(relativeX / dataPointWidth);
+    
+    // If user is hovering over older data (not the last 5% of the chart), pause updates
+    if (priceData.length > 0 && dataIndex < priceData.length * 0.95) {
+      if (!isPaused) {
+        setIsPaused(true);
+        setShowBackToLive(true);
+        console.log('[CleanChart] 🛑 Auto-scroll paused - user viewing historical data');
+      }
+    }
     
     if (dataIndex >= 0 && dataIndex < priceData.length) {
       const point = priceData[dataIndex];
@@ -914,6 +932,14 @@ const CleanPriceChart = memo(({ coin, width, height = 220 }) => {
 
   const handleMouseLeave = () => {
     setHoveredPoint(null);
+  };
+
+  // Resume live updates and scroll to latest data
+  const handleBackToLive = () => {
+    setIsPaused(false);
+    setShowBackToLive(false);
+    setHoveredPoint(null);
+    console.log('[CleanChart] ▶️ Resumed auto-scroll - back to live data');
   };
 
   // Format time for tooltip with enhanced granular timeframe support
@@ -1084,6 +1110,18 @@ const CleanPriceChart = memo(({ coin, width, height = 220 }) => {
           </button>
         ))}
       </div>
+      
+      {/* Back to Live button - shows when user has paused live updates */}
+      {showBackToLive && (
+        <div className="back-to-live-container">
+          <button 
+            className="back-to-live-button"
+            onClick={handleBackToLive}
+          >
+            ↻ Back to Live
+          </button>
+        </div>
+      )}
     </div>
   );
 });
