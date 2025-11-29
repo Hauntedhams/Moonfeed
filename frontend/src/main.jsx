@@ -3,9 +3,17 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
 
-// Jupiter Wallet Kit imports (replaces old wallet adapter)
+// Jupiter Wallet Kit imports
 import { UnifiedWalletProvider } from '@jup-ag/wallet-adapter';
-import { useWrappedReownAdapter } from '@jup-ag/jup-mobile-adapter';
+
+// Standard Solana wallet adapters
+import {
+  PhantomWalletAdapter,
+  SolflareWalletAdapter,
+  CoinbaseWalletAdapter,
+  Coin98WalletAdapter,
+  TrustWalletAdapter,
+} from '@solana/wallet-adapter-wallets';
 
 // WebSocket context for singleton connection
 import { LiveDataProvider } from './hooks/useLiveDataContext.jsx';
@@ -13,42 +21,20 @@ import { LiveDataProvider } from './hooks/useLiveDataContext.jsx';
 // Wallet notification handler
 import { WalletNotification } from './components/WalletNotification.jsx';
 
-// Solana RPC endpoint (mainnet-beta for production)
-const RPC_ENDPOINT = 'https://api.mainnet-beta.solana.com';
-
 // Root component that provides wallet context
 function RootApp() {
-  // Initialize Jupiter Mobile Adapter with WalletConnect/Reown configuration
-  // This adapter enables mobile wallet connections through WalletConnect protocol
-  const { jupiterAdapter } = useWrappedReownAdapter({
-    appKitOptions: {
-      metadata: {
-        name: 'Moonfeed',
-        description: 'Discover trending meme coins on Solana with TikTok-style scrolling',
-        url: typeof window !== 'undefined' ? window.location.origin : 'https://moonfeed.app',
-        icons: ['https://moonfeed.app/favicon.ico'],
-      },
-      // TODO: Get your project ID from https://dashboard.reown.com/
-      // This is required for WalletConnect functionality
-      projectId: 'YOUR_REOWN_PROJECT_ID', // Replace with your Reown project ID
-      features: {
-        analytics: false,
-        socials: ['google', 'x', 'apple'],
-        email: false,
-      },
-      // Disable built-in wallet list to use only Jupiter Mobile Adapter
-      enableWallets: false,
-    },
-  });
+  // Initialize wallet adapters - these provide the connection to browser wallet extensions
+  const wallets = useMemo(
+    () => [
+      new PhantomWalletAdapter(),
+      new SolflareWalletAdapter(),
+      new CoinbaseWalletAdapter(),
+      new Coin98WalletAdapter(),
+      new TrustWalletAdapter(),
+    ],
+    []
+  );
   
-  // Configure wallet adapters for the UnifiedWalletProvider
-  // This memoized array includes the Jupiter Mobile Adapter and filters out any invalid adapters
-  const wallets = useMemo(() => {
-    return [
-      jupiterAdapter, // Jupiter Mobile Adapter with WalletConnect integration
-    ].filter((item) => item && item.name && item.icon);
-  }, [jupiterAdapter]);
-
   return (
     <UnifiedWalletProvider
       wallets={wallets}

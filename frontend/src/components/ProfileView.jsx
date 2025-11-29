@@ -1,15 +1,25 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useWallet, useConnection } from '@solana/wallet-adapter-react';
-import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
+import { useWallet as useJupiterWallet } from '@jup-ag/wallet-adapter';
+import { Connection, PublicKey } from '@solana/web3.js';
 import { getFullApiUrl } from '../config/api';
 import { useTrackedWallets } from '../contexts/TrackedWalletsContext';
 import { useDarkMode } from '../contexts/DarkModeContext';
 import WalletPopup from './WalletPopup';
+import JupiterWalletButton from './JupiterWalletButton';
 import './ProfileView.css';
 
 const ProfileView = () => {
-  const { publicKey, connected, disconnect, signTransaction } = useWallet();
-  const { connection } = useConnection();
+  // Use Jupiter Wallet Kit adapter
+  const jupiterWallet = useJupiterWallet();
+  const publicKey = jupiterWallet.publicKey;
+  const connected = jupiterWallet.connected;
+  const disconnect = jupiterWallet.disconnect;
+  const signTransaction = jupiterWallet.signTransaction;
+  
+  // Create Solana connection (memoized to prevent recreation)
+  const connectionRef = useRef(new Connection('https://api.mainnet-beta.solana.com', 'confirmed'));
+  const connection = connectionRef.current;
+  
   const { isDarkMode, toggleDarkMode } = useDarkMode();
   const [balance, setBalance] = useState(null);
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
@@ -42,7 +52,7 @@ const ProfileView = () => {
     };
     
     setupWallet();
-  }, [connected, publicKey, connection]);
+  }, [connected, publicKey]); // Removed connection from dependencies
 
   // Refresh orders when filter changes
   useEffect(() => {
@@ -499,8 +509,11 @@ const ProfileView = () => {
               <h3>Connect Wallet</h3>
               <p>Connect your Solana wallet to view transaction history, manage favorites, and access advanced features.</p>
               <div className="wallet-button-container">
-                <WalletMultiButton />
+                <JupiterWalletButton />
               </div>
+              <p className="wallet-hint">
+                💡 Supports Phantom, Solflare, and all Solana wallets
+              </p>
             </div>
           </div>
 
@@ -584,24 +597,57 @@ const ProfileView = () => {
           <div 
             className="profile-picture-wrapper"
             onClick={() => fileInputRef.current?.click()}
-            title="Click to change profile picture"
+            title="Click to upload profile picture"
           >
             {profilePicture ? (
-              <img 
-                src={profilePicture} 
-                alt="Profile" 
-                className="profile-picture"
-              />
+              <>
+                <img 
+                  src={profilePicture} 
+                  alt="Profile" 
+                  className="profile-picture"
+                />
+                <div className="profile-picture-overlay">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <circle cx="12" cy="13" r="4" stroke="currentColor" strokeWidth="2"/>
+                  </svg>
+                  <span className="upload-text">Change</span>
+                </div>
+              </>
             ) : (
               <div className="profile-picture-placeholder">
                 <svg width="60" height="60" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <circle cx="12" cy="8" r="4" stroke="currentColor" strokeWidth="2"/>
                   <path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2" stroke="currentColor" strokeWidth="2"/>
                 </svg>
+                <div className="upload-hint">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <circle cx="12" cy="13" r="4" stroke="currentColor" strokeWidth="2"/>
+                  </svg>
+                  <span>Upload Photo</span>
+                </div>
               </div>
             )}
-            <div className="connected-badge">✓</div>
+            <div className="connected-badge" title="Wallet Connected">
+              ✓
+            </div>
           </div>
+          
+          {profilePicture && (
+            <button 
+              className="remove-picture-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                removeProfilePicture();
+              }}
+              title="Remove profile picture"
+            >
+              Remove Photo
+            </button>
+          )}
+          
+          <p className="profile-address">{formatAddress(publicKey)}</p>
           
           {/* Hidden file input for profile picture upload */}
           <input

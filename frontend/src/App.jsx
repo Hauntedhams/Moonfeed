@@ -393,6 +393,11 @@ function App() {
         coinAddress={currentViewedCoin?.mintAddress || currentViewedCoin?.address}
         coinSymbol={currentViewedCoin?.symbol || currentViewedCoin?.ticker}
       />
+      
+      {/* Wallet Debug Component - logs connection events to console */}
+      <Suspense fallback={null}>
+        <WalletDebug />
+      </Suspense>
         </div>
       </WalletProvider>
     </TrackedWalletsProvider>

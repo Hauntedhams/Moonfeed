@@ -1,22 +1,29 @@
-import React from 'react';
-
 /**
  * Wallet notification handler for Jupiter Wallet Kit
- * Displays user-friendly notifications for wallet events
+ * Provides callback functions for various wallet events
  */
-export const WalletNotification = (notification) => {
-  // You can customize this to use your preferred notification library
-  // For now, we'll use simple console logging and browser notifications
+export const WalletNotification = {
+  onConnect: (publicKey) => {
+    console.log('✅ Wallet Connected:', publicKey?.toString());
+  },
   
-  const { type, message } = notification;
+  onConnecting: (walletName) => {
+    console.log('🔄 Connecting to wallet:', walletName);
+  },
   
-  console.log(`🔔 Wallet ${type}:`, message);
+  onDisconnect: () => {
+    console.log('� Wallet Disconnected');
+  },
   
-  // Display browser notification if available
-  if (message && typeof message === 'string') {
-    // For development, we'll just log. In production, you might want a toast library
-    console.log(`📱 ${type.toUpperCase()}: ${message}`);
-  }
+  onNotInstalled: (walletName) => {
+    console.log('⚠️ Wallet not installed:', walletName);
+  },
   
-  return null;
+  onError: (error) => {
+    console.error('❌ Wallet Error:', error);
+  },
+  
+  onChangeAccount: (publicKey) => {
+    console.log('� Account Changed:', publicKey?.toString());
+  },
 };

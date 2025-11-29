@@ -160,6 +160,7 @@
 /* Profile Picture Section - Top Center */
 .profile-picture-section {
   display: flex;
+  flex-direction: column;
   justify-content: center;
   align-items: center;
   margin-bottom: 30px;
@@ -170,6 +171,7 @@
   position: relative;
   cursor: pointer;
   transition: transform 0.2s ease;
+  margin-bottom: 12px;
 }
 
 .profile-picture-wrapper:hover {
@@ -189,10 +191,66 @@
 
 .profile-picture-placeholder {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   background: linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 100%);
   color: #666;
+  gap: 8px;
+}
+
+/* Upload hint for placeholder */
+.upload-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #667eea;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.profile-picture-wrapper:hover .upload-hint {
+  opacity: 1;
+}
+
+.upload-hint svg {
+  width: 24px;
+  height: 24px;
+}
+
+/* Overlay when hovering over existing photo */
+.profile-picture-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  color: white;
+  gap: 6px;
+}
+
+.profile-picture-wrapper:hover .profile-picture-overlay {
+  opacity: 1;
+}
+
+.upload-text {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .profile-picture-wrapper:hover .profile-picture,
@@ -201,22 +259,36 @@
   box-shadow: 0 12px 32px rgba(102, 126, 234, 0.2);
 }
 
-.connected-badge {
-  position: absolute;
-  bottom: 5px;
-  right: 5px;
-  width: 32px;
-  height: 32px;
-  background: linear-gradient(135deg, #10b981 0%, #22c55e 100%);
-  color: #fff;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
-  font-weight: bold;
-  border: 3px solid #ffffff;
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+/* Remove picture button */
+.remove-picture-btn {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-bottom: 8px;
+}
+
+.remove-picture-btn:hover {
+  background: #ef4444;
+  color: white;
+  border-color: #ef4444;
+}
+
+/* Profile address display */
+.profile-address {
+  font-size: 14px;
+  color: rgba(0, 0, 0, 0.6);
+  font-weight: 500;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+  background: rgba(102, 126, 234, 0.08);
+  padding: 6px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(102, 126, 234, 0.15);
 }
 
 /* Header Styles (for disconnected state) */
@@ -299,26 +371,104 @@
 .wallet-button-container {
   display: flex;
   justify-content: center;
+  margin: 20px 0;
 }
 
-/* Override wallet adapter button styles */
-.wallet-button-container .wallet-adapter-button {
+/* Style the unified wallet button */
+.unified-wallet-btn,
+.wallet-button-container button {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
   border: none !important;
   border-radius: 16px !important;
-  padding: 14px 28px !important;
+  padding: 16px 32px !important;
   font-size: 16px !important;
   font-weight: 600 !important;
   color: #fff !important;
   cursor: pointer !important;
   transition: all 0.3s ease !important;
   box-shadow: 0 8px 32px rgba(102, 126, 234, 0.3) !important;
+  min-width: 200px !important;
+  height: auto !important;
 }
 
-.wallet-button-container .wallet-adapter-button:hover {
+.unified-wallet-btn:hover,
+.wallet-button-container button:hover {
   background: linear-gradient(135deg, #5a6fd8 0%, #6b4190 100%) !important;
   transform: translateY(-2px) !important;
   box-shadow: 0 12px 40px rgba(102, 126, 234, 0.4) !important;
+}
+
+.unified-wallet-btn:active,
+.wallet-button-container button:active {
+  transform: translateY(0) !important;
+  box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3) !important;
+}
+
+/* Override any Jupiter default styles */
+.wallet-adapter-button-trigger {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  border: none !important;
+  border-radius: 16px !important;
+  padding: 16px 32px !important;
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  color: #fff !important;
+  cursor: pointer !important;
+  transition: all 0.3s ease !important;
+  box-shadow: 0 8px 32px rgba(102, 126, 234, 0.3) !important;
+  min-width: 200px !important;
+}
+
+/* Custom Connect Wallet Button */
+.connect-wallet-button {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  border-radius: 16px;
+  padding: 16px 32px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 8px 32px rgba(102, 126, 234, 0.3);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 200px;
+  justify-content: center;
+}
+
+.connect-wallet-button:hover {
+  background: linear-gradient(135deg, #5a6fd8 0%, #6b4190 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 40px rgba(102, 126, 234, 0.4);
+}
+
+.connect-wallet-button:active {
+  transform: translateY(0);
+  box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3);
+}
+
+.connect-wallet-button svg {
+  width: 20px;
+  height: 20px;
+}
+
+.connection-card h3 {
+  color: #111827;
+  font-size: 24px;
+  font-weight: 600;
+  margin: 0 0 15px 0;
+}
+
+.connection-card p {
+  color: #6b7280;
+  font-size: 16px;
+  line-height: 1.6;
+  margin: 0 0 30px 0;
+  max-width: 400px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 /* Features Preview */
@@ -1282,4 +1432,39 @@
 
 .dark-mode .profile-view::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.3);
+}
+
+/* Dark mode profile picture enhancements */
+.dark-mode .upload-hint {
+  color: #667eea;
+}
+
+.dark-mode .profile-address {
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(102, 126, 234, 0.15);
+  border-color: rgba(102, 126, 234, 0.25);
+}
+
+.dark-mode .remove-picture-btn {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #ff6b6b;
+}
+
+.dark-mode .remove-picture-btn:hover {
+  background: #ef4444;
+  color: white;
+}
+
+.dark-mode .wallet-hint {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+/* Wallet hint text */
+.wallet-hint {
+  text-align: center;
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.5);
+  margin-top: 12px;
+  font-style: italic;
 }

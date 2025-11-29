@@ -1370,8 +1370,8 @@
 /* Twelve Chart Section - Ensure dimensions for chart rendering */
 .twelve-chart-section {
   width: 100%;
-  min-height: 420px;
-  height: 420px;
+  min-height: 320px;
+  height: 320px;
   display: flex;
   flex-direction: column;
   position: relative;
@@ -1755,8 +1755,10 @@
 .live-transactions-content {
   position: relative;
   color: rgba(0, 0, 0, 0.8);
-  min-height: 450px; /* Match parent height */
+  min-height: 200px; /* Reduced to fit actual content display */
+  max-height: 300px; /* Limit maximum height */
   padding: 16px;
+  overflow-y: auto; /* Add scroll if more transactions */
 }
 
 .transactions-header {

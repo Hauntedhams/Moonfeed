@@ -41,10 +41,12 @@ const CoinCard = memo(({
   const [graduationIconPosition, setGraduationIconPosition] = useState(null);
   const [priceFlash, setPriceFlash] = useState('');
   const [showLiveTransactions, setShowLiveTransactions] = useState(false);
-  const [showTopTraders, setShowTopTraders] = useState(false);
+  const [showTopTraders, setShowTopTraders] = useState(true); // Auto-load top traders
   const [selectedWallet, setSelectedWallet] = useState(null);
   const [showDescriptionModal, setShowDescriptionModal] = useState(false);
   const [chartHoveredPrice, setChartHoveredPrice] = useState(null); // Track hovered price from chart
+  const [chartHoveredData, setChartHoveredData] = useState(null); // Track full crosshair data (price + time)
+  const [chartFirstPrice, setChartFirstPrice] = useState(null); // Track first visible price for % calculation
   const chartsContainerRef = useRef(null);
   const chartNavRef = useRef(null);
   const prevPriceRef = useRef(null);
@@ -942,11 +944,34 @@ const CoinCard = memo(({
     }
   };
 
+  // Handle crosshair move from chart
+  const handleChartCrosshairMove = (data) => {
+    if (data && data.price) {
+      setChartHoveredData(data);
+      setChartHoveredPrice(data.price);
+    } else {
+      // Restore live price
+      setChartHoveredData(null);
+      setChartHoveredPrice(null);
+    }
+  };
+
+  // Handle first visible price update from chart (for % calculation)
+  const handleFirstPriceUpdate = (price) => {
+    setChartFirstPrice(price);
+  };
+
   // Use live data when available, fallback to coin data
   // 🔥 CRITICAL FIX: Use displayPrice computed from useMemo which is reactive to coins Map
   // 🎯 NEW: Use chartHoveredPrice when hovering over chart
   const price = chartHoveredPrice !== null ? chartHoveredPrice : displayPrice;
-  const changePct = liveData?.change24h ?? coin.change_24h ?? coin.priceChange24h ?? coin.change24h ?? 0;
+  
+  // 🎯 NEW: Calculate percentage change dynamically when hovering over chart
+  // If hovering, calculate % from first visible price to hovered price
+  // Otherwise, use the live 24h change
+  const changePct = chartHoveredData && chartFirstPrice 
+    ? ((chartHoveredPrice - chartFirstPrice) / chartFirstPrice) * 100
+    : (liveData?.change24h ?? coin.change_24h ?? coin.priceChange24h ?? coin.change24h ?? 0);
   const marketCap = liveData?.marketCap ?? coin.market_cap_usd ?? coin.market_cap ?? coin.marketCap ?? 0;
   const volume24h = liveData?.volume24h ?? coin.volume_24h_usd ?? coin.volume_24h ?? coin.volume24h ?? 0;
   const liquidity = liveData?.liquidity ?? coin.liquidity_usd ?? coin.liquidity ?? coin.liquidityUsd ?? 0;
@@ -1478,6 +1503,8 @@ const CoinCard = memo(({
               <TwelveDataChart 
                 coin={coin}
                 isActive={isExpanded && isVisible}
+                onCrosshairMove={handleChartCrosshairMove}
+                onFirstPriceUpdate={handleFirstPriceUpdate}
               />
             </div>
           </div> {/* Close charts-section */}
@@ -1625,23 +1652,12 @@ const CoinCard = memo(({
             )}
           </div>
 
-          {/* Top Traders Section - Separate from Transactions */}
+          {/* Top Traders Section - Auto-loaded */}
           <div className="top-traders-section">
             <div className="top-traders-section-header">Top Traders</div>
-            {!showTopTraders ? (
-              <div className="load-top-traders-wrapper">
-                <button 
-                  className="load-top-traders-btn"
-                  onClick={() => setShowTopTraders(true)}
-                >
-                  Load Top Traders
-                </button>
-              </div>
-            ) : (
-              <div className="top-traders-content">
-                <TopTradersList coinAddress={mintAddress} />
-              </div>
-            )}
+            <div className="top-traders-content">
+              <TopTradersList coinAddress={mintAddress} />
+            </div>
           </div>
 
           {/* Token Information - Comprehensive Solana Tracker Data */}
@@ -2020,6 +2036,8 @@ const CoinCard = memo(({
         <TwelveDataChart 
           coin={coin}
           isActive={true}
+          onCrosshairMove={handleChartCrosshairMove}
+          onFirstPriceUpdate={handleFirstPriceUpdate}
         />
       </div>
 

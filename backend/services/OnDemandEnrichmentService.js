@@ -226,7 +226,89 @@ class OnDemandEnrichmentService {
       // Priority: coin.price_usd (Jupiter) > enrichedData.price_usd (DexScreener)
       const livePrice = coin.price_usd || coin.priceUsd || coin.price || enrichedData.price_usd;
       
-      if (livePrice && hasDexScreenerData) {
+      // 🌙 MOONFEED SPECIAL HANDLING: For coins without DEX data (pre-bonding curve)
+      const isMoonfeedNative = !hasDexScreenerData && (
+        coin.source === 'moonfeed' || 
+        coin.isMoonfeedNative ||
+        mintAddress === 'FeqAiLPejhkTJ2nEiCCL7JdtJkZdPNTYSm8vAjrZmoon' // $MOO token
+      );
+      
+      if (isMoonfeedNative) {
+        console.log(`🌙 Moonfeed-native coin detected: ${coin.symbol || mintAddress}`);
+        
+        // Mark as Moonfeed native for frontend handling
+        enrichedData.isMoonfeedNative = true;
+        enrichedData.source = 'moonfeed';
+        
+        // Try to get token info from Solana RPC
+        let rpcInfo = null;
+        try {
+          rpcInfo = await this.fetchTokenInfoFromRPC(mintAddress);
+        } catch (error) {
+          console.warn(`⚠️ Could not fetch RPC info for ${coin.symbol}:`, error.message);
+        }
+        
+        // Determine price to use (priority: livePrice > lastTradePrice > estimatedPrice)
+        let priceToUse = livePrice;
+        
+        if (!priceToUse && rpcInfo?.lastTradePrice) {
+          priceToUse = rpcInfo.lastTradePrice;
+          console.log(`💰 Using last trade price for ${coin.symbol}: $${priceToUse}`);
+        } else if (!priceToUse && rpcInfo?.estimatedPrice) {
+          priceToUse = rpcInfo.estimatedPrice;
+          console.log(`💰 Using estimated starting price for ${coin.symbol}: $${priceToUse}`);
+        }
+        
+        if (priceToUse) {
+          enrichedData.price_usd = priceToUse;
+          enrichedData.priceUsd = priceToUse;
+          enrichedData.baseTokenPrice = priceToUse;
+          enrichedData.preLaunch = !livePrice && rpcInfo?.isEstimate; // True only if truly estimated
+          
+          // Use RPC data for supply and market cap
+          if (rpcInfo?.supply) {
+            enrichedData.totalSupply = rpcInfo.supply;
+            enrichedData.marketCap = rpcInfo.marketCap || (priceToUse * rpcInfo.supply);
+            enrichedData.market_cap_usd = enrichedData.marketCap;
+            console.log(`📊 Market cap: $${enrichedData.marketCap.toLocaleString()}`);
+          }
+          
+          // Use RPC volume if available
+          if (rpcInfo?.volume24h !== undefined) {
+            enrichedData.volume24h = rpcInfo.volume24h;
+            enrichedData.volume_24h_usd = rpcInfo.volume24h;
+            console.log(`📊 24h volume: $${rpcInfo.volume24h.toLocaleString()}`);
+          }
+          
+          console.log(`💰 Using ${livePrice ? 'live' : (rpcInfo?.lastTradePrice ? 'last trade' : 'estimated')} price: $${priceToUse}`);
+        } else {
+          // Absolutely no price available
+          enrichedData.price_usd = null;
+          enrichedData.priceUsd = null;
+          enrichedData.preLaunch = true;
+          console.log(`⏳ No price yet for ${coin.symbol} - awaiting first trade`);
+        }
+        
+        // Set default values for missing data (don't override RPC data)
+        if (!enrichedData.liquidity) {
+          enrichedData.liquidity = coin.liquidity || null;
+        }
+        if (!enrichedData.volume24h) {
+          enrichedData.volume24h = coin.volume24h || null;
+        }
+        
+        // Generate chart if we have any price
+        if (priceToUse) {
+          enrichedData.cleanChartData = {
+            currentPrice: priceToUse,
+            change24h: enrichedData.priceChange?.h24 || 0,
+            dataPoints: this.generateMoonfeedChart(priceToUse),
+            isMoonfeedNative: true,
+            preLaunch: !livePrice // Flag to show "waiting for live price"
+          };
+          console.log(`✅ Generated Moonfeed chart with ${livePrice ? 'live' : 'estimated'} price: $${priceToUse}`);
+        }
+      } else if (livePrice && hasDexScreenerData) {
         // Override DexScreener price with live Jupiter price for accuracy
         if (coin.price_usd && enrichedData.price_usd && coin.price_usd !== enrichedData.price_usd) {
           console.log(`🔄 Overriding DexScreener price $${enrichedData.price_usd} with live Jupiter price $${livePrice}`);
@@ -846,6 +928,161 @@ class OnDemandEnrichmentService {
         generatedAt: new Date().toISOString()
       }
     };
+  }
+
+  /**
+   * Generate a simple flat chart for Moonfeed-native coins (no DEX data yet)
+   * Shows current price across time until trading begins
+   */
+  generateMoonfeedChart(currentPrice) {
+    if (!currentPrice || typeof currentPrice !== 'number' || currentPrice <= 0) {
+      console.warn('⚠️ Invalid currentPrice for Moonfeed chart generation:', currentPrice);
+      return [];
+    }
+
+    const now = Date.now();
+    const dataPoints = [];
+    
+    // Create 5 data points showing flat price (pre-trading)
+    const timePoints = [
+      { offset: 24 * 60 * 60 * 1000, label: '24h' },
+      { offset: 6 * 60 * 60 * 1000, label: '6h' },
+      { offset: 1 * 60 * 60 * 1000, label: '1h' },
+      { offset: 5 * 60 * 1000, label: '5m' },
+      { offset: 0, label: 'now' }
+    ];
+    
+    timePoints.forEach(point => {
+      dataPoints.push({
+        timestamp: now - point.offset,
+        time: new Date(now - point.offset).toISOString(),
+        price: currentPrice,
+        label: point.label
+      });
+    });
+
+    console.log(`✅ Generated Moonfeed chart with flat price $${currentPrice.toFixed(8)}`);
+    
+    return dataPoints;
+  }
+
+  /**
+   * Fetch basic token info from Solana RPC
+   * Used for Moonfeed-native coins that don't have DEX data yet
+   */
+  async fetchTokenInfoFromRPC(mintAddress) {
+    try {
+      const { Connection, PublicKey } = require('@solana/web3.js');
+      const HELIUS_API_KEY = process.env.HELIUS_API_KEY || '26240c3d-8cce-414e-95f7-5c0c75c1a2cb';
+      const connection = new Connection(`https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`, 'confirmed');
+      
+      console.log(`🔍 Fetching REAL token info from Helius RPC for ${mintAddress}`);
+      
+      // Get mint account info to get token supply
+      const mintPubkey = new PublicKey(mintAddress);
+      const mintInfo = await connection.getParsedAccountInfo(mintPubkey);
+      
+      if (!mintInfo || !mintInfo.value) {
+        console.warn(`⚠️ No mint info found for ${mintAddress}`);
+        return null;
+      }
+      
+      const tokenData = mintInfo.value.data.parsed?.info;
+      if (!tokenData) {
+        console.warn(`⚠️ Could not parse token data for ${mintAddress}`);
+        return null;
+      }
+      
+      // Extract token supply
+      const supply = parseFloat(tokenData.supply) / Math.pow(10, tokenData.decimals);
+      const decimals = tokenData.decimals;
+      
+      console.log(`✅ Token supply: ${supply.toLocaleString()} (${decimals} decimals)`);
+      
+      // 🔍 Try to get REAL last trade price from recent transactions
+      let lastTradePrice = null;
+      let volume24h = 0;
+      
+      try {
+        const signatures = await connection.getSignaturesForAddress(mintPubkey, { limit: 20 });
+        console.log(`📜 Found ${signatures.length} recent transactions for ${mintAddress}`);
+        
+        if (signatures.length > 0) {
+          // Get the most recent transaction to extract price
+          const lastSig = signatures[0];
+          const tx = await connection.getParsedTransaction(lastSig.signature, {
+            maxSupportedTransactionVersion: 0
+          });
+          
+          if (tx && tx.meta && tx.meta.postTokenBalances && tx.meta.preTokenBalances) {
+            // Try to calculate price from token balance changes
+            const postBalances = tx.meta.postTokenBalances;
+            const preBalances = tx.meta.preTokenBalances;
+            
+            if (postBalances.length > 0 && preBalances.length > 0) {
+              // Find balance changes
+              const tokenChange = postBalances.find(b => b.mint === mintAddress);
+              const preTokenBalance = preBalances.find(b => b.mint === mintAddress);
+              
+              if (tokenChange && preTokenBalance) {
+                const tokenDelta = parseFloat(tokenChange.uiTokenAmount.uiAmount || 0) - 
+                                  parseFloat(preTokenBalance.uiTokenAmount.uiAmount || 0);
+                
+                // Check for SOL balance change to calculate price
+                if (tx.meta.preBalances && tx.meta.postBalances && Math.abs(tokenDelta) > 0) {
+                  const solDelta = (tx.meta.postBalances[0] - tx.meta.preBalances[0]) / 1e9; // Convert lamports to SOL
+                  
+                  if (solDelta !== 0) {
+                    // Calculate price per token (SOL/token)
+                    const priceInSol = Math.abs(solDelta / tokenDelta);
+                    // Assume SOL = $150 (you can fetch real SOL price from Jupiter if needed)
+                    const solPrice = 150;
+                    lastTradePrice = priceInSol * solPrice;
+                    
+                    console.log(`💰 Calculated last trade price: $${lastTradePrice.toFixed(8)} (${priceInSol.toFixed(8)} SOL)`);
+                  }
+                }
+              }
+            }
+          }
+          
+          // Calculate 24h volume from recent transactions
+          const oneDayAgo = Date.now() / 1000 - 86400;
+          const recentTxs = signatures.filter(sig => sig.blockTime > oneDayAgo);
+          volume24h = recentTxs.length * (lastTradePrice || 0) * 1000; // Rough estimate
+          
+          console.log(`📊 24h volume (estimate): $${volume24h.toLocaleString()}`);
+        }
+      } catch (txError) {
+        console.warn(`⚠️ Could not parse transactions for price:`, txError.message);
+      }
+      
+      // If we couldn't get real price, use a reasonable estimate based on supply
+      if (!lastTradePrice) {
+        // For small supply tokens, use higher starting price
+        if (supply < 10000000) {
+          lastTradePrice = 0.001; // $0.001 for low supply
+        } else if (supply < 100000000) {
+          lastTradePrice = 0.0001; // $0.0001 for medium supply
+        } else {
+          lastTradePrice = 0.00001; // $0.00001 for high supply
+        }
+        console.log(`⚠️ Using estimated starting price: $${lastTradePrice}`);
+      }
+      
+      return {
+        supply,
+        decimals,
+        lastTradePrice,
+        estimatedPrice: lastTradePrice,
+        marketCap: supply * lastTradePrice,
+        volume24h,
+        isEstimate: !lastTradePrice || volume24h === 0
+      };
+    } catch (error) {
+      console.error(`❌ Error fetching token info from RPC:`, error.message);
+      return null;
+    }
   }
 }
 

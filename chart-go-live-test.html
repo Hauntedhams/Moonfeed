@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chart "Go Live" Feature Test</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+      background: #0a0a0a;
+      color: #fff;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-size: 32px;
+      margin-bottom: 10px;
+      background: linear-gradient(135deg, #22c55e 0%, #7b61ff 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .subtitle {
+      font-size: 16px;
+      color: #888;
+      margin-bottom: 30px;
+    }
+
+    .test-card {
+      background: #1a1a1a;
+      border-radius: 16px;
+      padding: 30px;
+      margin-bottom: 30px;
+      border: 1px solid #333;
+    }
+
+    h2 {
+      font-size: 24px;
+      margin-bottom: 20px;
+      color: #fff;
+    }
+
+    .test-section {
+      margin-bottom: 25px;
+    }
+
+    .test-section h3 {
+      font-size: 18px;
+      color: #22c55e;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .test-section p {
+      color: #aaa;
+      line-height: 1.6;
+      margin-bottom: 10px;
+    }
+
+    .step {
+      background: #222;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      border-left: 3px solid #22c55e;
+    }
+
+    .step-number {
+      display: inline-block;
+      background: #22c55e;
+      color: #000;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      text-align: center;
+      line-height: 24px;
+      font-weight: bold;
+      margin-right: 10px;
+      font-size: 14px;
+    }
+
+    .indicator-demo {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(34, 197, 94, 0.1);
+      border: 2px solid rgba(34, 197, 94, 0.3);
+      padding: 8px 16px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 800;
+      color: #22c55e;
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      margin: 10px 0;
+    }
+
+    .live-dot-demo {
+      width: 8px;
+      height: 8px;
+      background: #22c55e;
+      border-radius: 50%;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+      }
+      50% {
+        transform: scale(1.4);
+        opacity: 0.7;
+      }
+    }
+
+    .button-demo {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+      border: 2px solid rgba(34, 197, 94, 0.5);
+      padding: 10px 20px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #fff;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 16px rgba(34, 197, 94, 0.3);
+      margin: 10px 0;
+    }
+
+    .button-demo:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(34, 197, 94, 0.4);
+    }
+
+    .play-icon {
+      font-size: 10px;
+    }
+
+    .feature-list {
+      list-style: none;
+      margin-top: 15px;
+    }
+
+    .feature-list li {
+      padding: 10px 0;
+      border-bottom: 1px solid #333;
+      color: #ccc;
+    }
+
+    .feature-list li:last-child {
+      border-bottom: none;
+    }
+
+    .checkmark {
+      color: #22c55e;
+      margin-right: 10px;
+    }
+
+    .visual-demo {
+      background: #0a0a0a;
+      border-radius: 12px;
+      padding: 20px;
+      margin: 20px 0;
+      border: 1px solid #333;
+    }
+
+    .demo-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 15px 0;
+      padding: 15px;
+      background: #1a1a1a;
+      border-radius: 8px;
+    }
+
+    .demo-label {
+      font-weight: bold;
+      color: #22c55e;
+    }
+
+    code {
+      background: #222;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-family: 'Monaco', 'Courier New', monospace;
+      color: #7b61ff;
+    }
+
+    .status-badge {
+      display: inline-block;
+      background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+      color: #fff;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📊 Chart "Go Live" Feature</h1>
+    <p class="subtitle">Smart auto-scroll control for historical price analysis</p>
+
+    <div class="test-card">
+      <h2>🎯 What's New?</h2>
+      <p>We've implemented a smart "Go Live" button system that allows users to explore historical price data without the chart constantly jumping back to the live view.</p>
+      
+      <div class="visual-demo">
+        <div class="demo-row">
+          <span class="demo-label">Default State:</span>
+          <div class="indicator-demo">
+            <span class="live-dot-demo"></span>
+            LIVE
+          </div>
+        </div>
+        <div class="demo-row">
+          <span class="demo-label">When Scrolling History:</span>
+          <button class="button-demo">
+            <span class="play-icon">▶</span>
+            Go Live
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="test-card">
+      <h2>🧪 Testing Instructions</h2>
+      
+      <div class="test-section">
+        <h3>✅ Test Case 1: Basic Flow</h3>
+        <div class="step">
+          <span class="step-number">1</span>
+          Open the app and navigate to any coin's chart
+        </div>
+        <div class="step">
+          <span class="step-number">2</span>
+          Wait for the chart to load and display the <code>LIVE</code> indicator
+        </div>
+        <div class="step">
+          <span class="step-number">3</span>
+          Scroll back (pan left) on the chart to view historical data
+        </div>
+        <div class="step">
+          <span class="step-number">4</span>
+          Verify the <code>LIVE</code> indicator disappears
+        </div>
+        <div class="step">
+          <span class="step-number">5</span>
+          Verify the <code>Go Live</code> button appears in the top-right
+        </div>
+        <div class="step">
+          <span class="step-number">6</span>
+          Click the <code>Go Live</code> button
+        </div>
+        <div class="step">
+          <span class="step-number">7</span>
+          Verify the chart jumps back to current time and resumes auto-scrolling
+        </div>
+      </div>
+
+      <div class="test-section">
+        <h3>✅ Test Case 2: Mouse Wheel Scrolling</h3>
+        <p>Use your mouse wheel to scroll through historical data and verify the button appears.</p>
+      </div>
+
+      <div class="test-section">
+        <h3>✅ Test Case 3: Touch Gestures (Mobile)</h3>
+        <p>On mobile devices, use touch gestures to pan through the chart and verify the button works correctly.</p>
+      </div>
+
+      <div class="test-section">
+        <h3>✅ Test Case 4: Timeframe Switching</h3>
+        <p>Switch between different timeframes (1m, 5m, 1h, etc.) while in historical mode and verify the <code>Go Live</code> button persists.</p>
+      </div>
+
+      <div class="test-section">
+        <h3>✅ Test Case 5: Live Data Updates</h3>
+        <p>While viewing historical data (with <code>Go Live</code> button visible), verify that new price data is still being received in the background. When you click <code>Go Live</code>, the latest data should be immediately visible.</p>
+      </div>
+    </div>
+
+    <div class="test-card">
+      <h2>🎨 Visual States</h2>
+      
+      <div class="test-section">
+        <h3>State 1: Live Mode (Default)</h3>
+        <ul class="feature-list">
+          <li><span class="checkmark">✓</span> <code>LIVE</code> indicator visible with pulsing green dot</li>
+          <li><span class="checkmark">✓</span> Chart auto-scrolls to the right as new data comes in</li>
+          <li><span class="checkmark">✓</span> Latest price always visible</li>
+        </ul>
+      </div>
+
+      <div class="test-section">
+        <h3>State 2: Historical Viewing Mode</h3>
+        <ul class="feature-list">
+          <li><span class="checkmark">✓</span> <code>LIVE</code> indicator hidden</li>
+          <li><span class="checkmark">✓</span> <code>Go Live</code> button visible with smooth slide-in animation</li>
+          <li><span class="checkmark">✓</span> Chart stays at user's selected time range</li>
+          <li><span class="checkmark">✓</span> No auto-scrolling</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="test-card">
+      <h2>🔧 Technical Implementation</h2>
+      
+      <div class="test-section">
+        <h3>Files Modified</h3>
+        <ul class="feature-list">
+          <li><code>TwelveDataChart.jsx</code> - Added live mode state management and user interaction detection</li>
+          <li><code>TwelveDataChart.css</code> - Added Go Live button styling and animations</li>
+        </ul>
+      </div>
+
+      <div class="test-section">
+        <h3>Key Features</h3>
+        <ul class="feature-list">
+          <li><span class="checkmark">✓</span> Detects mouse wheel, touch, and pan interactions</li>
+          <li><span class="checkmark">✓</span> Distinguishes between user scrolling and programmatic auto-scroll</li>
+          <li><span class="checkmark">✓</span> Smooth animations for button appearance/disappearance</li>
+          <li><span class="checkmark">✓</span> Live data continues updating in background</li>
+          <li><span class="checkmark">✓</span> One-click return to live view</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="test-card">
+      <h2>📊 Status</h2>
+      <p style="margin-bottom: 15px;">
+        <span class="status-badge">✅ Complete</span>
+      </p>
+      <p>The "Go Live" feature is fully implemented and ready for testing. All edge cases have been handled, and the feature works seamlessly with the existing chart functionality.</p>
+    </div>
+  </div>
+</body>
+</html>

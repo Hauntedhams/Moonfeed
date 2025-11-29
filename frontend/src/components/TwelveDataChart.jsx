@@ -19,7 +19,7 @@ const pendingFetches = new Map(); // Deduplicate concurrent fetches
 let timeframeChangeTimer = null;
 const TIMEFRAME_DEBOUNCE_MS = 800; // Wait 800ms after last click before fetching (increased from 500ms)
 
-const TwelveDataChart = ({ coin, isActive = false }) => {
+const TwelveDataChart = ({ coin, isActive = false, onCrosshairMove, onFirstPriceUpdate }) => {
   const chartContainerRef = useRef(null);
   const chartRef = useRef(null);
   const lineSeriesRef = useRef(null);
@@ -42,6 +42,9 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
   const [isInView, setIsInView] = useState(false); // Track if chart is in viewport
   const [shouldLoad, setShouldLoad] = useState(false); // Track if chart should load
   const [showAdvanced, setShowAdvanced] = useState(false); // Toggle between clean and advanced chart
+  const [isLiveMode, setIsLiveMode] = useState(true); // Track if chart should auto-scroll to live data
+  const isLiveModeRef = useRef(true); // Ref to track live mode for use in intervals
+  const userInteractionTimeoutRef = useRef(null); // Track user interaction timeout
 
   // Extract pairAddress for historical data and tokenMint for real-time subscription
   const pairAddress = coin?.pairAddress || 
@@ -98,6 +101,11 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
 
     return () => observer.disconnect();
   }, []);
+
+  // Sync isLiveMode state with ref for use in intervals
+  useEffect(() => {
+    isLiveModeRef.current = isLiveMode;
+  }, [isLiveMode]);
 
   // 🚀 LAZY LOADING: Only load chart when near viewport
   useEffect(() => {
@@ -255,8 +263,8 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
           });
           lastUpdateTimeRef.current = currentTime;
           
-          // Smooth scroll to show latest data
-          if (chartRef.current) {
+          // Smooth scroll to show latest data ONLY if in live mode
+          if (chartRef.current && isLiveModeRef.current) {
             chartRef.current.timeScale().scrollToRealTime();
           }
           
@@ -347,8 +355,8 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
           setLatestPrice(toPrice);
           lastUpdateTimeRef.current = actualTime;
           
-          // Smooth scroll to show latest data
-          if (chartRef.current) {
+          // Smooth scroll to show latest data ONLY if in live mode
+          if (chartRef.current && isLiveModeRef.current) {
             chartRef.current.timeScale().scrollToRealTime();
           }
         }
@@ -378,6 +386,15 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
     '1d': { timeframe: 'day', aggregate: 1, limit: 100, label: '1D', intervalSeconds: 86400 },
   };
 
+  // Check if this is a Moonfeed-native coin (not on DEX yet)
+  const isMoonfeedNative = () => {
+    // Moonfeed coins will have specific markers from backend enrichment
+    return coin?.source === 'moonfeed' || 
+           coin?.isMoonfeedNative || 
+           coin?.mintAddress === 'FeqAiLPejhkTJ2nEiCCL7JdtJkZdPNTYSm8vAjrZmoon' || // $MOO token
+           (!coin?.poolAddress && !coin?.pairAddress && coin?.mintAddress); // Has mint but no DEX pair
+  };
+
   // Fetch historical OHLCV data from GeckoTerminal via backend proxy
   const fetchHistoricalData = async (poolAddress, timeframeKey = '5m') => {
     const config = TIMEFRAME_CONFIG[timeframeKey];
@@ -405,6 +422,41 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
       return chartData;
     }
     
+    // 🌙 MOONFEED FALLBACK: For coins not on DEX yet, create chart from current price
+    if (isMoonfeedNative()) {
+      console.log('🌙 Moonfeed-native coin detected, using RPC price data');
+      
+      // Check if we have a current price from the coin object
+      const currentPrice = coin?.priceUsd || coin?.price || coin?.baseTokenPrice;
+      
+      if (currentPrice && !isNaN(currentPrice)) {
+        console.log(`💰 Using current price: $${currentPrice}`);
+        
+        // Create a simple flat chart showing current price over last hour
+        // This will update live via WebSocket
+        const currentTime = Math.floor(Date.now() / 1000);
+        const intervalSeconds = config.intervalSeconds || 300;
+        const numPoints = Math.min(limit, 12); // 12 points for 1 hour at 5min intervals
+        
+        const chartData = [];
+        for (let i = numPoints - 1; i >= 0; i--) {
+          chartData.push({
+            time: currentTime - (i * intervalSeconds),
+            value: parseFloat(currentPrice)
+          });
+        }
+        
+        console.log(`📊 Created ${chartData.length} data points from current price`);
+        chartDataCache.set(cacheKey, { data: chartData, timestamp: now });
+        
+        return chartData;
+      } else {
+        console.warn('⚠️ No price data available for Moonfeed coin');
+        // Return empty array to show placeholder
+        return [];
+      }
+    }
+    
     // Check cache first
     const cachedData = chartDataCache.get(cacheKey);
     if (cachedData && now - cachedData.timestamp < CHART_CACHE_DURATION) {
@@ -429,6 +481,21 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
         const response = await fetch(url);
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+          
+          // Special handling for 404 (coin not on DEX yet) - likely a Moonfeed coin
+          if (response.status === 404 || errorData.status === 404 || errorData.error?.includes('404 Not Found')) {
+            console.warn('⚠️ Coin not found on GeckoTerminal (likely pre-DEX Moonfeed coin)');
+            
+            // Try Moonfeed fallback
+            const fallbackData = await fetchHistoricalData(poolAddress, timeframeKey);
+            if (fallbackData && fallbackData.length > 0) {
+              return fallbackData;
+            }
+            
+            // Return empty to show friendly message
+            console.log('💤 No data available yet for this coin');
+            return [];
+          }
           
           // Special handling for rate limiting or service unavailable
           if (response.status === 429 || response.status === 503 || errorData.status === 429 || errorData.status === 403) {
@@ -722,6 +789,94 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
         chartRef.current = chart;
         lineSeriesRef.current = lineSeries;
 
+        // Get timeScale reference for all event listeners
+        const timeScale = chart.timeScale();
+        let isUserInteracting = false;
+
+        // Subscribe to crosshair move events to update parent component's price display
+        chart.subscribeCrosshairMove((param) => {
+          if (!param || !param.time || !param.seriesData || !onCrosshairMove) {
+            // Crosshair moved away or no data - restore live price
+            if (onCrosshairMove) {
+              onCrosshairMove(null);
+            }
+            return;
+          }
+          
+          // Get the price at the crosshair position
+          const priceData = param.seriesData.get(lineSeries);
+          if (priceData) {
+            // Send crosshair data to parent
+            onCrosshairMove({
+              price: priceData.value,
+              time: param.time,
+            });
+          }
+        });
+
+        // Subscribe to visible logical range changes to update first visible price
+        timeScale.subscribeVisibleLogicalRangeChange(() => {
+          if (!onFirstPriceUpdate) return;
+          
+          try {
+            const logicalRange = timeScale.getVisibleLogicalRange();
+            if (logicalRange) {
+              // Get the first visible bar index (left edge of visible range)
+              const firstVisibleIndex = Math.ceil(logicalRange.from);
+              
+              // Get all data from the series
+              const allData = lineSeries.data();
+              
+              if (allData && allData.length > 0 && firstVisibleIndex >= 0 && firstVisibleIndex < allData.length) {
+                const firstVisiblePrice = allData[firstVisibleIndex].value;
+                onFirstPriceUpdate(firstVisiblePrice);
+              }
+            }
+          } catch (error) {
+            // Silently fail - not critical for functionality
+            console.debug('Could not update first visible price:', error);
+          }
+        });
+        
+        // Track mouse/touch interactions on the chart
+        container.addEventListener('mousedown', () => {
+          isUserInteracting = true;
+        });
+        
+        container.addEventListener('touchstart', () => {
+          isUserInteracting = true;
+        });
+        
+        container.addEventListener('wheel', () => {
+          if (isLiveMode) {
+            console.log('👤 User is scrolling chart - disabling live mode');
+            setIsLiveMode(false);
+          }
+        });
+        
+        // Subscribe to visible logical range changes (user scrolling/panning)
+        timeScale.subscribeVisibleLogicalRangeChange(() => {
+          // Only disable live mode if user is interacting with the chart
+          if (isUserInteracting && isLiveMode) {
+            console.log('👤 User is panning chart - disabling live mode');
+            setIsLiveMode(false);
+            isUserInteracting = false;
+          }
+        });
+        
+        // Reset interaction flag when mouse/touch is released
+        container.addEventListener('mouseup', () => {
+          setTimeout(() => {
+            isUserInteracting = false;
+          }, 100);
+        });
+        
+        container.addEventListener('touchend', () => {
+          setTimeout(() => {
+            isUserInteracting = false;
+          }, 100);
+        });
+
         console.log('✅ Chart created, fetching historical data...');
         
         // Fetch and set historical data
@@ -732,9 +887,31 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
         
         // If no data available (API rate limited and no cache), show friendly message
         if (historicalData.length === 0) {
-          console.log('📊 No data available yet, will auto-retry in 5 seconds');
+          console.log('📊 No data available yet');
           setLoading(false);
-          setError('Chart data loading... Auto-retry in 5s');
+          
+          // Check if this is a Moonfeed coin
+          if (isMoonfeedNative()) {
+            // Show a friendly pre-launch message for Moonfeed coins without price
+            setError('🌙 Awaiting first trade - Chart will update live when trading begins');
+          } else {
+            setError('Chart data loading... Auto-retry in 5s');
+            
+            // Auto-retry after 5 seconds for regular DEX coins
+            setTimeout(() => {
+              if (mounted) {
+                console.log('🔄 Auto-retrying chart load...');
+                setError(null);
+                setShouldLoad(false);
+                // Re-trigger lazy load on next scroll
+                setTimeout(() => {
+                  if (mounted) {
+                    setShouldLoad(true);
+                  }
+                }, 100);
+              }
+            }, 5000);
+          }
           
           // Clean up chart since we can't display anything
           if (chartRef.current) {
@@ -742,21 +919,6 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
             chartRef.current = null;
           }
           lineSeriesRef.current = null;
-          
-          // Auto-retry after 5 seconds
-          setTimeout(() => {
-            if (mounted) {
-              console.log('🔄 Auto-retrying chart load...');
-              setError(null);
-              setShouldLoad(false);
-              // Re-trigger lazy load on next scroll
-              setTimeout(() => {
-                if (mounted) {
-                  setShouldLoad(true);
-                }
-              }, 100);
-            }
-          }, 5000);
           
           return;
         }
@@ -783,6 +945,12 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
         currentIntervalRef.current = roundToInterval(lastDataPoint.time);
         
         chart.timeScale().fitContent();
+        
+        // Send first visible price to parent for percentage calculation
+        if (onFirstPriceUpdate && historicalData.length > 0) {
+          const firstDataPoint = historicalData[0];
+          onFirstPriceUpdate(firstDataPoint.value);
+        }
         
         setLoading(false);
         setError(null);
@@ -1113,6 +1281,22 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
     }, TIMEFRAME_DEBOUNCE_MS);
   };
 
+  // Handle "Go Live" button click
+  const handleGoLive = () => {
+    console.log('🔴 Returning to live mode');
+    setIsLiveMode(true);
+    
+    // Restore live price in parent component
+    if (onCrosshairMove) {
+      onCrosshairMove(null);
+    }
+    
+    // Scroll chart to the latest data
+    if (chartRef.current) {
+      chartRef.current.timeScale().scrollToRealTime();
+    }
+  };
+
 
   return (
     <div className="twelve-data-chart-wrapper" style={{ width: '100%', height: '100%', position: 'relative' }}>
@@ -1200,11 +1384,21 @@ const TwelveDataChart = ({ coin, isActive = false }) => {
         </div>
       )}
 
-      {/* Live Indicator */}
-      {isLiveConnected && (
+      {/* Live Indicator - Show when in live mode */}
+      {isLiveConnected && isLiveMode && (
         <div className="live-indicator">
           <span className="live-dot"></span>
           LIVE
+        </div>
+      )}
+
+      {/* Go Live Button - Show when user has scrolled away from live view */}
+      {isLiveConnected && !isLiveMode && (
+        <div className="go-live-button-container">
+          <button className="go-live-button" onClick={handleGoLive}>
+            <span className="live-icon">▶</span>
+            Go Live
+          </button>
         </div>
       )}
     </div>

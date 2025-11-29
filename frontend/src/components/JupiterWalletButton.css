@@ -3,6 +3,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 100%;
+  pointer-events: auto !important;
+  z-index: 10;
 }
 
 /* Override Jupiter's default button styles to match your app theme */
@@ -10,16 +13,21 @@
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
   border: none !important;
   border-radius: 12px !important;
-  padding: 12px 24px !important;
+  padding: 16px 32px !important;
   font-weight: 600 !important;
-  font-size: 14px !important;
+  font-size: 16px !important;
   transition: all 0.2s ease !important;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3) !important;
+  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.3) !important;
+  cursor: pointer !important;
+  color: white !important;
+  min-width: 200px !important;
+  pointer-events: auto !important;
 }
 
 .jupiter-wallet-button-container button:hover {
   transform: translateY(-2px) !important;
-  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4) !important;
+  box-shadow: 0 10px 28px rgba(102, 126, 234, 0.4) !important;
+  background: linear-gradient(135deg, #5a6fd8 0%, #6b4190 100%) !important;
 }
 
 .jupiter-wallet-button-container button:active {
@@ -29,7 +37,8 @@
 /* Mobile responsive */
 @media (max-width: 768px) {
   .jupiter-wallet-button-container button {
-    padding: 10px 20px !important;
-    font-size: 13px !important;
+    padding: 12px 24px !important;
+    font-size: 14px !important;
+    min-width: 160px !important;
   }
 }
