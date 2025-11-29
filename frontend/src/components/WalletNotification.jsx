@@ -1,29 +1,48 @@
 /**
  * Wallet notification handler for Jupiter Wallet Kit
  * Provides callback functions for various wallet events
+ * These callbacks MUST exist for Jupiter to work properly
  */
 export const WalletNotification = {
   onConnect: (publicKey) => {
-    console.log('✅ Wallet Connected:', publicKey?.toString());
+    if (typeof console !== 'undefined') {
+      console.log('Wallet Connected:', publicKey?.toString());
+    }
+    return true;
   },
   
   onConnecting: (walletName) => {
-    console.log('🔄 Connecting to wallet:', walletName);
+    if (typeof console !== 'undefined') {
+      console.log('Connecting to wallet:', walletName);
+    }
+    return true;
   },
   
   onDisconnect: () => {
-    console.log('� Wallet Disconnected');
+    if (typeof console !== 'undefined') {
+      console.log('Wallet Disconnected');
+    }
+    return true;
   },
   
   onNotInstalled: (walletName) => {
-    console.log('⚠️ Wallet not installed:', walletName);
+    if (typeof console !== 'undefined') {
+      console.log('Wallet not installed:', walletName);
+    }
+    return true;
   },
   
   onError: (error) => {
-    console.error('❌ Wallet Error:', error);
+    if (typeof console !== 'undefined' && console.error) {
+      console.error('Wallet Error:', error);
+    }
+    return true;
   },
   
   onChangeAccount: (publicKey) => {
-    console.log('� Account Changed:', publicKey?.toString());
+    if (typeof console !== 'undefined') {
+      console.log('Account Changed:', publicKey?.toString());
+    }
+    return true;
   },
 };

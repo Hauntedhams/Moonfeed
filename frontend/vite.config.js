@@ -11,7 +11,12 @@ export default defineConfig({
         manualChunks: {
           // Vendor chunks for better caching
           'react-vendor': ['react', 'react-dom'],
-          'wallet-vendor': ['@solana/web3.js', '@solana/wallet-adapter-react', '@solana/wallet-adapter-wallets'],
+          'wallet-vendor': [
+            '@solana/web3.js', 
+            '@solana/wallet-adapter-react', 
+            '@solana/wallet-adapter-wallets',
+            '@jup-ag/wallet-adapter'
+          ],
         }
       }
     },
@@ -21,7 +26,7 @@ export default defineConfig({
     minify: 'terser',
     terserOptions: {
       compress: {
-        drop_console: true, // Remove console.logs in production
+        drop_console: false, // Keep console.logs - needed for wallet callbacks
       }
     }
   },
