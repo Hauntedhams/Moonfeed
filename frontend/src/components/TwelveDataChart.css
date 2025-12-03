@@ -297,7 +297,7 @@ body.light-mode .twelve-data-chart,
     0 0 20px var(--chart-green-glow),
     0 0 40px var(--chart-green-bg),
     inset 0 0 10px var(--chart-green-bg);
-  backdrop-filter: blur(10px);
+  /* backdrop-filter: blur(10px); */ /* Removed - was blocking chart interaction */
 }
 
 .live-dot {
@@ -680,6 +680,14 @@ body.light-mode .twelve-data-chart,
   padding: 0;
   display: flex;
   flex-direction: column;
+  z-index: 1; /* Ensure proper stacking */
+}
+
+/* Ensure canvas elements inside chart are visible */
+.chart-container canvas {
+  display: block !important;
+  position: relative !important;
+  z-index: 2 !important;
 }
 
 .chart-wrapper {
@@ -689,6 +697,10 @@ body.light-mode .twelve-data-chart,
   position: relative;
   overflow: hidden;
   background: transparent;
+  /* Ensure chart is interactive and can receive pointer events */
+  pointer-events: auto;
+  touch-action: pan-x pan-y;
+  user-select: none;
 }
 
 /* Remove the grid pattern overlay that might interfere with light mode */
@@ -1182,41 +1194,107 @@ body.light-mode .twelve-data-chart,
 }
 
 /* ============================================
-   LAZY LOADING PLACEHOLDER
+   DESKTOP MODE - FULL VIEWPORT CHART
    ============================================ */
-
-.chart-lazy-placeholder {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--chart-bg);
-  z-index: 5;
-}
-
-.chart-lazy-placeholder .placeholder-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-secondary);
-  opacity: 0.6;
-}
-
-.chart-lazy-placeholder svg {
-  opacity: 0.5;
-  animation: pulse-fade 2s ease-in-out infinite;
-}
-
-@keyframes pulse-fade {
-  0%, 100% {
-    opacity: 0.3;
+@media (min-width: 1200px) {
+  /* Ensure chart wrapper fills entire right panel and is interactive */
+  .twelve-data-chart-wrapper {
+    width: 100% !important;
+    height: 100vh !important;
+    min-height: 100vh !important;
+    display: flex !important;
+    flex-direction: column !important;
+    pointer-events: auto !important; /* Ensure wrapper allows interactions */
+    position: relative !important;
   }
-  50% {
-    opacity: 0.7;
+
+  /* Chart container takes full available space - account for bottom selector */
+  .chart-container {
+    flex: 1 !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-height: calc(100vh - 60px) !important; /* Account for timeframe selector at bottom */
+    max-height: calc(100vh - 60px) !important; /* Prevent overlap with bottom selector */
+    pointer-events: auto !important; /* Fully interactive */
+    touch-action: pan-x pan-y !important; /* Enable touch interactions */
+    user-select: none !important; /* Prevent text selection while dragging */
+    cursor: crosshair !important; /* Show crosshair cursor */
+  }
+
+  /* Canvas inside chart should be fully interactive */
+  .price-chart-canvas {
+    width: 100% !important;
+    height: 100% !important;
+    min-height: calc(100vh - 60px) !important;
+    pointer-events: auto !important;
+    touch-action: pan-x pan-y !important;
+  }
+
+  /* Timeframe selector at bottom - visible and interactive */
+  .timeframe-selector {
+    flex-shrink: 0;
+    width: 100%;
+    z-index: 100;
+    position: absolute; /* Changed from fixed to absolute */
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(10, 14, 26, 0.95);
+    backdrop-filter: blur(20px);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 12px 16px;
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    pointer-events: auto; /* Ensure buttons are clickable */
+  }
+
+  /* Make timeframe buttons more prominent in desktop */
+  .timeframe-selector .timeframe-btn {
+    pointer-events: auto;
+    cursor: pointer;
+    min-width: 50px;
+    padding: 8px 14px;
+    font-size: 12px;
+  }
+
+  /* Live indicator positioning for desktop */
+  .live-indicator {
+    position: absolute; /* Changed from fixed to absolute */
+    top: 20px;
+    right: 20px;
+    z-index: 200;
+    pointer-events: none; /* Don't block chart interaction */
+  }
+
+  /* Go live button positioning for desktop - above timeframe selector */
+  .go-live-button-container {
+    position: absolute; /* Changed from fixed to absolute */
+    bottom: 80px; /* Above timeframe selector */
+    right: 24px;
+    z-index: 200;
+    pointer-events: auto; /* Ensure button is clickable */
+  }
+  
+  .go-live-button {
+    pointer-events: auto;
+    cursor: pointer;
+  }
+
+  /* Loading and error overlays */
+  .chart-loading-overlay,
+  .chart-error-overlay {
+    position: absolute;
+    top: 50px; /* Below timeframe selector */
+    left: 0;
+    right: 0;
+    bottom: 0;
+  }
+
+  /* Lazy placeholder */
+  .chart-lazy-placeholder {
+    min-height: 100vh;
   }
 }
+
+/* ============================================

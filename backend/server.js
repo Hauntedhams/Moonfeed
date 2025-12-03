@@ -1472,17 +1472,18 @@ app.get('/api/coins/new', async (req, res) => {
     // Apply live Jupiter prices before returning
     const coinsWithLivePrices = applyLivePrices(limitedCoins);
     
-    // 📊 Preload chart data for ALL coins (WAIT for completion before returning)
-    console.log(`📊 Preloading chart data for ${coinsWithLivePrices.length} coins...`);
-    await preloadChartData(coinsWithLivePrices, {
-      batchSize: 2, // Process 2 at a time (very conservative)
-      batchDelay: 2000 // 2 seconds between batches
+    // 📊 Preload chart data in background (DON'T WAIT - let response return immediately)
+    console.log(`📊 Starting background chart preload for ${coinsWithLivePrices.length} coins...`);
+    preloadChartData(coinsWithLivePrices, {
+      batchSize: 3, // Process 3 at a time
+      batchDelay: 1000 // 1 second between batches
+    }).then(() => {
+      console.log(`✅ Background chart preload completed for ${coinsWithLivePrices.length} new coins`);
     }).catch(err => {
-      console.warn('Chart preload error:', err.message);
-      // Continue even if preloading fails
+      console.warn('⚠️ Background chart preload error:', err.message);
     });
     
-    console.log(`✅ Returning ${coinsWithLivePrices.length}/${newCoins.length} new coins WITH chart data (limit: ${limit === 9999 ? 'ALL' : limit})`);
+    console.log(`✅ Returning ${coinsWithLivePrices.length}/${newCoins.length} new coins (chart data loading in background, limit: ${limit === 9999 ? 'ALL' : limit})`);
     
     res.json({
       success: true,
@@ -1606,17 +1607,18 @@ app.get('/api/coins/trending', async (req, res) => {
     // Apply live Jupiter prices before returning
     const coinsWithLivePrices = applyLivePrices(limitedCoins);
     
-    // 📊 Preload chart data for ALL trending coins (WAIT for completion before returning)
-    console.log(`📊 Preloading chart data for ${coinsWithLivePrices.length} coins...`);
-    await preloadChartData(coinsWithLivePrices, {
-      batchSize: 2, // Process 2 at a time (very conservative)
-      batchDelay: 2000 // 2 seconds between batches
+    // 📊 Preload chart data in background (DON'T WAIT - let response return immediately)
+    console.log(`📊 Starting background chart preload for ${coinsWithLivePrices.length} coins...`);
+    preloadChartData(coinsWithLivePrices, {
+      batchSize: 3, // Process 3 at a time
+      batchDelay: 1000 // 1 second between batches
+    }).then(() => {
+      console.log(`✅ Background chart preload completed for ${coinsWithLivePrices.length} trending coins`);
     }).catch(err => {
-      console.warn('Chart preload error:', err.message);
-      // Continue even if preloading fails
+      console.warn('⚠️ Background chart preload error:', err.message);
     });
     
-    console.log(`✅ Returning ${coinsWithLivePrices.length}/${trendingCoins.length} trending coins WITH chart data (limit: ${limit === 9999 ? 'ALL' : limit})`);
+    console.log(`✅ Returning ${coinsWithLivePrices.length}/${trendingCoins.length} trending coins (chart data loading in background, limit: ${limit === 9999 ? 'ALL' : limit})`);
     
     res.json({
       success: true,

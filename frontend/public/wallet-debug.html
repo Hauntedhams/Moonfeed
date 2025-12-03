@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wallet Connection Debug - Production</title>
+  <style>
+    body {
+      font-family: 'Monaco', monospace;
+      max-width: 900px;
+      margin: 40px auto;
+      padding: 20px;
+      background: #0a0a0a;
+      color: #00ff00;
+    }
+    .section {
+      margin: 20px 0;
+      padding: 15px;
+      border: 1px solid #00ff00;
+      border-radius: 8px;
+    }
+    h2 { color: #00ffff; }
+    .status { padding: 5px; margin: 5px 0; }
+    .success { background: #004400; }
+    .error { background: #440000; color: #ff4444; }
+    .warning { background: #444400; color: #ffff00; }
+    button {
+      background: #00ff00;
+      color: #000;
+      border: none;
+      padding: 10px 20px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      border-radius: 4px;
+      margin: 5px;
+    }
+    button:hover { background: #00cc00; }
+    pre {
+      background: #1a1a1a;
+      padding: 10px;
+      border-radius: 4px;
+      overflow-x: auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>🔍 Wallet Connection Debug Tool</h1>
+  <p>Use this to diagnose why wallet connect isn't working in production</p>
+
+  <div class="section">
+    <h2>1. Environment Detection</h2>
+    <div id="env-info"></div>
+  </div>
+
+  <div class="section">
+    <h2>2. Wallet Extension Detection</h2>
+    <div id="wallet-detection"></div>
+  </div>
+
+  <div class="section">
+    <h2>3. Jupiter Wallet Adapter Check</h2>
+    <div id="jupiter-check"></div>
+  </div>
+
+  <div class="section">
+    <h2>4. Console Logs Test</h2>
+    <button onclick="testConsole()">Test Console Functions</button>
+    <div id="console-test"></div>
+  </div>
+
+  <div class="section">
+    <h2>5. Network & Build Info</h2>
+    <div id="build-info"></div>
+  </div>
+
+  <div class="section">
+    <h2>6. Manual Connection Test</h2>
+    <button onclick="testPhantomDirect()">Test Phantom Direct</button>
+    <button onclick="testSolflareDirect()">Test Solflare Direct</button>
+    <div id="connection-test"></div>
+  </div>
+
+  <script>
+    // 1. Environment Detection
+    function checkEnvironment() {
+      const info = {
+        url: window.location.href,
+        hostname: window.location.hostname,
+        protocol: window.location.protocol,
+        userAgent: navigator.userAgent,
+        isLocalhost: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1',
+        isProduction: window.location.hostname.includes('vercel.app') || window.location.hostname.includes('moonfeed'),
+      };
+      
+      document.getElementById('env-info').innerHTML = `
+        <div class="status ${info.isLocalhost ? 'success' : 'warning'}">
+          <strong>Environment:</strong> ${info.isLocalhost ? 'LOCALHOST' : 'PRODUCTION'}
+        </div>
+        <div class="status">
+          <strong>URL:</strong> ${info.url}
+        </div>
+        <div class="status">
+          <strong>Hostname:</strong> ${info.hostname}
+        </div>
+        <div class="status">
+          <strong>Protocol:</strong> ${info.protocol}
+        </div>
+      `;
+    }
+
+    // 2. Wallet Extension Detection
+    function checkWallets() {
+      const wallets = {
+        phantom: window.solana || window.phantom?.solana,
+        solflare: window.solflare,
+        coinbase: window.coinbaseSolana,
+        backpack: window.backpack,
+      };
+
+      let html = '';
+      for (const [name, wallet] of Object.entries(wallets)) {
+        const exists = !!wallet;
+        const isPhantom = wallet?.isPhantom;
+        html += `
+          <div class="status ${exists ? 'success' : 'error'}">
+            <strong>${name.toUpperCase()}:</strong> 
+            ${exists ? '✅ Detected' : '❌ Not Found'}
+            ${isPhantom ? ' (Phantom)' : ''}
+          </div>
+        `;
+      }
+
+      document.getElementById('wallet-detection').innerHTML = html;
+    }
+
+    // 3. Check if Jupiter is loaded
+    function checkJupiter() {
+      const hasReact = typeof window.React !== 'undefined';
+      const hasReactDOM = typeof window.ReactDOM !== 'undefined';
+      
+      document.getElementById('jupiter-check').innerHTML = `
+        <div class="status ${hasReact ? 'success' : 'error'}">
+          <strong>React:</strong> ${hasReact ? '✅ Loaded' : '❌ Not Found'}
+        </div>
+        <div class="status ${hasReactDOM ? 'success' : 'error'}">
+          <strong>ReactDOM:</strong> ${hasReactDOM ? '✅ Loaded' : '❌ Not Found'}
+        </div>
+        <div class="status warning">
+          <strong>Note:</strong> Jupiter wallet adapter is bundled in your app
+        </div>
+      `;
+    }
+
+    // 4. Test console functions
+    function testConsole() {
+      const results = [];
+      
+      try {
+        console.log('Test log');
+        results.push('✅ console.log works');
+      } catch (e) {
+        results.push('❌ console.log ERROR: ' + e.message);
+      }
+
+      try {
+        console.error('Test error');
+        results.push('✅ console.error works');
+      } catch (e) {
+        results.push('❌ console.error ERROR: ' + e.message);
+      }
+
+      try {
+        if (typeof console !== 'undefined') {
+          results.push('✅ console is defined');
+        } else {
+          results.push('❌ console is undefined');
+        }
+      } catch (e) {
+        results.push('❌ console check ERROR: ' + e.message);
+      }
+
+      document.getElementById('console-test').innerHTML = results.map(r => 
+        `<div class="status ${r.includes('✅') ? 'success' : 'error'}">${r}</div>`
+      ).join('');
+    }
+
+    // 5. Build info
+    function checkBuildInfo() {
+      const scripts = Array.from(document.scripts).map(s => s.src);
+      const hasReactVendor = scripts.some(s => s.includes('react-vendor'));
+      const hasWalletVendor = scripts.some(s => s.includes('wallet-vendor'));
+      
+      document.getElementById('build-info').innerHTML = `
+        <div class="status ${hasReactVendor ? 'success' : 'error'}">
+          <strong>React Vendor Chunk:</strong> ${hasReactVendor ? '✅ Found' : '❌ Not Found'}
+        </div>
+        <div class="status ${hasWalletVendor ? 'success' : 'error'}">
+          <strong>Wallet Vendor Chunk:</strong> ${hasWalletVendor ? '✅ Found' : '❌ Not Found'}
+        </div>
+        <div class="status">
+          <strong>Total Scripts:</strong> ${scripts.length}
+        </div>
+      `;
+    }
+
+    // 6. Direct connection test
+    async function testPhantomDirect() {
+      const output = document.getElementById('connection-test');
+      output.innerHTML = '<div class="status">Testing Phantom connection...</div>';
+
+      try {
+        const phantom = window.solana || window.phantom?.solana;
+        
+        if (!phantom) {
+          output.innerHTML = '<div class="status error">❌ Phantom not detected</div>';
+          return;
+        }
+
+        output.innerHTML += '<div class="status success">✅ Phantom detected</div>';
+        
+        const resp = await phantom.connect();
+        output.innerHTML += `<div class="status success">✅ Connected! PublicKey: ${resp.publicKey.toString()}</div>`;
+        
+      } catch (error) {
+        output.innerHTML += `<div class="status error">❌ Error: ${error.message}</div>`;
+        console.error('Phantom connection error:', error);
+      }
+    }
+
+    async function testSolflareDirect() {
+      const output = document.getElementById('connection-test');
+      output.innerHTML = '<div class="status">Testing Solflare connection...</div>';
+
+      try {
+        const solflare = window.solflare;
+        
+        if (!solflare) {
+          output.innerHTML = '<div class="status error">❌ Solflare not detected</div>';
+          return;
+        }
+
+        output.innerHTML += '<div class="status success">✅ Solflare detected</div>';
+        
+        const resp = await solflare.connect();
+        output.innerHTML += `<div class="status success">✅ Connected! PublicKey: ${resp.publicKey.toString()}</div>`;
+        
+      } catch (error) {
+        output.innerHTML += `<div class="status error">❌ Error: ${error.message}</div>`;
+        console.error('Solflare connection error:', error);
+      }
+    }
+
+    // Run all checks on load
+    window.addEventListener('load', () => {
+      checkEnvironment();
+      checkWallets();
+      checkJupiter();
+      checkBuildInfo();
+    });
+  </script>
+</body>
+</html>

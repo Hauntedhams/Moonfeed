@@ -2036,6 +2036,7 @@ const CoinCard = memo(({
         <TwelveDataChart 
           coin={coin}
           isActive={true}
+          isDesktopMode={true}
           onCrosshairMove={handleChartCrosshairMove}
           onFirstPriceUpdate={handleFirstPriceUpdate}
         />

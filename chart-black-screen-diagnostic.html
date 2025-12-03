@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chart Black Screen Diagnostic</title>
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100vh;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #0a0e1a;
+      color: white;
+    }
+    
+    .container {
+      display: flex;
+      width: 100%;
+      height: 100vh;
+    }
+    
+    .left-panel {
+      width: 480px;
+      background: linear-gradient(135deg, #0b1220 0%, #0e1426 50%, #0b1220 100%);
+      padding: 20px;
+      overflow-y: auto;
+    }
+    
+    .right-panel {
+      flex: 1;
+      background: #0a0e1a;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .chart-wrapper {
+      width: 100%;
+      height: 100vh;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: linear-gradient(180deg, #000000 0%, #0a0a0a 100%);
+    }
+    
+    .chart-container {
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      min-height: calc(100vh - 60px);
+      position: relative;
+      background: linear-gradient(180deg, #000000 0%, #0a0a0a 100%);
+      border: 2px solid lime; /* Debug border */
+    }
+    
+    .timeframe-selector {
+      flex-shrink: 0;
+      width: 100%;
+      height: 60px;
+      background: rgba(10, 14, 26, 0.95);
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 10px;
+    }
+    
+    .timeframe-btn {
+      padding: 8px 16px;
+      background: #f3f4f6;
+      color: #222;
+      border: 1px solid rgba(0, 0, 0, 0.1);
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    
+    .timeframe-btn.active {
+      background: linear-gradient(135deg, #22c55e 0%, #7b61ff 100%);
+      color: white;
+    }
+    
+    .info-box {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      background: rgba(0, 0, 0, 0.8);
+      padding: 15px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      font-size: 12px;
+      line-height: 1.6;
+      z-index: 1000;
+    }
+    
+    .info-label {
+      color: #888;
+      margin-right: 8px;
+    }
+    
+    .info-value {
+      color: #00ff41;
+      font-weight: 600;
+    }
+    
+    .status-indicator {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-right: 5px;
+    }
+    
+    .status-ok {
+      background: #00ff41;
+      box-shadow: 0 0 10px #00ff41;
+    }
+    
+    .status-error {
+      background: #ff3b3b;
+      box-shadow: 0 0 10px #ff3b3b;
+    }
+  </style>
+  <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+<body>
+  <div class="container">
+    <div class="left-panel">
+      <h2>Left Panel (Coin Info)</h2>
+      <p>This simulates the left panel with coin information.</p>
+      <p>The chart should appear on the right side.</p>
+      <h3>Test Checklist:</h3>
+      <ul>
+        <li>✓ Container has proper dimensions</li>
+        <li>✓ Background gradient is visible</li>
+        <li>✓ Chart canvas should render</li>
+        <li>✓ Timeframe selector at bottom</li>
+      </ul>
+    </div>
+    
+    <div class="right-panel">
+      <div class="info-box" id="infoBox">
+        <div><span class="status-indicator status-ok"></span>Initializing chart...</div>
+        <div style="margin-top: 10px;">
+          <span class="info-label">Container Width:</span><span class="info-value" id="width">-</span>
+        </div>
+        <div>
+          <span class="info-label">Container Height:</span><span class="info-value" id="height">-</span>
+        </div>
+        <div>
+          <span class="info-label">Chart Instance:</span><span class="info-value" id="chartStatus">-</span>
+        </div>
+        <div>
+          <span class="info-label">Canvas Element:</span><span class="info-value" id="canvasStatus">-</span>
+        </div>
+        <div>
+          <span class="info-label">Data Points:</span><span class="info-value" id="dataPoints">-</span>
+        </div>
+      </div>
+      
+      <div class="chart-wrapper">
+        <div class="chart-container" id="chartContainer"></div>
+        
+        <div class="timeframe-selector">
+          <button class="timeframe-btn">5m</button>
+          <button class="timeframe-btn">15m</button>
+          <button class="timeframe-btn">1h</button>
+          <button class="timeframe-btn active">4h</button>
+          <button class="timeframe-btn">1d</button>
+          <button class="timeframe-btn">1w</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    console.log('🚀 Starting chart diagnostic...');
+    
+    const container = document.getElementById('chartContainer');
+    const infoBox = document.getElementById('infoBox');
+    
+    // Log container info
+    function updateInfo() {
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+      const computedStyle = window.getComputedStyle(container);
+      
+      document.getElementById('width').textContent = width + 'px';
+      document.getElementById('height').textContent = height + 'px';
+      
+      console.log('📐 Container dimensions:', { width, height });
+      console.log('📏 Computed styles:', {
+        background: computedStyle.background,
+        display: computedStyle.display,
+        position: computedStyle.position,
+        zIndex: computedStyle.zIndex
+      });
+      
+      return { width, height };
+    }
+    
+    const { width, height } = updateInfo();
+    
+    if (width === 0 || height === 0) {
+      console.error('❌ Container has 0 dimensions!');
+      infoBox.querySelector('.status-indicator').className = 'status-indicator status-error';
+      infoBox.querySelector('div').textContent = '❌ Container has 0 dimensions!';
+      document.getElementById('chartStatus').textContent = 'FAILED';
+    } else {
+      try {
+        console.log('✅ Creating chart with dimensions:', { width, height });
+        
+        // Create the chart
+        const chart = LightweightCharts.createChart(container, {
+          layout: {
+            background: { type: 'solid', color: 'transparent' },
+            textColor: 'rgba(255, 255, 255, 0.6)',
+          },
+          grid: {
+            vertLines: { color: 'rgba(255, 255, 255, 0.05)' },
+            horzLines: { color: 'rgba(255, 255, 255, 0.05)' },
+          },
+          width: width,
+          height: height,
+          timeScale: {
+            timeVisible: true,
+            secondsVisible: false,
+            borderColor: 'rgba(255, 255, 255, 0.1)',
+          },
+          rightPriceScale: {
+            borderColor: 'rgba(255, 255, 255, 0.1)',
+          },
+          crosshair: {
+            vertLine: {
+              color: 'rgba(0, 255, 65, 0.3)',
+              width: 1,
+            },
+            horzLine: {
+              color: 'rgba(0, 255, 65, 0.3)',
+              width: 1,
+            },
+          },
+        });
+        
+        console.log('✅ Chart created:', chart);
+        document.getElementById('chartStatus').textContent = 'CREATED';
+        
+        // Check for canvas element
+        const canvas = container.querySelector('canvas');
+        if (canvas) {
+          console.log('✅ Canvas element found:', canvas);
+          console.log('   Canvas dimensions:', canvas.width, 'x', canvas.height);
+          document.getElementById('canvasStatus').textContent = `${canvas.width}x${canvas.height}`;
+        } else {
+          console.error('❌ No canvas element found!');
+          document.getElementById('canvasStatus').textContent = 'NOT FOUND';
+        }
+        
+        // Create sample data
+        const now = Math.floor(Date.now() / 1000);
+        const data = [];
+        for (let i = 0; i < 100; i++) {
+          data.push({
+            time: now - (100 - i) * 300, // 5-minute intervals
+            value: 0.00001 + Math.random() * 0.00002,
+          });
+        }
+        
+        console.log('📊 Adding', data.length, 'data points');
+        document.getElementById('dataPoints').textContent = data.length;
+        
+        // Add line series
+        const lineSeries = chart.addLineSeries({
+          color: '#00ff41',
+          lineWidth: 3,
+          priceFormat: {
+            type: 'price',
+            precision: 8,
+            minMove: 0.00000001,
+          },
+          topColor: 'rgba(0, 255, 65, 0.3)',
+          bottomColor: 'rgba(0, 255, 65, 0.01)',
+        });
+        
+        lineSeries.setData(data);
+        chart.timeScale().fitContent();
+        
+        console.log('✅ Chart fully initialized!');
+        infoBox.querySelector('div').textContent = '✅ Chart initialized successfully!';
+        
+        // Handle resize
+        window.addEventListener('resize', () => {
+          const { width, height } = updateInfo();
+          if (width > 0 && height > 0) {
+            chart.applyOptions({ width, height });
+          }
+        });
+        
+      } catch (error) {
+        console.error('❌ Error creating chart:', error);
+        infoBox.querySelector('.status-indicator').className = 'status-indicator status-error';
+        infoBox.querySelector('div').textContent = '❌ Error: ' + error.message;
+        document.getElementById('chartStatus').textContent = 'ERROR';
+      }
+    }
+  </script>
+</body>
+</html>

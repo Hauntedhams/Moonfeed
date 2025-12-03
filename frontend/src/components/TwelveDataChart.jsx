@@ -19,7 +19,7 @@ const pendingFetches = new Map(); // Deduplicate concurrent fetches
 let timeframeChangeTimer = null;
 const TIMEFRAME_DEBOUNCE_MS = 800; // Wait 800ms after last click before fetching (increased from 500ms)
 
-const TwelveDataChart = ({ coin, isActive = false, onCrosshairMove, onFirstPriceUpdate }) => {
+const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCrosshairMove, onFirstPriceUpdate }) => {
   const chartContainerRef = useRef(null);
   const chartRef = useRef(null);
   const lineSeriesRef = useRef(null);
@@ -39,8 +39,8 @@ const TwelveDataChart = ({ coin, isActive = false, onCrosshairMove, onFirstPrice
     return document.documentElement.classList.contains('dark-mode');
   }); // Track theme mode
   const [selectedTimeframe, setSelectedTimeframe] = useState('1m'); // Track selected timeframe
-  const [isInView, setIsInView] = useState(false); // Track if chart is in viewport
-  const [shouldLoad, setShouldLoad] = useState(false); // Track if chart should load
+  const [isInView, setIsInView] = useState(isDesktopMode); // Track if chart is in viewport - start true if desktop
+  const [shouldLoad, setShouldLoad] = useState(isDesktopMode); // Track if chart should load - start true if desktop  
   const [showAdvanced, setShowAdvanced] = useState(false); // Toggle between clean and advanced chart
   const [isLiveMode, setIsLiveMode] = useState(true); // Track if chart should auto-scroll to live data
   const isLiveModeRef = useRef(true); // Ref to track live mode for use in intervals
@@ -110,9 +110,61 @@ const TwelveDataChart = ({ coin, isActive = false, onCrosshairMove, onFirstPrice
   // 🚀 LAZY LOADING: Only load chart when near viewport
   useEffect(() => {
     const container = chartContainerRef.current;
-    if (!container) return;
+    if (!container) {
+      console.log('⚠️ No container ref yet');
+      return;
+    }
 
-    // Create intersection observer with 200% rootMargin (load before visible)
+    // 🖥️ DESKTOP MODE FIX: If isDesktopMode prop is true, this chart is in the desktop right panel
+    // It should load immediately without intersection observer
+    if (isDesktopMode) {
+      console.log('🖥️ Desktop right panel - loading chart immediately:', coin?.symbol);
+      console.log('📐 Container current dimensions:', {
+        clientWidth: container.clientWidth,
+        clientHeight: container.clientHeight,
+        offsetWidth: container.offsetWidth,
+        offsetHeight: container.offsetHeight,
+        parentWidth: container.parentElement?.clientWidth,
+        parentHeight: container.parentElement?.clientHeight
+      });
+      setIsInView(true);
+      setShouldLoad(true);
+      return; // Skip intersection observer setup
+    }
+
+    // 📱 MOBILE/TABLET: Check viewport width as fallback for responsive design
+    const checkDesktopMode = () => {
+      const isDesktopViewport = window.innerWidth >= 1200;
+      
+      if (isDesktopViewport && !shouldLoad) {
+        console.log('🖥️ Desktop viewport detected - loading chart immediately:', coin?.symbol);
+        setIsInView(true);
+        setShouldLoad(true);
+      }
+      
+      return isDesktopViewport;
+    };
+    
+    // Check immediately
+    const isDesktop = checkDesktopMode();
+    
+    if (isDesktop) {
+      console.log('✅ Desktop viewport confirmed - chart will load immediately');
+      // In desktop mode, also listen for resize events in case user resizes window
+      const handleResize = () => {
+        checkDesktopMode();
+      };
+      
+      window.addEventListener('resize', handleResize);
+      
+      return () => {
+        window.removeEventListener('resize', handleResize);
+      };
+    }
+    
+    console.log('📱 Mobile mode - using Intersection Observer for lazy loading');
+
+    // Mobile/Tablet: Create intersection observer with 200% rootMargin (load before visible)
     // This means charts load when they're within 2 screen heights of viewport
     const observer = new IntersectionObserver(
       (entries) => {
@@ -139,7 +191,7 @@ const TwelveDataChart = ({ coin, isActive = false, onCrosshairMove, onFirstPrice
     return () => {
       observer.disconnect();
     };
-  }, [coin?.symbol]);
+  }, [coin?.symbol, shouldLoad, isDesktopMode]);
 
   // Function to update chart theme dynamically
   const updateChartTheme = (isDark) => {
@@ -194,7 +246,7 @@ const TwelveDataChart = ({ coin, isActive = false, onCrosshairMove, onFirstPrice
   const getThemeColors = (isDark) => {
     if (isDark) {
       return {
-        background: { type: 'solid', color: 'transparent' },
+        background: { type: 'solid', color: '#0a0a0a' }, // Changed from transparent to solid color
         text: 'rgba(255, 255, 255, 0.6)',
         gridLines: 'rgba(255, 255, 255, 0.05)',
         border: 'rgba(255, 255, 255, 0.1)',
@@ -686,6 +738,14 @@ const TwelveDataChart = ({ coin, isActive = false, onCrosshairMove, onFirstPrice
 
       try {
         console.log('📊 Initializing chart for:', pairAddress);
+        console.log('📐 Container dimensions:', { width, height });
+        console.log('📏 Container styles:', {
+          computed: window.getComputedStyle(container),
+          offsetWidth: container.offsetWidth,
+          offsetHeight: container.offsetHeight,
+          clientWidth: container.clientWidth,
+          clientHeight: container.clientHeight
+        });
         
         // Get theme colors
         const colors = getThemeColors(isDarkMode);
@@ -788,6 +848,19 @@ const TwelveDataChart = ({ coin, isActive = false, onCrosshairMove, onFirstPrice
 
         chartRef.current = chart;
         lineSeriesRef.current = lineSeries;
+
+        // 🔍 DIAGNOSTIC: Check if canvas was created
+        const canvasElements = container.querySelectorAll('canvas');
+        console.log('🎨 Chart created - Canvas elements found:', canvasElements.length);
+        canvasElements.forEach((canvas, index) => {
+          console.log(`   Canvas ${index}:`, {
+            width: canvas.width,
+            height: canvas.height,
+            style: canvas.style.cssText,
+            display: window.getComputedStyle(canvas).display,
+            zIndex: window.getComputedStyle(canvas).zIndex,
+          });
+        });
 
         // Get timeScale reference for all event listeners
         const timeScale = chart.timeScale();
@@ -956,6 +1029,21 @@ const TwelveDataChart = ({ coin, isActive = false, onCrosshairMove, onFirstPrice
         setError(null);
 
         console.log('✅ Chart initialized with', historicalData.length, 'data points');
+        
+        // Ensure chart is fully interactive
+        chart.applyOptions({
+          handleScroll: {
+            mouseWheel: true,
+            pressedMouseMove: true,
+            horzTouchDrag: true,
+            vertTouchDrag: true,
+          },
+          handleScale: {
+            axisPressedMouseMove: true,
+            mouseWheel: true,
+            pinch: true,
+          },
+        });
 
         // 🚀 START LIVE HEARTBEAT IMMEDIATELY - Chart will flow to the right!
         startLiveHeartbeat(lineSeries);
@@ -977,22 +1065,35 @@ const TwelveDataChart = ({ coin, isActive = false, onCrosshairMove, onFirstPrice
           console.log('✅ RPC WebSocket connected successfully!');
         }
 
-        // Handle resize
+        // Handle resize with debouncing for better performance
+        let resizeTimeout;
         const handleResize = () => {
-          if (chart && chartContainerRef.current) {
-            const newWidth = chartContainerRef.current.clientWidth;
-            const newHeight = chartContainerRef.current.clientHeight;
-            
-            if (newWidth && newHeight) {
-              chart.applyOptions({
-                width: newWidth,
-                height: newHeight,
-              });
+          clearTimeout(resizeTimeout);
+          resizeTimeout = setTimeout(() => {
+            if (chart && chartContainerRef.current) {
+              const newWidth = chartContainerRef.current.clientWidth;
+              const newHeight = chartContainerRef.current.clientHeight;
+              
+              console.log('📏 Resizing chart to:', { newWidth, newHeight });
+              
+              if (newWidth && newHeight && newWidth > 100 && newHeight > 100) {
+                chart.applyOptions({
+                  width: newWidth,
+                  height: newHeight,
+                });
+                // Refit content after resize to ensure proper display
+                chart.timeScale().fitContent();
+              }
             }
-          }
+          }, 150);
         };
 
         window.addEventListener('resize', handleResize);
+        
+        // Also trigger a resize check after a short delay to handle desktop layout
+        setTimeout(() => {
+          handleResize();
+        }, 300);
 
         // Store cleanup function
         chart.cleanup = () => {
@@ -1299,9 +1400,18 @@ const TwelveDataChart = ({ coin, isActive = false, onCrosshairMove, onFirstPrice
 
 
   return (
-    <div className="twelve-data-chart-wrapper" style={{ width: '100%', height: '100%', position: 'relative' }}>
-      {/* Lazy Load Placeholder - Show when chart hasn't loaded yet */}
-      {!shouldLoad && (
+    <div 
+      className="twelve-data-chart-wrapper" 
+      style={{ 
+        width: '100%', 
+        height: isDesktopMode ? '100vh' : '100%', 
+        position: 'relative',
+        display: 'flex',
+        flexDirection: 'column'
+      }}
+    >
+      {/* Lazy Load Placeholder - Show when chart hasn't loaded yet (but not in desktop mode) */}
+      {!shouldLoad && !isDesktopMode && (
         <div className="chart-lazy-placeholder">
           <div className="placeholder-content">
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1343,7 +1453,19 @@ const TwelveDataChart = ({ coin, isActive = false, onCrosshairMove, onFirstPrice
 
       {/* Chart Container - Show clean chart when not in advanced mode */}
       {!showAdvanced && (
-        <div ref={chartContainerRef} style={{ width: '100%', height: '100%' }} />
+        <div 
+          ref={chartContainerRef} 
+          className="chart-container"
+          style={{ 
+            width: '100%', 
+            height: isDesktopMode ? '100vh' : '100%',
+            flex: 1,
+            position: 'relative',
+            minHeight: isDesktopMode ? '100vh' : '400px',
+            backgroundColor: '#0a0a0a', // Ensure visible background
+            zIndex: 1, // Ensure proper stacking
+          }} 
+        />
       )}
 
       {/* Advanced Dexscreener Chart - Show when in advanced mode */}
