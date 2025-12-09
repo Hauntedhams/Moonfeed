@@ -13,6 +13,7 @@ const BirdeyeWebSocketProxy = require('./birdeyeWebSocketProxy');
 const PriceWebSocketServer = require('./priceWebSocketServer');
 const WebSocketRouter = require('./websocketRouter');
 const JupiterLivePriceService = require('./jupiterLivePriceService');
+const SolanaNativePriceService = require('./solanaNativePriceService'); // ACCURATE real-time prices from DexScreener
 const dexscreenerService = require('./dexscreenerService');
 const dexpaprikaService = require('./dexpaprikaService');
 const heliusService = require('./heliusService');
@@ -718,11 +719,15 @@ const rugcheckAutoProcessor = new RugcheckAutoProcessor();
 // Initialize Jupiter Token Service
 const jupiterTokenService = new JupiterTokenService();
 
-// Initialize Jupiter Live Price Service
+// Initialize Jupiter Live Price Service (LEGACY - keeping for backwards compatibility)
 const jupiterLivePriceService = new JupiterLivePriceService();
 
-// Make Jupiter Live Price Service globally available for WebSocket integration
+// Initialize Solana Native RPC Price Service (ACCURATE real-time prices)
+const solanaNativePriceService = new SolanaNativePriceService();
+
+// Make price services globally available for WebSocket integration
 global.jupiterLivePriceService = jupiterLivePriceService;
+global.solanaNativePriceService = solanaNativePriceService;
 
 // Initialize Jupiter Data Service for market data
 const jupiterDataService = new JupiterDataService();
@@ -739,9 +744,9 @@ function initializeWithLatestBatch() {
     // Make coins available to price engine
     global.coinsCache = currentCoins;
     
-    // Update Jupiter Live Price Service with new coin list
-    if (jupiterLivePriceService && jupiterLivePriceService.isRunning) {
-      jupiterLivePriceService.updateCoinList(currentCoins);
+    // Update Native RPC Price Service with new coin list
+    if (solanaNativePriceService && solanaNativePriceService.isRunning) {
+      solanaNativePriceService.updateCoinList(currentCoins);
     }
     
     console.log(`🚀 Initialized with latest batch: ${latestBatch.length} coins`);
@@ -763,11 +768,11 @@ function initializeWithLatestBatch() {
         newCoinStorage.saveBatch(freshNewBatch); // Save to disk
         console.log(`✅ NEW feed initialized with ${freshNewBatch.length} coins (on-demand enrichment only)`);
         
-        // Update Jupiter Live Price Service with combined coin list (TRENDING + NEW)
-        if (jupiterLivePriceService && jupiterLivePriceService.isRunning) {
+        // Update Native RPC Price Service with combined coin list (TRENDING + NEW)
+        if (solanaNativePriceService && solanaNativePriceService.isRunning) {
           const allCoins = [...currentCoins, ...freshNewBatch];
-          jupiterLivePriceService.updateCoinList(allCoins);
-          console.log(`🪐 Updated Jupiter service with ${allCoins.length} coins (${currentCoins.length} trending + ${freshNewBatch.length} new)`);
+          solanaNativePriceService.updateCoinList(allCoins);
+          console.log(`🔗 Updated Native RPC service with ${allCoins.length} coins (${currentCoins.length} trending + ${freshNewBatch.length} new)`);
         }
       })
       .catch(error => {
@@ -907,30 +912,53 @@ async function enrichPriorityCoins(coins, count = 10, feedName = 'coins') {
   return coins;
 }
 
-// Helper function to apply live Jupiter prices to coins
+// Helper function to apply ACCURATE live prices to coins (DexScreener via Native RPC service)
 function applyLivePrices(coins) {
-  if (!jupiterLivePriceService || !jupiterLivePriceService.isRunning) {
-    return coins;
+  // Try Solana Native RPC service first (uses DexScreener - most accurate)
+  if (solanaNativePriceService && solanaNativePriceService.isRunning) {
+    const updatedCoins = coins.map(coin => {
+      const mintAddress = coin.mintAddress || coin.address || coin.tokenAddress;
+      const cachedPrice = solanaNativePriceService.priceCache.get(mintAddress);
+      
+      if (cachedPrice && cachedPrice.price) {
+        return {
+          ...coin,
+          price_usd: cachedPrice.price,
+          nativeRpcLive: true,
+          priceSource: 'dexscreener-realtime',
+          lastPriceUpdate: cachedPrice.timestamp || Date.now()
+        };
+      }
+      
+      return coin;
+    });
+    
+    return updatedCoins;
   }
   
-  // Apply latest prices from Jupiter cache
-  const updatedCoins = coins.map(coin => {
-    const mintAddress = coin.mintAddress || coin.address || coin.tokenAddress;
-    const cachedPrice = jupiterLivePriceService.priceCache.get(mintAddress);
+  // Fallback to Jupiter if native RPC not running
+  if (jupiterLivePriceService && jupiterLivePriceService.isRunning) {
+    const updatedCoins = coins.map(coin => {
+      const mintAddress = coin.mintAddress || coin.address || coin.tokenAddress;
+      const cachedPrice = jupiterLivePriceService.priceCache.get(mintAddress);
+      
+      if (cachedPrice && cachedPrice.price) {
+        return {
+          ...coin,
+          price_usd: cachedPrice.price,
+          jupiterLive: true,
+          priceSource: 'jupiter-api',
+          lastPriceUpdate: cachedPrice.timestamp || Date.now()
+        };
+      }
+      
+      return coin;
+    });
     
-    if (cachedPrice && cachedPrice.price) {
-      return {
-        ...coin,
-        price_usd: cachedPrice.price,
-        jupiterLive: true,
-        lastPriceUpdate: cachedPrice.timestamp || Date.now()
-      };
-    }
-    
-    return coin;
-  });
+    return updatedCoins;
+  }
   
-  return updatedCoins;
+  return coins;
 }
 
 // Make Solana Tracker API request
@@ -1290,11 +1318,11 @@ async function fetchDexscreenerTrendingBatch() {
     dextrendingCoins = formattedTokens;
     dextrendingLastFetch = now;
     
-    // ✅ ADD DEXtrending coins to Jupiter Live Price tracking
-    if (jupiterLivePriceService && jupiterLivePriceService.isRunning) {
+    // ✅ ADD DEXtrending coins to Native RPC Price tracking
+    if (solanaNativePriceService && solanaNativePriceService.isRunning) {
       const allCoins = [...currentCoins, ...newCoins, ...formattedTokens];
-      jupiterLivePriceService.updateCoinList(allCoins);
-      console.log(`🪐 Updated Jupiter service with ${allCoins.length} total coins (${currentCoins.length} trending + ${newCoins.length} new + ${formattedTokens.length} dextrending)`);
+      solanaNativePriceService.updateCoinList(allCoins);
+      console.log(`🔗 Updated Native RPC service with ${allCoins.length} total coins (${currentCoins.length} trending + ${newCoins.length} new + ${formattedTokens.length} dextrending)`);
     }
     
     return formattedTokens;
@@ -1309,6 +1337,83 @@ async function fetchDexscreenerTrendingBatch() {
     return [];
   }
 }
+
+// ========================================
+// ON-DEMAND PRICE ENDPOINT
+// ========================================
+
+// Get live price for a specific coin directly from blockchain
+app.get('/api/price/:mintAddress', async (req, res) => {
+  try {
+    const { mintAddress } = req.params;
+    
+    if (!mintAddress || mintAddress.length < 32) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid mint address'
+      });
+    }
+
+    console.log(`⛓️ On-demand price request for: ${mintAddress.substring(0, 8)}...`);
+
+    // Check if we already have the price cached
+    const cachedPrice = solanaNativePriceService.priceCache.get(mintAddress);
+    if (cachedPrice && (Date.now() - cachedPrice.timestamp) < 10000) {
+      // Price is less than 10 seconds old - use cache
+      return res.json({
+        success: true,
+        price: cachedPrice.price,
+        priceChangeInstant: cachedPrice.priceChangeInstant || 0,
+        timestamp: cachedPrice.timestamp,
+        source: 'blockchain-cache',
+        age: Date.now() - cachedPrice.timestamp
+      });
+    }
+
+    // Fetch fresh price from blockchain
+    const coin = { mintAddress, symbol: mintAddress.substring(0, 6) };
+    const price = await solanaNativePriceService.fetchTokenPrice(mintAddress, coin.symbol);
+    
+    if (price && price > 0) {
+      const previousPrice = cachedPrice?.price || price;
+      const priceChangeInstant = cachedPrice ? ((price - previousPrice) / previousPrice) * 100 : 0;
+      
+      // Cache the result
+      const priceUpdate = {
+        address: mintAddress,
+        price,
+        previousPrice,
+        priceChangeInstant,
+        timestamp: Date.now(),
+        source: 'solana-blockchain'
+      };
+      solanaNativePriceService.priceCache.set(mintAddress, priceUpdate);
+      
+      console.log(`⛓️ On-demand price for ${mintAddress.substring(0, 8)}...: $${price.toFixed(10)}`);
+      
+      return res.json({
+        success: true,
+        price,
+        priceChangeInstant,
+        timestamp: Date.now(),
+        source: 'blockchain-live'
+      });
+    } else {
+      return res.status(404).json({
+        success: false,
+        error: 'No pool found for this token'
+      });
+    }
+    
+  } catch (error) {
+    console.error('❌ On-demand price error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch price',
+      details: error.message
+    });
+  }
+});
 
 // ========================================
 // API ROUTES
@@ -2075,9 +2180,9 @@ function startTrendingAutoRefresher() {
         currentCoins = freshTrendingBatch;
         global.coinsCache = freshTrendingBatch;
         
-        // Update Jupiter Live Price Service with new coin list
-        if (jupiterLivePriceService && jupiterLivePriceService.isRunning) {
-          jupiterLivePriceService.updateCoinList(freshTrendingBatch);
+        // Update Native RPC Price Service with new coin list
+        if (solanaNativePriceService && solanaNativePriceService.isRunning) {
+          solanaNativePriceService.updateCoinList(freshTrendingBatch);
         }
         
         console.log('✅ TRENDING feed cache updated (on-demand enrichment only)');
@@ -2101,11 +2206,11 @@ function startNewFeedAutoRefresher() {
       // Update cache
       newCoins = freshNewBatch;
       
-      // Update Jupiter Live Price Service with combined coin list (TRENDING + NEW)
-      if (jupiterLivePriceService && jupiterLivePriceService.isRunning) {
+      // Update Native RPC Price Service with combined coin list (TRENDING + NEW)
+      if (solanaNativePriceService && solanaNativePriceService.isRunning) {
         const allCoins = [...currentCoins, ...freshNewBatch];
-        jupiterLivePriceService.updateCoinList(allCoins);
-        console.log(`🪐 Updated Jupiter service with ${allCoins.length} coins after NEW feed refresh`);
+        solanaNativePriceService.updateCoinList(allCoins);
+        console.log(`🔗 Updated Native RPC service with ${allCoins.length} coins after NEW feed refresh`);
       }
       
       console.log('✅ NEW feed cache updated (on-demand enrichment only)');
@@ -2126,11 +2231,11 @@ function startDextrendingAutoRefresher() {
       dextrendingCoins = freshDextrendingBatch;
       dextrendingLastFetch = Date.now();
       
-      // ✅ Update Jupiter Live Price Service with DEXtrending coins
-      if (jupiterLivePriceService && jupiterLivePriceService.isRunning) {
+      // ✅ Update Native RPC Price Service with DEXtrending coins
+      if (solanaNativePriceService && solanaNativePriceService.isRunning) {
         const allCoins = [...currentCoins, ...newCoins, ...freshDextrendingBatch];
-        jupiterLivePriceService.updateCoinList(allCoins);
-        console.log(`🪐 Updated Jupiter service with ${allCoins.length} total coins after DEXTRENDING refresh`);
+        solanaNativePriceService.updateCoinList(allCoins);
+        console.log(`🔗 Updated Native RPC service with ${allCoins.length} total coins after DEXTRENDING refresh`);
       }
       
       console.log('✅ DEXTRENDING feed cache updated (on-demand enrichment only)');
@@ -2185,16 +2290,46 @@ server.listen(PORT, async () => {
   // Initialize feeds and start auto-refreshers
   initializeWithLatestBatch();
   
-  // Start Jupiter Live Price Service (5-second intervals for real-time prices)
-  console.log('🪐 Starting Jupiter Live Price Service...');
-  if (currentCoins.length > 0) {
-    jupiterLivePriceService.start(currentCoins);
-    console.log(`✅ Jupiter Live Price Service started with ${currentCoins.length} coins`);
-  } else {
-    // Start with empty list, will be updated when coins are fetched
-    jupiterLivePriceService.start([]);
-    console.log('⚠️ Jupiter Live Price Service started with empty list (will update when coins are fetched)');
-  }
+  // Start Solana Native RPC Price Service (TRUE on-chain prices from blockchain)
+  console.log('🔗 Starting Solana Native RPC Price Service (Direct Blockchain)...');
+  console.log('⚡ Using ON-DEMAND mode - prices fetched only when requested');
+  console.log('💡 Frontend will request prices as user scrolls through coins');
+  
+  // 🔥 CRITICAL: Connect RPC service to WebSocket to broadcast live prices
+  solanaNativePriceService.on('prices-updated', (priceUpdates) => {
+    // Broadcast price updates to all connected WebSocket clients
+    if (wsServer && wsServer.wss) {
+      wsServer.wss.clients.forEach((client) => {
+        if (client.readyState === 1) { // WebSocket.OPEN
+          try {
+            client.send(JSON.stringify({
+              type: 'price-update',
+              data: priceUpdates,
+              timestamp: Date.now(),
+              source: 'solana-blockchain'
+            }));
+          } catch (error) {
+            console.error('❌ Error broadcasting RPC price:', error.message);
+          }
+        }
+      });
+      
+      // Log every 10 updates to reduce noise
+      if (priceUpdates.length > 0 && Math.random() < 0.1) {
+        console.log(`📡 Broadcasted ${priceUpdates.length} live blockchain prices to ${wsServer.wss.clients.size} clients`);
+      }
+    }
+  });
+  
+  // ⚡ NEW APPROACH: Don't fetch all coins at once - use on-demand fetching instead
+  // The frontend will call /api/price/:mintAddress for each visible coin
+  // This is MUCH faster and more efficient than fetching 267 coins sequentially
+  
+  console.log(`✅ Solana Native RPC Price Service initialized (on-demand mode)`);
+  console.log(`📡 Ready to serve live on-chain prices via /api/price/:mintAddress`);
+  
+  // DISABLED: Jupiter service (replaced with Native RPC for TRUE on-chain accuracy)
+  // jupiterLivePriceService.start(currentCoins);
 });
 
 // Export the server for testing

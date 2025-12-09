@@ -45,6 +45,7 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
   const [isLiveMode, setIsLiveMode] = useState(true); // Track if chart should auto-scroll to live data
   const isLiveModeRef = useRef(true); // Ref to track live mode for use in intervals
   const userInteractionTimeoutRef = useRef(null); // Track user interaction timeout
+  const [chartInitialized, setChartInitialized] = useState(false); // Track when chart is fully initialized
 
   // Extract pairAddress for historical data and tokenMint for real-time subscription
   const pairAddress = coin?.pairAddress || 
@@ -59,18 +60,18 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
                     coin?.baseToken?.address ||
                     null;
   
-  // 🔍 DEBUG: Log what we're working with
-  useEffect(() => {
-    console.log('🎯 TwelveDataChart received coin:', {
-      symbol: coin?.symbol,
-      name: coin?.name,
-      pairAddress,
-      tokenMint,
-      hasChartData: !!coin?.chartData,
-      chartDataLength: coin?.chartData?.length,
-      allKeys: Object.keys(coin || {})
-    });
-  }, [coin]);
+  // 🔍 DEBUG: Log what we're working with (commented to reduce console spam)
+  // useEffect(() => {
+  //   console.log('🎯 TwelveDataChart received coin:', {
+  //     symbol: coin?.symbol,
+  //     name: coin?.name,
+  //     pairAddress,
+  //     tokenMint,
+  //     hasChartData: !!coin?.chartData,
+  //     chartDataLength: coin?.chartData?.length,
+  //     allKeys: Object.keys(coin || {})
+  //   });
+  // }, [coin]);
 
   // Detect and track theme changes
   useEffect(() => {
@@ -79,8 +80,6 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
       // If the class exists, it's dark mode; otherwise it's light mode (the default)
       const isDark = document.documentElement.classList.contains('dark-mode');
       
-      console.log('🎨 Theme detected:', isDark ? 'dark' : 'light');
-      console.log('   documentElement classes:', document.documentElement.className);
       setIsDarkMode(isDark);
       
       // Update chart colors if chart exists
@@ -111,22 +110,12 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
   useEffect(() => {
     const container = chartContainerRef.current;
     if (!container) {
-      console.log('⚠️ No container ref yet');
       return;
     }
 
     // 🖥️ DESKTOP MODE FIX: If isDesktopMode prop is true, this chart is in the desktop right panel
     // It should load immediately without intersection observer
     if (isDesktopMode) {
-      console.log('🖥️ Desktop right panel - loading chart immediately:', coin?.symbol);
-      console.log('📐 Container current dimensions:', {
-        clientWidth: container.clientWidth,
-        clientHeight: container.clientHeight,
-        offsetWidth: container.offsetWidth,
-        offsetHeight: container.offsetHeight,
-        parentWidth: container.parentElement?.clientWidth,
-        parentHeight: container.parentElement?.clientHeight
-      });
       setIsInView(true);
       setShouldLoad(true);
       return; // Skip intersection observer setup
@@ -137,7 +126,6 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
       const isDesktopViewport = window.innerWidth >= 1200;
       
       if (isDesktopViewport && !shouldLoad) {
-        console.log('🖥️ Desktop viewport detected - loading chart immediately:', coin?.symbol);
         setIsInView(true);
         setShouldLoad(true);
       }
@@ -149,7 +137,6 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
     const isDesktop = checkDesktopMode();
     
     if (isDesktop) {
-      console.log('✅ Desktop viewport confirmed - chart will load immediately');
       // In desktop mode, also listen for resize events in case user resizes window
       const handleResize = () => {
         checkDesktopMode();
@@ -161,8 +148,6 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
         window.removeEventListener('resize', handleResize);
       };
     }
-    
-    console.log('📱 Mobile mode - using Intersection Observer for lazy loading');
 
     // Mobile/Tablet: Create intersection observer with 200% rootMargin (load before visible)
     // This means charts load when they're within 2 screen heights of viewport
@@ -170,7 +155,6 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
-            console.log('👁️ Chart entering viewport:', coin?.symbol);
             setIsInView(true);
             setShouldLoad(true);
           } else {
@@ -696,34 +680,43 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
     let mounted = true;
     
     const initialize = async () => {
-      console.log('🎯 Starting chart initialization...');
-      
       // Wait for DOM to be ready and retry if dimensions aren't available
       let retries = 0;
-      const maxRetries = 20; // Increased retries
+      const maxRetries = 10; // Reduced from 20 - fail faster for off-screen charts
       
       while (retries < maxRetries) {
-        await new Promise(resolve => setTimeout(resolve, 150)); // Longer wait
+        await new Promise(resolve => setTimeout(resolve, 100)); // Reduced from 150ms
         
         if (!mounted || !chartContainerRef.current) return;
 
         const container = chartContainerRef.current;
-        const width = container.clientWidth;
-        const height = container.clientHeight;
         
-        console.log(`🔍 [Retry ${retries + 1}/${maxRetries}] Container dimensions: ${width}x${height}`);
+        // Check if container is actually visible in the DOM using getBoundingClientRect
+        const rect = container.getBoundingClientRect();
+        const isVisible = rect.width > 0 && rect.height > 0;
+        
+        // If container is not visible (off-screen, hidden, or collapsed), silently exit
+        // This is expected for charts that are below the fold - not an error condition
+        if (!isVisible) {
+          retries++;
+          if (retries >= maxRetries) {
+            // Silently defer initialization - chart will load when visible
+            setLoading(false);
+            return;
+          }
+          continue;
+        }
+        
+        const width = container.clientWidth || Math.floor(rect.width);
+        const height = container.clientHeight || Math.floor(rect.height);
         
         if (width && height && width > 100 && height > 100) {
-          console.log(`✅ Container ready with dimensions: ${width}x${height}`);
           break; // Dimensions are ready
         }
         
         retries++;
         if (retries >= maxRetries) {
-          console.error('❌ Chart container has no dimensions after retries');
-          console.error('   Container:', container);
-          console.error('   Parent:', container?.parentElement);
-          console.error('   Computed style:', window.getComputedStyle(container));
+          // Only show error if container is visible but has invalid dimensions
           setError('Chart container failed to initialize. Please try reopening the chart.');
           setLoading(false);
           return;
@@ -733,19 +726,11 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
       if (!mounted || !chartContainerRef.current) return;
 
       const container = chartContainerRef.current;
-      const width = container.clientWidth;
-      const height = container.clientHeight;
+      const rect = container.getBoundingClientRect();
+      const width = container.clientWidth || Math.floor(rect.width);
+      const height = container.clientHeight || Math.floor(rect.height);
 
       try {
-        console.log('📊 Initializing chart for:', pairAddress);
-        console.log('📐 Container dimensions:', { width, height });
-        console.log('📏 Container styles:', {
-          computed: window.getComputedStyle(container),
-          offsetWidth: container.offsetWidth,
-          offsetHeight: container.offsetHeight,
-          clientWidth: container.clientWidth,
-          clientHeight: container.clientHeight
-        });
         
         // Get theme colors
         const colors = getThemeColors(isDarkMode);
@@ -791,17 +776,21 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
             },
           },
           crosshair: {
-            mode: 1,
+            mode: 0, // Changed to Normal mode (0) instead of Magnet mode (1)
             vertLine: {
               color: colors.crosshair,
               width: 1,
               style: 2,
+              visible: true,
+              labelVisible: true,
               labelBackgroundColor: colors.crosshairLabel,
             },
             horzLine: {
               color: colors.crosshair,
               width: 1,
               style: 2,
+              visible: true,
+              labelVisible: true,
               labelBackgroundColor: colors.crosshairLabel,
             },
           },
@@ -851,41 +840,18 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
 
         // 🔍 DIAGNOSTIC: Check if canvas was created
         const canvasElements = container.querySelectorAll('canvas');
-        console.log('🎨 Chart created - Canvas elements found:', canvasElements.length);
-        canvasElements.forEach((canvas, index) => {
-          console.log(`   Canvas ${index}:`, {
-            width: canvas.width,
-            height: canvas.height,
-            style: canvas.style.cssText,
-            display: window.getComputedStyle(canvas).display,
-            zIndex: window.getComputedStyle(canvas).zIndex,
-          });
-        });
+        if (canvasElements.length === 0) {
+          console.warn('⚠️ No canvas elements found after chart creation!');
+        } else {
+          console.log(`✅ Chart created with ${canvasElements.length} canvas elements`);
+        }
 
         // Get timeScale reference for all event listeners
         const timeScale = chart.timeScale();
         let isUserInteracting = false;
 
-        // Subscribe to crosshair move events to update parent component's price display
-        chart.subscribeCrosshairMove((param) => {
-          if (!param || !param.time || !param.seriesData || !onCrosshairMove) {
-            // Crosshair moved away or no data - restore live price
-            if (onCrosshairMove) {
-              onCrosshairMove(null);
-            }
-            return;
-          }
-          
-          // Get the price at the crosshair position
-          const priceData = param.seriesData.get(lineSeries);
-          if (priceData) {
-            // Send crosshair data to parent
-            onCrosshairMove({
-              price: priceData.value,
-              time: param.time,
-            });
-          }
-        });
+        // � NOTE: Crosshair subscription moved to separate useEffect to avoid stale closure
+        // See the useEffect with [chartRef.current, lineSeriesRef.current, onCrosshairMove] dependencies
 
         // Subscribe to visible logical range changes to update first visible price
         timeScale.subscribeVisibleLogicalRangeChange(() => {
@@ -1027,6 +993,7 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
         
         setLoading(false);
         setError(null);
+        setChartInitialized(true); // Mark chart as initialized for crosshair subscription
 
         console.log('✅ Chart initialized with', historicalData.length, 'data points');
         
@@ -1036,12 +1003,30 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
             mouseWheel: true,
             pressedMouseMove: true,
             horzTouchDrag: true,
-            vertTouchDrag: true,
+            vertTouchDrag: false, // Disable vertical drag to allow crosshair hover
           },
           handleScale: {
             axisPressedMouseMove: true,
             mouseWheel: true,
             pinch: true,
+          },
+          // Ensure crosshair is properly configured
+          crosshair: {
+            mode: 0, // Normal mode - crosshair appears everywhere
+            vertLine: {
+              width: 1,
+              color: 'rgba(32, 226, 47, 0.5)',
+              style: 2,
+              visible: true,
+              labelVisible: true,
+            },
+            horzLine: {
+              width: 1,
+              color: 'rgba(32, 226, 47, 0.5)',
+              style: 2,
+              visible: true,
+              labelVisible: true,
+            },
           },
         });
 
@@ -1306,10 +1291,8 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
 
     // 🚀 LAZY LOADING: Only initialize chart when shouldLoad is true AND not in advanced mode
     if (shouldLoad && !showAdvanced) {
-      console.log('🎯 Lazy loading chart for:', coin?.symbol);
       initialize();
     } else {
-      console.log('⏸️ Deferring chart load for:', coin?.symbol, '(showAdvanced:', showAdvanced, ')');
       setLoading(false); // Don't show loading spinner for deferred charts
     }
 
@@ -1345,8 +1328,85 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
       }
       
       lineSeriesRef.current = null;
+      setChartInitialized(false); // Reset initialization state
     };
   }, [pairAddress, selectedTimeframe, shouldLoad, showAdvanced]); // Re-initialize if pairAddress, timeframe, shouldLoad, or showAdvanced changes
+
+  // 🔥 CRITICAL FIX: Separate effect for crosshair subscription to avoid stale callback
+  // This effect runs whenever the chart is initialized or callback changes
+  useEffect(() => {
+    if (!chartInitialized) {
+      console.log(`📊 [TwelveDataChart] Crosshair subscription skipped - chart not initialized yet`);
+      return;
+    }
+    
+    const chart = chartRef.current;
+    const lineSeries = lineSeriesRef.current;
+    
+    if (!chart || !lineSeries) {
+      console.log(`📊 [TwelveDataChart] Crosshair subscription skipped - chart or series not ready`);
+      return;
+    }
+    
+    if (!onCrosshairMove) {
+      console.log(`📊 [TwelveDataChart] Crosshair subscription skipped - no callback provided`);
+      return;
+    }
+    
+    console.log(`📊 [TwelveDataChart] ✅ Setting up fresh crosshair subscription for ${coin?.symbol}`);
+    console.log(`📊 [TwelveDataChart] Chart exists:`, !!chart, 'Series exists:', !!lineSeries, 'Callback exists:', !!onCrosshairMove);
+    
+    // Subscribe to crosshair move events
+    const handler = (param) => {
+      console.log(`📊 [TwelveDataChart] 🎯 CROSSHAIR EVENT FIRED!`, {
+        hasParam: !!param,
+        hasTime: !!param?.time,
+        hasSeriesData: !!param?.seriesData,
+        time: param?.time,
+        point: param?.point
+      });
+      
+      if (!param || !param.time || !param.seriesData) {
+        // Crosshair moved away or no data - restore live price
+        console.log(`📊 [TwelveDataChart] 🔄 Restoring live price (no data at crosshair)`);
+        onCrosshairMove(null);
+        return;
+      }
+      
+      // Get the price at the crosshair position - use ref to avoid stale closure
+      const currentLineSeries = lineSeriesRef.current;
+      if (!currentLineSeries) {
+        console.log(`📊 [TwelveDataChart] ⚠️ Line series ref is null`);
+        return;
+      }
+      
+      const priceData = param.seriesData.get(currentLineSeries);
+      console.log(`📊 [TwelveDataChart] 💰 Price data at crosshair:`, priceData);
+      
+      if (priceData && priceData.value !== undefined) {
+        // Send crosshair data to parent
+        console.log(`📊 [TwelveDataChart] ✅ Calling onCrosshairMove with price: $${priceData.value}`);
+        onCrosshairMove({
+          price: priceData.value,
+          time: param.time,
+        });
+      } else {
+        console.log(`📊 [TwelveDataChart] ⚠️ No price data at this point`);
+        onCrosshairMove(null);
+      }
+    };
+    
+    chart.subscribeCrosshairMove(handler);
+    console.log(`📊 [TwelveDataChart] ✅ Crosshair subscription active for ${coin?.symbol}`);
+    
+    // Cleanup subscription when effect re-runs or unmounts
+    return () => {
+      console.log(`📊 [TwelveDataChart] 🧹 Cleaning up crosshair subscription for ${coin?.symbol}`);
+      if (chart && handler) {
+        chart.unsubscribeCrosshairMove(handler);
+      }
+    };
+  }, [chartInitialized, onCrosshairMove, coin?.symbol]); // Re-subscribe when chart initializes or callback changes
 
   // Handle switching between clean and advanced modes
   useEffect(() => {

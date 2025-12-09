@@ -7,6 +7,7 @@ import TopTradersList from './TopTradersList';
 import WalletPopup from './WalletPopup';
 import { useLiveData } from '../hooks/useLiveDataContext.jsx';
 import { useSolanaTransactions } from '../hooks/useSolanaTransactions.jsx';
+import { useOnDemandPrice } from '../hooks/useOnDemandPrice.js';
 import { API_CONFIG } from '../config/api.js';
 import { 
   calculateGraduationPercentage, 
@@ -91,18 +92,29 @@ const CoinCard = memo(({
     return getChart(address);
   }, [isMobile, isVisible, address, getChart]);
   
-  // 🔥 CRITICAL FIX: Compute display price directly without useMemo to ensure it updates on every render
-  // This guarantees that when liveData changes, the price display updates immediately
-  const livePrice = liveData?.price;
-  const fallbackPrice = coin.price_usd || coin.priceUsd || coin.price || 0;
-  const displayPrice = livePrice || fallbackPrice;
-  
   // 🔥 MOBILE FIX: Disable WebSocket connections on mobile to prevent crashes
   const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768;
   
   // Solana RPC live transactions - auto-load when autoLoadTransactions is true
   // 🔥 DISABLED on mobile to prevent memory crashes from multiple WebSocket connections
   const mintAddress = coin.mintAddress || coin.mint || coin.address || coin.contract_address || coin.contractAddress || coin.tokenAddress;
+  
+  // 🔥 NEW: On-demand price fetching from Solana blockchain
+  // Fetches price ONLY when coin is visible - no batch fetching!
+  const { 
+    price: onDemandPrice, 
+    isLive: priceIsLive,
+    priceChangePercent: instantChange 
+  } = useOnDemandPrice(
+    mintAddress,
+    isVisible,
+    coin.price_usd || coin.priceUsd || coin.price || 0
+  );
+  
+  // 🔥 CRITICAL FIX: Use on-demand price as primary source, fallback to WebSocket/API
+  const livePrice = liveData?.price;
+  const fallbackPrice = coin.price_usd || coin.priceUsd || coin.price || 0;
+  const displayPrice = onDemandPrice || livePrice || fallbackPrice;
   const { transactions, isConnected: txConnected, error: txError, clearTransactions } = useSolanaTransactions(
     mintAddress,
     !isMobileDevice && (showLiveTransactions || autoLoadTransactions) // Only connect on desktop
@@ -945,26 +957,42 @@ const CoinCard = memo(({
   };
 
   // Handle crosshair move from chart
-  const handleChartCrosshairMove = (data) => {
+  // 🔥 CRITICAL: Use useCallback to prevent stale closures
+  const handleChartCrosshairMove = React.useCallback((data) => {
+    // 🔥 ALWAYS LOG to debug - we need to see if this is being called
+    console.log(`📊 [${coin.symbol}] Chart crosshair callback:`, data);
+    
     if (data && data.price) {
       setChartHoveredData(data);
       setChartHoveredPrice(data.price);
+      console.log(`✅ [${coin.symbol}] Set hovered price to: $${data.price.toFixed(8)}`);
     } else {
       // Restore live price
       setChartHoveredData(null);
       setChartHoveredPrice(null);
+      console.log(`🔄 [${coin.symbol}] Cleared hovered price, back to live`);
     }
-  };
+  }, [coin.symbol]); // Only recreate if coin symbol changes
 
   // Handle first visible price update from chart (for % calculation)
-  const handleFirstPriceUpdate = (price) => {
+  const handleFirstPriceUpdate = React.useCallback((price) => {
     setChartFirstPrice(price);
-  };
+  }, []);
 
   // Use live data when available, fallback to coin data
   // 🔥 CRITICAL FIX: Use displayPrice computed from useMemo which is reactive to coins Map
-  // 🎯 NEW: Use chartHoveredPrice when hovering over chart
+  // 🎯 CHART HOVER: Use chartHoveredPrice when hovering over chart (takes priority over everything)
   const price = chartHoveredPrice !== null ? chartHoveredPrice : displayPrice;
+  
+  // 🔥 DEBUG: Log price calculation to see what's happening
+  if (import.meta.env.DEV && chartHoveredPrice !== null) {
+    console.log(`📊 [${coin.symbol}] PRICE CALC:`, {
+      chartHoveredPrice,
+      displayPrice,
+      finalPrice: price,
+      usingHoveredPrice: chartHoveredPrice !== null
+    });
+  }
   
   // 🎯 NEW: Calculate percentage change dynamically when hovering over chart
   // If hovering, calculate % from first visible price to hovered price
@@ -1069,8 +1097,7 @@ const CoinCard = memo(({
         
         {/* Enrichment status badge */}
         {!isEnriched && (
-          <div 
-            className="enrichment-status-badge"
+          <div className="enrichment-status-badge"
             style={{
               position: 'absolute',
               top: 10,
@@ -1236,15 +1263,29 @@ const CoinCard = memo(({
                   <div className={`coin-price ${priceFlash}`}>
                     {/* Live indicators */}
                     <div className="live-indicators">
-                      <div className={`live-indicator ${connected ? 'connected' : 'disconnected'}`} 
-                           title={connected ? 'Connected to live data' : 'Disconnected from live data'}>
-                        <div className="live-dot"></div>
-                      </div>
-                      {liveData?.jupiterLive && (
-                        <div className="jupiter-live-indicator" 
-                             title="Live Jupiter pricing active">
-                          🪐
+                      {chartHoveredData ? (
+                        <div className="chart-hover-indicator" title="Showing historical price from chart">
+                          📊 {new Date(chartHoveredData.time * 1000).toLocaleString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: true
+                          })}
                         </div>
+                      ) : (
+                        <>
+                          <div className={`live-indicator ${connected ? 'connected' : 'disconnected'}`} 
+                               title={connected ? 'Connected to live data' : 'Disconnected from live data'}>
+                            <div className="live-dot"></div>
+                          </div>
+                          {liveData?.jupiterLive && (
+                            <div className="jupiter-live-indicator" 
+                                 title="Live Jupiter pricing active">
+                              🪐
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                     {formatPrice(price)}
@@ -1652,11 +1693,11 @@ const CoinCard = memo(({
             )}
           </div>
 
-          {/* Top Traders Section - Auto-loaded */}
+          {/* Top Traders Section - Loaded when expanded */}
           <div className="top-traders-section">
             <div className="top-traders-section-header">Top Traders</div>
             <div className="top-traders-content">
-              <TopTradersList coinAddress={mintAddress} />
+              <TopTradersList coinAddress={mintAddress} isExpanded={isExpanded} />
             </div>
           </div>
 

@@ -3,7 +3,7 @@ import { getFullApiUrl } from '../config/api';
 import WalletPopup from './WalletPopup';
 import './TopTradersList.css';
 
-const TopTradersList = ({ coinAddress }) => {
+const TopTradersList = ({ coinAddress, isExpanded }) => {
   const [traders, setTraders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -12,26 +12,28 @@ const TopTradersList = ({ coinAddress }) => {
   const [selectedTraderData, setSelectedTraderData] = useState(null);
   const loadingRef = useRef(false); // Prevent duplicate calls
 
-  // Auto-load top traders when component mounts
+  // Load top traders only when card is expanded
   useEffect(() => {
     console.log('🔄 TopTradersList useEffect triggered:', {
       coinAddress,
+      isExpanded,
       loaded,
       loading,
       loadingRef: loadingRef.current,
-      shouldLoad: coinAddress && !loaded && !loading && !loadingRef.current
+      shouldLoad: coinAddress && isExpanded && !loaded && !loading && !loadingRef.current
     });
     
-    // Prevent duplicate calls using ref
-    if (coinAddress && !loaded && !loading && !loadingRef.current) {
-      console.log('✅ Conditions met - calling loadTopTraders()');
+    // Only load when card is expanded
+    if (coinAddress && isExpanded && !loaded && !loading && !loadingRef.current) {
+      console.log('✅ Card expanded - loading top traders');
       loadTopTraders();
     } else {
       if (!coinAddress) console.log('⚠️ No coinAddress provided');
+      if (!isExpanded) console.log('⚠️ Card not expanded yet');
       if (loaded) console.log('⚠️ Already loaded');
       if (loading || loadingRef.current) console.log('⚠️ Already loading');
     }
-  }, [coinAddress]);
+  }, [coinAddress, isExpanded]);
 
   const loadTopTraders = async () => {
     if (!coinAddress) {
@@ -147,6 +149,15 @@ const TopTradersList = ({ coinAddress }) => {
     if (!count) return '';
     return ` / ${count} txns`;
   };
+
+  // Show placeholder when card is not expanded
+  if (!isExpanded) {
+    return (
+      <div className="traders-placeholder">
+        <p>Expand card to view top traders</p>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
