@@ -2,7 +2,7 @@
  * Jupiter Referral Service
  * Manages referral accounts and token accounts for collecting Jupiter swap fees
  * 
- * Your Referral Account: 34GAnxxnJQpSbPbe7sbgDTdBzBD4Hq74bSZicZiyRpmd
+ * Your Referral Account: 42DqmQMZrVeZkP2Btj2cS96Ej81jVxFqwUZWazVvhUPt
  * Fee Rate: 100 BPS (1%)
  */
 
@@ -16,8 +16,8 @@ class JupiterReferralService {
       'confirmed'
     );
     
-    // Your referral account from .env
-    this.referralAccount = process.env.JUPITER_REFERRAL_ACCOUNT || '34GAnxxnJQpSbPbe7sbgDTdBzBD4Hq74bSZicZiyRpmd';
+    // Your Jupiter Ultra referral account (PDA created under Jupiter Ultra Referral Project)
+    this.referralAccount = process.env.JUPITER_REFERRAL_ACCOUNT || '42DqmQMZrVeZkP2Btj2cS96Ej81jVxFqwUZWazVvhUPt';
     this.feeBps = parseInt(process.env.JUPITER_REFERRAL_FEE_BPS || '100'); // 1%
     
     console.log(`🪐 Jupiter Referral Service initialized`);

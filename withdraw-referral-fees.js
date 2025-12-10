@@ -10,6 +10,8 @@
  * - claimAll(): Claim all tokens with balances
  * - claimPartially(): Claim specific tokens
  * 
+ * After claiming, fees are automatically transferred to the destination wallet.
+ * 
  * Usage:
  *   node withdraw-referral-fees.js [--all | --token <mint>]
  * 
@@ -41,12 +43,16 @@ if (fs.existsSync(envReferralPath)) {
   console.log('✅ Loaded configuration from .env\n');
 }
 
-const { Connection, Keypair, PublicKey, sendAndConfirmTransaction } = require('@solana/web3.js');
+const { Connection, Keypair, PublicKey, sendAndConfirmTransaction, Transaction } = require('@solana/web3.js');
 const { ReferralProvider } = require('@jup-ag/referral-sdk');
+const { getAssociatedTokenAddress, createTransferInstruction, createAssociatedTokenAccountInstruction, getAccount, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } = require('@solana/spl-token');
 
 // Configuration
 const RPC_ENDPOINT = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
 const REFERRAL_ACCOUNT = '42DqmQMZrVeZkP2Btj2cS96Ej81jVxFqwUZWazVvhUPt'; // Your Ultra referral account
+
+// 🎯 DESTINATION WALLET - Where all claimed fees will be sent
+const DESTINATION_WALLET = '34GAnxxnJQpSbPbe7sbgDTdBzBD4Hq74bSZicZiyRpmd';
 
 // Common tokens to check and withdraw
 const TOKENS_TO_CHECK = [
@@ -68,6 +74,88 @@ const TOKENS_TO_CHECK = [
   }
 ];
 
+/**
+ * Transfer tokens from source wallet to destination wallet
+ */
+async function transferTokensToDestination(connection, sourceWallet, tokenMint, destinationAddress) {
+  try {
+    const mintPubkey = new PublicKey(tokenMint);
+    const destinationPubkey = new PublicKey(destinationAddress);
+    
+    // Get source token account
+    const sourceTokenAccount = await getAssociatedTokenAddress(
+      mintPubkey,
+      sourceWallet.publicKey
+    );
+    
+    // Check source balance
+    let sourceBalance;
+    try {
+      const accountInfo = await getAccount(connection, sourceTokenAccount);
+      sourceBalance = accountInfo.amount;
+    } catch (error) {
+      console.log(`   ℹ️  No balance to transfer for this token`);
+      return { success: false, reason: 'no_balance' };
+    }
+    
+    if (sourceBalance === BigInt(0)) {
+      console.log(`   ℹ️  Zero balance, nothing to transfer`);
+      return { success: false, reason: 'zero_balance' };
+    }
+    
+    console.log(`   💰 Found ${sourceBalance.toString()} tokens to transfer`);
+    
+    // Get or create destination token account
+    const destinationTokenAccount = await getAssociatedTokenAddress(
+      mintPubkey,
+      destinationPubkey
+    );
+    
+    const transaction = new Transaction();
+    
+    // Check if destination token account exists
+    try {
+      await getAccount(connection, destinationTokenAccount);
+    } catch (error) {
+      // Account doesn't exist, create it
+      console.log(`   📝 Creating token account for destination wallet...`);
+      transaction.add(
+        createAssociatedTokenAccountInstruction(
+          sourceWallet.publicKey, // payer
+          destinationTokenAccount, // ata
+          destinationPubkey, // owner
+          mintPubkey // mint
+        )
+      );
+    }
+    
+    // Add transfer instruction
+    transaction.add(
+      createTransferInstruction(
+        sourceTokenAccount, // source
+        destinationTokenAccount, // destination
+        sourceWallet.publicKey, // owner
+        sourceBalance // amount
+      )
+    );
+    
+    // Send transaction
+    const { blockhash } = await connection.getLatestBlockhash();
+    transaction.recentBlockhash = blockhash;
+    transaction.feePayer = sourceWallet.publicKey;
+    
+    const signature = await sendAndConfirmTransaction(connection, transaction, [sourceWallet]);
+    
+    console.log(`   ✅ Transferred to ${DESTINATION_WALLET}`);
+    console.log(`   🔗 Signature: ${signature}`);
+    
+    return { success: true, signature, amount: sourceBalance.toString() };
+  } catch (error) {
+    console.error(`   ❌ Transfer failed: ${error.message}`);
+    return { success: false, error: error.message };
+  }
+}
+
 async function claimAllTokens(referralProvider, wallet, referralAccountPubkey, connection) {
   console.log('🔍 Scanning for all tokens with fees...\n');
   
@@ -80,14 +168,16 @@ async function claimAllTokens(referralProvider, wallet, referralAccountPubkey, c
 
     if (claimTransactions.length === 0) {
       console.log('ℹ️  No tokens with fees found to claim\n');
-      return { success: 0, failed: 0, results: [] };
+      return { success: 0, failed: 0, results: [], transferred: 0 };
     }
 
-    console.log(`� Found ${claimTransactions.length} token(s) with fees to claim\n`);
+    console.log(`📦 Found ${claimTransactions.length} token(s) with fees to claim\n`);
 
     let successCount = 0;
     let failedCount = 0;
+    let transferredCount = 0;
     const results = [];
+    const claimedTokens = []; // Track which tokens were claimed for transfer
 
     // Send each claim transaction
     for (let i = 0; i < claimTransactions.length; i++) {
@@ -126,6 +216,9 @@ async function claimAllTokens(referralProvider, wallet, referralAccountPubkey, c
         
         successCount++;
         results.push({ index: i + 1, success: true, signature });
+        
+        // Mark for transfer - we'll transfer all common tokens
+        claimedTokens.push(i);
       } catch (error) {
         console.error(`❌ Claim failed: ${error.message}\n`);
         failedCount++;
@@ -133,15 +226,38 @@ async function claimAllTokens(referralProvider, wallet, referralAccountPubkey, c
       }
     }
 
-    return { success: successCount, failed: failedCount, results };
+    // After claiming, transfer all tokens to destination wallet
+    if (successCount > 0) {
+      console.log('\n' + '='.repeat(60));
+      console.log(`📤 TRANSFERRING FEES TO DESTINATION WALLET`);
+      console.log(`🎯 Destination: ${DESTINATION_WALLET}`);
+      console.log('='.repeat(60) + '\n');
+      
+      // Transfer common tokens (these are the ones most likely to have balances)
+      for (const token of TOKENS_TO_CHECK) {
+        console.log(`💸 Checking ${token.name}...`);
+        const transferResult = await transferTokensToDestination(
+          connection, 
+          wallet, 
+          token.mint, 
+          DESTINATION_WALLET
+        );
+        if (transferResult.success) {
+          transferredCount++;
+        }
+        console.log('');
+      }
+    }
+
+    return { success: successCount, failed: failedCount, results, transferred: transferredCount };
   } catch (error) {
     console.error(`❌ Error scanning for tokens: ${error.message}\n`);
-    return { success: 0, failed: 0, results: [], error: error.message };
+    return { success: 0, failed: 0, results: [], error: error.message, transferred: 0 };
   }
 }
 
-async function claimSpecificToken(referralProvider, wallet, referralAccountPubkey, tokenMint, connection) {
-  console.log(`🔍 Claiming fees for token: ${tokenMint}\n`);
+async function claimSpecificToken(referralProvider, wallet, referralAccountPubkey, tokenMint, tokenName, connection) {
+  console.log(`🔍 Claiming fees for token: ${tokenName || tokenMint}\n`);
   
   try {
     // Use the SDK's claimV2 method for a specific token
@@ -183,7 +299,21 @@ async function claimSpecificToken(referralProvider, wallet, referralAccountPubke
     console.log(`🔗 Signature: ${signature}`);
     console.log(`🌐 Explorer: https://solscan.io/tx/${signature}\n`);
     
-    return { success: true, signature };
+    // After claiming, transfer to destination wallet
+    console.log('\n' + '='.repeat(60));
+    console.log(`📤 TRANSFERRING TO DESTINATION WALLET`);
+    console.log(`🎯 Destination: ${DESTINATION_WALLET}`);
+    console.log('='.repeat(60) + '\n');
+    
+    console.log(`💸 Transferring ${tokenName || 'token'}...`);
+    const transferResult = await transferTokensToDestination(
+      connection, 
+      wallet, 
+      tokenMint, 
+      DESTINATION_WALLET
+    );
+    
+    return { success: true, signature, transferred: transferResult.success };
   } catch (error) {
     console.error(`❌ Claim failed: ${error.message}\n`);
     return { success: false, error: error.message };
@@ -192,6 +322,10 @@ async function claimSpecificToken(referralProvider, wallet, referralAccountPubke
 
 async function main() {
   console.log('🚀 Jupiter Referral Fee Claim Tool (Using Official SDK)\n');
+  console.log('='.repeat(60));
+  console.log('📍 Referral Account:', REFERRAL_ACCOUNT);
+  console.log('🎯 Destination Wallet:', DESTINATION_WALLET);
+  console.log('='.repeat(60) + '\n');
 
   // Load wallet from private key
   const privateKeyEnvVar = process.env.ULTRA_WALLET_PRIVATE_KEY || process.env.REFERRAL_ACCOUNT_PRIVATE_KEY;
@@ -202,7 +336,7 @@ async function main() {
     console.log('ULTRA_WALLET_PRIVATE_KEY=your_private_key_here');
     console.log('\nOr add to your existing .env file:');
     console.log('REFERRAL_ACCOUNT_PRIVATE_KEY=your_private_key_here\n');
-    console.log('⚠️  This should be the private key for wallet: 42DqmQ...hUPt\n');
+    console.log('⚠️  This should be the private key for the wallet that owns the referral account\n');
     process.exit(1);
   }
 
@@ -216,8 +350,7 @@ async function main() {
     wallet = Keypair.fromSecretKey(bs58.decode(privateKeyEnvVar));
   }
 
-  console.log('✅ Wallet loaded:', wallet.publicKey.toBase58());
-  console.log('📍 Referral Account:', REFERRAL_ACCOUNT);
+  console.log('✅ Signing Wallet loaded:', wallet.publicKey.toBase58());
   console.log('');
 
   // Initialize connection and SDK
@@ -227,7 +360,7 @@ async function main() {
 
   // Check SOL balance for transaction fees
   const balance = await connection.getBalance(wallet.publicKey);
-  console.log(`💰 Wallet SOL Balance: ${(balance / 1e9).toFixed(4)} SOL`);
+  console.log(`💰 Signing Wallet SOL Balance: ${(balance / 1e9).toFixed(4)} SOL`);
   
   if (balance < 0.01 * 1e9) {
     console.warn('⚠️  Warning: Low SOL balance. You may need more SOL for transaction fees.\n');
@@ -244,7 +377,7 @@ async function main() {
   let result;
 
   if (claimAllFlag) {
-    console.log('🌟 Mode: Claim ALL tokens\n');
+    console.log('🌟 Mode: Claim ALL tokens and transfer to destination\n');
     result = await claimAllTokens(referralProvider, wallet, referralAccountPubkey, connection);
   } else if (specificToken) {
     // Try to find the token in TOKENS_TO_CHECK
@@ -254,30 +387,33 @@ async function main() {
     );
     
     if (token) {
-      console.log(`🌟 Mode: Claim ${token.name}\n`);
-      result = await claimSpecificToken(referralProvider, wallet, referralAccountPubkey, token.mint, connection);
+      console.log(`🌟 Mode: Claim ${token.name} and transfer to destination\n`);
+      result = await claimSpecificToken(referralProvider, wallet, referralAccountPubkey, token.mint, token.name, connection);
     } else {
       // Assume it's a mint address
-      console.log(`🌟 Mode: Claim specific token\n`);
-      result = await claimSpecificToken(referralProvider, wallet, referralAccountPubkey, specificToken, connection);
+      console.log(`🌟 Mode: Claim specific token and transfer to destination\n`);
+      result = await claimSpecificToken(referralProvider, wallet, referralAccountPubkey, specificToken, null, connection);
     }
   } else {
     // Default: Claim all tokens (most convenient)
-    console.log('🌟 Mode: Claim ALL tokens (default)\n');
+    console.log('🌟 Mode: Claim ALL tokens and transfer to destination (default)\n');
     console.log('💡 Tip: Use --token <mint> to claim a specific token\n');
     result = await claimAllTokens(referralProvider, wallet, referralAccountPubkey, connection);
   }
 
   // Summary
   console.log('\n' + '='.repeat(60));
-  console.log('📊 CLAIM SUMMARY');
+  console.log('📊 CLAIM & TRANSFER SUMMARY');
   console.log('='.repeat(60));
+  console.log(`🎯 Destination: ${DESTINATION_WALLET}`);
   
-  if (result.success !== undefined) {
+  if (result.success !== undefined && typeof result.success === 'number') {
     console.log(`✅ Successful claims: ${result.success}`);
     console.log(`❌ Failed claims: ${result.failed}`);
+    console.log(`📤 Successful transfers: ${result.transferred || 0}`);
   } else if (result.success) {
     console.log('✅ Claim successful');
+    console.log(`📤 Transfer: ${result.transferred ? 'Success' : 'No balance to transfer'}`);
   } else {
     console.log('❌ Claim failed');
   }
