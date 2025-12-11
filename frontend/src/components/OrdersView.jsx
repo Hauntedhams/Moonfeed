@@ -2,24 +2,30 @@ import React, { useState, useEffect } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { getFullApiUrl } from '../config/api';
+import { getTransactions, deleteTransaction, storeTransaction, clearTransactions } from '../utils/transactionStorage';
 import './OrdersView.css';
 
 const OrdersView = () => {
   const { publicKey, connected, signTransaction } = useWallet();
   const [orders, setOrders] = useState([]);
+  const [transactions, setTransactions] = useState([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
+  const [loadingTransactions, setLoadingTransactions] = useState(false);
   const [ordersError, setOrdersError] = useState(null);
   const [statusFilter, setStatusFilter] = useState('active');
   const [cancellingOrder, setCancellingOrder] = useState(null);
   const [showLimitOrderInfo, setShowLimitOrderInfo] = useState(false);
+  const [activeSection, setActiveSection] = useState('orders'); // 'orders' or 'transactions'
 
   // Fetch orders when wallet connects or filter changes
   useEffect(() => {
     const setupOrders = async () => {
       if (connected && publicKey) {
         fetchOrders();
+        fetchTransactions();
       } else {
         setOrders([]);
+        setTransactions([]);
         
         // Clear order caches on disconnect
         const { clearAllOrderCaches } = await import('../utils/orderCache.js');
@@ -29,6 +35,130 @@ const OrdersView = () => {
     
     setupOrders();
   }, [connected, publicKey, statusFilter]);
+
+  // Fetch transactions from localStorage AND blockchain (Helius API)
+  const fetchTransactions = async () => {
+    if (!publicKey) return;
+    
+    setLoadingTransactions(true);
+    try {
+      const walletAddress = publicKey.toString();
+      
+      // Get locally stored transactions first (instant)
+      const storedTransactions = getTransactions(walletAddress);
+      
+      // Show local storage transactions immediately while we fetch from API
+      if (storedTransactions.length > 0) {
+        setTransactions(storedTransactions);
+      }
+      
+      // Fetch blockchain transactions from backend
+      try {
+        const response = await fetch(getFullApiUrl(`/api/wallet/${walletAddress}/swaps?limit=50`));
+        
+        if (response.ok) {
+          const result = await response.json();
+          
+          if (result.success && result.transactions && result.transactions.length > 0) {
+            console.log(`📡 Fetched ${result.transactions.length} swap transactions from blockchain`);
+            
+            // Merge blockchain transactions with local storage
+            // Update existing ones if they have "Unknown" data, add new ones
+            for (const tx of result.transactions) {
+              const existing = storedTransactions.find(st => st.signature === tx.signature);
+              
+              if (!existing) {
+                // New transaction - add it
+                storeTransaction({
+                  walletAddress,
+                  signature: tx.signature,
+                  type: tx.type,
+                  tokenMint: tx.tokenMint,
+                  tokenSymbol: tx.tokenSymbol,
+                  tokenName: tx.tokenName,
+                  tokenImage: tx.tokenImage,
+                  inputAmount: tx.inputAmount,
+                  outputAmount: tx.outputAmount,
+                  inputMint: tx.inputMint,
+                  outputMint: tx.outputMint,
+                  pricePerToken: tx.pricePerToken,
+                  timestamp: tx.timestamp,
+                });
+              } else if (existing.tokenSymbol === 'Unknown' && tx.tokenSymbol !== 'Unknown') {
+                // Existing transaction has Unknown data - update it with better metadata
+                // Delete old and add new with better data
+                deleteTransaction(walletAddress, tx.signature);
+                storeTransaction({
+                  walletAddress,
+                  signature: tx.signature,
+                  type: tx.type,
+                  tokenMint: tx.tokenMint,
+                  tokenSymbol: tx.tokenSymbol,
+                  tokenName: tx.tokenName,
+                  tokenImage: tx.tokenImage,
+                  inputAmount: tx.inputAmount || existing.inputAmount,
+                  outputAmount: tx.outputAmount || existing.outputAmount,
+                  inputMint: tx.inputMint,
+                  outputMint: tx.outputMint,
+                  pricePerToken: tx.pricePerToken || existing.pricePerToken,
+                  timestamp: tx.timestamp || existing.timestamp,
+                });
+              }
+            }
+            
+            // Refresh from localStorage (now includes blockchain txs)
+            const updatedTransactions = getTransactions(walletAddress);
+            setTransactions(updatedTransactions);
+          } else if (storedTransactions.length === 0) {
+            // No blockchain transactions and no local storage
+            setTransactions([]);
+          }
+        } else {
+          // API failed, use local storage only
+          console.warn('Failed to fetch blockchain transactions, using local storage only');
+          if (storedTransactions.length === 0) {
+            setTransactions([]);
+          }
+        }
+      } catch (apiError) {
+        console.error('Error fetching blockchain transactions:', apiError);
+        // Fallback to local storage (already set above)
+        if (storedTransactions.length === 0) {
+          setTransactions([]);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching transactions:', err);
+      setTransactions([]);
+    } finally {
+      setLoadingTransactions(false);
+    }
+  };
+
+  // Handle clearing cache and re-fetching fresh data
+  const handleClearAndRefresh = async () => {
+    if (!publicKey) return;
+    
+    const walletAddress = publicKey.toString();
+    clearTransactions(walletAddress);
+    setTransactions([]);
+    
+    // Fetch fresh from blockchain
+    await fetchTransactions();
+  };
+
+  // Handle delete transaction
+  const handleDeleteTransaction = (signature) => {
+    if (!publicKey) return;
+    
+    const walletAddress = publicKey.toString();
+    const deleted = deleteTransaction(walletAddress, signature);
+    
+    if (deleted) {
+      // Refresh transactions list
+      fetchTransactions();
+    }
+  };
 
   // Helper function to check if an order is expired
   const isOrderExpired = (order) => {
@@ -351,6 +481,33 @@ const OrdersView = () => {
     }
   };
 
+  const formatTimeAgo = (timestamp) => {
+    if (!timestamp) return 'Unknown';
+    
+    try {
+      const date = new Date(timestamp);
+      if (isNaN(date.getTime())) return 'Invalid date';
+      
+      const now = new Date();
+      const diffMs = now - date;
+      const diffMins = Math.floor(diffMs / (1000 * 60));
+      const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+      const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+      
+      if (diffMins < 1) return 'Just now';
+      if (diffMins < 60) return `${diffMins}m ago`;
+      if (diffHours < 24) return `${diffHours}h ago`;
+      if (diffDays < 7) return `${diffDays}d ago`;
+      
+      return date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric'
+      });
+    } catch (err) {
+      return 'Unknown';
+    }
+  };
+
   if (!connected) {
     return (
       <div className="orders-view">
@@ -363,15 +520,15 @@ const OrdersView = () => {
                 <path d="M9 12h6M9 16h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             </div>
-            <h1>Limit Orders</h1>
-            <p className="orders-subtitle">Connect your wallet to view and manage your active limit orders</p>
+            <h1>Orders & Transactions</h1>
+            <p className="orders-subtitle">Connect your wallet to view limit orders and transaction history</p>
           </div>
 
           {/* Wallet Connection Section */}
           <div className="wallet-connection-section">
             <div className="connection-card">
               <h3>Connect Wallet</h3>
-              <p>Connect your Solana wallet to view and manage your Jupiter limit orders.</p>
+              <p>Connect your Solana wallet to view limit orders and your recent meme coin purchases.</p>
               <div className="wallet-button-container">
                 <WalletMultiButton />
               </div>
@@ -393,35 +550,58 @@ const OrdersView = () => {
               <path d="M9 12h6M9 16h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </div>
-          <h1>Your Limit Orders</h1>
-          <p className="orders-subtitle">Manage your active Jupiter limit orders</p>
-          <button 
-            className="what-are-limit-orders-link"
-            onClick={() => setShowLimitOrderInfo(true)}
+          <h1>Orders & Transactions</h1>
+          <p className="orders-subtitle">Manage limit orders and view your recent buys</p>
+        </div>
+
+        {/* Section Tabs */}
+        <div className="section-tabs">
+          <button
+            className={`section-tab ${activeSection === 'orders' ? 'active' : ''}`}
+            onClick={() => setActiveSection('orders')}
           >
-            What are limit orders?
+            <span className="tab-icon">📋</span>
+            <span className="tab-label">Limit Orders</span>
+            {orders.length > 0 && <span className="tab-count">{orders.length}</span>}
+          </button>
+          <button
+            className={`section-tab ${activeSection === 'transactions' ? 'active' : ''}`}
+            onClick={() => setActiveSection('transactions')}
+          >
+            <span className="tab-icon">💸</span>
+            <span className="tab-label">Transactions</span>
+            {transactions.length > 0 && <span className="tab-count">{transactions.length}</span>}
           </button>
         </div>
 
-        {/* Orders Section */}
-        <div className="orders-section">
-          <div className="orders-header">
-            <h3>Limit Orders</h3>
-            <div className="orders-filter">
-              <button
-                className={`filter-btn ${statusFilter === 'active' ? 'active' : ''}`}
-                onClick={() => setStatusFilter('active')}
-              >
-                Active
-              </button>
-              <button
-                className={`filter-btn ${statusFilter === 'history' ? 'active' : ''}`}
-                onClick={() => setStatusFilter('history')}
-              >
-                History
-              </button>
+        {/* Limit Orders Section */}
+        {activeSection === 'orders' && (
+          <div className="orders-section">
+            <div className="orders-header">
+              <h3>Limit Orders</h3>
+              <div className="orders-header-right">
+                <button 
+                  className="what-are-limit-orders-link"
+                  onClick={() => setShowLimitOrderInfo(true)}
+                >
+                  What are limit orders?
+                </button>
+                <div className="orders-filter">
+                  <button
+                    className={`filter-btn ${statusFilter === 'active' ? 'active' : ''}`}
+                    onClick={() => setStatusFilter('active')}
+                  >
+                    Active
+                  </button>
+                  <button
+                    className={`filter-btn ${statusFilter === 'history' ? 'active' : ''}`}
+                    onClick={() => setStatusFilter('history')}
+                  >
+                    History
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
 
           {loadingOrders ? (
             <div className="orders-loading">
@@ -970,6 +1150,135 @@ const OrdersView = () => {
             </div>
           )}
         </div>
+      )}
+
+        {/* Transactions Section */}
+        {activeSection === 'transactions' && (
+          <div className="transactions-section">
+            <div className="transactions-header">
+              <div className="transactions-header-top">
+                <h3>Recent Transactions</h3>
+                <div className="transactions-header-buttons">
+                  <button 
+                    className="sync-blockchain-btn"
+                    onClick={fetchTransactions}
+                    disabled={loadingTransactions}
+                    title="Sync with blockchain"
+                  >
+                    {loadingTransactions ? '🔄' : '🔄 Sync'}
+                  </button>
+                  <button 
+                    className="clear-refresh-btn"
+                    onClick={handleClearAndRefresh}
+                    disabled={loadingTransactions}
+                    title="Clear cache and refresh from blockchain"
+                  >
+                    🗑️ Refresh
+                  </button>
+                </div>
+              </div>
+              <p className="transactions-subtitle">Your swap transactions on Solana</p>
+            </div>
+
+            {loadingTransactions ? (
+              <div className="transactions-loading">
+                <div className="loading-spinner"></div>
+                <p>Loading transactions...</p>
+              </div>
+            ) : transactions.length === 0 ? (
+              <div className="transactions-empty">
+                <div className="empty-icon">💸</div>
+                <p>No transactions yet</p>
+                <span className="empty-hint">
+                  Your meme coin purchases will appear here when you buy through Moonfeed
+                </span>
+              </div>
+            ) : (
+              <div className="transactions-list">
+                {transactions.map((tx) => {
+                  const timeAgo = formatTimeAgo(tx.timestamp);
+                  
+                  return (
+                    <div key={tx.id || tx.signature} className="transaction-card">
+                      <div className="transaction-header">
+                        <div className="transaction-token">
+                          {tx.tokenImage ? (
+                            <img 
+                              src={tx.tokenImage} 
+                              alt={tx.tokenSymbol}
+                              className="transaction-token-image"
+                              onError={(e) => {
+                                e.target.style.display = 'none';
+                                e.target.nextSibling.style.display = 'flex';
+                              }}
+                            />
+                          ) : null}
+                          <div className="transaction-token-placeholder" style={{ display: tx.tokenImage ? 'none' : 'flex' }}>
+                            {tx.tokenSymbol?.charAt(0) || '?'}
+                          </div>
+                          <div className="transaction-token-info">
+                            <span className="transaction-symbol">{tx.tokenSymbol || 'Unknown'}</span>
+                            <span className="transaction-name">{tx.tokenName || tx.tokenSymbol}</span>
+                          </div>
+                        </div>
+                        <div className={`transaction-type ${tx.type}`}>
+                          {tx.type === 'buy' ? '🟢 Buy' : '🔴 Sell'}
+                        </div>
+                      </div>
+
+                      <div className="transaction-details">
+                        <div className="transaction-detail-row">
+                          <span className="detail-label">Amount Spent:</span>
+                          <span className="detail-value">{tx.inputAmount?.toFixed(4) || '0'} SOL</span>
+                        </div>
+                        <div className="transaction-detail-row">
+                          <span className="detail-label">Tokens Received:</span>
+                          <span className="detail-value">
+                            {tx.outputAmount ? tx.outputAmount.toLocaleString(undefined, {
+                              maximumFractionDigits: 2
+                            }) : '0'} {tx.tokenSymbol}
+                          </span>
+                        </div>
+                        {tx.pricePerToken > 0 && (
+                          <div className="transaction-detail-row">
+                            <span className="detail-label">Price per Token:</span>
+                            <span className="detail-value">
+                              {tx.pricePerToken < 0.000001 
+                                ? tx.pricePerToken.toExponential(4) 
+                                : tx.pricePerToken.toFixed(8)} SOL
+                            </span>
+                          </div>
+                        )}
+                        <div className="transaction-detail-row">
+                          <span className="detail-label">Time:</span>
+                          <span className="detail-value">{timeAgo}</span>
+                        </div>
+                      </div>
+
+                      <div className="transaction-actions">
+                        <a
+                          href={`https://solscan.io/tx/${tx.signature}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="view-tx-btn"
+                        >
+                          View on Solscan ↗
+                        </a>
+                        <button
+                          className="delete-tx-btn"
+                          onClick={() => handleDeleteTransaction(tx.signature)}
+                          title="Remove from history"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Limit Order Info Modal */}

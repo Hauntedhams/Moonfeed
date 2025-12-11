@@ -477,19 +477,28 @@ const CoinCard = memo(({
           });
         }
         
-        // �🔥 NEW LOGIC: Only consider rugcheck "attempted" if rugcheckProcessedAt exists
+        // 🔥 NEW LOGIC: Only consider rugcheck "attempted" if rugcheckProcessedAt exists
         // If rugcheck fails, backend won't set rugcheckProcessedAt, so it will retry on next view
         const rugcheckAttempted = coin.rugcheckProcessedAt;
         
-        // Check if we have ANY rugcheck data (not just verified flag)
+        // Check if rugcheck is still pending (data not ready yet)
+        const rugcheckPending = coin.rugcheckPending || coin.riskLevel === 'pending';
+        
+        // Check if we have ANY real rugcheck data (not pending status)
         const hasAnyRugcheckData = coin.rugcheckVerified || 
                                    coin.liquidityLocked !== null && coin.liquidityLocked !== undefined ||
                                    coin.rugcheckScore !== null && coin.rugcheckScore !== undefined ||
-                                   coin.riskLevel || 
+                                   (coin.riskLevel && coin.riskLevel !== 'pending' && coin.riskLevel !== 'unknown') || 
                                    coin.freezeAuthority !== null && coin.freezeAuthority !== undefined ||
                                    coin.mintAuthority !== null && coin.mintAuthority !== undefined;
         
-        if (coin.rugcheckVerified || hasAnyRugcheckData) {
+        // Show "Loading" state if rugcheck is pending
+        if (rugcheckPending && !hasAnyRugcheckData) {
+          rugcheckInfo = '<div style="margin-top: 16px; padding: 12px; background: rgba(249, 115, 22, 0.1); border-radius: 8px; border-left: 3px solid #f97316; text-align: center;">';
+          rugcheckInfo += '<div style="font-size: 0.8rem; color: #c2410c;">⏳ Security check in progress...</div>';
+          rugcheckInfo += '<div style="font-size: 0.7rem; color: #ea580c; margin-top: 4px;">Rugcheck data loading (this may take a few seconds)</div>';
+          rugcheckInfo += '</div>';
+        } else if (coin.rugcheckVerified || hasAnyRugcheckData) {
           rugcheckInfo = '<div style="margin-top: 16px; padding: 12px; background: rgba(0,0,0,0.03); border-radius: 8px; border-left: 3px solid #4F46E5;">';
           rugcheckInfo += '<div style="font-weight: 700; font-size: 0.85rem; color: #4F46E5; margin-bottom: 10px;">🔐 SECURITY ANALYSIS</div>';
           
@@ -519,7 +528,8 @@ const CoinCard = memo(({
           
           // Risk Assessment & Score - ALWAYS show if rugcheckVerified
           const riskSection = [];
-          if (coin.riskLevel && coin.riskLevel !== 'unknown') {
+          // Only show valid risk levels (not 'unknown' or 'pending')
+          if (coin.riskLevel && coin.riskLevel !== 'unknown' && coin.riskLevel !== 'pending') {
             const riskEmoji = coin.riskLevel === 'low' ? '🟢' : 
                              coin.riskLevel === 'medium' ? '🟡' : '🔴';
             const riskColor = coin.riskLevel === 'low' ? '#16a34a' : 
@@ -1261,19 +1271,9 @@ const CoinCard = memo(({
               <div className="price-and-social-section">
                 <div className="price-section">
                   <div className={`coin-price ${priceFlash}`}>
-                    {/* Live indicators */}
+                    {/* Live indicators - only show when not hovering over chart */}
                     <div className="live-indicators">
-                      {chartHoveredData ? (
-                        <div className="chart-hover-indicator" title="Showing historical price from chart">
-                          📊 {new Date(chartHoveredData.time * 1000).toLocaleString('en-US', {
-                            month: 'short',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                            hour12: true
-                          })}
-                        </div>
-                      ) : (
+                      {!chartHoveredData && (
                         <>
                           <div className={`live-indicator ${connected ? 'connected' : 'disconnected'}`} 
                                title={connected ? 'Connected to live data' : 'Disconnected from live data'}>

@@ -10,6 +10,7 @@ import { DarkModeProvider } from './contexts/DarkModeContext'
 import ReferralTracker from './utils/ReferralTracker'
 import MobileOptimizer from './utils/mobileOptimizer'
 import { initializePerformanceMonitoring } from './utils/mobileOptimizations'
+import { storeTransaction } from './utils/transactionStorage'
 
 // Lazy load heavy components that aren't needed immediately
 const WalletDebug = lazy(() => import('./components/WalletDebug'))
@@ -209,10 +210,49 @@ function App() {
   };
 
   // Handle Jupiter swap success
-  const handleSwapSuccess = ({ txid, swapResult, quoteResponseMeta, coin }) => {
+  const handleSwapSuccess = ({ txid, swapResult, quoteResponseMeta, coin, walletAddress }) => {
     console.log('🎉 Swap successful for', coin.symbol, 'TX:', txid);
-    // You can add success notifications, analytics, etc. here
-    // Modal will remain open to show success state
+    
+    // Store the transaction in localStorage for transaction history
+    if (txid && coin) {
+      try {
+        // Extract swap details from swapResult if available
+        const inputAmount = swapResult?.inputAmount 
+          ? parseFloat(swapResult.inputAmount) / 1e9 // Convert lamports to SOL
+          : 0;
+        const outputAmount = swapResult?.outputAmount 
+          ? parseFloat(swapResult.outputAmount) / (10 ** (coin.decimals || 6))
+          : 0;
+        
+        // Calculate price per token
+        const pricePerToken = outputAmount > 0 ? inputAmount / outputAmount : 0;
+        
+        // Try to get wallet address from different sources
+        const wallet = walletAddress || swapResult?.walletAddress || null;
+        
+        if (wallet) {
+          storeTransaction({
+            walletAddress: wallet,
+            signature: txid,
+            type: 'buy',
+            tokenMint: coin.mintAddress || coin.address,
+            tokenSymbol: coin.symbol || 'Unknown',
+            tokenName: coin.name || coin.symbol || 'Unknown',
+            tokenImage: coin.image || coin.logoURI || null,
+            inputAmount,
+            outputAmount,
+            inputMint: 'So11111111111111111111111111111111111111112', // SOL
+            outputMint: coin.mintAddress || coin.address,
+            pricePerToken,
+          });
+          console.log('📝 Transaction stored for history');
+        } else {
+          console.log('⚠️ No wallet address available, transaction not stored');
+        }
+      } catch (error) {
+        console.error('Failed to store transaction:', error);
+      }
+    }
   };
 
   // Handle Jupiter swap error

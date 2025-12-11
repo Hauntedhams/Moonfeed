@@ -46,6 +46,7 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
   const isLiveModeRef = useRef(true); // Ref to track live mode for use in intervals
   const userInteractionTimeoutRef = useRef(null); // Track user interaction timeout
   const [chartInitialized, setChartInitialized] = useState(false); // Track when chart is fully initialized
+  const [tooltipData, setTooltipData] = useState(null); // Track tooltip data for click/hover display
 
   // Extract pairAddress for historical data and tokenMint for real-time subscription
   const pairAddress = coin?.pairAddress || 
@@ -993,6 +994,7 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
         
         setLoading(false);
         setError(null);
+        console.log('🎯 [INIT] Setting chartInitialized to TRUE');
         setChartInitialized(true); // Mark chart as initialized for crosshair subscription
 
         console.log('✅ Chart initialized with', historicalData.length, 'data points');
@@ -1335,78 +1337,222 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
   // 🔥 CRITICAL FIX: Separate effect for crosshair subscription to avoid stale callback
   // This effect runs whenever the chart is initialized or callback changes
   useEffect(() => {
+    console.log(`🎯 [CROSSHAIR-SETUP] Effect triggered - chartInitialized: ${chartInitialized}, showAdvanced: ${showAdvanced}`);
+    
     if (!chartInitialized) {
-      console.log(`📊 [TwelveDataChart] Crosshair subscription skipped - chart not initialized yet`);
+      console.log(`🎯 [CROSSHAIR-SETUP] Skipped - chart not initialized yet`);
+      return;
+    }
+    
+    if (showAdvanced) {
+      console.log(`🎯 [CROSSHAIR-SETUP] Skipped - advanced mode active`);
       return;
     }
     
     const chart = chartRef.current;
     const lineSeries = lineSeriesRef.current;
     
+    console.log(`🎯 [CROSSHAIR-SETUP] Chart ref exists:`, !!chart, 'LineSeries ref exists:', !!lineSeries);
+    
     if (!chart || !lineSeries) {
-      console.log(`📊 [TwelveDataChart] Crosshair subscription skipped - chart or series not ready`);
+      console.log(`🎯 [CROSSHAIR-SETUP] Skipped - chart or series not ready`);
       return;
     }
     
-    if (!onCrosshairMove) {
-      console.log(`📊 [TwelveDataChart] Crosshair subscription skipped - no callback provided`);
-      return;
-    }
-    
-    console.log(`📊 [TwelveDataChart] ✅ Setting up fresh crosshair subscription for ${coin?.symbol}`);
-    console.log(`📊 [TwelveDataChart] Chart exists:`, !!chart, 'Series exists:', !!lineSeries, 'Callback exists:', !!onCrosshairMove);
+    console.log(`🎯 [CROSSHAIR-SETUP] ✅ Setting up crosshair subscription for ${coin?.symbol}`);
     
     // Subscribe to crosshair move events
     const handler = (param) => {
-      console.log(`📊 [TwelveDataChart] 🎯 CROSSHAIR EVENT FIRED!`, {
-        hasParam: !!param,
-        hasTime: !!param?.time,
-        hasSeriesData: !!param?.seriesData,
-        time: param?.time,
-        point: param?.point
-      });
+      // Log crosshair events (throttle to avoid spam)
+      const now = Date.now();
+      if (!window._lastCrosshairLog || now - window._lastCrosshairLog > 500) {
+        console.log(`🎯 [CROSSHAIR] Event fired!`, {
+          hasPoint: !!param?.point,
+          hasTime: !!param?.time,
+          point: param?.point,
+          time: param?.time
+        });
+        window._lastCrosshairLog = now;
+      }
       
-      if (!param || !param.time || !param.seriesData) {
-        // Crosshair moved away or no data - restore live price
-        console.log(`📊 [TwelveDataChart] 🔄 Restoring live price (no data at crosshair)`);
-        onCrosshairMove(null);
+      if (!param || !param.point) {
+        // Crosshair moved away - restore live price and hide tooltip
+        setTooltipData(null);
+        if (onCrosshairMove) onCrosshairMove(null);
         return;
       }
       
-      // Get the price at the crosshair position - use ref to avoid stale closure
+      // Check if we have series data
+      if (!param.time || !param.seriesData) {
+        return;
+      }
+      
+      // Get the price at the crosshair position
       const currentLineSeries = lineSeriesRef.current;
       if (!currentLineSeries) {
-        console.log(`📊 [TwelveDataChart] ⚠️ Line series ref is null`);
         return;
       }
       
       const priceData = param.seriesData.get(currentLineSeries);
-      console.log(`📊 [TwelveDataChart] 💰 Price data at crosshair:`, priceData);
       
       if (priceData && priceData.value !== undefined) {
-        // Send crosshair data to parent
-        console.log(`📊 [TwelveDataChart] ✅ Calling onCrosshairMove with price: $${priceData.value}`);
-        onCrosshairMove({
-          price: priceData.value,
-          time: param.time,
+        // Format the time for display
+        const date = new Date(param.time * 1000);
+        const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const dateStr = date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+        
+        // Format price for display
+        const price = priceData.value;
+        let formattedPrice;
+        if (price < 0.00001) {
+          formattedPrice = `$${price.toFixed(8)}`;
+        } else if (price < 0.01) {
+          formattedPrice = `$${price.toFixed(6)}`;
+        } else if (price < 1) {
+          formattedPrice = `$${price.toFixed(4)}`;
+        } else {
+          formattedPrice = `$${price.toFixed(2)}`;
+        }
+        
+        console.log(`🎯 [CROSSHAIR] Showing tooltip: ${formattedPrice} at (${param.point.x}, ${param.point.y})`);
+        
+        // Set tooltip data with position from crosshair point
+        setTooltipData({
+          price: formattedPrice,
+          rawPrice: price,
+          time: `${timeStr} • ${dateStr}`,
+          x: param.point?.x || 0,
+          y: param.point?.y || 0
         });
+        
+        // Send crosshair data to parent
+        if (onCrosshairMove) {
+          onCrosshairMove({
+            price: priceData.value,
+            time: param.time,
+          });
+        }
       } else {
-        console.log(`📊 [TwelveDataChart] ⚠️ No price data at this point`);
-        onCrosshairMove(null);
+        setTooltipData(null);
+        if (onCrosshairMove) onCrosshairMove(null);
       }
     };
     
-    chart.subscribeCrosshairMove(handler);
-    console.log(`📊 [TwelveDataChart] ✅ Crosshair subscription active for ${coin?.symbol}`);
+    // Subscribe to crosshair
+    try {
+      chart.subscribeCrosshairMove(handler);
+      console.log(`🎯 [CROSSHAIR-SETUP] ✅ Successfully subscribed to crosshair for ${coin?.symbol}`);
+    } catch (err) {
+      console.error(`🎯 [CROSSHAIR-SETUP] ❌ Failed to subscribe:`, err);
+    }
     
     // Cleanup subscription when effect re-runs or unmounts
     return () => {
-      console.log(`📊 [TwelveDataChart] 🧹 Cleaning up crosshair subscription for ${coin?.symbol}`);
-      if (chart && handler) {
-        chart.unsubscribeCrosshairMove(handler);
+      console.log(`🎯 [CROSSHAIR-SETUP] 🧹 Cleaning up for ${coin?.symbol}`);
+      setTooltipData(null);
+      try {
+        if (chart && handler) {
+          chart.unsubscribeCrosshairMove(handler);
+        }
+      } catch (err) {
+        console.error(`🎯 [CROSSHAIR-SETUP] Cleanup error:`, err);
       }
     };
-  }, [chartInitialized, onCrosshairMove, coin?.symbol]); // Re-subscribe when chart initializes or callback changes
+  }, [chartInitialized, showAdvanced, onCrosshairMove, coin?.symbol]);
+
+  // 📱 FALLBACK: Manual click/touch/hover handler for chart interaction
+  // This uses the chart's coordinate conversion to get price at position
+  const lastHoverTimeRef = useRef(0);
+  const HOVER_THROTTLE_MS = 16; // ~60fps throttle for smooth updates
+  
+  const handleChartClick = (clientX, clientY, forceUpdate = false) => {
+    const chart = chartRef.current;
+    const lineSeries = lineSeriesRef.current;
+    const container = chartContainerRef.current;
+    
+    if (!chart || !lineSeries || !container) {
+      return;
+    }
+    
+    // Throttle hover updates for performance (but not forced/click events)
+    const now = Date.now();
+    if (!forceUpdate && now - lastHoverTimeRef.current < HOVER_THROTTLE_MS) {
+      return;
+    }
+    lastHoverTimeRef.current = now;
+    
+    const rect = container.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    
+    try {
+      // Use lightweight-charts coordinate conversion
+      const timeScale = chart.timeScale();
+      
+      // Get time at x position
+      const time = timeScale.coordinateToTime(x);
+      
+      if (time) {
+        // Get the price value at this time
+        const data = lineSeries.data ? lineSeries.data() : [];
+        let price = null;
+        
+        // Find the data point at or nearest to this time
+        for (let i = 0; i < data.length; i++) {
+          if (data[i].time === time) {
+            price = data[i].value;
+            break;
+          } else if (data[i].time > time && i > 0) {
+            // Use the previous point's price (closest match)
+            price = data[i - 1].value;
+            break;
+          }
+        }
+        
+        if (price === null && data.length > 0) {
+          price = data[data.length - 1].value;
+        }
+        
+        if (price !== null) {
+          const date = new Date(time * 1000);
+          const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const dateStr = date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+          
+          let formattedPrice;
+          if (price < 0.00001) {
+            formattedPrice = `$${price.toFixed(8)}`;
+          } else if (price < 0.01) {
+            formattedPrice = `$${price.toFixed(6)}`;
+          } else if (price < 1) {
+            formattedPrice = `$${price.toFixed(4)}`;
+          } else {
+            formattedPrice = `$${price.toFixed(2)}`;
+          }
+          
+          setTooltipData({
+            price: formattedPrice,
+            rawPrice: price,
+            time: `${timeStr} • ${dateStr}`,
+            x: x,
+            y: y
+          });
+          
+          if (onCrosshairMove) {
+            onCrosshairMove({ price, time });
+          }
+        }
+      }
+    } catch (err) {
+      // Silently handle errors during hover
+    }
+  };
+
+  // Clear tooltip when switching modes or when chart is hidden
+  useEffect(() => {
+    if (showAdvanced || !chartInitialized) {
+      setTooltipData(null);
+    }
+  }, [showAdvanced, chartInitialized]);
 
   // Handle switching between clean and advanced modes
   useEffect(() => {
@@ -1516,6 +1662,33 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
         <div 
           ref={chartContainerRef} 
           className="chart-container"
+          onClick={(e) => {
+            handleChartClick(e.clientX, e.clientY, true); // Force update on click
+          }}
+          onTouchStart={(e) => {
+            if (e.touches.length === 1) {
+              const touch = e.touches[0];
+              handleChartClick(touch.clientX, touch.clientY, true); // Force update on touch
+            }
+          }}
+          onTouchMove={(e) => {
+            // Handle touch drag to show price at different points
+            if (e.touches.length === 1) {
+              const touch = e.touches[0];
+              handleChartClick(touch.clientX, touch.clientY);
+            }
+          }}
+          onMouseMove={(e) => {
+            // Show price tooltip on hover
+            handleChartClick(e.clientX, e.clientY);
+          }}
+          onMouseLeave={() => {
+            // Clear tooltip when mouse leaves chart
+            setTooltipData(null);
+            if (onCrosshairMove) {
+              onCrosshairMove(null);
+            }
+          }}
           style={{ 
             width: '100%', 
             height: isDesktopMode ? '100vh' : '100%',
@@ -1524,8 +1697,23 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
             minHeight: isDesktopMode ? '100vh' : '400px',
             backgroundColor: '#0a0a0a', // Ensure visible background
             zIndex: 1, // Ensure proper stacking
+            cursor: 'crosshair', // Show crosshair cursor on hover
           }} 
-        />
+        >
+          {/* Historical Price Tooltip - Shows when user hovers/clicks on chart */}
+          {tooltipData && (
+            <div 
+              className="chart-price-tooltip"
+              style={{
+                left: `${Math.min(Math.max(tooltipData.x + 15, 10), (chartContainerRef.current?.offsetWidth || 300) - 160)}px`,
+                top: `${Math.max(tooltipData.y - 70, 10)}px`,
+              }}
+            >
+              <div className="tooltip-price">{tooltipData.price}</div>
+              <div className="tooltip-time">{tooltipData.time}</div>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Advanced Dexscreener Chart - Show when in advanced mode */}

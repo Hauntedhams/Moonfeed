@@ -19,6 +19,7 @@ const dexpaprikaService = require('./dexpaprikaService');
 const heliusService = require('./heliusService');
 const rugcheckService = require('./rugcheckService');
 const RugcheckAutoProcessor = require('./rugcheckAutoProcessor');
+const rugcheckBatchProcessor = require('./services/RugcheckBatchProcessor'); // New batch processor
 const dexscreenerAutoEnricher = require('./dexscreenerAutoEnricher');
 const trendingAutoRefresher = require('./trendingAutoRefresher');
 const newFeedAutoRefresher = require('./newFeedAutoRefresher');
@@ -697,6 +698,84 @@ app.get('/api/enrichment/stats', (req, res) => {
   });
 });
 
+// Get rugcheck data for a single coin (from batch processor cache)
+app.get('/api/rugcheck/:mintAddress', (req, res) => {
+  try {
+    const { mintAddress } = req.params;
+    
+    if (!mintAddress || mintAddress.length < 32) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid mint address'
+      });
+    }
+    
+    // Get from batch processor cache
+    const cachedData = rugcheckBatchProcessor.getCached(mintAddress);
+    
+    if (cachedData) {
+      return res.json({
+        success: true,
+        data: cachedData,
+        cached: true,
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    // Not in cache - queue for background processing with PRIORITY
+    // Frontend should poll again or the data will be available on next request
+    rugcheckBatchProcessor.queueFeedCoins([{ mintAddress }], 'api-request', { priority: true });
+    
+    return res.json({
+      success: true,
+      data: null,
+      cached: false,
+      pending: true,
+      message: 'Rugcheck data not cached, queued with priority for processing',
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('❌ Error fetching rugcheck data:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Force immediate rugcheck for a single coin (bypasses queue)
+app.get('/api/rugcheck/:mintAddress/immediate', async (req, res) => {
+  try {
+    const { mintAddress } = req.params;
+    const { symbol } = req.query;
+    
+    if (!mintAddress || mintAddress.length < 32) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid mint address'
+      });
+    }
+    
+    // Fetch immediately (bypasses queue)
+    const rugcheckData = await rugcheckBatchProcessor.fetchImmediately(mintAddress, symbol || '');
+    
+    return res.json({
+      success: true,
+      data: rugcheckData,
+      immediate: true,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('❌ Error fetching immediate rugcheck data:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // Solana Tracker API Configuration
 const SOLANA_TRACKER_API_KEY = process.env.SOLANA_TRACKER_API_KEY;
 const SOLANA_TRACKER_BASE_URL = 'https://data.solanatracker.io';
@@ -751,22 +830,39 @@ function initializeWithLatestBatch() {
     
     console.log(`🚀 Initialized with latest batch: ${latestBatch.length} coins`);
     
+    // Process priority trending coins synchronously (first 15) - ensures first page has rugcheck
+    console.log('🔒 Processing priority rugcheck for trending coins...');
+    rugcheckBatchProcessor.processPriorityCoinsSync(currentCoins, 15, 'trending')
+      .then(() => {
+        // Queue remaining coins for background processing
+        rugcheckBatchProcessor.queueFeedCoins(currentCoins.slice(15), 'trending-remaining');
+      });
+    
     // Try to load saved NEW feed batch first
     const savedNewBatch = newCoinStorage.getCurrentBatch();
     if (savedNewBatch.length > 0) {
       newCoins = savedNewBatch;
       const batchInfo = newCoinStorage.getBatchInfo();
-      console.log(`📂 Loaded saved NEW feed: ${savedNewBatch.length} coins (age: ${batchInfo.age} min) - on-demand enrichment only`);
+      console.log(`📂 Loaded saved NEW feed: ${savedNewBatch.length} coins (age: ${batchInfo.age} min)`);
+      
+      // Process priority for saved new feed
+      rugcheckBatchProcessor.processPriorityCoinsSync(savedNewBatch, 15, 'new-saved')
+        .then(() => {
+          rugcheckBatchProcessor.queueFeedCoins(savedNewBatch.slice(15), 'new-saved-remaining');
+        });
     }
     
-    // IMMEDIATE FETCH: Populate NEW feed immediately on startup (NO pre-enrichment)
+    // IMMEDIATE FETCH: Populate NEW feed immediately on startup
     console.log('🆕 Fetching NEW feed immediately on startup...');
     fetchNewCoinBatch()
       .then(async freshNewBatch => {
-        // NO PRE-ENRICHMENT - use on-demand enrichment only
         newCoins = freshNewBatch;
         newCoinStorage.saveBatch(freshNewBatch); // Save to disk
-        console.log(`✅ NEW feed initialized with ${freshNewBatch.length} coins (on-demand enrichment only)`);
+        console.log(`✅ NEW feed initialized with ${freshNewBatch.length} coins`);
+        
+        // Process priority coins synchronously, then queue the rest
+        await rugcheckBatchProcessor.processPriorityCoinsSync(freshNewBatch, 15, 'new');
+        rugcheckBatchProcessor.queueFeedCoins(freshNewBatch.slice(15), 'new-remaining');
         
         // Update Native RPC Price Service with combined coin list (TRENDING + NEW)
         if (solanaNativePriceService && solanaNativePriceService.isRunning) {
@@ -779,14 +875,11 @@ function initializeWithLatestBatch() {
         console.error('❌ Failed to fetch initial NEW feed:', error.message);
       });
     
-    // NO PRE-ENRICHMENT for TRENDING - use on-demand enrichment only
-    console.log('🎯 TRENDING coins ready (on-demand enrichment only)');
+    // TRENDING coins ready with background rugcheck
+    console.log('🎯 TRENDING coins ready (rugcheck processing in background)');
     
-    // Start background processors immediately (no enrichment needed)
+    // Start background processors
     console.log('✅ Starting background processors...');
-    // DISABLED: No auto-enrichment needed with on-demand approach
-    // startDexscreenerAutoEnricher();
-    // startRugcheckAutoProcessor();
     startTrendingAutoRefresher();     // Start 24-hour auto-refresh for trending coins
     startNewFeedAutoRefresher();      // Start 30-minute auto-refresh for new coins
     startDextrendingAutoRefresher();  // Start 1-hour auto-refresh for Dexscreener trending coins
@@ -1556,6 +1649,12 @@ app.get('/api/coins/new', async (req, res) => {
     
     const limitedCoins = newCoins.slice(0, limit);
     
+    // Apply cached rugcheck data to coins
+    const rugcheckEnriched = rugcheckBatchProcessor.enrichCoinsWithCache(limitedCoins);
+    if (rugcheckEnriched > 0) {
+      console.log(`🔒 Applied cached rugcheck data to ${rugcheckEnriched}/${limitedCoins.length} new coins`);
+    }
+    
     // 🆕 AUTO-ENRICH: Enrich top 20 new coins in the background for Age/Holders
     const TOP_COINS_TO_ENRICH = 20; // Increased from 10 for better UX
     if (limitedCoins.length > 0) {
@@ -1641,6 +1740,12 @@ app.get('/api/coins/dextrending', async (req, res) => {
     
     const limitedCoins = coinsWithPrices.slice(0, limit);
     
+    // Apply cached rugcheck data to coins
+    const rugcheckEnriched = rugcheckBatchProcessor.enrichCoinsWithCache(limitedCoins);
+    if (rugcheckEnriched > 0) {
+      console.log(`🔒 Applied cached rugcheck data to ${rugcheckEnriched}/${limitedCoins.length} dextrending coins`);
+    }
+    
     // 🚫 NO AUTO-ENRICHMENT for DEXtrending - only enrich on-scroll/on-expand
     // DEXtrending already has good metadata from Dexscreener, enrichment should be user-triggered
     // This reduces unnecessary API calls and improves overall feed performance
@@ -1681,12 +1786,21 @@ app.get('/api/coins/trending', async (req, res) => {
       trendingCoins = await fetchFreshCoinBatch();
       currentCoins = trendingCoins;
       global.coinsCache = trendingCoins;
+      
+      // Queue for rugcheck processing
+      rugcheckBatchProcessor.queueFeedCoins(trendingCoins, 'trending');
     }
     
     // Apply live prices from Jupiter before serving
     trendingCoins = applyLivePrices(trendingCoins);
     
     const limitedCoins = trendingCoins.slice(0, limit);
+    
+    // Apply cached rugcheck data to coins
+    const rugcheckEnriched = rugcheckBatchProcessor.enrichCoinsWithCache(limitedCoins);
+    if (rugcheckEnriched > 0) {
+      console.log(`🔒 Applied cached rugcheck data to ${rugcheckEnriched}/${limitedCoins.length} trending coins`);
+    }
     
     // 🆕 AUTO-ENRICH: Enrich top 20 coins in the background for Age/Holders
     // This ensures holder data, age, and other enriched fields are available
@@ -1932,6 +2046,15 @@ app.get('/api/coins/graduating', async (req, res) => {
     
     const limitedCoins = graduatingTokens.slice(0, limit);
     
+    // Apply cached rugcheck data to coins
+    const rugcheckEnriched = rugcheckBatchProcessor.enrichCoinsWithCache(limitedCoins);
+    if (rugcheckEnriched > 0) {
+      console.log(`🔒 Applied cached rugcheck data to ${rugcheckEnriched}/${limitedCoins.length} graduating coins`);
+    }
+    
+    // Queue graduating tokens for background rugcheck processing (if not already cached)
+    rugcheckBatchProcessor.queueFeedCoins(limitedCoins, 'graduating');
+    
     // 🆕 AUTO-ENRICH: Enrich top 20 graduating coins in the background for Age/Holders
     const TOP_COINS_TO_ENRICH = 20;
     if (limitedCoins.length > 0) {
@@ -1999,100 +2122,19 @@ app.post('/api/admin/dextrending-refresh-trigger', async (req, res) => {
   }
 });
 
-// 🔍 DEBUG: Jupiter Live Price Service diagnostic endpoint
-app.get('/api/debug/jupiter-status', (req, res) => {
-  res.json({
-    isRunning: jupiterLivePriceService?.isRunning || false,
-    subscribers: jupiterLivePriceService?.subscribers?.size || 0,
-    coinsTracked: jupiterLivePriceService?.coinList?.length || 0,
-    lastUpdate: jupiterLivePriceService?.lastUpdate || null,
-    lastFetchAttempt: jupiterLivePriceService?.lastFetchAttempt || null,
-    priceCache: jupiterLivePriceService?.priceCache?.size || 0,
-    updateFrequency: jupiterLivePriceService?.updateFrequency || 0,
-    samplePrices: Array.from(jupiterLivePriceService?.priceCache?.entries() || []).slice(0, 3).map(([addr, data]) => ({
-      address: addr.substring(0, 8) + '...',
-      symbol: data.symbol,
-      price: data.price
-    }))
-  });
-});
-
-// Health check endpoints (both /health and /api/health for Render compatibility)
-// CRITICAL: These must respond immediately without any dependencies or slow operations
-app.get('/health', (req, res) => {
-  res.status(200).json({
-    status: 'ok',
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Render specifically checks /api/health - keep this minimal for fast response
-app.get('/api/health', (req, res) => {
-  // Send immediate response - don't access complex objects that might not be ready
-  res.status(200).json({
-    status: 'ok',
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Detailed status endpoint (not used for health checks)
-app.get('/api/status', (req, res) => {
+// Admin endpoint: Check rugcheck batch processor stats
+app.get('/api/admin/rugcheck-stats', (req, res) => {
   try {
+    const stats = rugcheckBatchProcessor.getStats();
     res.json({
-      status: 'ok',
-      timestamp: new Date().toISOString(),
-      service: 'moonfeed-batch-backend',
-      uptime: process.uptime(),
-      currentCoins: currentCoins.length,
-      storage: batchStorage ? batchStorage.getStorageInfo() : { status: 'not initialized' },
-      hasApiKey: !!process.env.DEXSCREENER_API_KEY,
-      jupiterLivePrice: {
-        isRunning: jupiterLivePriceService.isRunning,
-        coinsTracked: jupiterLivePriceService.coinList?.length || 0,
-        subscribers: jupiterLivePriceService.subscribers?.size || 0,
-        updateFrequency: jupiterLivePriceService.updateFrequency || 5000,
-        lastUpdate: jupiterLivePriceService.lastUpdate || null,
-        lastSuccessfulFetch: jupiterLivePriceService.lastSuccessfulFetch || null
-      },
-      priceEngine: priceEngine ? {
-        isRunning: priceEngine.isRunning,
-        clientCount: priceEngine.activeClients ? priceEngine.activeClients.size : 0,
-        coinsCount: priceEngine.coins ? priceEngine.coins.size : 0,
-        chartsCount: priceEngine.charts ? priceEngine.charts.size : 0,
-        lastUpdate: Date.now()
-      } : { status: 'not initialized' },
-      initialization: 'complete'
+      success: true,
+      ...stats,
+      timestamp: new Date().toISOString()
     });
   } catch (error) {
     res.status(500).json({
-      status: 'error',
-      message: error.message
-    });
-  }
-});
-
-// Admin endpoint: Check trending auto-refresher status
-app.get('/api/admin/trending-refresher-status', (req, res) => {
-  try {
-    const status = trendingAutoRefresher.getStatus();
-    res.json(status);
-  } catch (error) {
-    res.status(500).json({
-      error: error.message,
-      isRunning: false
-    });
-  }
-});
-
-// Admin endpoint: Check new feed auto-refresher status
-app.get('/api/admin/new-refresher-status', (req, res) => {
-  try {
-    const status = newFeedAutoRefresher.getStatus();
-    res.json(status);
-  } catch (error) {
-    res.status(500).json({
-      error: error.message,
-      isRunning: false
+      success: false,
+      error: error.message
     });
   }
 });
@@ -2174,7 +2216,7 @@ function startTrendingAutoRefresher() {
       (freshBatch) => {
         coinStorage.saveBatch(freshBatch);
       },
-      // Callback when refresh completes - update cache (NO enrichment)
+      // Callback when refresh completes - update cache and queue rugcheck
       async (freshTrendingBatch) => {
         console.log(`🔄 Updating TRENDING feed cache with ${freshTrendingBatch.length} fresh coins`);
         currentCoins = freshTrendingBatch;
@@ -2185,7 +2227,10 @@ function startTrendingAutoRefresher() {
           solanaNativePriceService.updateCoinList(freshTrendingBatch);
         }
         
-        console.log('✅ TRENDING feed cache updated (on-demand enrichment only)');
+        // Queue coins for background rugcheck processing
+        rugcheckBatchProcessor.queueFeedCoins(freshTrendingBatch, 'trending');
+        
+        console.log('✅ TRENDING feed cache updated (rugcheck queued for background processing)');
       }
     );
   }
@@ -2196,11 +2241,11 @@ function startNewFeedAutoRefresher() {
   newFeedAutoRefresher.start(
     // Function to fetch fresh NEW coins
     fetchNewCoinBatch,
-    // Callback when refresh completes - update cache (NO enrichment)
+    // Callback when refresh completes - update cache and queue rugcheck
     async (freshNewBatch) => {
       console.log(`🔄 Updating NEW feed cache with ${freshNewBatch.length} fresh coins`);
       
-      // NO PRE-ENRICHMENT - save directly
+      // Save to storage
       newCoinStorage.saveBatch(freshNewBatch);
       
       // Update cache
@@ -2213,7 +2258,10 @@ function startNewFeedAutoRefresher() {
         console.log(`🔗 Updated Native RPC service with ${allCoins.length} coins after NEW feed refresh`);
       }
       
-      console.log('✅ NEW feed cache updated (on-demand enrichment only)');
+      // Queue coins for background rugcheck processing
+      rugcheckBatchProcessor.queueFeedCoins(freshNewBatch, 'new');
+      
+      console.log('✅ NEW feed cache updated (rugcheck queued for background processing)');
     }
   );
 }
@@ -2223,7 +2271,7 @@ function startDextrendingAutoRefresher() {
   dextrendingAutoRefresher.start(
     // Function to fetch fresh DEXTRENDING coins
     fetchDexscreenerTrendingBatch,
-    // Callback when refresh completes - update cache AND Jupiter tracking
+    // Callback when refresh completes - update cache and queue rugcheck
     async (freshDextrendingBatch) => {
       console.log(`🔄 Updating DEXTRENDING feed cache with ${freshDextrendingBatch.length} fresh coins`);
       
@@ -2238,7 +2286,10 @@ function startDextrendingAutoRefresher() {
         console.log(`🔗 Updated Native RPC service with ${allCoins.length} total coins after DEXTRENDING refresh`);
       }
       
-      console.log('✅ DEXTRENDING feed cache updated (on-demand enrichment only)');
+      // Queue coins for background rugcheck processing
+      rugcheckBatchProcessor.queueFeedCoins(freshDextrendingBatch, 'dextrending');
+      
+      console.log('✅ DEXTRENDING feed cache updated (rugcheck queued for background processing)');
     }
   );
 }
@@ -2331,6 +2382,3 @@ server.listen(PORT, async () => {
   // DISABLED: Jupiter service (replaced with Native RPC for TRUE on-chain accuracy)
   // jupiterLivePriceService.start(currentCoins);
 });
-
-// Export the server for testing
-module.exports = server;

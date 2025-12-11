@@ -182,7 +182,8 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError }
         // Track trade for affiliate system
         trackTradeWithAffiliate(txid, swapResult);
         
-        onSwapSuccess?.({ txid, swapResult, coin });
+        // Pass walletAddress along with the success callback for transaction storage
+        onSwapSuccess?.({ txid, swapResult, coin, walletAddress });
       };
 
       jupiterConfig.onError = ({ error }) => {

@@ -4573,3 +4573,23 @@
 }
 
 .info-layer {}
+
+@media (max-width: 480px) {
+  .chart-page {
+    padding: 0 16px;
+  }
+  
+  .clean-chart-wrapper .clean-price-chart {
+    width: 100%;
+    max-width: 300px;
+  }
+}
+
+/* Mobile-specific optimizations for banner area */
+@media (max-width: 768px) {
+  .coin-banner {
+    /* Slightly smaller on mobile */
+    height: clamp(180px, 32vh, 250px);
+  }
+  
+  .coin-info-layer {

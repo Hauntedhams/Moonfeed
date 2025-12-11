@@ -5,7 +5,8 @@ class RugcheckService {
     this.baseUrl = 'https://api.rugcheck.xyz/v1';
     this.cache = new Map();
     this.cacheExpiry = 5 * 60 * 1000; // 5 minutes cache
-    this.requestDelay = 200; // 200ms delay between requests to avoid rate limiting
+    this.requestDelay = 0; // No delay here - batch processor handles rate limiting
+    this.requestTimeout = 15000; // 15 second timeout (increased from 10)
   }
 
   async checkToken(mintAddress) {
@@ -17,16 +18,13 @@ class RugcheckService {
         return cached.data;
       }
 
-      // Add delay to avoid rate limiting
-      await this.sleep(this.requestDelay);
-
       // Make API request to public endpoint (try both formats)
       let response = await fetch(`${this.baseUrl}/tokens/${mintAddress}/report`, {
         headers: {
           'Accept': 'application/json',
           'User-Agent': 'MoonFeed/1.0'
         },
-        timeout: 10000 // 10 second timeout
+        timeout: this.requestTimeout
       });
 
       // If report endpoint fails, try the base token endpoint
@@ -37,7 +35,7 @@ class RugcheckService {
             'Accept': 'application/json',
             'User-Agent': 'MoonFeed/1.0'
           },
-          timeout: 10000
+          timeout: this.requestTimeout
         });
       }
 

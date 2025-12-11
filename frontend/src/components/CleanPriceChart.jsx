@@ -874,33 +874,82 @@ const CleanPriceChart = memo(({ coin, width, height = 220 }) => {
 
   }, [priceData, width, height, hoveredPoint, isLiveMode]);
 
-  // Mouse tracking for hover tooltip
+  // Mouse tracking for hover tooltip - uses shared interaction logic
   const handleMouseMove = (event) => {
-    if (!priceData.length || !canvasRef.current) return;
+    if (!priceData.length || !canvasRef.current || !hasLoadedData) return;
+    handleChartInteraction(event.clientX, event.clientY);
+  };
 
+  const handleMouseLeave = () => {
+    setHoveredPoint(null);
+  };
+
+  // Touch event handlers for mobile support
+  const handleTouchStart = (event) => {
+    if (!priceData.length || !canvasRef.current || !hasLoadedData) return;
+    
+    // Prevent default to avoid scrolling while interacting with chart
+    event.preventDefault();
+    isUserInteractingRef.current = true;
+    
+    const touch = event.touches[0];
+    handleChartInteraction(touch.clientX, touch.clientY);
+  };
+
+  const handleTouchMove = (event) => {
+    if (!priceData.length || !canvasRef.current || !isUserInteractingRef.current || !hasLoadedData) return;
+    
+    // Prevent scrolling while dragging on chart
+    event.preventDefault();
+    
+    const touch = event.touches[0];
+    handleChartInteraction(touch.clientX, touch.clientY);
+  };
+
+  const handleTouchEnd = () => {
+    isUserInteractingRef.current = false;
+    // Keep the tooltip visible for a moment after touch ends
+    setTimeout(() => {
+      if (!isUserInteractingRef.current) {
+        setHoveredPoint(null);
+      }
+    }, 2000); // Hide after 2 seconds for better visibility on mobile
+  };
+
+  // Click handler for desktop click-to-show-price
+  const handleClick = (event) => {
+    if (!priceData.length || !canvasRef.current || !hasLoadedData) return;
+    console.log('[CleanChart] 📍 Chart clicked at:', event.clientX, event.clientY);
+    handleChartInteraction(event.clientX, event.clientY);
+  };
+
+  // Shared interaction logic for mouse, touch, and click events
+  const handleChartInteraction = (clientX, clientY) => {
     const canvas = canvasRef.current;
+    if (!canvas) return;
+    
     const rect = canvas.getBoundingClientRect();
-    const mouseX = event.clientX - rect.left;
-    const mouseY = event.clientY - rect.top;
+    const posX = clientX - rect.left;
+    const posY = clientY - rect.top;
 
     // Chart dimensions and padding (must match drawChart padding)
     const padding = { top: 20, right: 20, bottom: 40, left: 60 };
     const chartHeight = height - padding.top - padding.bottom;
     const containerWidth = canvas.offsetWidth;
 
-    // Check if mouse is within chart area
-    if (mouseX < padding.left || mouseX > containerWidth - padding.right || 
-        mouseY < padding.top || mouseY > height - padding.bottom) {
+    // Check if position is within chart area
+    if (posX < padding.left || posX > containerWidth - padding.right || 
+        posY < padding.top || posY > height - padding.bottom) {
       setHoveredPoint(null);
       return;
     }
 
-    // Pause auto-scrolling when user hovers over chart (not at the latest data point)
+    // Calculate data point index from position
     const dataPointWidth = (containerWidth - padding.left - padding.right) / (priceData.length - 1);
-    const relativeX = mouseX - padding.left;
+    const relativeX = posX - padding.left;
     const dataIndex = Math.round(relativeX / dataPointWidth);
     
-    // If user is hovering over older data (not the last 5% of the chart), pause updates
+    // If user is interacting with older data (not the last 5% of the chart), pause updates
     if (priceData.length > 0 && dataIndex < priceData.length * 0.95) {
       if (!isPaused) {
         setIsPaused(true);
@@ -919,19 +968,17 @@ const CleanPriceChart = memo(({ coin, width, height = 220 }) => {
       const x = padding.left + (dataIndex / (priceData.length - 1)) * (containerWidth - padding.left - padding.right);
       const y = padding.top + (1 - (point.price - minPrice) / (maxPrice - minPrice)) * chartHeight;
       
+      console.log('[CleanChart] 💰 Showing price at index', dataIndex, ':', point.price);
+      
       setHoveredPoint({
         ...point,
-        x: mouseX, // Use mouse position for tooltip placement
-        y: mouseY,
+        x: posX, // Use interaction position for tooltip placement
+        y: posY,
         dataX: x,
         dataY: y,
         index: dataIndex
       });
     }
-  };
-
-  const handleMouseLeave = () => {
-    setHoveredPoint(null);
   };
 
   // Resume live updates and scroll to latest data
@@ -1065,19 +1112,24 @@ const CleanPriceChart = memo(({ coin, width, height = 220 }) => {
           className="price-chart-canvas"
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}
+          onClick={handleClick}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
           style={{ 
             opacity: hasLoadedData ? 1 : 0.3,
-            transition: 'opacity 0.3s ease'
+            transition: 'opacity 0.3s ease',
+            touchAction: 'none' // Prevent default touch actions for smooth chart interaction
           }}
         />
         
-        {/* Hover tooltip */}
+        {/* Hover/Click tooltip for historical price display */}
         {hoveredPoint && hasLoadedData && (
           <div 
             className="chart-tooltip"
             style={{
-              left: hoveredPoint.x > (canvasRef.current?.offsetWidth * 0.7 || 200) ? `${hoveredPoint.x - 120}px` : `${hoveredPoint.x + 10}px`,
-              top: `${hoveredPoint.y - 60}px`,
+              left: `${Math.max(10, Math.min(hoveredPoint.x > (canvasRef.current?.offsetWidth * 0.6 || 200) ? hoveredPoint.x - 130 : hoveredPoint.x + 15, (canvasRef.current?.offsetWidth || 300) - 140))}px`,
+              top: `${Math.max(5, hoveredPoint.y - 70)}px`,
             }}
           >
             <div className="tooltip-price">{formatPrice(hoveredPoint.price)}</div>

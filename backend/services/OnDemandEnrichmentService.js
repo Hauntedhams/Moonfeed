@@ -108,6 +108,68 @@ class OnDemandEnrichmentService {
       if (cached) {
         console.log(`✅ [GLOBAL CACHE HIT] ${coin.symbol || mintAddress} - saved enrichment API calls`);
         this.stats.cacheHits++;
+        
+        // 🔑 KEY FIX: If rugcheck was pending, check if it's now available in batch processor cache
+        if (cached.rugcheckPending || !cached.rugcheckVerified) {
+          try {
+            const rugcheckBatchProcessor = require('./RugcheckBatchProcessor');
+            const freshRugcheck = rugcheckBatchProcessor.getCached(mintAddress);
+            
+            if (freshRugcheck && freshRugcheck.rugcheckAvailable) {
+              console.log(`🔒 [RUGCHECK UPDATE] ${coin.symbol || mintAddress} - applying fresh rugcheck data`);
+              // Merge fresh rugcheck data with cached data
+              const updatedData = {
+                ...cached,
+                liquidityLocked: freshRugcheck.liquidityLocked,
+                lockPercentage: freshRugcheck.lockPercentage,
+                burnPercentage: freshRugcheck.burnPercentage,
+                rugcheckScore: freshRugcheck.score,
+                riskLevel: freshRugcheck.riskLevel,
+                freezeAuthority: freshRugcheck.freezeAuthority,
+                mintAuthority: freshRugcheck.mintAuthority,
+                topHolderPercent: freshRugcheck.topHolderPercent,
+                isHoneypot: freshRugcheck.isHoneypot,
+                rugcheckVerified: true,
+                rugcheckFromCache: true,
+                rugcheckPending: false
+              };
+              // Update the cache with the complete data
+              this.cache.set(mintAddress, coin, updatedData);
+              return { ...coin, ...updatedData };
+            } else {
+              // Still not in batch processor cache - fetch immediately
+              console.log(`⚡ [IMMEDIATE FETCH] ${coin.symbol || mintAddress} - fetching rugcheck now...`);
+              try {
+                const immediateRugcheck = await rugcheckBatchProcessor.fetchImmediately(mintAddress, coin.symbol);
+                
+                if (immediateRugcheck && immediateRugcheck.rugcheckAvailable) {
+                  const updatedData = {
+                    ...cached,
+                    liquidityLocked: immediateRugcheck.liquidityLocked,
+                    lockPercentage: immediateRugcheck.lockPercentage,
+                    burnPercentage: immediateRugcheck.burnPercentage,
+                    rugcheckScore: immediateRugcheck.score,
+                    riskLevel: immediateRugcheck.riskLevel,
+                    freezeAuthority: immediateRugcheck.freezeAuthority,
+                    mintAuthority: immediateRugcheck.mintAuthority,
+                    topHolderPercent: immediateRugcheck.topHolderPercent,
+                    isHoneypot: immediateRugcheck.isHoneypot,
+                    rugcheckVerified: true,
+                    rugcheckImmediate: true,
+                    rugcheckPending: false
+                  };
+                  this.cache.set(mintAddress, coin, updatedData);
+                  return { ...coin, ...updatedData };
+                }
+              } catch (immErr) {
+                console.warn(`⚠️ Immediate rugcheck failed for ${coin.symbol}:`, immErr.message);
+              }
+            }
+          } catch (err) {
+            console.warn(`⚠️ Error checking rugcheck cache for ${coin.symbol}:`, err.message);
+          }
+        }
+        
         return { ...coin, ...cached };
       }
     }
@@ -118,8 +180,8 @@ class OnDemandEnrichmentService {
     console.log(`🔄 Enriching ${coin.symbol || mintAddress} on-demand (PARALLEL MODE)...`);
 
     try {
-      // 🚀 PHASE 1: Fast APIs (DexScreener, Jupiter, Pump.fun, Moonshot) + Rugcheck (parallel start)
-      // Start ALL APIs in parallel, but only wait for fast ones
+      // 🚀 PHASE 1: Fast APIs (DexScreener, Jupiter, Pump.fun, Moonshot)
+      // Rugcheck is handled separately via batch processor cache
       const fastApis = {
         dex: this.fetchDexScreener(mintAddress),
         jupiter: jupiterBatchService.getTokenData(mintAddress),
@@ -127,10 +189,7 @@ class OnDemandEnrichmentService {
         moonshot: moonshotMetadataService.getMetadata(mintAddress) // 🌙 Fetch Moonshot metadata
       };
 
-      // 🆕 OPTIMIZATION: Start rugcheck immediately in parallel (don't wait for it yet)
-      const rugcheckPromise = this.fetchRugcheck(mintAddress);
-
-      // Wait for fast APIs only (don't wait for rugcheck)
+      // Wait for fast APIs only
       const fastResults = await Promise.race([
         Promise.allSettled(Object.values(fastApis)),
         new Promise((_, reject) => 
@@ -330,34 +389,73 @@ class OnDemandEnrichmentService {
         console.warn(`⚠️ No valid price for ${coin.symbol}, cannot generate chart`);
       }
 
-      // 🚀 PHASE 2: Wait for rugcheck with aggressive timeout
-      // 🆕 OPTIMIZATION: Only wait 2s for rugcheck (it already started in parallel)
-      // Rugcheck has 800ms head start from Phase 1, so effective timeout is ~2.8s
-      console.log(`🔐 Phase 2: Checking rugcheck for ${coin.symbol} (already started in parallel)...`);
+      // 🚀 PHASE 2: Get rugcheck data from batch processor cache
+      // The batch processor pre-fetches rugcheck data in the background when feeds are updated
+      // This eliminates on-demand rugcheck API calls and prevents rate limiting at scale
+      console.log(`🔐 Phase 2: Checking rugcheck cache for ${coin.symbol}...`);
       
       try {
-        const rugcheckTimeout = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Rugcheck timeout')), 2000)
-        );
+        // Import batch processor (lazy load to avoid circular dependency)
+        const rugcheckBatchProcessor = require('./RugcheckBatchProcessor');
         
-        // Wait max 2 seconds for rugcheck (it already has ~800ms head start from Phase 1)
-        const rugData = await Promise.race([rugcheckPromise, rugcheckTimeout]);
+        // Try to get from cache first (instant, no API call)
+        const cachedRugcheck = rugcheckBatchProcessor.getCached(mintAddress);
         
-        if (rugData) {
-          const rugcheckData = this.processRugcheckData(rugData);
-          Object.assign(enrichedData, rugcheckData);
-          console.log(`✅ Phase 2: Rugcheck applied in ${Date.now() - startTime}ms`);
+        if (cachedRugcheck && cachedRugcheck.rugcheckAvailable) {
+          // Apply cached rugcheck data
+          enrichedData.liquidityLocked = cachedRugcheck.liquidityLocked;
+          enrichedData.lockPercentage = cachedRugcheck.lockPercentage;
+          enrichedData.burnPercentage = cachedRugcheck.burnPercentage;
+          enrichedData.rugcheckScore = cachedRugcheck.score;
+          enrichedData.riskLevel = cachedRugcheck.riskLevel;
+          enrichedData.freezeAuthority = cachedRugcheck.freezeAuthority;
+          enrichedData.mintAuthority = cachedRugcheck.mintAuthority;
+          enrichedData.topHolderPercent = cachedRugcheck.topHolderPercent;
+          enrichedData.isHoneypot = cachedRugcheck.isHoneypot;
+          enrichedData.rugcheckVerified = true;
+          enrichedData.rugcheckFromCache = true;
+          
+          console.log(`✅ Phase 2: Rugcheck from cache in ${Date.now() - startTime}ms`);
           console.log(`🔐 Rugcheck data:`, {
-            liquidityLocked: rugcheckData.liquidityLocked,
-            lockPercentage: rugcheckData.lockPercentage,
-            riskLevel: rugcheckData.riskLevel
+            liquidityLocked: cachedRugcheck.liquidityLocked,
+            lockPercentage: cachedRugcheck.lockPercentage,
+            riskLevel: cachedRugcheck.riskLevel
           });
+        } else {
+          // Not in cache - fetch immediately for on-demand requests (user is actively viewing)
+          console.log(`⚡ Fetching rugcheck IMMEDIATELY for ${coin.symbol} (on-demand)...`);
+          try {
+            const immediateRugcheck = await rugcheckBatchProcessor.fetchImmediately(mintAddress, coin.symbol);
+            
+            if (immediateRugcheck && immediateRugcheck.rugcheckAvailable) {
+              enrichedData.liquidityLocked = immediateRugcheck.liquidityLocked;
+              enrichedData.lockPercentage = immediateRugcheck.lockPercentage;
+              enrichedData.burnPercentage = immediateRugcheck.burnPercentage;
+              enrichedData.rugcheckScore = immediateRugcheck.score;
+              enrichedData.riskLevel = immediateRugcheck.riskLevel;
+              enrichedData.freezeAuthority = immediateRugcheck.freezeAuthority;
+              enrichedData.mintAuthority = immediateRugcheck.mintAuthority;
+              enrichedData.topHolderPercent = immediateRugcheck.topHolderPercent;
+              enrichedData.isHoneypot = immediateRugcheck.isHoneypot;
+              enrichedData.rugcheckVerified = true;
+              enrichedData.rugcheckImmediate = true;
+              console.log(`✅ Immediate rugcheck complete for ${coin.symbol}: ${immediateRugcheck.liquidityLocked ? 'LOCKED 🔒' : 'unlocked'}`);
+            } else {
+              // Fallback returned - API may have failed
+              enrichedData.riskLevel = 'unknown';
+              enrichedData.rugcheckUnavailable = true;
+              console.log(`⚠️ Immediate rugcheck returned fallback for ${coin.symbol}`);
+            }
+          } catch (immError) {
+            console.warn(`⚠️ Immediate rugcheck failed for ${coin.symbol}:`, immError.message);
+            enrichedData.riskLevel = 'unknown';
+            enrichedData.rugcheckUnavailable = true;
+          }
         }
       } catch (rugError) {
-        console.warn(`⚠️ Rugcheck timeout or error for ${coin.symbol} (continuing without it):`, rugError.message);
-        // Set default rugcheck values so UI shows "Security check unavailable" instead of "analyzing..."
-        enrichedData.liquidityLocked = false;
-        enrichedData.lockPercentage = 0;
+        console.warn(`⚠️ Rugcheck cache error for ${coin.symbol}:`, rugError.message);
+        // DON'T set liquidityLocked to false - leave it undefined so UI shows "unavailable" 
+        // instead of incorrectly showing "UNLOCKED" for coins that ARE locked
         enrichedData.riskLevel = 'unknown';
         enrichedData.rugcheckUnavailable = true;
       }

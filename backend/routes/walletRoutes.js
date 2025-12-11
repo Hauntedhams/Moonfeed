@@ -277,6 +277,41 @@ router.get('/:owner/trades', async (req, res) => {
 });
 
 /**
+ * GET /api/wallet/:owner/swaps
+ * Fetch swap/trade transaction history for a wallet
+ * Returns: List of swap transactions (buys/sells) from Helius
+ */
+router.get('/:owner/swaps', async (req, res) => {
+  try {
+    const { owner } = req.params;
+    const { limit = 50 } = req.query;
+    
+    if (!owner) {
+      return res.status(400).json({
+        success: false,
+        error: 'Wallet address is required'
+      });
+    }
+
+    console.log(`🔍 Fetching swap transactions for: ${owner.slice(0, 4)}...${owner.slice(-4)}`);
+
+    const result = await heliusService.getSwapTransactions(owner, parseInt(limit));
+    
+    console.log(`✅ Successfully fetched ${result.transactions?.length || 0} swap transactions`);
+
+    res.json(result);
+
+  } catch (error) {
+    console.error('❌ Error fetching swap transactions:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch swap transactions',
+      details: error.message
+    });
+  }
+});
+
+/**
  * GET /api/wallet/:owner/page/:page
  * Fetch paginated wallet data (holdings/trades)
  * Returns: Paginated list of positions or transactions
