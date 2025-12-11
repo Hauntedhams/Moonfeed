@@ -2391,3 +2391,4 @@ server.listen(PORT, async () => {
   // DISABLED: Jupiter service (replaced with Native RPC for TRUE on-chain accuracy)
   // jupiterLivePriceService.start(currentCoins);
 });
+// Trigger redeploy Thu Dec 11 14:28:41 PST 2025
