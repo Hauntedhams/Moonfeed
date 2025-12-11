@@ -77,6 +77,15 @@ app.get('/api/version', (req, res) => {
   });
 });
 
+// Health check endpoint for Render deployment
+app.get('/api/health', (req, res) => {
+  res.status(200).json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+
 // Mount wallet routes
 app.use('/api/wallet', walletRoutes);
 
