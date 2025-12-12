@@ -5,7 +5,7 @@
 .timeframe-selector {
   display: flex;
   gap: 6px;
-  padding: 10px 8px 8px 8px;
+  padding: 14px 8px;
   background: var(--chart-bg);
   border-bottom: 1px solid var(--chart-border);
   flex-wrap: nowrap; /* Keep all buttons on one line */
@@ -14,19 +14,19 @@
   position: relative;
   z-index: 10;
   overflow-x: auto; /* Allow horizontal scroll if needed on small screens */
-  overflow-y: hidden;
+  overflow-y: visible;
 }
 
 .timeframe-btn,
 .timeframe-button {
-  min-width: 42px;
-  padding: 7px 10px;
-  font-size: 11px;
+  min-width: 38px;
+  padding: 14px 10px !important;
+  font-size: 12px;
   font-weight: 600;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  background: #f3f4f6;
-  color: #222;
-  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border-radius: 20px !important;
   cursor: pointer;
   transition: all 0.2s ease;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
@@ -39,11 +39,11 @@
 
 .timeframe-btn:hover:not(:disabled),
 .timeframe-button:hover:not(:disabled) {
-  background: #e5e7eb;
-  border-color: rgba(0, 0, 0, 0.15);
-  color: #111;
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #fff;
   transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .timeframe-btn.active,
@@ -73,6 +73,7 @@
   color: #fff;
   font-weight: 600;
   min-width: 70px;
+  border-radius: 20px !important;
   position: relative;
   overflow: hidden;
 }
@@ -1268,9 +1269,10 @@ body.light-mode .twelve-data-chart,
   .timeframe-selector .timeframe-btn {
     pointer-events: auto;
     cursor: pointer;
-    min-width: 50px;
-    padding: 8px 14px;
+    min-width: 40px;
+    padding: 14px 12px !important;
     font-size: 12px;
+    border-radius: 20px !important;
   }
 
   /* Live indicator positioning for desktop */
