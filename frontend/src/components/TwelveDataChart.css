@@ -1,7 +1,7 @@
 /* ============================================
    TIMEFRAME SELECTOR
-   Updated: 2024-12-11 16:45 - Taller, rounder pill buttons
-   Cache bust: v3
+   Updated: 2024-12-11 17:00 - Taller, rounder pill buttons
+   Cache bust: v4 - force new hash
    ============================================ */
 
 .timeframe-selector {
@@ -21,6 +21,7 @@
 
 .timeframe-btn,
 .timeframe-button {
+  --cache-bust: "v4";
   min-width: 38px;
   padding: 14px 10px !important;
   font-size: 12px;
