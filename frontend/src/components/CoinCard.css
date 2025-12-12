@@ -1,12 +1,6 @@
 /* =============================================================================
    COIN CARD - Streamlined Two-Layer TikTok-style Component (CLEAN STYLES)
-   BUILD: 2024-12-11-DIAGNOSTIC-V8
    ============================================================================= */
-
-/* 🔴 DIAGNOSTIC: If you see this red border on coin-info-layer, new CSS is loaded */
-.coin-info-layer {
-  outline: 4px solid red !important;
-}
 
 /* ⚡ MOBILE PERFORMANCE OPTIMIZATIONS - Disable animations on mobile devices */
 @media (max-width: 768px), (hover: none) {
