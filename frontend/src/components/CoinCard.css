@@ -597,6 +597,10 @@
   backdrop-filter: blur(4px);
   white-space: nowrap;
   flex-shrink: 0;
+  /* 🔥 FIX: Enable click on read-more button even when parent has pointer-events: none */
+  pointer-events: auto;
+  position: relative;
+  z-index: 10;
 }
 
 .read-more-button:hover {
