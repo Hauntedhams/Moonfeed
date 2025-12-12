@@ -4593,3 +4593,7 @@
   }
   
   .coin-info-layer {
+    /* Adjust height for mobile banner */
+    height: calc(100dvh - clamp(180px, 32vh, 250px));
+  }
+}

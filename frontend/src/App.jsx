@@ -4,6 +4,7 @@ import ModernTokenScroller from './components/ModernTokenScroller'
 import FavoritesGrid from './components/FavoritesGrid'
 import BottomNavBar from './components/BottomNavBar'
 import TopTabs from './components/TopTabs'
+import ErrorBoundary from './components/ErrorBoundary'
 import { WalletProvider } from './contexts/WalletContext'
 import { TrackedWalletsProvider } from './contexts/TrackedWalletsContext'
 import { DarkModeProvider } from './contexts/DarkModeContext'
@@ -355,21 +356,23 @@ function App() {
           />
         </div>
       ) : (
-        <ModernTokenScroller
-          onFavoritesChange={handleFavoritesChange}
-          favorites={favorites}
-          filters={filters}
-          onlyFavorites={false}
-          onTradeClick={handleTradeClick}
-          onVisibleCoinsChange={handleVisibleCoinsChange}
-          onCurrentCoinChange={handleCurrentCoinChange}
-          onTotalCoinsChange={handleTotalCoinsChange}
-          advancedFilters={advancedFilters}
-          onAdvancedFilter={handleAdvancedFilter}
-          isAdvancedFilterActive={isAdvancedFilterActive}
-          showFiltersButton={true} // Show filters button on home view
-          onSearchClick={handleSearchClick} // Add search click handler
-        />
+        <ErrorBoundary>
+          <ModernTokenScroller
+            onFavoritesChange={handleFavoritesChange}
+            favorites={favorites}
+            filters={filters}
+            onlyFavorites={false}
+            onTradeClick={handleTradeClick}
+            onVisibleCoinsChange={handleVisibleCoinsChange}
+            onCurrentCoinChange={handleCurrentCoinChange}
+            onTotalCoinsChange={handleTotalCoinsChange}
+            advancedFilters={advancedFilters}
+            onAdvancedFilter={handleAdvancedFilter}
+            isAdvancedFilterActive={isAdvancedFilterActive}
+            showFiltersButton={true} // Show filters button on home view
+            onSearchClick={handleSearchClick} // Add search click handler
+          />
+        </ErrorBoundary>
       )}
       </div>
       

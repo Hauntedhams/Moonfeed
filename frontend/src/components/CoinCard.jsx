@@ -1093,6 +1093,20 @@ const CoinCard = memo(({
   //   console.log(`🔗 Social data available for ${coin.symbol}:`, { ... });
   // }
 
+  // 🔍 PRODUCTION DEBUG: Log when CoinCard renders (only first coin to avoid spam)
+  if (typeof window !== 'undefined' && !window.__COINCARD_RENDER_LOGGED__) {
+    console.log('🎴 CoinCard RENDER:', {
+      symbol: coin.symbol,
+      name: coin.name,
+      hasBanner: !!(coin.banner || coin.bannerImage || coin.header || coin.bannerUrl),
+      hasProfileImage: !!(coin.profileImage || coin.image || coin.logo),
+      isVisible,
+      isExpanded,
+      mintAddress: coin.mintAddress?.slice(0, 10) + '...'
+    });
+    window.__COINCARD_RENDER_LOGGED__ = true;
+  }
+
   return (
     <div className="coin-card">
       {/* Desktop Split-Screen Layout */}
