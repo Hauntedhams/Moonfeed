@@ -38,3 +38,4 @@ export default defineConfig({
     }
   }
 })
+// Force Vercel rebuild Sat Dec 13 08:19:33 PST 2025
