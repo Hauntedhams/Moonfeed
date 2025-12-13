@@ -1374,12 +1374,13 @@
 /* Twelve Chart Section - Ensure dimensions for chart rendering */
 .twelve-chart-section {
   width: 100%;
-  min-height: 320px;
-  height: 320px;
+  min-height: 400px;
+  height: auto;
   display: flex;
   flex-direction: column;
   position: relative;
-  background: #000;
+  background: #0a0e1a;
+  overflow: visible;
 }
 
 /* 🔥 HOT SWIPE AREA - Full-width, fixed-height container for natural scroll/drag */
@@ -4575,8 +4576,6 @@
 .info-layer-content::-webkit-scrollbar {
   width: 8px;
 }
-
-.info-layer {}
 
 @media (max-width: 480px) {
   .chart-page {

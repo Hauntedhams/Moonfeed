@@ -175,8 +175,9 @@ body.dark-mode .timeframe-btn.clean-btn {
    ============================================ */
 
 /* Default (Dark MODE) */
-.twelve-data-chart {
-  --chart-bg: linear-gradient(180deg, #000000 0%, #0a0a0a 100%);
+.twelve-data-chart,
+.twelve-data-chart-wrapper {
+  --chart-bg: #0a0e1a; /* Match parent container background */
   --chart-text: rgba(255, 255, 255, 0.9);
   --chart-text-dim: rgba(255, 255, 255, 0.6);
   --chart-border: rgba(255, 255, 255, 0.1);
@@ -195,7 +196,10 @@ body.dark-mode .timeframe-btn.clean-btn {
 /* Light MODE */
 body.light-mode .twelve-data-chart,
 .light-mode .twelve-data-chart,
-[data-theme="light"] .twelve-data-chart {
+[data-theme="light"] .twelve-data-chart,
+body.light-mode .twelve-data-chart-wrapper,
+.light-mode .twelve-data-chart-wrapper,
+[data-theme="light"] .twelve-data-chart-wrapper {
   --chart-bg: linear-gradient(180deg, #ffffff 0%, #f8f9fa 100%);
   --chart-text: rgba(0, 0, 0, 0.9);
   --chart-text-dim: rgba(0, 0, 0, 0.6);
@@ -263,38 +267,32 @@ body.light-mode .twelve-data-chart,
   position: relative;
   width: 100%;
   height: 100%;
-  min-height: 380px; /* Increased to account for price display */
+  min-height: 380px;
   background: var(--chart-bg);
-  border-radius: 0;
-  overflow: visible; /* Changed from hidden to visible to prevent cutoff */
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   padding: 0;
-  box-shadow: none;
-  border: none;
-  /* Enable hardware acceleration for chart rendering */
-  will-change: transform;
-  transform: translateZ(0);
-  -webkit-transform: translateZ(0);
+  margin: 0;
 }
 
 /* LIVE Indicator - Enhanced with Glow */
 .live-indicator {
   position: absolute;
-  top: 16px;
-  right: 16px;
+  top: 12px;
+  right: 100px; /* Positioned to avoid overlapping with price scale */
   background: var(--chart-green-bg);
   border: 2px solid var(--chart-green-border);
-  padding: 8px 16px;
-  border-radius: 12px;
+  padding: 6px 12px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 12px;
+  gap: 6px;
+  font-size: 11px;
   font-weight: 800;
   color: var(--chart-green);
   text-transform: uppercase;
-  letter-spacing: 1.2px;
+  letter-spacing: 1px;
   z-index: 100;
   animation: livePulseGlow 2s ease-in-out infinite;
   box-shadow: 
@@ -587,7 +585,7 @@ body.light-mode .twelve-data-chart,
   width: 100%;
   height: 100%;
   min-height: 400px;
-  background: #000000;
+  background: transparent; /* Changed from #000000 - let chart handle its own background */
   display: flex;
   flex-direction: column;
 }
@@ -671,27 +669,23 @@ body.light-mode .twelve-data-chart,
   z-index: 5;
 }
 
-/* Chart Container with Enhanced Background */
+/* Chart Container - Simplified */
 .chart-container {
-  flex: 1;
   width: 100%;
-  height: 100%;
-  min-height: 380px;
+  height: 320px;
+  min-height: 280px;
   position: relative;
-  background: var(--chart-bg);
-  border-radius: 0;
+  background: #0a0e1a;
   overflow: hidden;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  z-index: 1; /* Ensure proper stacking */
+  margin: 0;
 }
 
-/* Ensure canvas elements inside chart are visible */
-.chart-container canvas {
-  display: block !important;
-  position: relative !important;
-  z-index: 2 !important;
+/* Light mode background */
+body.light-mode .chart-container,
+.light-mode .chart-container,
+[data-theme="light"] .chart-container {
+  background: #ffffff;
 }
 
 .chart-wrapper {
@@ -701,10 +695,6 @@ body.light-mode .twelve-data-chart,
   position: relative;
   overflow: hidden;
   background: transparent;
-  /* Ensure chart is interactive and can receive pointer events */
-  pointer-events: auto;
-  touch-action: pan-x pan-y;
-  user-select: none;
 }
 
 /* Remove the grid pattern overlay that might interfere with light mode */
@@ -1000,9 +990,9 @@ body.light-mode .twelve-data-chart,
   }
   
   .live-indicator {
-    top: 12px;
+    top: 10px;
     right: 12px;
-    padding: 6px 12px;
+    padding: 5px 10px;
     font-size: 10px;
   }
   
@@ -1281,7 +1271,7 @@ body.light-mode .twelve-data-chart,
   /* Live indicator positioning for desktop */
   .live-indicator {
     position: absolute; /* Changed from fixed to absolute */
-    top: 20px;
+    top: 16px;
     right: 20px;
     z-index: 200;
     pointer-events: none; /* Don't block chart interaction */

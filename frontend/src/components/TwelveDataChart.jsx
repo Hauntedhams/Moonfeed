@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createChart, LineSeries } from 'lightweight-charts';
+import { useDarkMode } from '../contexts/DarkModeContext';
 import './TwelveDataChart.css';
 
 // Use backend proxy to avoid CORS errors
@@ -20,6 +21,9 @@ let timeframeChangeTimer = null;
 const TIMEFRAME_DEBOUNCE_MS = 800; // Wait 800ms after last click before fetching (increased from 500ms)
 
 const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCrosshairMove, onFirstPriceUpdate }) => {
+  // Get dark mode from context - this is the source of truth
+  const { isDarkMode: contextDarkMode } = useDarkMode();
+  
   const chartContainerRef = useRef(null);
   const chartRef = useRef(null);
   const lineSeriesRef = useRef(null);
@@ -34,10 +38,6 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
   const [latestPrice, setLatestPrice] = useState(null);
   const [usePolling, setUsePolling] = useState(false);
   const [isLiveConnected, setIsLiveConnected] = useState(false); // Track RPC WebSocket status
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    // Initialize based on actual DOM state
-    return document.documentElement.classList.contains('dark-mode');
-  }); // Track theme mode
   const [selectedTimeframe, setSelectedTimeframe] = useState('1m'); // Track selected timeframe
   const [isInView, setIsInView] = useState(isDesktopMode); // Track if chart is in viewport - start true if desktop
   const [shouldLoad, setShouldLoad] = useState(isDesktopMode); // Track if chart should load - start true if desktop  
@@ -74,33 +74,13 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
   //   });
   // }, [coin]);
 
-  // Detect and track theme changes
+  // Update chart when theme changes from context
   useEffect(() => {
-    const detectTheme = () => {
-      // Check if dark-mode class exists on documentElement
-      // If the class exists, it's dark mode; otherwise it's light mode (the default)
-      const isDark = document.documentElement.classList.contains('dark-mode');
-      
-      setIsDarkMode(isDark);
-      
-      // Update chart colors if chart exists
-      if (chartRef.current) {
-        updateChartTheme(isDark);
-      }
-    };
-
-    // Initial detection
-    detectTheme();
-
-    // Watch for theme changes on documentElement
-    const observer = new MutationObserver(detectTheme);
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class']
-    });
-
-    return () => observer.disconnect();
-  }, []);
+    // Update chart colors if chart exists when context dark mode changes
+    if (chartRef.current) {
+      updateChartTheme(contextDarkMode);
+    }
+  }, [contextDarkMode]);
 
   // Sync isLiveMode state with ref for use in intervals
   useEffect(() => {
@@ -183,6 +163,8 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
     if (!chartRef.current || !lineSeriesRef.current) return;
 
     const colors = getThemeColors(isDark);
+    
+    console.log('🎨 updateChartTheme called with isDark:', isDark);
 
     chartRef.current.applyOptions({
       layout: {
@@ -204,6 +186,8 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
       },
       rightPriceScale: {
         borderColor: colors.border,
+        borderVisible: false, // Hide border line to avoid black bar
+        textColor: colors.text,
       },
       crosshair: {
         vertLine: {
@@ -225,13 +209,28 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
       crosshairMarkerBorderColor: colors.lineColor,
       crosshairMarkerBackgroundColor: colors.lineColor,
     });
+    
+    // Force resize to trigger full redraw including price scale background
+    if (chartContainerRef.current) {
+      const width = chartContainerRef.current.clientWidth;
+      const height = chartContainerRef.current.clientHeight;
+      if (width > 0 && height > 0) {
+        chartRef.current.resize(width, height);
+      }
+    }
   };
 
   // Get theme-specific colors
   const getThemeColors = (isDark) => {
+    // Use the exact same background color for both chart and price scale
+    const bgColor = isDark ? '#0a0e1a' : '#ffffff';
+    
+    console.log('🎨 getThemeColors called with isDark:', isDark, '-> bgColor:', bgColor);
+    
     if (isDark) {
       return {
-        background: { type: 'solid', color: '#0a0a0a' }, // Changed from transparent to solid color
+        // Use proper object format for solid background
+        background: { type: 'solid', color: bgColor },
         text: 'rgba(255, 255, 255, 0.6)',
         gridLines: 'rgba(255, 255, 255, 0.05)',
         border: 'rgba(255, 255, 255, 0.1)',
@@ -244,7 +243,7 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
       };
     } else {
       return {
-        background: { type: 'solid', color: '#ffffff' },
+        background: { type: 'solid', color: bgColor },
         text: 'rgba(0, 0, 0, 0.7)',
         gridLines: 'rgba(0, 0, 0, 0.08)',
         border: 'rgba(0, 0, 0, 0.15)',
@@ -733,14 +732,18 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
 
       try {
         
-        // Get theme colors
-        const colors = getThemeColors(isDarkMode);
+        // Get theme colors - use contextDarkMode from React context as single source of truth
+        const colors = getThemeColors(contextDarkMode);
+        
+        console.log('🎨 Creating chart with theme:', { isDark: contextDarkMode, bgColor: colors.background.color });
         
         // Create chart with theme-aware styling
         const chart = createChart(container, {
           layout: {
             background: colors.background,
             textColor: colors.text,
+            // Ensure the font color is visible
+            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
           },
           grid: {
             vertLines: { 
@@ -772,9 +775,16 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
           rightPriceScale: {
             borderColor: colors.border,
             scaleMargins: {
-              top: 0.1,
-              bottom: 0.1,
+              top: 0.02,
+              bottom: 0.02,
             },
+            visible: true,
+            autoScale: true,
+            alignLabels: true,
+            borderVisible: false,
+            mode: 0,
+            minimumWidth: 85,
+            textColor: colors.text,
           },
           crosshair: {
             mode: 0, // Changed to Normal mode (0) instead of Magnet mode (1)
@@ -839,20 +849,23 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
         chartRef.current = chart;
         lineSeriesRef.current = lineSeries;
 
-        // 🔍 DIAGNOSTIC: Check if canvas was created
-        const canvasElements = container.querySelectorAll('canvas');
-        if (canvasElements.length === 0) {
-          console.warn('⚠️ No canvas elements found after chart creation!');
-        } else {
-          console.log(`✅ Chart created with ${canvasElements.length} canvas elements`);
-        }
+        // 🎨 CRITICAL: Force theme update immediately after chart creation
+        // This ensures the price scale gets the correct background color
+        // even if contextDarkMode was stale during initial creation
+        // Force resize after chart creation to ensure proper rendering
+        setTimeout(() => {
+          if (chartRef.current && chartContainerRef.current) {
+            const containerWidth = chartContainerRef.current.clientWidth;
+            const containerHeight = chartContainerRef.current.clientHeight;
+            if (containerWidth > 0 && containerHeight > 0) {
+              chartRef.current.resize(containerWidth, containerHeight);
+            }
+          }
+        }, 50);
 
         // Get timeScale reference for all event listeners
         const timeScale = chart.timeScale();
         let isUserInteracting = false;
-
-        // � NOTE: Crosshair subscription moved to separate useEffect to avoid stale closure
-        // See the useEffect with [chartRef.current, lineSeriesRef.current, onCrosshairMove] dependencies
 
         // Subscribe to visible logical range changes to update first visible price
         timeScale.subscribeVisibleLogicalRangeChange(() => {
@@ -985,6 +998,20 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
         currentIntervalRef.current = roundToInterval(lastDataPoint.time);
         
         chart.timeScale().fitContent();
+        
+        // Force chart resize after a brief delay to ensure proper rendering
+        setTimeout(() => {
+          if (chartRef.current && chartContainerRef.current) {
+            const container = chartContainerRef.current;
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+            
+            if (width > 0 && height > 0) {
+              chartRef.current.resize(width, height);
+              chartRef.current.timeScale().fitContent();
+            }
+          }
+        }, 100);
         
         // Send first visible price to parent for percentage calculation
         if (onFirstPriceUpdate && historicalData.length > 0) {
@@ -1610,10 +1637,11 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
       className="twelve-data-chart-wrapper" 
       style={{ 
         width: '100%', 
-        height: isDesktopMode ? '100vh' : '100%', 
+        height: isDesktopMode ? '100vh' : 'auto', 
+        minHeight: isDesktopMode ? '100vh' : '380px',
         position: 'relative',
         display: 'flex',
-        flexDirection: 'column'
+        flexDirection: 'column',
       }}
     >
       {/* Lazy Load Placeholder - Show when chart hasn't loaded yet (but not in desktop mode) */}
@@ -1691,13 +1719,9 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
           }}
           style={{ 
             width: '100%', 
-            height: isDesktopMode ? '100vh' : '100%',
-            flex: 1,
-            position: 'relative',
-            minHeight: isDesktopMode ? '100vh' : '400px',
-            backgroundColor: '#0a0a0a', // Ensure visible background
-            zIndex: 1, // Ensure proper stacking
-            cursor: 'crosshair', // Show crosshair cursor on hover
+            height: isDesktopMode ? 'calc(100vh - 60px)' : '320px',
+            minHeight: '280px',
+            cursor: 'crosshair',
           }} 
         >
           {/* Historical Price Tooltip - Shows when user hovers/clicks on chart */}
