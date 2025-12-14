@@ -16,7 +16,8 @@
   --shadow-lg: rgba(0, 0, 0, 0.1);
 }
 
-.dark-mode {
+.dark-mode,
+html.dark-mode {
   /* Dark mode colors */
   --bg-primary: #0f0f0f;
   --bg-secondary: #1a1a1a;
@@ -48,6 +49,7 @@ html, body {
   overscroll-behavior: none; /* Prevent bounce scrolling on iOS */
   /* Enable touch scrolling on iOS */
   -webkit-overflow-scrolling: touch;
+  color: var(--text-primary); /* Universal text color inheritance */
 }
 
 body {
@@ -55,6 +57,26 @@ body {
   background: linear-gradient(135deg, #0b1220 0%, #0e1426 50%, #0b1220 100%);
   margin: 0;
   padding: 0;
+  color: var(--text-primary); /* Ensure body text uses theme color */
+}
+
+/* Universal text color inheritance - ensures all elements default to theme text color */
+body *, 
+#root * {
+  color: inherit;
+}
+
+/* Explicitly set text-primary on common text elements for consistency */
+p, span, div, label, h1, h2, h3, h4, h5, h6 {
+  color: var(--text-primary);
+}
+
+/* Secondary text elements */
+.text-secondary,
+small,
+.subtitle,
+.description {
+  color: var(--text-secondary);
 }
 
 #root {

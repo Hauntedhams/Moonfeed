@@ -167,6 +167,119 @@ body.dark-mode .timeframe-btn.clean-btn {
 }
 
 /* ============================================
+   LIGHT MODE - Timeframe Buttons
+   Light mode is default (no .dark-mode class)
+   ============================================ */
+
+/* Light mode (default - when html does NOT have .dark-mode) */
+html:not(.dark-mode) .timeframe-selector {
+  background: linear-gradient(180deg, #ffffff 0%, #f8f9fa 100%) !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1) !important;
+}
+
+html:not(.dark-mode) .timeframe-btn,
+html:not(.dark-mode) .timeframe-button {
+  border: 1px solid rgba(0, 0, 0, 0.15) !important;
+  background: rgba(0, 0, 0, 0.05) !important;
+  color: #333 !important;
+}
+
+html:not(.dark-mode) .timeframe-btn:hover:not(:disabled),
+html:not(.dark-mode) .timeframe-button:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.1) !important;
+  border-color: rgba(0, 0, 0, 0.2) !important;
+  color: #000 !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+html:not(.dark-mode) .timeframe-btn.active,
+html:not(.dark-mode) .timeframe-button.active {
+  background: linear-gradient(135deg, #22c55e 0%, #7b61ff 100%) !important;
+  border-color: transparent !important;
+  color: #fff !important;
+  font-weight: 700;
+  box-shadow: 0 2px 12px rgba(123, 97, 255, 0.3);
+}
+
+/* Light mode advanced button */
+html:not(.dark-mode) .timeframe-btn.advanced-btn {
+  background: linear-gradient(135deg, #7b61ff 0%, #22c55e 100%) !important;
+  border: 1px solid rgba(123, 97, 255, 0.3) !important;
+  color: #fff !important;
+}
+
+html:not(.dark-mode) .timeframe-btn.advanced-btn:hover {
+  background: linear-gradient(135deg, #6b51ef 0%, #1eaa47 100%) !important;
+  border-color: rgba(123, 97, 255, 0.5) !important;
+  box-shadow: 0 4px 16px rgba(123, 97, 255, 0.3);
+}
+
+/* Light mode clean button */
+html:not(.dark-mode) .timeframe-btn.clean-btn {
+  background: linear-gradient(135deg, #22c55e 0%, #10b981 100%) !important;
+  border: 1px solid rgba(34, 197, 94, 0.3) !important;
+  color: #fff !important;
+}
+
+html:not(.dark-mode) .timeframe-btn.clean-btn:hover {
+  background: linear-gradient(135deg, #16a34a 0%, #059669 100%) !important;
+  border-color: rgba(34, 197, 94, 0.5) !important;
+  box-shadow: 0 4px 16px rgba(34, 197, 94, 0.3);
+}
+
+/* ============================================
+   DARK MODE - Timeframe Buttons (Override light mode when .dark-mode is active)
+   ============================================ */
+
+html.dark-mode .timeframe-selector {
+  background: var(--chart-bg) !important;
+  border-bottom: 1px solid var(--chart-border) !important;
+}
+
+html.dark-mode .timeframe-btn,
+html.dark-mode .timeframe-button {
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: #fff !important;
+}
+
+html.dark-mode .timeframe-btn:hover:not(:disabled),
+html.dark-mode .timeframe-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.2) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+  color: #fff !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+html.dark-mode .timeframe-btn.active,
+html.dark-mode .timeframe-button.active {
+  background: linear-gradient(135deg, #22c55e 0%, #7b61ff 100%) !important;
+  border-color: transparent !important;
+  color: #fff !important;
+}
+
+/* ============================================
+   DEXSCREENER ADVANCED CHART CONTAINER
+   ============================================ */
+.dexscreener-advanced-container {
+  width: 100%;
+  height: 380px;
+  min-height: 320px;
+  max-height: 400px;
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* Desktop mode - allow taller chart */
+@media (min-width: 1200px) {
+  .dexscreener-advanced-container {
+    height: calc(100vh - 80px);
+    max-height: none;
+  }
+}
+
+/* ============================================
    MODERN ANIMATED CHART - TikTok Style
    ============================================ */
 
@@ -193,14 +306,10 @@ body.dark-mode .timeframe-btn.clean-btn {
   --error-bg: rgba(255, 107, 107, 0.1);
 }
 
-/* Light MODE */
-body.light-mode .twelve-data-chart,
-.light-mode .twelve-data-chart,
-[data-theme="light"] .twelve-data-chart,
-body.light-mode .twelve-data-chart-wrapper,
-.light-mode .twelve-data-chart-wrapper,
-[data-theme="light"] .twelve-data-chart-wrapper {
-  --chart-bg: linear-gradient(180deg, #ffffff 0%, #f8f9fa 100%);
+/* Light MODE - uses html:not(.dark-mode) since dark mode adds .dark-mode class */
+html:not(.dark-mode) .twelve-data-chart,
+html:not(.dark-mode) .twelve-data-chart-wrapper {
+  --chart-bg: #ffffff;
   --chart-text: rgba(0, 0, 0, 0.9);
   --chart-text-dim: rgba(0, 0, 0, 0.6);
   --chart-border: rgba(0, 0, 0, 0.15);
@@ -214,6 +323,25 @@ body.light-mode .twelve-data-chart-wrapper,
   --loading-bg: rgba(255, 255, 255, 0.9);
   --error-text: #dc3545;
   --error-bg: rgba(220, 53, 69, 0.1);
+}
+
+/* Dark MODE - explicit override when .dark-mode class is present */
+html.dark-mode .twelve-data-chart,
+html.dark-mode .twelve-data-chart-wrapper {
+  --chart-bg: #0a0e1a !important;
+  --chart-text: rgba(255, 255, 255, 0.9) !important;
+  --chart-text-dim: rgba(255, 255, 255, 0.6) !important;
+  --chart-border: rgba(255, 255, 255, 0.1) !important;
+  --chart-green: #00ff41 !important;
+  --chart-green-bg: rgba(0, 255, 65, 0.15) !important;
+  --chart-green-border: rgba(0, 255, 65, 0.4) !important;
+  --chart-green-glow: rgba(0, 255, 65, 0.3) !important;
+  --chart-green-shadow: rgba(0, 255, 65, 0.8) !important;
+  --chart-red: #ff3b3b !important;
+  --chart-red-glow: rgba(255, 59, 59, 0.5) !important;
+  --loading-bg: rgba(0, 0, 0, 0.8) !important;
+  --error-text: #ff6b6b !important;
+  --error-bg: rgba(255, 107, 107, 0.1) !important;
 }
 
 /* Price Flash Animations */
@@ -266,14 +394,33 @@ body.light-mode .twelve-data-chart-wrapper,
 .twelve-data-chart {
   position: relative;
   width: 100%;
-  height: 100%;
+  height: auto;
   min-height: 380px;
+  max-height: 450px; /* Prevent excessive height on mobile */
   background: var(--chart-bg);
   overflow: hidden;
   display: flex;
   flex-direction: column;
   padding: 0;
   margin: 0;
+}
+
+/* Light mode background for twelve-data-chart */
+html:not(.dark-mode) .twelve-data-chart {
+  background: #ffffff !important;
+}
+
+/* Dark mode background for twelve-data-chart */
+html.dark-mode .twelve-data-chart {
+  background: #0a0e1a !important;
+}
+
+/* Desktop mode - allow full height */
+@media (min-width: 1200px) {
+  .twelve-data-chart {
+    max-height: none;
+    height: 100%;
+  }
 }
 
 /* LIVE Indicator - Enhanced with Glow */
@@ -681,11 +828,9 @@ body.light-mode .twelve-data-chart-wrapper,
   margin: 0;
 }
 
-/* Light mode background */
-body.light-mode .chart-container,
-.light-mode .chart-container,
-[data-theme="light"] .chart-container {
-  background: #ffffff;
+/* Light mode background for chart container */
+html:not(.dark-mode) .chart-container {
+  background: #ffffff !important;
 }
 
 .chart-wrapper {
@@ -1258,6 +1403,12 @@ body.light-mode .chart-container,
     pointer-events: auto; /* Ensure buttons are clickable */
   }
 
+  /* Light mode desktop timeframe selector */
+  html:not(.dark-mode) .timeframe-selector {
+    background: rgba(255, 255, 255, 0.95) !important;
+    border-top: 1px solid rgba(0, 0, 0, 0.1) !important;
+  }
+
   /* Make timeframe buttons more prominent in desktop */
   .timeframe-selector .timeframe-btn {
     pointer-events: auto;
@@ -1307,4 +1458,4 @@ body.light-mode .chart-container,
   }
 }
 
-/* ============================================
+/* ============================================ */

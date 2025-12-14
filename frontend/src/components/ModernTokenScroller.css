@@ -101,13 +101,11 @@
   height: 100dvh; /* Use dynamic viewport height */
   width: 100%;
   overflow-y: scroll;
-  /* Enable CSS snap as foundation, JS enhances it */
-  scroll-snap-type: y proximity; /* proximity = less aggressive, JS refines the snap */
+  /* Enable CSS snap - mandatory for instant snapping */
+  scroll-snap-type: y mandatory;
   -webkit-overflow-scrolling: touch; /* Smooth momentum on iOS */
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* IE and Edge */
-  /* Smooth scroll behavior for better UX */
-  scroll-behavior: smooth;
   /* Performance optimizations */
   will-change: scroll-position;
   contain: layout style paint;
@@ -117,10 +115,10 @@
   scroll-padding: 0;
 }
 
-/* Mobile: use proximity snap for smoother experience */
+/* Mobile: use mandatory snap for instant snapping */
 @media (max-width: 767px) {
   .modern-scroller-container {
-    scroll-snap-type: y proximity; /* proximity works better with touch momentum */
+    scroll-snap-type: y mandatory; /* mandatory for instant snap on swipe */
   }
 }
 
@@ -149,7 +147,7 @@
   background: linear-gradient(135deg, #0b1220 0%, #0e1426 50%, #0b1220 100%);
   /* Enable snap point at start of each card */
   scroll-snap-align: start;
-  scroll-snap-stop: normal; /* Allow skipping cards for fast scrolls */
+  scroll-snap-stop: always; /* Force stop at each card for precise snapping */
   flex-shrink: 0;
   contain: layout style paint;
   /* Ensure exact height for perfect snap points */

@@ -185,7 +185,7 @@
 
 /* Column 3: Buy */
 .col-buy {
-  color: #22c55e;
+  color: #22c55e !important;
   font-size: 0.7rem;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   font-weight: 700;
@@ -194,7 +194,7 @@
 
 /* Column 4: Sell */
 .col-sell {
-  color: #ef4444;
+  color: #ef4444 !important;
   font-size: 0.7rem;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   font-weight: 700;
@@ -207,14 +207,15 @@
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   font-weight: 700;
   text-align: right;
+  color: #22c55e !important; /* Default to green (positive) */
 }
 
 .col-pnl.positive {
-  color: #22c55e;
+  color: #22c55e !important;
 }
 
 .col-pnl.negative {
-  color: #ef4444;
+  color: #ef4444 !important;
 }
 
 /* Placeholder, loading and error states */

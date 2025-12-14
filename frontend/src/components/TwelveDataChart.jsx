@@ -1742,9 +1742,9 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
 
       {/* Advanced Dexscreener Chart - Show when in advanced mode */}
       {showAdvanced && (
-        <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+        <div className="dexscreener-advanced-container" style={{ width: '100%', height: '380px', position: 'relative' }}>
           <iframe
-            src={`https://dexscreener.com/solana/${pairAddress}?embed=1&theme=dark&trades=0&info=0`}
+            src={`https://dexscreener.com/solana/${pairAddress}?embed=1&theme=${contextDarkMode ? 'dark' : 'light'}&trades=0&info=0`}
             style={{
               width: '100%',
               height: '100%',

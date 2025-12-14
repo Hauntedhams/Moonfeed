@@ -665,6 +665,7 @@ const ModernTokenScroller = ({
     if (!container) return;
     
     let scrollTimer = null;
+    let lastScrollTime = 0;
     const isMobileDevice = window.innerWidth < 768 || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     
     const handleScroll = () => {
@@ -673,10 +674,18 @@ const ModernTokenScroller = ({
       // Clear previous timer
       if (scrollTimer) clearTimeout(scrollTimer);
       
-      // 🔥 Longer delay for smoother momentum scrolling (200ms mobile, 150ms desktop)
-      const snapDelay = isMobileDevice ? 200 : 150;
+      // Track scroll velocity for smoother experience
+      const now = Date.now();
+      lastScrollTime = now;
+      
+      // 🔥 Much shorter delay for instant snapping (50ms mobile, 80ms desktop)
+      // CSS mandatory snap handles the actual snapping, this just updates the index
+      const snapDelay = isMobileDevice ? 50 : 80;
       
       scrollTimer = setTimeout(() => {
+        // Only proceed if no new scroll events occurred
+        if (Date.now() - lastScrollTime < snapDelay - 10) return;
+        
         const scrollTop = container.scrollTop;
         
         // Find all coin cards
@@ -707,12 +716,13 @@ const ModernTokenScroller = ({
           const targetTop = closestCard.offsetTop;
           const currentTop = container.scrollTop;
           
-          // Only snap if we're far enough away (increased threshold for smoother feel)
-          if (Math.abs(targetTop - currentTop) > 5) {
-            // 🔥 Smooth behavior for natural scrolling
+          // 🔥 CSS mandatory snap handles the actual snapping
+          // Only do manual snap if CSS snap failed (threshold reduced for faster response)
+          if (Math.abs(targetTop - currentTop) > 2) {
+            // Quick instant snap - CSS should handle this but just in case
             container.scrollTo({
               top: targetTop,
-              behavior: 'smooth'
+              behavior: 'instant'
             });
           }
           
