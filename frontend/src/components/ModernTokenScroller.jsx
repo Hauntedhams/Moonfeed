@@ -659,14 +659,12 @@ const ModernTokenScroller = ({
     }
   }, []);
 
-  // 🎯 UNIVERSAL SMOOTH SNAP: Same smooth behavior for mobile & desktop
+  // 🎯 SIMPLE SCROLL HANDLER: CSS handles snapping, JS just tracks index
   useEffect(() => {
     const container = scrollerRef.current;
     if (!container) return;
     
     let scrollTimer = null;
-    let lastScrollTime = 0;
-    const isMobileDevice = window.innerWidth < 768 || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     
     const handleScroll = () => {
       if (isScrollLocked.current || expandedCoin) return;
@@ -674,71 +672,29 @@ const ModernTokenScroller = ({
       // Clear previous timer
       if (scrollTimer) clearTimeout(scrollTimer);
       
-      // Track scroll velocity for smoother experience
-      const now = Date.now();
-      lastScrollTime = now;
-      
-      // 🔥 Much shorter delay for instant snapping (50ms mobile, 80ms desktop)
-      // CSS mandatory snap handles the actual snapping, this just updates the index
-      const snapDelay = isMobileDevice ? 50 : 80;
-      
+      // Short delay to let CSS snap settle, then update index
       scrollTimer = setTimeout(() => {
-        // Only proceed if no new scroll events occurred
-        if (Date.now() - lastScrollTime < snapDelay - 10) return;
-        
         const scrollTop = container.scrollTop;
+        const viewportHeight = container.clientHeight;
         
-        // Find all coin cards
-        const cards = Array.from(container.querySelectorAll('.modern-coin-slide:not(.modern-coin-placeholder)'));
-        if (cards.length === 0) return;
+        // Calculate which card is currently showing (simple math based on scroll position)
+        const newIndex = Math.round(scrollTop / viewportHeight);
+        const clampedIndex = Math.max(0, Math.min(newIndex, coins.length - 1));
         
-        // Find the closest card to the top of the viewport
-        let closestCard = null;
-        let closestDistance = Infinity;
-        let closestIndex = currentIndex;
-        
-        cards.forEach((card) => {
-          const cardIndex = parseInt(card.dataset.index);
-          if (isNaN(cardIndex)) return;
+        // Update index if changed
+        if (clampedIndex !== currentIndex) {
+          setCurrentIndex(clampedIndex);
           
-          const cardTop = card.offsetTop;
-          const distance = Math.abs(cardTop - scrollTop);
-          
-          if (distance < closestDistance) {
-            closestDistance = distance;
-            closestCard = card;
-            closestIndex = cardIndex;
-          }
-        });
-        
-        // Snap to the closest card
-        if (closestCard) {
-          const targetTop = closestCard.offsetTop;
-          const currentTop = container.scrollTop;
-          
-          // 🔥 CSS mandatory snap handles the actual snapping
-          // Only do manual snap if CSS snap failed (threshold reduced for faster response)
-          if (Math.abs(targetTop - currentTop) > 2) {
-            // Quick instant snap - CSS should handle this but just in case
-            container.scrollTo({
-              top: targetTop,
-              behavior: 'instant'
-            });
-          }
-          
-          // Update index if changed
-          if (closestIndex !== currentIndex) {
-            setCurrentIndex(closestIndex);
-            
-            const coin = coins[closestIndex];
+          const coin = coins[clampedIndex];
+          if (coin) {
             const enriched = enrichedCoins.get(coin.mintAddress);
             const enrichedCoin = enriched ? { ...coin, ...enriched } : coin;
-            onCurrentCoinChange?.(enrichedCoin, closestIndex);
-            
-            console.log(`📱 Coin ${closestIndex + 1}/${coins.length}`);
+            onCurrentCoinChange?.(enrichedCoin, clampedIndex);
           }
+          
+          console.log(`📱 Coin ${clampedIndex + 1}/${coins.length}`);
         }
-      }, snapDelay);
+      }, 100); // Small delay to let CSS snap complete
     };
     
     container.addEventListener('scroll', handleScroll, { passive: true });

@@ -530,19 +530,18 @@
     touch-action: pan-y;
   }
   
-  /* Mobile-specific scroll improvements for smoother, easier swiping */
+  /* Mobile-specific scroll improvements - USE CSS SNAP like desktop */
   .modern-scroller-container {
-    /* KEY FIX: Use 'proximity' instead of 'mandatory' for gentler snap */
-    /* This allows free scrolling and only snaps when close to a snap point */
-    scroll-snap-type: y proximity;
-    /* Allow momentum scrolling on iOS for smoother experience */
+    /* Use mandatory snap just like desktop for consistent TikTok-style scrolling */
+    scroll-snap-type: y mandatory !important;
+    /* Allow momentum scrolling on iOS */
     -webkit-overflow-scrolling: touch;
-    /* Reduce scroll snap strictness for easier swiping */
-    scroll-padding-top: 0;
-    scroll-padding-bottom: 0;
   }
   
   .modern-coin-slide {
+    /* Enable snap on individual slides - same as desktop */
+    scroll-snap-align: start !important;
+    scroll-snap-stop: always !important;
     /* Ensure slides are properly positioned for smooth snapping */
     scroll-margin-top: 0;
     /* Allow touch actions */
