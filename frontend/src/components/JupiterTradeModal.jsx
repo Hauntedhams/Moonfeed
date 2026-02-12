@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import TriggerOrderModal from './TriggerOrderModal';
 import { useWallet } from '../contexts/WalletContext';
+import { useWallet as useJupiterWallet, UnifiedWalletButton } from '@jup-ag/wallet-adapter';
 import ReferralTracker from '../utils/ReferralTracker';
 import './JupiterTradeModal.css';
 
@@ -11,6 +12,9 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError }
   const [activeTab, setActiveTab] = useState('swap'); // 'swap' or 'limit'
   const [showTriggerModal, setShowTriggerModal] = useState(false);
   const { walletAddress } = useWallet();
+  
+  // Get the full Jupiter wallet adapter for passthrough to Terminal
+  const jupiterWallet = useJupiterWallet();
 
   // Track trade with affiliate system
   const trackTradeWithAffiliate = async (txid, swapResult) => {
@@ -52,8 +56,27 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError }
     }
   };
 
+  // Sync Jupiter Terminal with app's wallet state whenever it changes
+  // This enables bidirectional wallet sync:
+  // - Connect via app buttons → Jupiter Terminal sees it
+  // - Connect via Jupiter Terminal → App sees it (via UnifiedWalletProvider)
   useEffect(() => {
-    if (isOpen && coin && activeTab === 'swap') {
+    if (window.Jupiter && jupiterInitialized.current) {
+      console.log('🔄 Syncing wallet state to Jupiter Terminal:', {
+        connected: jupiterWallet.connected,
+        publicKey: jupiterWallet.publicKey?.toString()
+      });
+      
+      // Sync the wallet state to Jupiter Terminal
+      window.Jupiter.syncProps({
+        passthroughWalletContextState: jupiterWallet
+      });
+    }
+  }, [jupiterWallet.connected, jupiterWallet.publicKey]);
+
+  useEffect(() => {
+    // Only initialize Jupiter when wallet is connected
+    if (isOpen && coin && activeTab === 'swap' && jupiterWallet.connected) {
       // Simple check and initialize
       if (window.Jupiter && !jupiterInitialized.current) {
         initializeJupiter();
@@ -79,13 +102,13 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError }
       }
     }
     
-    // Clean up on close or tab change
-    if ((!isOpen || activeTab === 'limit') && jupiterInitialized.current) {
+    // Clean up on close or tab change or disconnect
+    if ((!isOpen || activeTab === 'limit' || !jupiterWallet.connected) && jupiterInitialized.current) {
       jupiterInitialized.current = false;
       setIsLoading(true);
       setError(null);
     }
-  }, [isOpen, coin, activeTab]);
+  }, [isOpen, coin, activeTab, jupiterWallet.connected]);
 
   const initializeJupiter = async () => {
     try {
@@ -148,6 +171,11 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError }
         displayMode: "integrated",
         integratedTargetId: "jupiter-container",
         endpoint: "https://api.mainnet-beta.solana.com",
+        
+        // 🔑 WALLET PASSTHROUGH - Use the app's wallet connection from UnifiedWalletProvider
+        // This makes Jupiter Terminal share the same wallet state as the rest of the app
+        // When user connects via Jupiter, the app sees it. When connected via app buttons, Jupiter sees it.
+        enableWalletPassthrough: true,
       };
       
       // Add formProps with referral configuration
@@ -196,6 +224,10 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError }
           setIsLoading(false);
         }
       };
+      
+      // 🔑 WALLET PASSTHROUGH: Pass the current wallet state so Jupiter Terminal 
+      // shows the same connected wallet as the rest of the app
+      jupiterConfig.passthroughWalletContextState = jupiterWallet;
 
       // Initialize Jupiter with the config
       window.Jupiter.init(jupiterConfig);
@@ -290,14 +322,32 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError }
           {/* Jupiter Container - only shown when swap tab is active */}
           {activeTab === 'swap' && (
             <div className="jupiter-widget-wrapper">
-              {isLoading && (
+              {/* Show connect wallet prompt if not connected */}
+              {!jupiterWallet.connected && (
+                <div className="jupiter-connect-prompt">
+                  <div className="connect-prompt-content">
+                    <div className="connect-icon">👛</div>
+                    <h3>Connect Your Wallet</h3>
+                    <p>Connect your Solana wallet to start trading {coin?.symbol || 'tokens'}</p>
+                    <div className="connect-button-container">
+                      <UnifiedWalletButton />
+                    </div>
+                    <p className="connect-hint">
+                      Supports Phantom, Solflare, and other Solana wallets
+                    </p>
+                  </div>
+                </div>
+              )}
+              
+              {/* Show loading/error states only when connected */}
+              {jupiterWallet.connected && isLoading && (
                 <div className="loading-state">
                   <div className="loading-spinner"></div>
                   <p>Loading...</p>
                 </div>
               )}
               
-              {error && (
+              {jupiterWallet.connected && error && (
                 <div className="error-state">
                   <p>Failed to load</p>
                   <button onClick={initializeJupiter} className="retry-button">
@@ -306,13 +356,15 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError }
                 </div>
               )}
               
+              {/* Jupiter container - hidden when not connected */}
               <div 
                 id="jupiter-container"
                 style={{ 
                   width: '100%', 
                   height: '600px',
                   minHeight: '600px',
-                  opacity: isLoading || error ? 0 : 1,
+                  opacity: (!jupiterWallet.connected || isLoading || error) ? 0 : 1,
+                  display: !jupiterWallet.connected ? 'none' : 'block',
                   transition: 'opacity 0.3s'
                 }}
               />

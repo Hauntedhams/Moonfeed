@@ -87,51 +87,85 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
     isLiveModeRef.current = isLiveMode;
   }, [isLiveMode]);
 
-  // 🚀 LAZY LOADING: Only load chart when near viewport
+  // 🔧 FIX: Listen for window resize to properly resize the chart
+  // Simplified since we now use React conditional rendering instead of CSS display:none
+  useEffect(() => {
+    if (!chartRef.current || !chartContainerRef.current) return;
+    
+    const resizeChart = () => {
+      if (!chartRef.current || !chartContainerRef.current) return;
+      
+      const container = chartContainerRef.current;
+      const rect = container.getBoundingClientRect();
+      const width = Math.floor(rect.width);
+      const height = Math.floor(rect.height);
+      
+      if (width > 50 && height > 50) {
+        try {
+          chartRef.current.resize(width, height);
+          chartRef.current.timeScale().fitContent();
+        } catch (err) {
+          console.warn('Chart resize error:', err);
+        }
+      }
+    };
+    
+    // Debounced resize handler
+    let resizeTimeout;
+    const handleResize = () => {
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(resizeChart, 100);
+    };
+    
+    window.addEventListener('resize', handleResize);
+    
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      clearTimeout(resizeTimeout);
+    };
+  }, [chartRef.current, chartContainerRef.current]);
+
+  // � FIX: Resize chart when switching between desktop and mobile modes
+  useEffect(() => {
+    if (!chartRef.current || !chartContainerRef.current) return;
+    
+    // Small delay to let CSS layout settle after mode change
+    const timer = setTimeout(() => {
+      if (!chartRef.current || !chartContainerRef.current) return;
+      
+      const container = chartContainerRef.current;
+      const rect = container.getBoundingClientRect();
+      const width = Math.floor(rect.width);
+      const height = Math.floor(rect.height);
+      
+      if (width > 50 && height > 50) {
+        try {
+          console.log('📐 Resizing chart for mode change:', { isDesktopMode, width, height });
+          chartRef.current.resize(width, height);
+          chartRef.current.timeScale().fitContent();
+        } catch (err) {
+          console.warn('Mode change resize error:', err);
+        }
+      }
+    }, 150);
+    
+    return () => clearTimeout(timer);
+  }, [isDesktopMode]);
+
+  // �🚀 LAZY LOADING: Only load chart when near viewport
+  // Simplified since we now use React conditional rendering for desktop/mobile
   useEffect(() => {
     const container = chartContainerRef.current;
-    if (!container) {
-      return;
-    }
+    if (!container) return;
 
-    // 🖥️ DESKTOP MODE FIX: If isDesktopMode prop is true, this chart is in the desktop right panel
-    // It should load immediately without intersection observer
+    // Desktop mode: Load immediately - chart is in the right panel via portal
     if (isDesktopMode) {
       setIsInView(true);
       setShouldLoad(true);
-      return; // Skip intersection observer setup
+      return;
     }
 
-    // 📱 MOBILE/TABLET: Check viewport width as fallback for responsive design
-    const checkDesktopMode = () => {
-      const isDesktopViewport = window.innerWidth >= 1200;
-      
-      if (isDesktopViewport && !shouldLoad) {
-        setIsInView(true);
-        setShouldLoad(true);
-      }
-      
-      return isDesktopViewport;
-    };
-    
-    // Check immediately
-    const isDesktop = checkDesktopMode();
-    
-    if (isDesktop) {
-      // In desktop mode, also listen for resize events in case user resizes window
-      const handleResize = () => {
-        checkDesktopMode();
-      };
-      
-      window.addEventListener('resize', handleResize);
-      
-      return () => {
-        window.removeEventListener('resize', handleResize);
-      };
-    }
-
-    // Mobile/Tablet: Create intersection observer with 200% rootMargin (load before visible)
-    // This means charts load when they're within 2 screen heights of viewport
+    // Mobile mode: Use intersection observer for lazy loading
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
@@ -1085,33 +1119,68 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
           clearTimeout(resizeTimeout);
           resizeTimeout = setTimeout(() => {
             if (chart && chartContainerRef.current) {
-              const newWidth = chartContainerRef.current.clientWidth;
-              const newHeight = chartContainerRef.current.clientHeight;
+              const rect = chartContainerRef.current.getBoundingClientRect();
+              const newWidth = Math.floor(rect.width);
+              const newHeight = Math.floor(rect.height);
               
-              console.log('📏 Resizing chart to:', { newWidth, newHeight });
-              
-              if (newWidth && newHeight && newWidth > 100 && newHeight > 100) {
-                chart.applyOptions({
-                  width: newWidth,
-                  height: newHeight,
-                });
-                // Refit content after resize to ensure proper display
-                chart.timeScale().fitContent();
+              if (newWidth > 50 && newHeight > 50) {
+                console.log('📏 Window resize - resizing chart to:', { newWidth, newHeight });
+                try {
+                  chart.resize(newWidth, newHeight);
+                  chart.timeScale().fitContent();
+                } catch (err) {
+                  console.warn('Resize error:', err);
+                }
               }
             }
-          }, 150);
+          }, 100);
         };
 
         window.addEventListener('resize', handleResize);
         
-        // Also trigger a resize check after a short delay to handle desktop layout
-        setTimeout(() => {
-          handleResize();
-        }, 300);
+        // 🔧 ResizeObserver for container size changes
+        let resizeObserver = null;
+        if (typeof ResizeObserver !== 'undefined' && chartContainerRef.current) {
+          resizeObserver = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+              const { width, height } = entry.contentRect;
+              
+              // Only resize if dimensions are valid
+              if (width > 50 && height > 50 && chartRef.current) {
+                clearTimeout(resizeTimeout);
+                resizeTimeout = setTimeout(() => {
+                  if (chartRef.current && chartContainerRef.current) {
+                    const rect = chartContainerRef.current.getBoundingClientRect();
+                    const containerWidth = Math.floor(rect.width);
+                    const containerHeight = Math.floor(rect.height);
+                    
+                    if (containerWidth > 50 && containerHeight > 50) {
+                      console.log('� ResizeObserver - resizing chart to:', { containerWidth, containerHeight });
+                      try {
+                        chartRef.current.resize(containerWidth, containerHeight);
+                        chartRef.current.timeScale().fitContent();
+                      } catch (err) {
+                        console.warn('ResizeObserver resize error:', err);
+                      }
+                    }
+                  }
+                }, 50);
+              }
+            }
+          });
+          
+          resizeObserver.observe(chartContainerRef.current);
+        }
+        
+        // Initial resize after chart creation
+        setTimeout(handleResize, 100);
 
         // Store cleanup function
         chart.cleanup = () => {
           window.removeEventListener('resize', handleResize);
+          if (resizeObserver) {
+            resizeObserver.disconnect();
+          }
         };
 
       } catch (error) {
@@ -1634,11 +1703,16 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
 
   return (
     <div 
-      className="twelve-data-chart-wrapper" 
-      style={{ 
+      className={`twelve-data-chart-wrapper ${isDesktopMode ? 'desktop-mode' : ''}`}
+      style={isDesktopMode ? { 
         width: '100%', 
-        height: isDesktopMode ? '100vh' : 'auto', 
-        minHeight: isDesktopMode ? '100vh' : '380px',
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+      } : { 
+        width: '100%', 
+        height: 'auto', 
+        minHeight: '380px',
         position: 'relative',
         display: 'flex',
         flexDirection: 'column',
@@ -1719,8 +1793,9 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
           }}
           style={{ 
             width: '100%', 
-            height: isDesktopMode ? 'calc(100vh - 60px)' : '320px',
-            minHeight: '280px',
+            height: isDesktopMode ? '100%' : '320px',
+            minHeight: isDesktopMode ? '400px' : '280px',
+            flex: isDesktopMode ? '1' : 'none',
             cursor: 'crosshair',
           }} 
         >
@@ -1742,14 +1817,14 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
 
       {/* Advanced Dexscreener Chart - Show when in advanced mode */}
       {showAdvanced && (
-        <div className="dexscreener-advanced-container" style={{ width: '100%', height: '380px', position: 'relative' }}>
+        <div className="dexscreener-advanced-container" style={{ width: '100%', height: isDesktopMode ? '100%' : '380px', minHeight: isDesktopMode ? '100vh' : '380px', position: 'relative' }}>
           <iframe
             src={`https://dexscreener.com/solana/${pairAddress}?embed=1&theme=${contextDarkMode ? 'dark' : 'light'}&trades=0&info=0`}
             style={{
               width: '100%',
               height: '100%',
               border: 'none',
-              borderRadius: '12px',
+              borderRadius: isDesktopMode ? '0' : '12px',
             }}
             title="Dexscreener Advanced Chart"
           />

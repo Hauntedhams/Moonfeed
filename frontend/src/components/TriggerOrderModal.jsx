@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { getFullApiUrl } from '../config/api';
 import { useWallet } from '../contexts/WalletContext';
 import './TriggerOrderModal.css';
@@ -9,7 +9,7 @@ const TriggerOrderModal = ({
   coin,
   onOrderCreated 
 }) => {
-  const { walletAddress, connected, signTransaction, recheckConnection } = useWallet();
+  const { walletAddress, connected, signTransaction, recheckConnection, connect } = useWallet();
   const [orderType, setOrderType] = useState('limit'); // 'limit' or 'stop'
   const [side, setSide] = useState('buy'); // 'buy' or 'sell'
   const [inputAmount, setInputAmount] = useState('');
@@ -20,6 +20,9 @@ const TriggerOrderModal = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
+  const [useSlider, setUseSlider] = useState(true); // Enable slider by default
+  const [sliderValue, setSliderValue] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
 
   // Force recheck wallet connection when modal opens
   useEffect(() => {
@@ -51,6 +54,43 @@ const TriggerOrderModal = ({
 
   // Get current price from coin data - check multiple possible field names
   const currentPrice = coin?.priceUsd || coin?.price_usd || coin?.price || coin?.priceNative || 0;
+
+  // Calculate price range for slider (50% below to 100% above current price)
+  const priceRange = useMemo(() => {
+    if (currentPrice <= 0) return { min: 0, max: 1, step: 0.01 };
+    const min = currentPrice * 0.5;
+    const max = currentPrice * 2;
+    const step = (max - min) / 1000;
+    return { min, max, step };
+  }, [currentPrice]);
+
+  // Initialize slider value when modal opens or price changes
+  useEffect(() => {
+    if (isOpen && currentPrice > 0 && sliderValue === 0) {
+      setSliderValue(currentPrice);
+      setTriggerPrice(currentPrice.toFixed(8));
+    }
+  }, [isOpen, currentPrice]);
+
+  // Handle slider change
+  const handleSliderChange = useCallback((e) => {
+    const value = parseFloat(e.target.value);
+    setSliderValue(value);
+    setTriggerPrice(value.toFixed(8));
+    setPriceType('price');
+    
+    // Calculate and update percentage
+    if (currentPrice > 0) {
+      const pct = ((value - currentPrice) / currentPrice) * 100;
+      setPercentage(pct.toFixed(2));
+    }
+  }, [currentPrice]);
+
+  // Calculate percentage from current slider/trigger price
+  const percentageFromCurrent = useMemo(() => {
+    if (!triggerPrice || !currentPrice || currentPrice <= 0) return 0;
+    return ((parseFloat(triggerPrice) - currentPrice) / currentPrice) * 100;
+  }, [triggerPrice, currentPrice]);
 
   // Debug price on modal open
   useEffect(() => {
@@ -252,13 +292,7 @@ const TriggerOrderModal = ({
 
   return (
     <div className="trigger-modal-overlay" onClick={onClose}>
-      <div className="trigger-modal-content" onClick={(e) => e.stopPropagation()}>
-        {/* Header */}
-        <div className="trigger-modal-header">
-          <h2>🎯 Limit Order</h2>
-          <button className="close-btn" onClick={onClose}>✕</button>
-        </div>
-
+      <div className="trigger-modal-content compact-layout" onClick={(e) => e.stopPropagation()}>
         {success ? (
           <div className="success-message">
             <div className="success-icon">✅</div>
@@ -267,58 +301,48 @@ const TriggerOrderModal = ({
           </div>
         ) : (
           <>
-            {/* Coin Info */}
-            <div className="coin-info-section">
-              <img 
-                src={coin?.image || '/default-coin.svg'} 
-                alt={coin?.symbol}
-                className="coin-image"
-                onError={(e) => e.target.src = '/default-coin.svg'}
-              />
-              <div>
-                <h3>{coin?.symbol}</h3>
-                <p className="current-price">
-                  Current: ${formatPrice(currentPrice)}
-                </p>
+            {/* Compact Header with Coin Info */}
+            <div className="compact-header">
+              <div className="header-left">
+                <img 
+                  src={coin?.image || '/default-coin.svg'} 
+                  alt={coin?.symbol}
+                  className="coin-image-small"
+                  onError={(e) => e.target.src = '/default-coin.svg'}
+                />
+                <div className="coin-details">
+                  <h3>{coin?.symbol}</h3>
+                  <span className="current-price-badge">${formatPrice(currentPrice)}</span>
+                </div>
               </div>
+              <button className="close-btn-compact" onClick={onClose}>✕</button>
             </div>
 
-            {/* Order Type Toggle */}
-            <div className="order-type-section">
-              <label>Order Type</label>
-              <div className="toggle-group">
+            {/* Quick Action Row: Order Type + Buy/Sell */}
+            <div className="action-row">
+              <div className="action-group">
                 <button 
-                  className={`toggle-btn ${orderType === 'limit' ? 'active' : ''}`}
+                  className={`action-btn ${orderType === 'limit' ? 'active' : ''}`}
                   onClick={() => setOrderType('limit')}
                 >
                   Limit
                 </button>
                 <button 
-                  className={`toggle-btn ${orderType === 'stop' ? 'active' : ''}`}
+                  className={`action-btn ${orderType === 'stop' ? 'active' : ''}`}
                   onClick={() => setOrderType('stop')}
                 >
                   Stop
                 </button>
               </div>
-              <p className="help-text">
-                {orderType === 'limit' 
-                  ? 'Execute when price reaches your target' 
-                  : 'Execute when price drops to your stop level'}
-              </p>
-            </div>
-
-            {/* Buy/Sell Toggle */}
-            <div className="side-section">
-              <label>Action</label>
-              <div className="toggle-group">
+              <div className="action-group">
                 <button 
-                  className={`toggle-btn ${side === 'buy' ? 'active buy' : ''}`}
+                  className={`action-btn buy-btn ${side === 'buy' ? 'active' : ''}`}
                   onClick={() => setSide('buy')}
                 >
                   Buy
                 </button>
                 <button 
-                  className={`toggle-btn ${side === 'sell' ? 'active sell' : ''}`}
+                  className={`action-btn sell-btn ${side === 'sell' ? 'active' : ''}`}
                   onClick={() => setSide('sell')}
                 >
                   Sell
@@ -326,199 +350,165 @@ const TriggerOrderModal = ({
               </div>
             </div>
 
-            {/* Amount Input */}
-            <div className="input-section">
-              <label>
-                Amount ({side === 'buy' ? 'SOL' : coin?.symbol})
-              </label>
-              <input
-                type="number"
-                value={inputAmount}
-                onChange={(e) => setInputAmount(e.target.value)}
-                placeholder="0.0"
-                step="0.01"
-                min="0"
-              />
-            </div>
-
-            {/* Trigger Price */}
-            <div className="trigger-price-section">
-              <label>Trigger Price</label>
-              
-              <div className="price-toggle">
-                <button 
-                  className={`price-toggle-btn ${priceType === 'price' ? 'active' : ''}`}
-                  onClick={() => setPriceType('price')}
-                >
-                  Price
-                </button>
-                <button 
-                  className={`price-toggle-btn ${priceType === 'percentage' ? 'active' : ''}`}
-                  onClick={() => setPriceType('percentage')}
-                >
-                  %
-                </button>
-              </div>
-
-              {priceType === 'price' ? (
-                <input
-                  type="number"
-                  value={triggerPrice}
-                  onChange={(e) => setTriggerPrice(e.target.value)}
-                  placeholder="0.0"
-                  step="0.00000001"
-                  min="0"
-                />
-              ) : (
-                <input
-                  type="number"
-                  value={percentage}
-                  onChange={(e) => setPercentage(e.target.value)}
-                  placeholder="0"
-                  step="0.1"
-                />
-              )}
-
-              {percentage && (
-                <p className="price-preview">
-                  {percentage > 0 ? '+' : ''}{percentage}% = ${formatPrice(triggerPrice)}
-                </p>
-              )}
-            </div>
-
-            {/* Quick Percentage Buttons */}
-            <div className="quick-percentage-section">
-              <label>Quick Select {side === 'buy' ? '(Buy at Lower/Higher Price)' : '(Sell at Lower/Higher Price)'}</label>
-              <div className="quick-buttons">
-                {[-50, -25, -10, 10, 25, 50, 100].map(pct => {
-                  // For BUY: negative = buy dip, positive = buy pump
-                  // For SELL: negative = sell dip, positive = sell pump
-                  const isNegative = pct < 0;
-                  const buttonLabel = isNegative 
-                    ? `${pct}%` 
-                    : `+${pct}%`;
-                  
-                  return (
-                    <button
-                      key={pct}
-                      className={`quick-btn ${isNegative ? 'negative' : 'positive'}`}
-                      onClick={() => {
-                        if (currentPrice > 0) {
-                          setPriceType('percentage');
-                          setPercentage(pct.toString());
-                          setError(null);
-                          
-                          // Calculate and show the target price
-                          const targetPrice = currentPrice * (1 + pct / 100);
-                          console.log(`🎯 Quick select ${buttonLabel}:`, {
-                            currentPrice,
-                            targetPrice,
-                            side,
-                            action: side === 'buy' 
-                              ? (pct > 0 ? 'Buy when price pumps' : 'Buy the dip')
-                              : (pct > 0 ? 'Sell the pump' : 'Sell before it dips more')
-                          });
-                        } else {
-                          // No current price available
-                          setError(`Current price unavailable. Please enter a manual price instead.`);
-                          setPriceType('price');
-                          console.warn('⚠️ Quick select failed: No current price for', coin?.symbol);
-                        }
-                      }}
-                      title={`${side === 'buy' ? 'Buy' : 'Sell'} when price ${pct > 0 ? 'increases' : 'decreases'} by ${Math.abs(pct)}%`}
-                    >
-                      {buttonLabel}
-                    </button>
-                  );
-                })}
-              </div>
-              {currentPrice <= 0 ? (
-                <p className="help-text warning">
-                  ⚠️ Current price unavailable. Please switch to "Price" mode and enter a manual price.
-                </p>
-              ) : (
-                <p className="help-text">
-                  💡 {side === 'buy' 
-                    ? 'Negative % = buy dip, Positive % = buy pump' 
-                    : 'Negative % = sell before dip, Positive % = sell pump'}
-                </p>
-              )}
-            </div>
-
-            {/* Expiry */}
-            <div className="expiry-section">
-              <label>Expires In</label>
-              <div className="expiry-options">
-                {['1h', '24h', '7d', '30d'].map(exp => (
-                  <button
-                    key={exp}
-                    className={`expiry-btn ${expiry === exp ? 'active' : ''}`}
-                    onClick={() => setExpiry(exp)}
-                  >
-                    {exp}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Order Summary */}
-            {inputAmount && triggerPrice && (
-              <div className="order-summary">
-                <h4>Order Summary</h4>
-                <div className="summary-row">
-                  <span>You {side}</span>
-                  <span>{inputAmount} {side === 'buy' ? 'SOL' : coin?.symbol}</span>
-                </div>
-                <div className="summary-row">
-                  <span>When price {orderType === 'limit' ? 'reaches' : 'drops to'}</span>
-                  <span>${formatPrice(triggerPrice)}</span>
-                </div>
-                <div className="summary-row">
-                  <span>Estimated {side === 'buy' ? 'receive' : 'get'}</span>
-                  <span>
-                    {side === 'buy' 
-                      ? (parseFloat(inputAmount) / parseFloat(triggerPrice)).toFixed(4)
-                      : (parseFloat(inputAmount) * parseFloat(triggerPrice)).toFixed(4)
-                    } {side === 'buy' ? coin?.symbol : 'SOL'}
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {/* Error Message */}
-            {error && (
-              <div className="error-message">
-                ❌ {error}
-              </div>
-            )}
-
-            {/* Warning about wallet */}
-            {!walletAddress && (
-              <div className="warning-message">
-                ⚠️ Please connect your Solana wallet to create limit orders
-              </div>
-            )}
-
-            {/* Create Order Button */}
-            <button
-              className="create-order-btn"
-              onClick={handleCreateOrder}
-              disabled={loading || !walletAddress || !inputAmount || !triggerPrice || parseFloat(triggerPrice) <= 0}
-            >
-              {loading ? (
+            {/* HERO: Price Slider Section */}
+            <div className={`hero-slider-section ${side}`}>
+              {currentPrice > 0 ? (
                 <>
-                  <span className="spinner"></span>
-                  Creating Order...
+                  <div className="slider-hero-display">
+                    <div className="price-main">
+                      <span className="price-label">Target Price</span>
+                      <span className="price-value">${formatPrice(triggerPrice || sliderValue)}</span>
+                    </div>
+                    <span className={`percentage-badge ${percentageFromCurrent >= 0 ? 'positive' : 'negative'}`}>
+                      {percentageFromCurrent >= 0 ? '+' : ''}{percentageFromCurrent.toFixed(1)}%
+                    </span>
+                  </div>
+                  
+                  <div className="slider-wrapper-hero">
+                    <div 
+                      className="slider-track-fill"
+                      style={{
+                        width: `${((sliderValue - priceRange.min) / (priceRange.max - priceRange.min)) * 100}%`,
+                        background: side === 'buy' 
+                          ? 'linear-gradient(90deg, #10b981, #059669)'
+                          : 'linear-gradient(90deg, #ef4444, #dc2626)'
+                      }}
+                    />
+                    <div 
+                      className="current-price-marker"
+                      style={{ 
+                        left: `${((currentPrice - priceRange.min) / (priceRange.max - priceRange.min)) * 100}%` 
+                      }}
+                    >
+                      <span className="marker-dot"></span>
+                    </div>
+                    <input
+                      type="range"
+                      min={priceRange.min}
+                      max={priceRange.max}
+                      step={priceRange.step}
+                      value={sliderValue || currentPrice}
+                      onChange={handleSliderChange}
+                      onMouseDown={() => setIsDragging(true)}
+                      onMouseUp={() => setIsDragging(false)}
+                      onTouchStart={() => setIsDragging(true)}
+                      onTouchEnd={() => setIsDragging(false)}
+                      className={`price-slider-input ${isDragging ? 'dragging' : ''}`}
+                    />
+                  </div>
+                  
+                  <div className="slider-labels">
+                    <span>-50%</span>
+                    <span className="current-marker">▼ Current</span>
+                    <span>+100%</span>
+                  </div>
+
+                  {/* Quick Percentage Chips */}
+                  <div className="quick-chips">
+                    {[-25, -10, 10, 25, 50].map(pct => (
+                      <button
+                        key={pct}
+                        className={`chip ${pct < 0 ? 'negative' : 'positive'} ${Math.abs(percentageFromCurrent - pct) < 1 ? 'selected' : ''}`}
+                        onClick={() => {
+                          const targetPrice = currentPrice * (1 + pct / 100);
+                          setPercentage(pct.toString());
+                          setTriggerPrice(targetPrice.toFixed(8));
+                          setSliderValue(targetPrice);
+                          setError(null);
+                        }}
+                      >
+                        {pct > 0 ? '+' : ''}{pct}%
+                      </button>
+                    ))}
+                  </div>
                 </>
               ) : (
-                `Create ${orderType.charAt(0).toUpperCase() + orderType.slice(1)} Order`
+                <div className="manual-price-input">
+                  <label>Target Price (USD)</label>
+                  <input
+                    type="number"
+                    value={triggerPrice}
+                    onChange={(e) => setTriggerPrice(e.target.value)}
+                    placeholder="Enter price..."
+                    step="0.00000001"
+                    min="0"
+                  />
+                </div>
               )}
-            </button>
+            </div>
 
-            {/* Help Text */}
-            <p className="help-note">
-              💡 Your order will execute automatically when the price reaches your trigger level
-            </p>
+            {/* Compact Amount + Expiry Row */}
+            <div className="input-row">
+              <div className="input-group flex-2">
+                <label>Amount ({side === 'buy' ? 'SOL' : coin?.symbol})</label>
+                <input
+                  type="number"
+                  value={inputAmount}
+                  onChange={(e) => setInputAmount(e.target.value)}
+                  placeholder="0.0"
+                  step="0.01"
+                  min="0"
+                />
+              </div>
+              <div className="input-group flex-1">
+                <label>Expires</label>
+                <div className="expiry-chips">
+                  {['24h', '7d', '30d'].map(exp => (
+                    <button
+                      key={exp}
+                      className={`expiry-chip ${expiry === exp ? 'active' : ''}`}
+                      onClick={() => setExpiry(exp)}
+                    >
+                      {exp}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Mini Order Summary */}
+            {inputAmount && triggerPrice && parseFloat(triggerPrice) > 0 && (
+              <div className="mini-summary">
+                <span className="summary-text">
+                  {side === 'buy' ? 'Buy' : 'Sell'} {inputAmount} {side === 'buy' ? 'SOL' : coin?.symbol} → Get ~{
+                    side === 'buy' 
+                      ? (parseFloat(inputAmount) / parseFloat(triggerPrice)).toFixed(2)
+                      : (parseFloat(inputAmount) * parseFloat(triggerPrice)).toFixed(4)
+                  } {side === 'buy' ? coin?.symbol : 'SOL'}
+                </span>
+              </div>
+            )}
+
+            {/* Error/Warning Messages */}
+            {error && <div className="inline-error">{error}</div>}
+            {!walletAddress && (
+              <div className="inline-warning">
+                <button className="connect-wallet-link" onClick={connect}>
+                  Connect wallet
+                </button>
+                {' '}to create orders
+              </div>
+            )}
+
+            {/* Sticky Create Button */}
+            <div className="sticky-button-container">
+              <button
+                className={`create-order-btn-hero ${side}`}
+                onClick={handleCreateOrder}
+                disabled={loading || !walletAddress || !inputAmount || !triggerPrice || parseFloat(triggerPrice) <= 0}
+              >
+                {loading ? (
+                  <>
+                    <span className="spinner"></span>
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    {side === 'buy' ? 'Buy' : 'Sell'} at ${formatPrice(triggerPrice)}
+                  </>
+                )}
+              </button>
+            </div>
           </>
         )}
       </div>

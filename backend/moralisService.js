@@ -46,20 +46,24 @@ function transformToken(moralisToken) {
   const bondingProgress = parseFloat(moralisToken.bondingCurveProgress) || 0;
   
   return {
-    // Core token info
+    // Core token info - include ALL address field variations for compatibility
     mint: moralisToken.tokenAddress,
     address: moralisToken.tokenAddress,
+    mintAddress: moralisToken.tokenAddress, // 🆕 Added for CoinCard compatibility
+    tokenAddress: moralisToken.tokenAddress, // 🆕 Added for enrichment compatibility
     symbol: moralisToken.symbol || 'UNKNOWN',
     name: moralisToken.name || moralisToken.symbol || 'Unknown Token',
     
-    // Metadata
+    // Metadata - include profileImage for display
     image: moralisToken.logo || null,
     logo: moralisToken.logo || null,
+    profileImage: moralisToken.logo || null, // 🆕 Added for CoinCard display
     decimals: parseInt(moralisToken.decimals) || 6,
     
     // Price info
     price: priceUsd,
     priceUsd: priceUsd,
+    price_usd: priceUsd, // 🆕 Added snake_case version
     priceNative: priceNative,
     priceSOL: priceNative,
     
@@ -72,9 +76,14 @@ function transformToken(moralisToken) {
     // Financial metrics
     liquidity: liquidity,
     liquidityUsd: liquidity,
+    liquidity_usd: liquidity, // 🆕 Added snake_case version
     fdv: fdv,
     fullyDilutedValuation: fdv,
     marketCap: fdv, // For compatibility
+    market_cap: fdv, // 🆕 Added snake_case version
+    
+    // 🆕 Mark as NOT enriched so CoinCard will trigger enrichment
+    enriched: false,
     
     // Graduation score
     graduationScore: calculateGraduationScore(moralisToken),

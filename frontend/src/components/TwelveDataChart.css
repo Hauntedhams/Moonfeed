@@ -1,7 +1,7 @@
 /* ============================================
    TIMEFRAME SELECTOR
    Updated: 2024-12-11 17:00 - Taller, rounder pill buttons
-   Cache bust: v4 - force new hash
+   Cache bust: v5 - consolidated desktop styles
    ============================================ */
 
 .timeframe-selector {
@@ -175,6 +175,27 @@ body.dark-mode .timeframe-btn.clean-btn {
 html:not(.dark-mode) .timeframe-selector {
   background: linear-gradient(180deg, #ffffff 0%, #f8f9fa 100%) !important;
   border-bottom: 1px solid rgba(0, 0, 0, 0.1) !important;
+}
+
+/* DESKTOP OVERRIDE: Remove white background in desktop mode */
+@media (min-width: 1200px) {
+  html:not(.dark-mode) .timeframe-selector,
+  .timeframe-selector {
+    background: rgba(0, 0, 0, 0.75) !important;
+    border-bottom: none !important;
+    position: absolute !important;
+    top: 16px !important;
+    left: 16px !important;
+    right: auto !important;
+    bottom: auto !important;
+    width: auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    border-radius: 12px !important;
+    padding: 8px 12px !important;
+    z-index: 1000 !important;
+  }
 }
 
 html:not(.dark-mode) .timeframe-btn,
@@ -410,7 +431,13 @@ html:not(.dark-mode) .twelve-data-chart {
   background: #ffffff !important;
 }
 
-/* Dark mode background for twelve-data-chart */
+/* DESKTOP: Make twelve-data-chart transparent */
+@media (min-width: 1200px) {
+  html:not(.dark-mode) .twelve-data-chart {
+    background: transparent !important;
+  }
+}
+
 html.dark-mode .twelve-data-chart {
   background: #0a0e1a !important;
 }
@@ -822,15 +849,42 @@ html.dark-mode .twelve-data-chart {
   height: 320px;
   min-height: 280px;
   position: relative;
-  background: #0a0e1a;
+  background: var(--chart-bg, #0a0e1a); /* Use CSS variable for theme support */
   overflow: hidden;
   padding: 0;
   margin: 0;
 }
 
+/* Desktop mode - chart container should fill available space */
+.desktop-mode .chart-container,
+.twelve-data-chart-wrapper.desktop-mode .chart-container {
+  height: 100% !important;
+  min-height: 400px !important;
+  flex: 1 1 auto !important;
+}
+
 /* Light mode background for chart container */
 html:not(.dark-mode) .chart-container {
   background: #ffffff !important;
+}
+
+/* DESKTOP: Make chart container transparent so chart canvas shows */
+@media (min-width: 1200px) {
+  html:not(.dark-mode) .chart-container {
+    background: transparent !important;
+  }
+  
+  /* Ensure desktop wrapper takes full height */
+  .twelve-data-chart-wrapper.desktop-mode {
+    height: 100% !important;
+    min-height: 100% !important;
+  }
+  
+  .twelve-data-chart-wrapper.desktop-mode .chart-container {
+    height: 100% !important;
+    min-height: 0 !important;
+    flex: 1 1 auto !important;
+  }
 }
 
 .chart-wrapper {
@@ -997,6 +1051,57 @@ html:not(.dark-mode) .chart-container {
   color: var(--chart-text-dim);
   font-size: 14px;
   font-weight: 500;
+}
+
+/* Chart Loading Overlay - used in JSX */
+.chart-loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: rgba(10, 14, 26, 0.95); /* Dark background explicitly */
+  backdrop-filter: blur(4px);
+  z-index: 10;
+}
+
+/* Light mode loading overlay */
+html:not(.dark-mode) .chart-loading-overlay {
+  background: rgba(248, 249, 250, 0.95);
+}
+
+.chart-loading-overlay p {
+  margin: 0;
+  color: var(--chart-text-dim);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Chart Error Overlay - used in JSX */
+.chart-error-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: rgba(10, 14, 26, 0.95); /* Dark background explicitly */
+  backdrop-filter: blur(4px);
+  z-index: 10;
+}
+
+/* Light mode error overlay */
+html:not(.dark-mode) .chart-error-overlay {
+  background: rgba(248, 249, 250, 0.95);
 }
 
 /* Status Messages */
@@ -1349,112 +1454,86 @@ html:not(.dark-mode) .chart-container {
 
 /* ============================================
    DESKTOP MODE - FULL VIEWPORT CHART
+   Consolidated desktop rules (min-width: 1200px)
    ============================================ */
 @media (min-width: 1200px) {
-  /* Ensure chart wrapper fills entire right panel and is interactive */
-  .twelve-data-chart-wrapper {
-    width: 100% !important;
-    height: 100vh !important;
-    min-height: 100vh !important;
-    display: flex !important;
-    flex-direction: column !important;
-    pointer-events: auto !important; /* Ensure wrapper allows interactions */
-    position: relative !important;
-  }
-
-  /* Chart container takes full available space - account for bottom selector */
-  .chart-container {
-    flex: 1 !important;
-    width: 100% !important;
-    height: 100% !important;
-    min-height: calc(100vh - 60px) !important; /* Account for timeframe selector at bottom */
-    max-height: calc(100vh - 60px) !important; /* Prevent overlap with bottom selector */
-    pointer-events: auto !important; /* Fully interactive */
-    touch-action: pan-x pan-y !important; /* Enable touch interactions */
-    user-select: none !important; /* Prevent text selection while dragging */
-    cursor: crosshair !important; /* Show crosshair cursor */
-  }
-
-  /* Canvas inside chart should be fully interactive */
-  .price-chart-canvas {
-    width: 100% !important;
-    height: 100% !important;
-    min-height: calc(100vh - 60px) !important;
-    pointer-events: auto !important;
-    touch-action: pan-x pan-y !important;
-  }
-
-  /* Timeframe selector at bottom - visible and interactive */
-  .timeframe-selector {
-    flex-shrink: 0;
+  /* Make chart wrapper fill entire right panel */
+  .twelve-data-chart-wrapper,
+  .twelve-data-chart-wrapper.desktop-mode {
     width: 100%;
-    z-index: 100;
-    position: absolute; /* Changed from fixed to absolute */
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background: rgba(10, 14, 26, 0.95);
-    backdrop-filter: blur(20px);
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-    padding: 12px 16px;
+    height: 100%;
+    min-height: 100%;
     display: flex;
-    gap: 8px;
-    justify-content: center;
-    pointer-events: auto; /* Ensure buttons are clickable */
-  }
-
-  /* Light mode desktop timeframe selector */
-  html:not(.dark-mode) .timeframe-selector {
-    background: rgba(255, 255, 255, 0.95) !important;
-    border-top: 1px solid rgba(0, 0, 0, 0.1) !important;
-  }
-
-  /* Make timeframe buttons more prominent in desktop */
-  .timeframe-selector .timeframe-btn {
+    flex-direction: column;
     pointer-events: auto;
-    cursor: pointer;
-    min-width: 40px;
-    padding: 14px 12px !important;
-    font-size: 12px;
-    border-radius: 20px !important;
+    position: relative;
+    background: #0a0e1a;
   }
 
-  /* Live indicator positioning for desktop */
-  .live-indicator {
-    position: absolute; /* Changed from fixed to absolute */
+  /* Light mode wrapper */
+  html:not(.dark-mode) .twelve-data-chart-wrapper,
+  html:not(.dark-mode) .twelve-data-chart-wrapper.desktop-mode {
+    background: #ffffff;
+  }
+
+  /* Chart container fills the wrapper - simplified */
+  .twelve-data-chart-wrapper .chart-container,
+  .twelve-data-chart-wrapper.desktop-mode .chart-container {
+    flex: 1;
+    width: 100%;
+    height: 100%;
+    min-height: 0; /* Allow flex to work */
+    position: relative;
+    background: transparent;
+  }
+
+  /* Timeframe selector - absolute positioned at top-left */
+  .timeframe-selector {
+    position: absolute;
     top: 16px;
-    right: 20px;
-    z-index: 200;
-    pointer-events: none; /* Don't block chart interaction */
-  }
-
-  /* Go live button positioning for desktop - above timeframe selector */
-  .go-live-button-container {
-    position: absolute; /* Changed from fixed to absolute */
-    bottom: 80px; /* Above timeframe selector */
-    right: 24px;
-    z-index: 200;
-    pointer-events: auto; /* Ensure button is clickable */
+    left: 16px;
+    right: auto;
+    bottom: auto;
+    width: auto;
+    height: auto;
+    background: rgba(0, 0, 0, 0.8);
+    border-radius: 12px;
+    padding: 8px 12px;
+    border: none;
+    z-index: 1000;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
   }
   
-  .go-live-button {
-    pointer-events: auto;
-    cursor: pointer;
+  /* Light mode timeframe selector */
+  html:not(.dark-mode) .timeframe-selector {
+    background: rgba(0, 0, 0, 0.7);
   }
 
-  /* Loading and error overlays */
-  .chart-loading-overlay,
-  .chart-error-overlay {
-    position: absolute;
-    top: 50px; /* Below timeframe selector */
-    left: 0;
-    right: 0;
-    bottom: 0;
+  /* Loading/error overlays */
+  .twelve-data-chart-wrapper .chart-loading-overlay,
+  .twelve-data-chart-wrapper .chart-error-overlay {
+    background: rgba(10, 14, 26, 0.9);
+  }
+  
+  html:not(.dark-mode) .twelve-data-chart-wrapper .chart-loading-overlay,
+  html:not(.dark-mode) .twelve-data-chart-wrapper .chart-error-overlay {
+    background: rgba(255, 255, 255, 0.9);
+  }
+  
+  /* Live indicator at top-right */
+  .live-indicator {
+    top: 16px;
+    right: 16px;
+    left: auto;
   }
 
-  /* Lazy placeholder */
-  .chart-lazy-placeholder {
-    min-height: 100vh;
+  /* Dexscreener advanced container */
+  .dexscreener-advanced-container {
+    flex: 1;
+    width: 100%;
+    height: 100%;
+    max-height: none;
   }
 }
 

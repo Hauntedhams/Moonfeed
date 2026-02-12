@@ -1,191 +1,91 @@
-/* Modern TikTok-style Token Scroller */
+/* Modern TikTok-style Token Scroller - SIMPLIFIED */
+
+/* ============================================
+   MAIN CONTAINER - Full viewport, no scroll
+   ============================================ */
 .modern-token-scroller {
   position: relative;
-  height: 100dvh; /* Use dynamic viewport height */
+  height: 100dvh;
   width: 100%;
   background: linear-gradient(135deg, #0b1220 0%, #0e1426 50%, #0b1220 100%);
   overflow: hidden;
-  /* Performance optimizations */
-  will-change: transform;
-  contain: layout style paint;
-  /* Prevent page-level scrolling */
-  overscroll-behavior: none;
 }
 
-/* Background enrichment status indicator */
-.enrichment-status {
-  position: fixed;
-  top: 80px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 1000;
-  background: rgba(0, 0, 0, 0.9);
-  color: white;
-  padding: 12px 20px;
-  border-radius: 25px;
-  font-size: 12px;
-  font-weight: 500;
-  backdrop-filter: blur(15px);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  transition: all 0.3s ease;
-  animation: slideDown 0.3s ease;
-  max-width: 320px;
-  text-align: center;
-}
-
-@keyframes slideDown {
-  from { transform: translateX(-50%) translateY(-20px); opacity: 0; }
-  to { transform: translateX(-50%) translateY(0); opacity: 1; }
-}
-
-.enrichment-content {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  justify-content: center;
-}
-
-.enrichment-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  text-align: left;
-}
-
-.enrichment-main {
-  font-weight: 600;
-  font-size: 13px;
-}
-
-.enrichment-detail {
-  font-size: 10px;
-  opacity: 0.8;
-  color: #cccccc;
-}
-
-.enrichment-spinner {
-  animation: spin 1s linear infinite;
-  font-size: 16px;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-.enrichment-progress {
-  width: 60px;
-  height: 4px;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.enrichment-progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #00d4ff, #4caf50);
-  border-radius: 2px;
-  transition: width 0.5s ease;
-}
-
-.enrichment-status.completed {
-  background: rgba(76, 175, 80, 0.95);
-}
-
-.enrichment-status.error {
-  background: rgba(244, 67, 54, 0.95);
-}
-
-/* Scrollable container - hybrid CSS + JS snap */
+/* ============================================
+   SCROLL CONTAINER - The only scrollable element
+   ============================================ */
 .modern-scroller-container {
-  height: 100dvh; /* Use dynamic viewport height */
+  height: 100dvh;
   width: 100%;
   overflow-y: scroll;
-  /* Enable CSS snap - mandatory for instant snapping */
+  overflow-x: hidden;
+  /* CSS Scroll Snap for TikTok-style */
   scroll-snap-type: y mandatory;
-  -webkit-overflow-scrolling: touch; /* Smooth momentum on iOS */
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none; /* IE and Edge */
-  /* Performance optimizations */
-  will-change: scroll-position;
-  contain: layout style paint;
-  transform: translateZ(0); /* Force hardware acceleration */
-  /* Prevent bounce/overscroll */
-  overscroll-behavior-y: contain;
-  scroll-padding: 0;
-}
-
-/* Mobile: use mandatory snap for instant snapping */
-@media (max-width: 767px) {
-  .modern-scroller-container {
-    scroll-snap-type: y mandatory; /* mandatory for instant snap on swipe */
-  }
-}
-
-.modern-scroller-container.scroll-locked {
-  overflow: hidden;
-  pointer-events: none;
-  scroll-snap-type: none; /* Disable scroll snap when locked */
-}
-
-/* Ensure coin cards can still receive interactions when scroll is locked */
-.modern-scroller-container.scroll-locked .modern-coin-slide {
-  pointer-events: auto;
+  /* Hide scrollbar */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  /* iOS smooth scroll */
+  -webkit-overflow-scrolling: touch;
 }
 
 .modern-scroller-container::-webkit-scrollbar {
-  display: none; /* Chrome, Safari, Opera */
+  display: none;
 }
 
-/* Individual coin slides - snap to start */
+/* When scroll is locked (coin expanded) */
+.modern-scroller-container.scroll-locked {
+  overflow: hidden !important;
+  pointer-events: none;
+  /* CRITICAL: Disable scroll snap to prevent jumping to next coin */
+  scroll-snap-type: none !important;
+}
+
+.modern-scroller-container.scroll-locked .modern-coin-slide {
+  pointer-events: auto;
+  /* Also disable snap on individual slides when locked */
+  scroll-snap-align: none !important;
+  scroll-snap-stop: normal !important;
+}
+
+/* ============================================
+   COIN SLIDES - Each coin takes full viewport
+   ============================================ */
 .modern-coin-slide {
-  height: 100dvh; /* Use dynamic viewport height */
+  height: 100dvh;
+  min-height: 100dvh;
   width: 100%;
+  /* Snap alignment */
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  /* Layout */
   display: flex;
   flex-direction: column;
   position: relative;
-  background: linear-gradient(135deg, #0b1220 0%, #0e1426 50%, #0b1220 100%);
-  /* Enable snap point at start of each card */
-  scroll-snap-align: start;
-  scroll-snap-stop: always; /* Force stop at each card for precise snapping */
-  flex-shrink: 0;
-  contain: layout style paint;
-  /* Ensure exact height for perfect snap points */
-  min-height: 100dvh;
-  max-height: 100dvh;
-}
-
-/* Placeholder coins - no snap */
-.modern-coin-placeholder {
-  height: 100dvh;
-  min-height: 100dvh;
-  max-height: 100dvh;
-  width: 100%;
   flex-shrink: 0;
   background: linear-gradient(135deg, #0b1220 0%, #0e1426 50%, #0b1220 100%);
 }
 
 .modern-coin-slide.active {
-  /* Visual enhancement for active slide */
   box-shadow: inset 0 0 0 2px rgba(0, 212, 255, 0.3);
 }
 
-/* 🔥 MOBILE PERFORMANCE: Virtual scrolling placeholder */
-.modern-coin-placeholder {
-  /* Ensure placeholders maintain scroll snap points */
-  scroll-snap-align: start !important;
-  flex-shrink: 0 !important;
-  height: 100vh !important;
-  min-height: 100vh !important;
-  width: 100% !important;
-  /* Invisible but maintains layout */
-  background: transparent !important;
-  /* Performance optimization */
-  contain: strict;
-  content-visibility: auto;
+.modern-coin-slide.expanded {
+  scroll-snap-align: none;
 }
 
-/* Loading States */
+/* Placeholder for virtual scrolling */
+.modern-coin-placeholder {
+  height: 100dvh;
+  min-height: 100dvh;
+  width: 100%;
+  flex-shrink: 0;
+  scroll-snap-align: start;
+  background: transparent;
+}
+
+/* ============================================
+   LOADING STATES
+   ============================================ */
 .modern-scroller-loading {
   height: 100dvh;
   display: flex;
@@ -213,7 +113,9 @@
   opacity: 0.8;
 }
 
-/* Error States */
+/* ============================================
+   ERROR STATES
+   ============================================ */
 .modern-scroller-error {
   height: 100dvh;
   display: flex;
@@ -268,9 +170,11 @@
   transform: translateY(0);
 }
 
-/* Empty States */
+/* ============================================
+   EMPTY STATES
+   ============================================ */
 .modern-scroller-empty {
-  height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -302,7 +206,9 @@
   max-width: 400px;
 }
 
-/* Loading more indicator */
+/* ============================================
+   LOADING MORE INDICATOR
+   ============================================ */
 .modern-scroller-loading-more {
   position: fixed;
   bottom: 100px;
@@ -325,13 +231,171 @@
   animation: spin 1s linear infinite;
 }
 
-/* Scroll Indicator - REMOVED (was blocking expand button interactions) */
+/* ============================================
+   ENRICHMENT STATUS INDICATOR
+   ============================================ */
+.enrichment-status {
+  position: fixed;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: 12px 20px;
+  border-radius: 25px;
+  font-size: 12px;
+  font-weight: 500;
+  backdrop-filter: blur(15px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  transition: all 0.3s ease;
+  animation: slideDown 0.3s ease;
+  max-width: 320px;
+  text-align: center;
+}
 
-/* Coin Card Integration Styles */
+.enrichment-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: center;
+}
+
+.enrichment-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+}
+
+.enrichment-main {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.enrichment-detail {
+  font-size: 10px;
+  opacity: 0.8;
+  color: #cccccc;
+}
+
+.enrichment-spinner {
+  animation: spin 1s linear infinite;
+  font-size: 16px;
+}
+
+.enrichment-progress {
+  width: 60px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.enrichment-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #00d4ff, #4caf50);
+  border-radius: 2px;
+  transition: width 0.5s ease;
+}
+
+.enrichment-status.completed {
+  background: rgba(76, 175, 80, 0.95);
+}
+
+.enrichment-status.error {
+  background: rgba(244, 67, 54, 0.95);
+}
+
+/* ============================================
+   BANNER OVERLAY BUTTONS
+   ============================================ */
+.banner-overlay-buttons {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2000;
+  pointer-events: none;
+}
+
+.banner-overlay-buttons .moonfeed-info-button,
+.banner-overlay-buttons .filters-button,
+.banner-overlay-buttons .banner-search-button {
+  pointer-events: auto;
+}
+
+/* Search Button */
+.banner-search-button {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 2100;
+  background: rgba(0, 0, 0, 0.4);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 50%;
+  padding: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  width: 32px;
+  height: 32px;
+  pointer-events: auto;
+  user-select: none;
+}
+
+.banner-search-button:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+
+.banner-search-button:active {
+  transform: translateY(0px) scale(0.95);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+}
+
+.banner-search-button svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Filter container */
+.banner-filter-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+.banner-filter-container .filters-button {
+  pointer-events: auto;
+}
+
+/* Virtual scrolling spacers */
+.virtual-spacer-top,
+.virtual-spacer-bottom {
+  width: 100%;
+  background: transparent;
+  pointer-events: none;
+}
+
+/* ============================================
+   COIN CARD INTEGRATION
+   ============================================ */
 .modern-coin-slide .coin-card,
 .modern-coin-slide .moonfeed-coin-card {
   width: 100%;
-  height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   padding: 0;
@@ -361,10 +425,17 @@
   margin-top: 20px;
 }
 
-/* Animations */
+/* ============================================
+   ANIMATIONS
+   ============================================ */
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
+}
+
+@keyframes slideDown {
+  from { transform: translateX(-50%) translateY(-20px); opacity: 0; }
+  to { transform: translateX(-50%) translateY(0); opacity: 1; }
 }
 
 @keyframes fadeInUp {
@@ -378,25 +449,12 @@
   }
 }
 
-/* Disabled fadeInUp animation to prevent white flash during scrolling */
-/*
-.modern-coin-slide.active .coin-card {
-  animation: fadeInUp 0.4s ease-out;
-}
-*/
-
-/* Mobile optimizations */
+/* ============================================
+   MOBILE OPTIMIZATIONS
+   ============================================ */
 @media (max-width: 768px) {
   .modern-coin-slide .coin-card {
     padding: 80px 16px 120px;
-  }
-  
-  .scroll-indicator {
-    right: 12px;
-  }
-  
-  .indicator-track {
-    height: 150px;
   }
   
   .coin-counter {
@@ -405,9 +463,8 @@
     min-width: 40px;
   }
   
-  /* Mobile adjustments for search button to align with tabs */
   .banner-search-button {
-    top: 16px; /* Match tab container padding */
+    top: 16px;
     right: 12px;
     width: 28px;
     height: 28px;
@@ -420,145 +477,28 @@
   }
 }
 
-/* Hide scrollbar completely */
-.modern-scroller-container {
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-
-.modern-scroller-container::-webkit-scrollbar {
-  width: 0;
-  height: 0;
-  background: transparent;
-}
-
-/* Scroll lock when coin is expanded */
-.modern-scroller-container.scroll-locked {
-  overflow: hidden;
-  pointer-events: none;
-  scroll-snap-type: none; /* Disable scroll snap when locked */
-}
-
-.modern-coin-slide.expanded {
-  scroll-snap-align: none;
-}
-
-/* Banner overlay buttons container */
-.banner-overlay-buttons {
-  position: fixed; /* Changed from absolute to fixed so it stays on top */
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 2000; /* Increased to be higher than coin cards */
-  pointer-events: none; /* Allow clicks to pass through to banner */
-}
-
-.banner-overlay-buttons .moonfeed-info-button,
-.banner-overlay-buttons .filters-button,
-.banner-overlay-buttons .banner-search-button {
-  pointer-events: auto; /* Re-enable clicks on the buttons themselves */
-}
-
-/* Banner Search Button - positioned inline with tabs at top right */
-.banner-search-button {
-  position: fixed;
-  top: 16px; /* Align with tabs vertically */
-  right: 16px;
-  z-index: 2100; /* Even higher than banner overlay buttons to be above TopTabs (1000) */
-  background: rgba(0, 0, 0, 0.4);
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 50%; /* Make it circular for icon-only button */
-  padding: 6px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  width: 32px;
-  height: 32px;
-  pointer-events: auto !important;
-  user-select: none;
-}
-
-.banner-search-button:hover {
-  background: rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.3);
-  transform: translateY(-2px) scale(1.05);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-}
-
-.banner-search-button:active {
-  transform: translateY(0px) scale(0.95);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
-}
-
-.banner-search-button svg {
-  width: 14px;
-  height: 14px;
-}
-
-/* Filter container positioned over banner */
-.banner-filter-container {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 1000;
-  pointer-events: none; /* Allow clicks to pass through to banner */
-}
-
-.banner-filter-container .filters-button {
-  pointer-events: auto; /* Re-enable clicks on the button itself */
-}
-
-/* Virtual scrolling spacers for mobile optimization */
-.virtual-spacer-top,
-.virtual-spacer-bottom {
-  width: 100%;
-  background: transparent;
-  pointer-events: none;
-}
-
-@media (max-width: 767px) {
-  .virtual-spacer-top,
-  .virtual-spacer-bottom {
-    /* Ensure spacers don't interfere with scrolling on mobile */
-    touch-action: pan-y;
-  }
-  
-  /* Mobile-specific scroll improvements - USE CSS SNAP like desktop */
-  .modern-scroller-container {
-    /* Use mandatory snap just like desktop for consistent TikTok-style scrolling */
-    scroll-snap-type: y mandatory !important;
-    /* Allow momentum scrolling on iOS */
-    -webkit-overflow-scrolling: touch;
+/* Fallback for browsers that don't support dvh */
+@supports not (height: 100dvh) {
+  .modern-token-scroller,
+  .modern-scroller-container,
+  .modern-coin-slide,
+  .modern-scroller-loading,
+  .modern-scroller-error,
+  .modern-scroller-empty {
+    height: 100vh;
   }
   
   .modern-coin-slide {
-    /* Enable snap on individual slides - same as desktop */
-    scroll-snap-align: start !important;
-    scroll-snap-stop: always !important;
-    /* Ensure slides are properly positioned for smooth snapping */
-    scroll-margin-top: 0;
-    /* Allow touch actions */
-    touch-action: pan-y pinch-zoom;
+    min-height: 100vh;
   }
   
-  /* Mobile adjustments for search button to align with tabs */
-  .banner-search-button {
-    top: 16px; /* Match tab container padding */
-    right: 12px;
-    width: 28px;
-    height: 28px;
-    padding: 5px;
+  .modern-coin-placeholder {
+    height: 100vh;
+    min-height: 100vh;
   }
   
-  .banner-search-button svg {
-    width: 12px;
-    height: 12px;
+  .modern-coin-slide .coin-card,
+  .modern-coin-slide .moonfeed-coin-card {
+    height: 100vh;
   }
 }

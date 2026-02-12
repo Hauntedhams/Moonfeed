@@ -52,6 +52,11 @@ const CoinCard = memo(({
   const chartNavRef = useRef(null);
   const prevPriceRef = useRef(null);
   const graduationIconRef = useRef(null);
+  const rightPanelRef = useRef(null); // Ref for the right panel (desktop chart target)
+  const mobileChartTargetRef = useRef(null); // Ref for mobile chart target (portal destination)
+  
+  // Track desktop mode for responsive chart positioning
+  const [isDesktopMode, setIsDesktopMode] = useState(() => window.innerWidth >= 1200);
 
   // Track if coin is enriched (has banner, socials, rugcheck, etc.)
   const isEnriched = !!(
@@ -192,6 +197,18 @@ const CoinCard = memo(({
     }
   }, [isVisible, isEnriched, enrichmentRequested, mintAddress, coin, onEnrichmentComplete]);
 
+  // 📱 RESPONSIVE CHART FIX: Track window size for single responsive chart
+  useEffect(() => {
+    const handleResize = () => {
+      const newIsDesktop = window.innerWidth >= 1200;
+      if (newIsDesktop !== isDesktopMode) {
+        setIsDesktopMode(newIsDesktop);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [isDesktopMode]);
 
 
   // Auto-show transactions UI when autoLoadTransactions is true
@@ -1237,27 +1254,30 @@ const CoinCard = memo(({
           >
             {coin.name || 'Unknown Token'}
           </h2>
-          <p className="banner-coin-symbol">
-            ${coin.symbol || coin.ticker || 'N/A'}
-          </p>
-          {coin.description && (
-            <div className="banner-coin-description-inline">
-              {coin.description}
-              {coin.description.length > 100 && (
-                <button 
-                  className="read-more-button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowDescriptionModal(true);
-                  }}
-                  title="Read more"
-                  style={{ marginLeft: '8px' }}
-                >
-                  read more
-                </button>
-              )}
-            </div>
-          )}
+          <div className="desktop-symbol-row">
+            <p className="banner-coin-symbol">
+              ${coin.symbol || coin.ticker || 'N/A'}
+            </p>
+            {coin.description && (
+              <>
+                <span className="banner-coin-description-inline desktop-description">
+                  {coin.description}
+                </span>
+                {coin.description.length > 50 && (
+                  <button 
+                    className="read-more-button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowDescriptionModal(true);
+                    }}
+                    title="Read more"
+                  >
+                    read more
+                  </button>
+                )}
+              </>
+            )}
+          </div>
         </div>
 
         <div className="info-layer-header">
@@ -1338,7 +1358,7 @@ const CoinCard = memo(({
                       aria-label="Telegram"
                     >
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 0 0-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/>
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 0 0-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0.02.27.02.39z"/>
                       </svg>
                     </a>
                   )}
@@ -1551,16 +1571,11 @@ const CoinCard = memo(({
         </div>
 
         <div className="info-layer-content">
-          {/* Price Charts - TwelveData Only */}
+          {/* Price Charts - Mobile chart portal target */}
           <div className="charts-section">
-            {/* Twelve Data Live Chart - Always showing */}
-            <div className="twelve-chart-section">
-              <TwelveDataChart 
-                coin={coin}
-                isActive={isExpanded && isVisible}
-                onCrosshairMove={handleChartCrosshairMove}
-                onFirstPriceUpdate={handleFirstPriceUpdate}
-              />
+            {/* Mobile chart renders here via portal */}
+            <div className="twelve-chart-section mobile-chart-target" ref={mobileChartTargetRef}>
+              {/* Chart portals here on mobile */}
             </div>
           </div> {/* Close charts-section */}
 
@@ -2086,16 +2101,33 @@ const CoinCard = memo(({
       </div>
       </div> {/* Close coin-card-left-panel */}
 
-      {/* Right Panel - Twelve Data Chart (Desktop Only) */}
-      <div className="coin-card-right-panel">
+      {/* Right Panel - Desktop only chart container */}
+      <div className="coin-card-right-panel" ref={rightPanelRef}>
+        {/* Desktop: Chart renders here */}
+        {isDesktopMode && (
+          <TwelveDataChart 
+            key={`chart-desktop-${mintAddress}`}
+            coin={coin}
+            isActive={isExpanded && isVisible}
+            isDesktopMode={true}
+            onCrosshairMove={handleChartCrosshairMove}
+            onFirstPriceUpdate={handleFirstPriceUpdate}
+          />
+        )}
+      </div>
+
+      {/* Mobile Chart - Rendered via portal into mobile-chart-target */}
+      {!isDesktopMode && mobileChartTargetRef.current && createPortal(
         <TwelveDataChart 
+          key={`chart-mobile-${mintAddress}`}
           coin={coin}
-          isActive={true}
-          isDesktopMode={true}
+          isActive={isExpanded && isVisible}
+          isDesktopMode={false}
           onCrosshairMove={handleChartCrosshairMove}
           onFirstPriceUpdate={handleFirstPriceUpdate}
-        />
-      </div>
+        />,
+        mobileChartTargetRef.current
+      )}
 
       {/* Banner Modal - Use Portal to render at document root */}
       {showBannerModal && createPortal(

@@ -44,12 +44,13 @@ html.dark-mode {
 html, body {
   width: 100%;
   height: 100%;
-  overflow: hidden; /* Prevent page-level scrolling */
-  /* ❌ REMOVED: position: fixed was preventing mobile scrolling */
-  overscroll-behavior: none; /* Prevent bounce scrolling on iOS */
-  /* Enable touch scrolling on iOS */
+  /* Prevent page-level scrolling - scroll happens in .modern-scroller-container */
+  overflow: hidden;
+  /* Prevent iOS bounce */
+  overscroll-behavior: none;
+  /* Enable touch scrolling */
   -webkit-overflow-scrolling: touch;
-  color: var(--text-primary); /* Universal text color inheritance */
+  color: var(--text-primary);
 }
 
 body {
@@ -58,6 +59,11 @@ body {
   margin: 0;
   padding: 0;
   color: var(--text-primary); /* Ensure body text uses theme color */
+}
+
+/* Light mode body background */
+html:not(.dark-mode) body {
+  background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 50%, #f8f9fa 100%);
 }
 
 /* Universal text color inheritance - ensures all elements default to theme text color */
@@ -86,8 +92,13 @@ small,
   margin: 0 auto;
   background: linear-gradient(135deg, #0b1220 0%, #0e1426 50%, #0b1220 100%);
   box-shadow: 0 0 20px rgba(0,0,0,0.1);
-  overflow: hidden; /* Prevent root-level scrolling */
+  overflow: hidden;
   position: relative;
+}
+
+/* Light mode #root background */
+html:not(.dark-mode) #root {
+  background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 50%, #f8f9fa 100%);
 }
 
 /* Anchor */

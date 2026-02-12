@@ -3,11 +3,12 @@ import ModernTokenScroller from './ModernTokenScroller';
 import TopTabs from './TopTabs';
 import NotificationsFeed from './NotificationsFeed';
 import { useWallet } from '../contexts/WalletContext';
+import { UnifiedWalletButton } from '@jup-ag/wallet-adapter';
 import './FavoritesGrid.css';
 
 function FavoritesGrid({ favorites = [], onCoinClick, onFavoritesChange }) {
   const [activeTab, setActiveTab] = useState('feed'); // 'feed' or 'notifications'
-  const { connected, connecting, connectWallet, walletAddress } = useWallet();
+  const { connected, connecting, walletAddress } = useWallet();
 
   const handleTabChange = ({ type }) => {
     setActiveTab(type);
@@ -19,13 +20,9 @@ function FavoritesGrid({ favorites = [], onCoinClick, onFavoritesChange }) {
       <div className="favorites-empty wallet-required">
         <div className="empty-state">
           <p>Connect wallet to see notifications</p>
-          <button 
-            className="connect-wallet-button"
-            onClick={connectWallet}
-            disabled={connecting}
-          >
-            {connecting ? 'Connecting...' : 'Connect Wallet'}
-          </button>
+          <div className="wallet-button-container">
+            <UnifiedWalletButton />
+          </div>
         </div>
       </div>
     );

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useWallet } from '../contexts/WalletContext';
+import { UnifiedWalletButton } from '@jup-ag/wallet-adapter';
 import './CommentsSection.css';
 
 const CommentsSection = ({ coinAddress, coinSymbol }) => {
@@ -8,7 +9,7 @@ const CommentsSection = ({ coinAddress, coinSymbol }) => {
   const [newComment, setNewComment] = useState('');
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState(null);
-  const { walletAddress, connected, connect } = useWallet();
+  const { walletAddress, connected } = useWallet();
   const containerRef = useRef(null);
   const textareaRef = useRef(null);
 
@@ -199,18 +200,9 @@ const CommentsSection = ({ coinAddress, coinSymbol }) => {
               <div className="connect-wallet-prompt">
                 <div className="connect-wallet-icon">🔒</div>
                 <p>Connect your wallet to join the conversation</p>
-                <button 
-                  className="connect-wallet-cta"
-                  onClick={async () => {
-                    try {
-                      await connect();
-                    } catch (error) {
-                      console.error('Failed to connect wallet:', error);
-                    }
-                  }}
-                >
-                  Connect Wallet
-                </button>
+                <div className="connect-wallet-cta-container">
+                  <UnifiedWalletButton />
+                </div>
               </div>
             )}
 

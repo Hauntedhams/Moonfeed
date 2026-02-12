@@ -1,41 +1,23 @@
 import React, { useState } from 'react';
 import { useWallet } from '../contexts/WalletContext';
+import { UnifiedWalletButton } from '@jup-ag/wallet-adapter';
 import './WalletButton.css';
 
+/**
+ * Universal Wallet Button
+ * Uses Jupiter's UnifiedWalletButton for connection which handles:
+ * - Phantom, Solflare, Coinbase, and other Solana wallets
+ * - Jupiter Mobile wallet via QR code
+ * - Consistent wallet state across the app
+ */
 const WalletButton = () => {
   const { 
     walletAddress, 
     connected, 
-    connecting,
-    connect, 
-    disconnect,
-    isPhantomAvailable,
-    isSolflareAvailable,
-    connectPhantom,
-    connectSolflare
+    disconnect
   } = useWallet();
 
   const [showDropdown, setShowDropdown] = useState(false);
-  const [showWalletSelector, setShowWalletSelector] = useState(false);
-
-  const handleConnect = async () => {
-    // If both wallets available, show selector
-    if (isPhantomAvailable && isSolflareAvailable) {
-      setShowWalletSelector(true);
-    } else {
-      // Auto-connect to available wallet
-      await connect();
-    }
-  };
-
-  const handleSelectWallet = async (type) => {
-    setShowWalletSelector(false);
-    if (type === 'phantom') {
-      await connectPhantom();
-    } else {
-      await connectSolflare();
-    }
-  };
 
   const formatAddress = (address) => {
     if (!address) return '';
@@ -49,84 +31,16 @@ const WalletButton = () => {
     }
   };
 
+  // When not connected, show Jupiter's unified wallet button
   if (!connected) {
     return (
-      <>
-        <button 
-          className="wallet-connect-btn"
-          onClick={handleConnect}
-          disabled={connecting}
-        >
-          {connecting ? (
-            <>
-              <span className="spinner-small"></span>
-              Connecting...
-            </>
-          ) : (
-            <>
-              👛 Connect Wallet
-            </>
-          )}
-        </button>
-
-        {/* Wallet Selector Modal */}
-        {showWalletSelector && (
-          <div 
-            className="wallet-selector-overlay"
-            onClick={() => setShowWalletSelector(false)}
-          >
-            <div 
-              className="wallet-selector-modal"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <h3>Select Wallet</h3>
-              <div className="wallet-options">
-                {isPhantomAvailable && (
-                  <button
-                    className="wallet-option"
-                    onClick={() => handleSelectWallet('phantom')}
-                  >
-                    <img 
-                      src="https://phantom.app/img/logo.png" 
-                      alt="Phantom"
-                      className="wallet-icon"
-                    />
-                    <div>
-                      <div className="wallet-name">Phantom</div>
-                      <div className="wallet-desc">Connect to Phantom</div>
-                    </div>
-                  </button>
-                )}
-                {isSolflareAvailable && (
-                  <button
-                    className="wallet-option"
-                    onClick={() => handleSelectWallet('solflare')}
-                  >
-                    <img 
-                      src="https://solflare.com/img/solflare-logo.svg" 
-                      alt="Solflare"
-                      className="wallet-icon"
-                    />
-                    <div>
-                      <div className="wallet-name">Solflare</div>
-                      <div className="wallet-desc">Connect to Solflare</div>
-                    </div>
-                  </button>
-                )}
-              </div>
-              <button 
-                className="close-selector"
-                onClick={() => setShowWalletSelector(false)}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-      </>
+      <div className="wallet-connect-wrapper">
+        <UnifiedWalletButton />
+      </div>
     );
   }
 
+  // When connected, show custom dropdown with wallet info
   return (
     <div className="wallet-connected">
       <button 

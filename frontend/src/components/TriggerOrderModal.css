@@ -1,41 +1,18 @@
+/* TriggerOrderModal.css - Compact Limit Order Layout */
+
 .trigger-modal-overlay {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.85); /* Match Jupiter modal */
+  background: rgba(0, 0, 0, 0.85);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 10000;
-  padding: 16px; /* Match Jupiter modal */
-  animation: fadeIn 0.2s ease; /* Match Jupiter modal */
-}
-
-@media (min-width: 769px) {
-  .trigger-modal-overlay {
-    justify-content: flex-start;
-    align-items: flex-start;
-    padding: 40px;
-    background: rgba(0, 0, 0, 0.85);
-    backdrop-filter: none;
-  }
-}
-
-.trigger-modal-content {
-  background: #0f172a; /* Match Jupiter modal */
-  border-radius: 24px;
-  width: 100%;
-  max-width: 450px;
-  max-height: 88vh;
-  overflow-y: auto; /* Make modal scrollable */
-  overflow-x: hidden;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  display: flex;
-  flex-direction: column;
-  animation: slideUp 0.25s ease;
+  padding: 16px;
+  animation: fadeIn 0.2s ease;
 }
 
 @keyframes fadeIn {
@@ -44,41 +21,73 @@
 }
 
 @keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(30px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-.trigger-modal-header {
+/* ============================================
+   COMPACT LAYOUT - Main Container
+   ============================================ */
+.trigger-modal-content.compact-layout {
+  background: #0f172a;
+  border-radius: 20px;
+  width: 100%;
+  max-width: 400px;
+  max-height: calc(100vh - 32px);
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  animation: slideUp 0.25s ease;
+}
+
+/* ============================================
+   COMPACT HEADER
+   ============================================ */
+.compact-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 24px;
+  padding: 16px 20px;
   border-bottom: 1px solid rgba(79, 195, 247, 0.1);
+  background: rgba(79, 195, 247, 0.03);
 }
 
-.trigger-modal-header h2 {
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.coin-image-small {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.coin-details h3 {
   margin: 0;
-  font-size: 1.5rem;
-  background: linear-gradient(135deg, #4FC3F7, #677EEA);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  font-size: 1.1rem;
+  color: white;
+  font-weight: 600;
 }
 
-.close-btn {
+.current-price-badge {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.6);
+  font-family: 'SF Mono', monospace;
+}
+
+.close-btn-compact {
   background: rgba(255, 255, 255, 0.1);
   border: none;
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   color: white;
-  font-size: 1.5rem;
+  font-size: 1.2rem;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -86,296 +95,444 @@
   transition: all 0.2s;
 }
 
-.close-btn:hover {
+.close-btn-compact:hover {
   background: rgba(255, 255, 255, 0.2);
+}
+
+/* ============================================
+   ACTION ROW - Order Type + Buy/Sell
+   ============================================ */
+.action-row {
+  display: flex;
+  gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid rgba(79, 195, 247, 0.08);
+}
+
+.action-group {
+  display: flex;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 10px;
+  padding: 4px;
+}
+
+.action-btn {
+  padding: 8px 14px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.action-btn:hover {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.action-btn.active {
+  background: rgba(79, 195, 247, 0.2);
+  color: white;
+}
+
+.action-btn.buy-btn.active {
+  background: rgba(16, 185, 129, 0.2);
+  color: #10b981;
+}
+
+.action-btn.sell-btn.active {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+}
+
+/* ============================================
+   HERO SLIDER SECTION
+   ============================================ */
+.hero-slider-section {
+  padding: 20px;
+  background: linear-gradient(180deg, rgba(79, 195, 247, 0.05) 0%, transparent 100%);
+  border-bottom: 1px solid rgba(79, 195, 247, 0.08);
+}
+
+.hero-slider-section.buy {
+  background: linear-gradient(180deg, rgba(16, 185, 129, 0.08) 0%, transparent 100%);
+}
+
+.hero-slider-section.sell {
+  background: linear-gradient(180deg, rgba(239, 68, 68, 0.08) 0%, transparent 100%);
+}
+
+.slider-hero-display {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.price-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.price-label {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.price-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: white;
+  font-family: 'SF Mono', 'JetBrains Mono', monospace;
+}
+
+.percentage-badge {
+  font-size: 1rem;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 10px;
+}
+
+.percentage-badge.positive {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.15);
+}
+
+.percentage-badge.negative {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.15);
+}
+
+/* Slider Wrapper */
+.slider-wrapper-hero {
+  position: relative;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  margin: 8px 0;
+}
+
+.slider-track-fill {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 6px;
+  border-radius: 3px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.current-price-marker {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+}
+
+.marker-dot {
+  display: block;
+  width: 12px;
+  height: 12px;
+  background: #fbbf24;
+  border-radius: 50%;
+  box-shadow: 0 0 8px rgba(251, 191, 36, 0.5);
+}
+
+.price-slider-input {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  cursor: pointer;
+  position: relative;
+  z-index: 3;
+}
+
+.price-slider-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: white;
+  cursor: grab;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), 0 0 0 3px rgba(79, 195, 247, 0.3);
+  border: none;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.price-slider-input::-webkit-slider-thumb:hover {
   transform: scale(1.1);
 }
 
-.coin-info-section {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 20px 24px;
-  background: rgba(79, 195, 247, 0.05);
-  border-bottom: 1px solid rgba(79, 195, 247, 0.1);
+.price-slider-input.dragging::-webkit-slider-thumb {
+  cursor: grabbing;
+  transform: scale(1.15);
 }
 
-.coin-info-section .coin-image {
-  width: 48px;
-  height: 48px;
+.buy .price-slider-input::-webkit-slider-thumb {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), 0 0 0 3px rgba(16, 185, 129, 0.4);
+}
+
+.sell .price-slider-input::-webkit-slider-thumb {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), 0 0 0 3px rgba(239, 68, 68, 0.4);
+}
+
+.price-slider-input::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
-  object-fit: cover;
+  background: white;
+  cursor: grab;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), 0 0 0 3px rgba(79, 195, 247, 0.3);
+  border: none;
 }
 
-.coin-info-section h3 {
-  margin: 0;
-  font-size: 1.2rem;
-  color: white;
-}
-
-.coin-info-section .current-price {
-  margin: 4px 0 0 0;
-  font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.order-type-section,
-.side-section,
-.input-section,
-.trigger-price-section,
-.quick-percentage-section,
-.expiry-section {
-  padding: 20px 24px;
-  border-bottom: 1px solid rgba(79, 195, 247, 0.1);
-}
-
-.order-type-section label,
-.side-section label,
-.input-section label,
-.trigger-price-section label,
-.quick-percentage-section label,
-.expiry-section label {
-  display: block;
-  margin-bottom: 12px;
-  font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.8);
-  font-weight: 500;
-}
-
-.toggle-group {
-  display: flex;
-  gap: 8px;
-}
-
-.toggle-btn {
-  flex: 1;
-  padding: 12px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(79, 195, 247, 0.2);
-  border-radius: 12px;
-  color: rgba(255, 255, 255, 0.8);
-  font-size: 1rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.toggle-btn:hover {
-  background: rgba(79, 195, 247, 0.1);
-  border-color: rgba(79, 195, 247, 0.4);
-}
-
-.toggle-btn.active {
-  background: linear-gradient(135deg, rgba(79, 195, 247, 0.2), rgba(103, 126, 234, 0.2));
-  border-color: #4FC3F7;
-  color: white;
-}
-
-.toggle-btn.buy.active {
-  background: linear-gradient(135deg, rgba(76, 175, 80, 0.2), rgba(56, 142, 60, 0.2));
-  border-color: #4CAF50;
-}
-
-.toggle-btn.sell.active {
-  background: linear-gradient(135deg, rgba(239, 83, 80, 0.2), rgba(211, 47, 47, 0.2));
-  border-color: #EF5350;
-}
-
-.help-text {
-  margin-top: 8px;
-  font-size: 0.85rem;
-  color: rgba(255, 255, 255, 0.5);
-  font-style: italic;
-}
-
-.help-text.warning {
-  color: #FFA726;
-  font-weight: 500;
-}
-
-.input-section input,
-.trigger-price-section input {
-  width: 100%;
-  padding: 14px 16px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(79, 195, 247, 0.2);
-  border-radius: 12px;
-  color: white;
-  font-size: 1.1rem;
-  font-weight: 500;
-  transition: all 0.2s;
-}
-
-.input-section input:focus,
-.trigger-price-section input:focus {
-  outline: none;
-  border-color: #4FC3F7;
-  background: rgba(79, 195, 247, 0.1);
-}
-
-.price-toggle {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.price-toggle-btn {
-  flex: 1;
-  padding: 8px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(79, 195, 247, 0.2);
-  border-radius: 8px;
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 0.9rem;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.price-toggle-btn.active {
-  background: rgba(79, 195, 247, 0.2);
-  border-color: #4FC3F7;
-  color: white;
-}
-
-.price-preview {
-  margin-top: 8px;
-  font-size: 0.9rem;
-  color: #4FC3F7;
-  font-weight: 500;
-}
-
-.quick-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.quick-btn {
-  padding: 8px 14px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(79, 195, 247, 0.2);
-  border-radius: 8px;
-  color: rgba(255, 255, 255, 0.8);
-  font-size: 0.85rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.quick-btn.positive {
-  border-color: rgba(76, 175, 80, 0.3);
-  background: rgba(76, 175, 80, 0.05);
-}
-
-.quick-btn.positive:hover {
-  background: rgba(76, 175, 80, 0.15);
-  border-color: #4CAF50;
-  color: #4CAF50;
-}
-
-.quick-btn.negative {
-  border-color: rgba(244, 67, 54, 0.3);
-  background: rgba(244, 67, 54, 0.05);
-}
-
-.quick-btn.negative:hover {
-  background: rgba(244, 67, 54, 0.15);
-  border-color: #F44336;
-  color: #F44336;
-}
-
-.quick-btn:hover {
-  background: rgba(79, 195, 247, 0.1);
-  border-color: #4FC3F7;
-  color: white;
-}
-
-.expiry-options {
-  display: flex;
-  gap: 8px;
-}
-
-.expiry-btn {
-  flex: 1;
-  padding: 10px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(79, 195, 247, 0.2);
-  border-radius: 10px;
-  color: rgba(255, 255, 255, 0.8);
-  font-size: 0.9rem;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.expiry-btn:hover {
-  background: rgba(79, 195, 247, 0.1);
-}
-
-.expiry-btn.active {
-  background: rgba(79, 195, 247, 0.2);
-  border-color: #4FC3F7;
-  color: white;
-}
-
-.order-summary {
-  margin: 20px 24px;
-  padding: 16px;
-  background: rgba(79, 195, 247, 0.05);
-  border: 1px solid rgba(79, 195, 247, 0.2);
-  border-radius: 12px;
-}
-
-.order-summary h4 {
-  margin: 0 0 12px 0;
-  font-size: 1rem;
-  color: white;
-}
-
-.summary-row {
+.slider-labels {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 8px;
-  font-size: 0.9rem;
+  align-items: center;
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.4);
+  margin-bottom: 12px;
 }
 
-.summary-row span:first-child {
-  color: rgba(255, 255, 255, 0.6);
-}
-
-.summary-row span:last-child {
-  color: white;
+.slider-labels .current-marker {
+  color: #fbbf24;
   font-weight: 500;
 }
 
-.error-message {
-  margin: 16px 24px;
-  padding: 12px;
-  background: rgba(239, 83, 80, 0.1);
-  border: 1px solid rgba(239, 83, 80, 0.3);
-  border-radius: 10px;
-  color: #EF5350;
-  font-size: 0.9rem;
+/* Quick Percentage Chips */
+.quick-chips {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  flex-wrap: wrap;
 }
 
-.warning-message {
-  margin: 16px 24px;
-  padding: 12px;
-  background: rgba(255, 193, 7, 0.1);
-  border: 1px solid rgba(255, 193, 7, 0.3);
-  border-radius: 10px;
-  color: #FFC107;
-  font-size: 0.9rem;
+.chip {
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
 }
 
-.create-order-btn {
-  width: calc(100% - 48px);
-  margin: 20px 24px 24px;
+.chip:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
+.chip.positive {
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.chip.positive:hover,
+.chip.positive.selected {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: #10b981;
+  color: #10b981;
+}
+
+.chip.negative {
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.chip.negative:hover,
+.chip.negative.selected {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
+/* Manual Price Input */
+.manual-price-input {
+  text-align: center;
+}
+
+.manual-price-input label {
+  display: block;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 10px;
+}
+
+.manual-price-input input {
+  width: 100%;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(79, 195, 247, 0.2);
+  border-radius: 12px;
+  color: white;
+  font-size: 1.2rem;
+  text-align: center;
+  font-family: 'SF Mono', monospace;
+}
+
+.manual-price-input input:focus {
+  outline: none;
+  border-color: #4FC3F7;
+}
+
+/* ============================================
+   INPUT ROW - Amount + Expiry
+   ============================================ */
+.input-row {
+  display: flex;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(79, 195, 247, 0.08);
+}
+
+.input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.input-group.flex-2 {
+  flex: 2;
+}
+
+.input-group.flex-1 {
+  flex: 1;
+}
+
+.input-group label {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.input-group input {
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(79, 195, 247, 0.2);
+  border-radius: 10px;
+  color: white;
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.input-group input:focus {
+  outline: none;
+  border-color: #4FC3F7;
+  background: rgba(79, 195, 247, 0.08);
+}
+
+/* Expiry Chips */
+.expiry-chips {
+  display: flex;
+  gap: 4px;
+}
+
+.expiry-chip {
+  flex: 1;
+  padding: 10px 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(79, 195, 247, 0.15);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.expiry-chip:hover {
+  background: rgba(79, 195, 247, 0.1);
+  color: white;
+}
+
+.expiry-chip.active {
+  background: rgba(79, 195, 247, 0.2);
+  border-color: #4FC3F7;
+  color: white;
+}
+
+/* ============================================
+   MINI SUMMARY
+   ============================================ */
+.mini-summary {
+  padding: 10px 20px;
+  background: rgba(79, 195, 247, 0.03);
+}
+
+.summary-text {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* ============================================
+   ERROR/WARNING MESSAGES
+   ============================================ */
+.inline-error {
+  padding: 10px 20px;
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  font-size: 0.85rem;
+}
+
+.inline-warning {
+  padding: 10px 20px;
+  background: rgba(251, 191, 36, 0.1);
+  color: #fbbf24;
+  font-size: 0.85rem;
+}
+
+/* Connect Wallet Link */
+.connect-wallet-link {
+  background: none;
+  border: none;
+  color: #4FC3F7;
+  font-size: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.2s ease;
+}
+
+.connect-wallet-link:hover {
+  color: #81d4fa;
+}
+
+.connect-wallet-link:active {
+  color: #29b6f6;
+}
+
+/* ============================================
+   STICKY BUTTON CONTAINER
+   ============================================ */
+.sticky-button-container {
+  padding: 16px 20px;
+  background: #0f172a;
+  border-top: 1px solid rgba(79, 195, 247, 0.08);
+  margin-top: auto;
+}
+
+.create-order-btn-hero {
+  width: 100%;
   padding: 16px;
   background: linear-gradient(135deg, #4FC3F7, #677EEA);
   border: none;
   border-radius: 14px;
   color: white;
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s;
@@ -385,12 +542,28 @@
   gap: 8px;
 }
 
-.create-order-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(79, 195, 247, 0.4);
+.create-order-btn-hero.buy {
+  background: linear-gradient(135deg, #10b981, #059669);
 }
 
-.create-order-btn:disabled {
+.create-order-btn-hero.sell {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+}
+
+.create-order-btn-hero:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(79, 195, 247, 0.3);
+}
+
+.create-order-btn-hero.buy:hover:not(:disabled) {
+  box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3);
+}
+
+.create-order-btn-hero.sell:hover:not(:disabled) {
+  box-shadow: 0 8px 20px rgba(239, 68, 68, 0.3);
+}
+
+.create-order-btn-hero:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -408,83 +581,156 @@
   to { transform: rotate(360deg); }
 }
 
-.help-note {
-  padding: 0 24px 24px;
-  margin: 0;
-  font-size: 0.85rem;
-  color: rgba(255, 255, 255, 0.5);
-  text-align: center;
-}
-
+/* ============================================
+   SUCCESS MESSAGE
+   ============================================ */
 .success-message {
   padding: 60px 40px;
   text-align: center;
 }
 
 .success-icon {
-  font-size: 4rem;
-  margin-bottom: 20px;
+  font-size: 3.5rem;
+  margin-bottom: 16px;
   animation: scaleIn 0.5s ease-out;
 }
 
 @keyframes scaleIn {
-  from {
-    transform: scale(0);
-  }
-  to {
-    transform: scale(1);
-  }
+  from { transform: scale(0); }
+  to { transform: scale(1); }
 }
 
 .success-message h3 {
-  margin: 0 0 12px 0;
-  font-size: 1.5rem;
+  margin: 0 0 8px 0;
+  font-size: 1.4rem;
   color: white;
 }
 
 .success-message p {
   margin: 0;
   color: rgba(255, 255, 255, 0.7);
+  font-size: 0.9rem;
 }
 
-/* Mobile optimizations */
-@media (max-width: 768px) {
-  .trigger-modal-content {
-    max-height: 85vh;
-  }
-
-  .trigger-modal-header h2 {
-    font-size: 1.3rem;
-  }
-
-  .quick-btn {
-    font-size: 0.75rem;
-    padding: 6px 10px;
-  }
-
-  .expiry-btn {
-    font-size: 0.85rem;
-    padding: 8px;
-  }
-}
-
+/* ============================================
+   MOBILE OPTIMIZATIONS
+   ============================================ */
 @media (max-width: 480px) {
   .trigger-modal-overlay {
     padding: 12px;
-    align-items: flex-start;
-    padding-top: 40px;
   }
-  .trigger-modal-content {
-    max-height: 90vh;
-    border-radius: 20px;
+  
+  .trigger-modal-content.compact-layout {
+    max-height: calc(100vh - 24px);
+    border-radius: 16px;
+  }
+  
+  .compact-header {
+    padding: 14px 16px;
+  }
+  
+  .coin-image-small {
+    width: 36px;
+    height: 36px;
+  }
+  
+  .coin-details h3 {
+    font-size: 1rem;
+  }
+  
+  .action-row {
+    padding: 10px 16px;
+    gap: 8px;
+  }
+  
+  .action-btn {
+    padding: 7px 12px;
+    font-size: 0.8rem;
+  }
+  
+  .hero-slider-section {
+    padding: 16px;
+  }
+  
+  .price-value {
+    font-size: 1.5rem;
+  }
+  
+  .percentage-badge {
+    padding: 6px 10px;
+    font-size: 0.9rem;
+  }
+  
+  .quick-chips {
+    gap: 4px;
+  }
+  
+  .chip {
+    padding: 5px 10px;
+    font-size: 0.75rem;
+  }
+  
+  .input-row {
+    padding: 14px 16px;
+    gap: 10px;
+  }
+  
+  .input-group input {
+    padding: 10px;
+    font-size: 0.95rem;
+  }
+  
+  .expiry-chip {
+    padding: 8px 4px;
+    font-size: 0.7rem;
+  }
+  
+  .sticky-button-container {
+    padding: 14px 16px;
+  }
+  
+  .create-order-btn-hero {
+    padding: 14px;
+    font-size: 0.95rem;
   }
 }
 
-@media (max-height: 700px) {
-  .trigger-modal-overlay {
-    padding-top: 20px;
+/* Very small screens */
+@media (max-height: 600px) {
+  .hero-slider-section {
+    padding: 12px 16px;
   }
-  .trigger-modal-content {
-    max-height: 92vh;
+  
+  .price-value {
+    font-size: 1.3rem;
+  }
+  
+  .slider-wrapper-hero {
+    height: 40px;
+  }
+  
+  .quick-chips {
+    margin-top: 8px;
+  }
+  
+  .chip {
+    padding: 4px 8px;
+    font-size: 0.7rem;
+  }
+  
+  .input-row {
+    padding: 12px 16px;
+  }
+  
+  .input-group input {
+    padding: 8px;
+  }
+  
+  .sticky-button-container {
+    padding: 12px 16px;
+  }
+  
+  .create-order-btn-hero {
+    padding: 12px;
   }
 }

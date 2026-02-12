@@ -278,7 +278,7 @@ function App() {
     <DarkModeProvider>
       <TrackedWalletsProvider>
         <WalletProvider>
-          <div style={{ minHeight: '100vh', position: 'relative', paddingBottom: 72 }}>
+          <div style={{ height: '100dvh', position: 'relative', overflow: 'hidden' }}>
         {/* Top tabs - only show on home screen */}
         {activeTab !== 'favorites' && activeTab !== 'coin-detail' && activeTab !== 'profile' && activeTab !== 'orders' && (
           <TopTabs 

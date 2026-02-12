@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { useWallet } from '@solana/wallet-adapter-react';
-import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
+import { useWallet as useJupiterWallet } from '@jup-ag/wallet-adapter';
+import { UnifiedWalletButton } from '@jup-ag/wallet-adapter';
 import { getFullApiUrl } from '../config/api';
 import { getTransactions, deleteTransaction, storeTransaction, clearTransactions } from '../utils/transactionStorage';
 import './OrdersView.css';
 
 const OrdersView = () => {
-  const { publicKey, connected, signTransaction } = useWallet();
+  // Use Jupiter Wallet Kit adapter for universal wallet connection
+  const jupiterWallet = useJupiterWallet();
+  const publicKey = jupiterWallet.publicKey;
+  const connected = jupiterWallet.connected;
+  const signTransaction = jupiterWallet.signTransaction;
   const [orders, setOrders] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
@@ -530,7 +534,7 @@ const OrdersView = () => {
               <h3>Connect Wallet</h3>
               <p>Connect your Solana wallet to view limit orders and your recent meme coin purchases.</p>
               <div className="wallet-button-container">
-                <WalletMultiButton />
+                <UnifiedWalletButton />
               </div>
             </div>
           </div>
