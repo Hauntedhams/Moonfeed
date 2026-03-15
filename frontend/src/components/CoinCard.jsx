@@ -2245,16 +2245,16 @@ const CoinCard = memo(({
           <span className="tiktok-action-label">{comments.length > 0 ? comments.length : 'Chat'}</span>
         </button>
 
-        {/* Trade */}
+        {/* Expand Info */}
         <button 
-          className="tiktok-action-btn trade-btn"
-          onClick={(e) => { e.stopPropagation(); onTradeClick && onTradeClick(coin); }}
-          title="Trade this token"
+          className={`tiktok-action-btn trade-btn ${isExpanded ? 'active' : ''}`}
+          onClick={(e) => { e.stopPropagation(); handleExpandToggle(e); }}
+          title={isExpanded ? "Collapse details" : "Expand details"}
         >
           <span className="tiktok-action-icon">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transition: 'transform 0.3s ease', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}><polyline points="18 15 12 9 6 15"/></svg>
           </span>
-          <span className="tiktok-action-label">Trade</span>
+          <span className="tiktok-action-label">{isExpanded ? 'Less' : 'More'}</span>
         </button>
 
         {/* Share / Copy Address */}
