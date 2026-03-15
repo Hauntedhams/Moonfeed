@@ -9,7 +9,7 @@ const BACKEND_API = import.meta.env.PROD
   : 'http://localhost:3001';
 const SOLANASTREAM_API_KEY = '011b8a15bb61a3cd81bfa19fd7a52ea3';
 const SOLANASTREAM_WS = `wss://api.solanastreaming.com/v1/stream?apiKey=${SOLANASTREAM_API_KEY}`;
-const PRICE_UPDATE_INTERVAL = 10000; // Poll for price updates every 10 seconds (fallback only)
+const PRICE_UPDATE_INTERVAL = 3000; // Poll for price updates every 3 seconds (fallback only — WebSocket is primary)
 
 // Client-side cache for chart data (shared across all chart instances)
 const chartDataCache = new Map();
@@ -20,7 +20,7 @@ const pendingFetches = new Map(); // Deduplicate concurrent fetches
 let timeframeChangeTimer = null;
 const TIMEFRAME_DEBOUNCE_MS = 800; // Wait 800ms after last click before fetching (increased from 500ms)
 
-const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCrosshairMove, onFirstPriceUpdate }) => {
+const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, showPriceScale, onCrosshairMove, onFirstPriceUpdate }) => {
   // Get dark mode from context - this is the source of truth
   const { isDarkMode: contextDarkMode } = useDarkMode();
   
@@ -38,7 +38,7 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
   const [latestPrice, setLatestPrice] = useState(null);
   const [usePolling, setUsePolling] = useState(false);
   const [isLiveConnected, setIsLiveConnected] = useState(false); // Track RPC WebSocket status
-  const [selectedTimeframe, setSelectedTimeframe] = useState('1m'); // Track selected timeframe
+  const [selectedTimeframe, setSelectedTimeframe] = useState('tick'); // Default to tick for Pump.fun-style live chart
   const [isInView, setIsInView] = useState(isDesktopMode); // Track if chart is in viewport - start true if desktop
   const [shouldLoad, setShouldLoad] = useState(isDesktopMode); // Track if chart should load - start true if desktop  
   const [showAdvanced, setShowAdvanced] = useState(false); // Toggle between clean and advanced chart
@@ -49,9 +49,10 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
   const [tooltipData, setTooltipData] = useState(null); // Track tooltip data for click/hover display
 
   // Extract pairAddress for historical data and tokenMint for real-time subscription
+  // IMPORTANT: Don't fall back to coin.address here — it's often the mint address, not a pool address.
+  // Using a mint address as pairAddress causes GeckoTerminal 404 errors.
   const pairAddress = coin?.pairAddress || 
                       coin?.poolAddress || 
-                      coin?.address || 
                       coin?.ammAccount ||
                       null;
   
@@ -81,6 +82,32 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
       updateChartTheme(contextDarkMode);
     }
   }, [contextDarkMode]);
+
+  // Dynamically show/hide the right price scale when the info layer is expanded.
+  // On mobile, the price scale is hidden by default to avoid overlap with action buttons.
+  // When the info layer slides up (expanded), the buttons scroll out of view so we show prices.
+  // Depends on chartInitialized so it also fires after a late chart creation.
+  useEffect(() => {
+    if (!chartRef.current || isDesktopMode) return; // Desktop always shows it
+    const shouldShow = showPriceScale === true;
+    console.log(`📊 [Chart] Price scale visibility → ${shouldShow} (chartInit: ${chartInitialized})`);
+    try {
+      chartRef.current.applyOptions({
+        rightPriceScale: { visible: shouldShow },
+      });
+      // Resize to reclaim/give space for the price axis
+      if (chartContainerRef.current) {
+        const w = chartContainerRef.current.clientWidth;
+        const h = chartContainerRef.current.clientHeight;
+        if (w > 0 && h > 0) {
+          chartRef.current.resize(w, h);
+          chartRef.current.timeScale().fitContent();
+        }
+      }
+    } catch (e) {
+      console.warn('📊 [Chart] Failed to update price scale:', e.message);
+    }
+  }, [showPriceScale, isDesktopMode, chartInitialized]);
 
   // Sync isLiveMode state with ref for use in intervals
   useEffect(() => {
@@ -301,49 +328,43 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
   };
 
   /**
-   * Start live heartbeat animation - makes chart flow to the right immediately
-   * Updates the current 5-minute interval point instead of adding new points
+   * Start live heartbeat animation - keeps the chart flowing to the right
+   * Only fires if no real price update has come in recently
    */
   const startLiveHeartbeat = (lineSeries) => {
     if (!lineSeries || heartbeatIntervalRef.current) return;
     
     console.log('💓 Starting live heartbeat animation');
     
-    // Update the current interval point every second to keep the chart alive
+    // Heartbeat checks every 2 seconds — only acts if no real updates are coming in
     heartbeatIntervalRef.current = setInterval(() => {
       if (!lineSeries || !chartRef.current) return;
       
-      const currentPrice = latestPrice;
+      const currentPrice = latestPriceRef.current;
       if (!currentPrice) return;
       
       const currentTime = Math.floor(Date.now() / 1000);
-      const currentInterval = roundToInterval(currentTime);
+      const lastUpdate = lastUpdateTimeRef.current || 0;
+      const timeSinceUpdate = currentTime - lastUpdate;
       
-      // Check if we have a recent update (within last 2 seconds)
-      const lastUpdateTime = lastUpdateTimeRef.current || 0;
-      const timeSinceUpdate = currentTime - lastUpdateTime;
-      
-      // If no recent price update, update the current interval point to keep chart alive
-      if (timeSinceUpdate >= 2) {
+      // Only heartbeat if no real price update in last 3 seconds
+      if (timeSinceUpdate >= 3) {
         try {
-          // Update the current interval point (not add a new one)
+          const currentInterval = roundToInterval(currentTime);
           lineSeries.update({
             time: currentInterval,
             value: currentPrice
           });
           lastUpdateTimeRef.current = currentTime;
           
-          // Smooth scroll to show latest data ONLY if in live mode
           if (chartRef.current && isLiveModeRef.current) {
             chartRef.current.timeScale().scrollToRealTime();
           }
-          
-          console.log('💓 Heartbeat: keeping chart alive at $' + currentPrice.toFixed(8));
         } catch (error) {
-          console.error('❌ Heartbeat error:', error);
+          // Silently fail
         }
       }
-    }, 1000); // Every second
+    }, 2000);
   };
   
   /**
@@ -358,96 +379,86 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
   };
 
   /**
-   * Smooth price animation function
-   * Updates the current interval point with smooth interpolation
-   * Only adds a new point when crossing into a new interval
+   * Ultra-fast price update function — Pump.fun-style real-time chart
+   * 
+   * Instead of slow 1-second easing animations, this:
+   * 1. Immediately plots the new price on the chart (instant visual update)
+   * 2. Uses requestAnimationFrame only for batching (not for slow interpolation)
+   * 3. Tracks the current candle interval and creates new points on interval crossings
+   * 
+   * This gives the effect of the chart line moving in real-time, 
+   * multiple times per second, just like Pump.fun's app.
    */
+  const latestPriceRef = useRef(null); // Track price without React re-renders
+  const pendingPriceRef = useRef(null); // Buffer for next frame
+  const rafScheduledRef = useRef(false); // Prevent multiple rAF calls
+  
   const animatePriceUpdate = (lineSeries, fromPrice, toPrice, actualTime) => {
     if (!lineSeries || !chartRef.current) return;
-    
-    // Cancel any existing animation
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-    }
     
     // Round to current interval based on selected timeframe
     const currentInterval = roundToInterval(actualTime);
     
     // Check if we've moved to a new interval
     const previousInterval = currentIntervalRef.current;
-    const isNewInterval = previousInterval !== null && currentInterval > previousInterval;
-    
-    if (isNewInterval) {
-      const config = TIMEFRAME_CONFIG[selectedTimeframe];
-      console.log(`🆕 New ${config?.label || 'interval'} detected:`, {
-        previous: new Date(previousInterval * 1000).toLocaleTimeString(),
-        current: new Date(currentInterval * 1000).toLocaleTimeString()
-      });
+    if (previousInterval !== null && currentInterval > previousInterval) {
+      // Lock in the previous interval's final price before moving on
+      try {
+        lineSeries.update({
+          time: previousInterval,
+          value: latestPriceRef.current || fromPrice
+        });
+      } catch (e) { /* ignore */ }
     }
     
     // Update the current interval tracker
     currentIntervalRef.current = currentInterval;
     
-    const now = performance.now();
-    const duration = 1000; // 1 second smooth animation
-    const frameRate = 60; // 60fps for ultra smooth
-    const totalFrames = Math.ceil((duration / 1000) * frameRate);
-    let currentFrame = 0;
+    // Store the target price for batched update
+    pendingPriceRef.current = { interval: currentInterval, price: toPrice, time: actualTime };
+    latestPriceRef.current = toPrice;
     
-    const animate = (currentTime) => {
-      const elapsed = currentTime - now;
-      const progress = Math.min(elapsed / duration, 1);
-      
-      // Ease-out function for natural deceleration
-      const easeOutQuart = (t) => 1 - Math.pow(1 - t, 4);
-      const easedProgress = easeOutQuart(progress);        try {
-          // Calculate interpolated price
-          const interpolatedPrice = fromPrice + ((toPrice - fromPrice) * easedProgress);
-          
-          // Update the current interval point (not add a new one)
-          // This keeps historical data in place while smoothly animating the current price
-          lineSeries.update({
-            time: currentInterval,
-            value: interpolatedPrice
-          });
+    // Schedule a single rAF to flush the update (batches rapid updates within the same frame)
+    if (!rafScheduledRef.current) {
+      rafScheduledRef.current = true;
+      requestAnimationFrame(() => {
+        rafScheduledRef.current = false;
         
-        currentFrame++;
+        const pending = pendingPriceRef.current;
+        if (!pending || !lineSeries || !chartRef.current) return;
         
-        // Continue animation if not complete
-        if (progress < 1 && currentFrame < totalFrames) {
-          animationFrameRef.current = requestAnimationFrame(animate);
-        } else {
-          // Animation complete - set final price for current interval
+        try {
+          // INSTANT update — no interpolation, no easing
+          // This is what makes the chart feel "alive" like Pump.fun
           lineSeries.update({
-            time: currentInterval,
-            value: toPrice
+            time: pending.interval,
+            value: pending.price
           });
-          setLatestPrice(toPrice);
-          lastUpdateTimeRef.current = actualTime;
           
-          // Smooth scroll to show latest data ONLY if in live mode
+          lastUpdateTimeRef.current = pending.time;
+          
+          // Auto-scroll to keep the live edge visible
           if (chartRef.current && isLiveModeRef.current) {
             chartRef.current.timeScale().scrollToRealTime();
           }
+        } catch (error) {
+          // Silently fail — next update will fix it
         }
-      } catch (error) {
-        console.error('❌ Animation error:', error);
-        // Fallback: just update the current interval point
-        lineSeries.update({
-          time: currentInterval,
-          value: toPrice
-        });
-        setLatestPrice(toPrice);
-        lastUpdateTimeRef.current = actualTime;
-      }
-    };
+      });
+    }
     
-    // Start animation
-    animationFrameRef.current = requestAnimationFrame(animate);
+    // Update React state sparingly (throttled) to avoid re-render overhead
+    // Only update state every ~500ms, not on every tick
+    const now = Date.now();
+    if (!animatePriceUpdate._lastStateUpdate || now - animatePriceUpdate._lastStateUpdate > 500) {
+      animatePriceUpdate._lastStateUpdate = now;
+      setLatestPrice(toPrice);
+    }
   };
 
   // Timeframe configuration for GeckoTerminal API
   const TIMEFRAME_CONFIG = {
+    'tick': { timeframe: 'minute', aggregate: 1, limit: 100, label: 'Tick', intervalSeconds: 5 }, // 5-second "tick" buckets — every trade creates visible movement
     '1m': { timeframe: 'minute', aggregate: 1, limit: 100, label: '1m', intervalSeconds: 60 },
     '5m': { timeframe: 'minute', aggregate: 5, limit: 100, label: '5m', intervalSeconds: 300 },
     '15m': { timeframe: 'minute', aggregate: 15, limit: 100, label: '15m', intervalSeconds: 900 },
@@ -458,10 +469,12 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
 
   // Check if this is a Moonfeed-native coin (not on DEX yet)
   const isMoonfeedNative = () => {
-    // Moonfeed coins will have specific markers from backend enrichment
+    // Only treat as "native" if it truly has no DEX pool data
+    // If pairAddress or poolAddress exists (from DexScreener or GeckoTerminal), use normal chart flow
+    if (coin?.pairAddress || coin?.poolAddress) return false;
+    
     return coin?.source === 'moonfeed' || 
            coin?.isMoonfeedNative || 
-           coin?.mintAddress === 'FeqAiLPejhkTJ2nEiCCL7JdtJkZdPNTYSm8vAjrZmoon' || // $MOO token
            (!coin?.poolAddress && !coin?.pairAddress && coin?.mintAddress); // Has mint but no DEX pair
   };
 
@@ -532,6 +545,12 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
     if (cachedData && now - cachedData.timestamp < CHART_CACHE_DURATION) {
       console.log(`📊 ✅ Cache hit: ${cacheKey} (age: ${Math.round((now - cachedData.timestamp) / 1000)}s)`);
       return cachedData.data;
+    }
+
+    // If no pool address available (and not handled by preloaded/moonfeed fallback above), return empty
+    if (!poolAddress) {
+      console.warn('⚠️ No pool address available for chart data fetch');
+      return [];
     }
     
     // Check if there's already a pending fetch for this data
@@ -709,7 +728,9 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
   useEffect(() => {
     // Initialize chart when pairAddress is available (works in both collapsed and expanded views)
     // Skip initialization if in advanced mode or chart already exists
-    if (!pairAddress || chartRef.current || showAdvanced) return;
+    // ALSO allow initialization for Moonfeed-native coins that have a price but no DEX pair
+    const canInitialize = pairAddress || isMoonfeedNative();
+    if (!canInitialize || chartRef.current || showAdvanced) return;
     
     let mounted = true;
     
@@ -812,7 +833,7 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
               top: 0.02,
               bottom: 0.02,
             },
-            visible: true,
+            visible: true, // Always create with price scale visible; useEffect toggles it for mobile when not expanded
             autoScale: true,
             alignLabels: true,
             borderVisible: false,
@@ -968,7 +989,35 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
         
         // Fetch and set historical data
         setLoading(true);
-        const historicalData = await fetchHistoricalData(pairAddress, selectedTimeframe);
+        let historicalData = await fetchHistoricalData(pairAddress, selectedTimeframe);
+        
+        if (!mounted) return;
+        
+        // 🔄 AUTO-ESCALATE TIMEFRAME: If insufficient data (< 3 candles), try larger timeframes
+        // This handles low-volume coins (like Moonshot-launched tokens) where minute data is sparse
+        if (historicalData.length < 3) {
+          // Skip intermediate timeframes — jump to 1d first (most likely to have data for low-volume coins)
+          // then fall back to 4h if 1d somehow fails
+          const escalationOrder = ['1d', '4h', '1h'];
+          
+          console.log(`📊 Only ${historicalData.length} candles at ${selectedTimeframe}, escalating timeframes...`);
+          
+          for (const fallbackTf of escalationOrder) {
+            if (!mounted) return;
+            if (fallbackTf === selectedTimeframe) continue; // Skip if already tried
+            try {
+              console.log(`📊 Trying ${fallbackTf} timeframe...`);
+              const fallbackData = await fetchHistoricalData(pairAddress, fallbackTf);
+              if (fallbackData.length >= 3) {
+                console.log(`✅ Found ${fallbackData.length} candles at ${fallbackTf} timeframe`);
+                historicalData = fallbackData;
+                break;
+              }
+            } catch (e) {
+              console.warn(`⚠️ ${fallbackTf} timeframe failed:`, e.message);
+            }
+          }
+        }
         
         if (!mounted) return;
         
@@ -1026,6 +1075,7 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
         
         const lastDataPoint = historicalData[historicalData.length - 1];
         setLatestPrice(lastDataPoint.value);
+        latestPriceRef.current = lastDataPoint.value; // Keep ref in sync for fast path
         lastUpdateTimeRef.current = lastDataPoint.time; // Track last timestamp
         
         // Initialize current interval tracker with the last historical data point's interval
@@ -1240,8 +1290,6 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
             try {
               const message = JSON.parse(event.data);
               
-              console.log('🔔 [Chart] Received WebSocket message:', message.type, message);
-              
               // Handle different message types
               switch (message.type) {
                 case 'connected':
@@ -1252,91 +1300,48 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
                   console.log('✅ Subscribed to token:', message.token);
                   break;
                   
-                case 'price-update':
-                  // Real-time price update from Solana RPC!
-                  const { price, timestamp, source } = message;
-                  
-                  console.log('📨 Received price-update:', { 
-                    token: message.token,
-                    price, 
-                    timestamp,
-                    source,
-                    hasLineSeries: !!lineSeries,
-                    chartExists: !!chartRef.current
-                  });
+                case 'price-update': {
+                  // 🚀 FAST PATH: Real-time price update from Solana RPC
+                  // Minimal processing — every millisecond counts for Pump.fun-style responsiveness
+                  const { price, timestamp } = message;
                   
                   if (price && !isNaN(price) && timestamp && lineSeries) {
-                    // Convert timestamp to seconds if needed
                     const timeInSeconds = timestamp > 1e12 ? Math.floor(timestamp / 1000) : timestamp;
-                    const currentInterval = roundToInterval(timeInSeconds);
-                    const config = TIMEFRAME_CONFIG[selectedTimeframe];
+                    const previousPrice = latestPriceRef.current || price;
                     
-                    console.log(`📊 Updating chart for current ${config?.label || 'interval'}:`, { 
-                      actualTime: new Date(timeInSeconds * 1000).toLocaleTimeString(),
-                      intervalTime: new Date(currentInterval * 1000).toLocaleTimeString(),
-                      value: price,
-                      source
-                    });
+                    // Instant chart update — no slow animation, no easing
+                    animatePriceUpdate(lineSeries, previousPrice, price, timeInSeconds);
                     
-                    // Determine if price went up or down for animation
-                    const previousPrice = latestPrice || price;
-                    const priceDirection = previousPrice ? (price > previousPrice ? 'up' : (price < previousPrice ? 'down' : 'same')) : null;
-                    
-                    // Smooth animated update within current 5-minute interval
-                    try {
-                      console.log('🎬 Animating price change within current interval:', {
-                        from: previousPrice,
-                        to: price,
-                        interval: new Date(currentInterval * 1000).toLocaleTimeString(),
-                        change: (((price - previousPrice) / previousPrice) * 100).toFixed(2) + '%'
-                      });
-                      
-                      // Animate price update within the current 5-minute interval
-                      animatePriceUpdate(lineSeries, previousPrice, price, timeInSeconds);
-                      
-                      console.log('✅ Chart animation started! New price: $' + price.toFixed(8) + ' (source: ' + source + ')');
-                    } catch (error) {
-                      console.error('❌ Error updating chart:', error);
-                      // Fallback to immediate update if animation fails
-                      lineSeries.update({ 
-                        time: currentInterval, 
-                        value: price 
-                      });
-                      setLatestPrice(price);
-                      lastUpdateTimeRef.current = timeInSeconds;
-                      currentIntervalRef.current = currentInterval;
+                    // Throttled visual flash feedback (max once per 300ms to avoid jank)
+                    if (chartContainerRef.current) {
+                      const now = performance.now();
+                      if (!ws._lastFlash || now - ws._lastFlash > 300) {
+                        ws._lastFlash = now;
+                        const direction = price > previousPrice ? 'up' : (price < previousPrice ? 'down' : null);
+                        if (direction) {
+                          const container = chartContainerRef.current;
+                          container.classList.remove('price-flash-up', 'price-flash-down');
+                          void container.offsetWidth;
+                          container.classList.add(`price-flash-${direction}`);
+                          setTimeout(() => {
+                            container.classList.remove('price-flash-up', 'price-flash-down');
+                          }, 300);
+                        }
+                      }
                     }
-                    
-                    // Trigger visual feedback animation
-                    if (priceDirection && priceDirection !== 'same' && chartContainerRef.current) {
-                      const container = chartContainerRef.current;
-                      // Remove existing animation classes
-                      container.classList.remove('price-flash-up', 'price-flash-down');
-                      // Trigger reflow to restart animation
-                      void container.offsetWidth;
-                      // Add animation class based on direction
-                      container.classList.add(`price-flash-${priceDirection}`);
-                      
-                      // Remove class after animation completes
-                      setTimeout(() => {
-                        container.classList.remove('price-flash-up', 'price-flash-down');
-                      }, 600);
-                    }
-                    
-                    console.log(`💰 LIVE Price Update: $${price.toFixed(8)} ${priceDirection && priceDirection !== 'same' ? `(${priceDirection === 'up' ? '📈' : '📉'})` : ''} [${source}]`);
                   }
                   break;
+                }
                   
                 case 'error':
                   console.error('❌ RPC WebSocket error:', message.message);
                   break;
                   
                 default:
-                  console.log('📨 RPC message:', message);
+                  break;
               }
             } catch (err) {
-              console.error('❌ WebSocket message parsing error:', err);
-              console.error('Raw message:', event.data);
+              // Silently fail on parse errors to avoid blocking the next message
             }
           };
 
@@ -1370,12 +1375,7 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
         
         if (priceData && lineSeries) {
           const { price, timestamp } = priceData;
-          const currentInterval = roundToInterval(timestamp);
-          
-          console.log('🔄 Polling update - Price:', price, 'at', new Date(timestamp * 1000).toLocaleTimeString(), 'interval:', new Date(currentInterval * 1000).toLocaleTimeString());
-          
-          // Update the current 5-minute interval point
-          const previousPrice = latestPrice || price;
+          const previousPrice = latestPriceRef.current || price;
           animatePriceUpdate(lineSeries, previousPrice, price, timestamp);
         }
       };
@@ -1853,23 +1853,6 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, onCros
         </div>
       )}
 
-      {/* Live Indicator - Show when in live mode */}
-      {isLiveConnected && isLiveMode && (
-        <div className="live-indicator">
-          <span className="live-dot"></span>
-          LIVE
-        </div>
-      )}
-
-      {/* Go Live Button - Show when user has scrolled away from live view */}
-      {isLiveConnected && !isLiveMode && (
-        <div className="go-live-button-container">
-          <button className="go-live-button" onClick={handleGoLive}>
-            <span className="live-icon">▶</span>
-            Go Live
-          </button>
-        </div>
-      )}
     </div>
   );
 };

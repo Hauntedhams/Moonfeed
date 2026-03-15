@@ -598,34 +598,46 @@ class PureRpcMonitor {
       this.broadcastPrice(tokenMint, initialPrice);
 
       // Subscribe to pool account changes for real-time RPC updates
+      // Use 'processed' commitment for fastest possible updates (sub-second)
+      // This fires on every on-chain trade/swap touching this pool
+      let lastBroadcastPrice = initialPrice?.price || 0;
+      const MIN_PRICE_CHANGE_PCT = 0.0001; // Only broadcast if price changed by 0.01%+
+
       const subscriptionId = this.connection.onAccountChange(
         new PublicKey(poolData.poolAddress),
         async (accountInfo, context) => {
-          console.log(`🔄 [Monitor] Pool update detected for ${tokenMint.substring(0, 8)}...`);
-          
-          // Parse price based on pool type
+          // Parse price based on pool type — inline for speed
           let priceData;
-          if (poolData.type === 'pumpfun') {
-            priceData = await this.getPumpfunPrice(poolData);
-          } else if (poolData.type === 'raydium') {
-            priceData = await this.getRaydiumPrice(poolData);
-          } else if (poolData.type === 'orca') {
-            priceData = await this.getOrcaPrice(poolData);
+          try {
+            if (poolData.type === 'pumpfun') {
+              priceData = this.parsePumpfunPriceFromData(accountInfo.data, poolData);
+            } else if (poolData.type === 'raydium') {
+              priceData = await this.getRaydiumPrice(poolData);
+            } else if (poolData.type === 'orca') {
+              priceData = await this.getOrcaPrice(poolData);
+            }
+          } catch (err) {
+            // Silently skip parse errors on rapid updates
+            return;
           }
           
           // If RPC fails (graduated), switch to Dexscreener
           if (!priceData) {
             console.log(`⚠️  [Monitor] RPC price failed, switching to Dexscreener...`);
-            // Unsubscribe from RPC
             this.connection.removeAccountChangeListener(subscriptionId);
-            // Start Dexscreener polling
             this.startDexscreenerPolling(tokenMint);
           } else {
-            console.log(`💰 [Monitor] New price: $${priceData.price.toFixed(8)}`);
-            this.broadcastPrice(tokenMint, priceData);
+            // Only broadcast if price actually changed (avoid flooding identical prices)
+            const pctChange = lastBroadcastPrice > 0 
+              ? Math.abs(priceData.price - lastBroadcastPrice) / lastBroadcastPrice 
+              : 1;
+            if (pctChange >= MIN_PRICE_CHANGE_PCT) {
+              lastBroadcastPrice = priceData.price;
+              this.broadcastPrice(tokenMint, priceData);
+            }
           }
         },
-        'confirmed'
+        'processed' // 'processed' = fastest, fires before 'confirmed'
       );
 
       console.log(`✅ [Monitor] Subscribed to pool account (ID: ${subscriptionId})`);
@@ -675,7 +687,7 @@ class PureRpcMonitor {
       if (priceData) {
         this.broadcastPrice(tokenMint, priceData);
       }
-    }, 3000); // Poll every 3 seconds for more responsive updates
+    }, 1000); // Poll every 1 second as backup for RPC subscription gaps
 
     if (this.subscriptions.has(tokenMint)) {
       this.subscriptions.get(tokenMint).pollingInterval = intervalId;
@@ -705,7 +717,8 @@ class PureRpcMonitor {
       }
     });
 
-    if (sentCount > 0) {
+    if (sentCount > 0 && Math.random() < 0.1) {
+      // Log only ~10% of broadcasts to avoid spam
       console.log(`📤 [Monitor] Broadcasted price $${(priceData.price || priceData.priceUsd).toFixed(8)} to ${sentCount} client(s)`);
     }
   }
@@ -797,7 +810,7 @@ class PureRpcMonitor {
       if (priceData) {
         this.broadcastPrice(tokenMint, priceData);
       }
-    }, 2000); // 2 second polling
+    }, 1500); // 1.5 second polling for near-real-time feel
 
     // Update subscription info
     if (this.subscriptions.has(tokenMint)) {
@@ -817,6 +830,42 @@ class PureRpcMonitor {
         this.broadcastPrice(tokenMint, priceData);
       }
     });
+  }
+
+  /**
+   * Fast inline Pump.fun price parser — uses account data already received
+   * from onAccountChange, avoiding a second RPC call.
+   */
+  parsePumpfunPriceFromData(data, poolData) {
+    try {
+      const virtualTokenReserves = data.readBigUInt64LE(8);
+      const virtualSolReserves = data.readBigUInt64LE(16);
+      const realTokenReserves = data.readBigUInt64LE(24);
+      const realSolReserves = data.readBigUInt64LE(32);
+
+      let solAmount, tokenAmount;
+      if (virtualTokenReserves > 0n && virtualSolReserves > 0n) {
+        solAmount = Number(virtualSolReserves) / 1e9;
+        tokenAmount = Number(virtualTokenReserves) / 1e6;
+      } else if (realTokenReserves > 0n && realSolReserves > 0n) {
+        solAmount = Number(realSolReserves) / 1e9;
+        tokenAmount = Number(realTokenReserves) / 1e6;
+      } else {
+        return null; // graduated or no liquidity
+      }
+
+      if (tokenAmount === 0) return null;
+      const price = (solAmount / tokenAmount) * this.solPrice;
+
+      return {
+        price,
+        priceUsd: price,
+        timestamp: Date.now(),
+        source: 'pumpfun-rpc-live'
+      };
+    } catch (error) {
+      return null;
+    }
   }
 
   /**

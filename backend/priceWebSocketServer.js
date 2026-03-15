@@ -11,6 +11,7 @@
 
 const WebSocket = require('ws');
 const PureRpcMonitor = require('./pureRpcMonitor');
+const solanaTransactionService = require('./solanaTransactionService');
 
 class PriceWebSocketServer {
   constructor(solanaRpcEndpoint = 'https://api.mainnet-beta.solana.com') {
@@ -105,6 +106,20 @@ class PriceWebSocketServer {
         await this.unsubscribeClient(ws, token);
         break;
 
+      case 'subscribe-txs':
+        if (!token) {
+          throw new Error('Token address required for transaction subscription');
+        }
+        await this.subscribeTxs(ws, token);
+        break;
+
+      case 'unsubscribe-txs':
+        if (!token) {
+          throw new Error('Token address required for transaction unsubscription');
+        }
+        this.unsubscribeTxs(ws, token);
+        break;
+
       case 'ping':
         this.sendMessage(ws, { type: 'pong', timestamp: Date.now() });
         break;
@@ -188,6 +203,57 @@ class PriceWebSocketServer {
       }
       this.clients.delete(ws);
     }
+    // Clean up transaction subscriptions
+    this.cleanupTxSubscriptions(ws);
+  }
+
+  /**
+   * Subscribe client to transaction history for a token.
+   * Sends recent swap history via the REST-backed service.
+   * (Live streaming removed — frontend polls REST every 10s instead.)
+   */
+  async subscribeTxs(ws, tokenAddress) {
+    try {
+      // Send recent transaction history
+      const history = await solanaTransactionService.getRecentTransactions(tokenAddress, 50);
+      this.sendMessage(ws, {
+        type: 'tx-history',
+        token: tokenAddress,
+        transactions: history,
+        timestamp: Date.now(),
+      });
+
+      this.sendMessage(ws, {
+        type: 'txs-subscribed',
+        token: tokenAddress,
+        historyCount: history.length,
+        timestamp: Date.now(),
+      });
+
+      console.log(`[PriceWebSocketServer] Sent ${history.length} txs for ${tokenAddress.substring(0, 8)}...`);
+    } catch (error) {
+      console.error(`[PriceWebSocketServer] Error fetching txs:`, error.message);
+      this.sendMessage(ws, {
+        type: 'error',
+        message: `Failed to fetch transactions: ${error.message}`,
+        token: tokenAddress,
+      });
+    }
+  }
+
+  /**
+   * Unsubscribe client from transaction stream (no-op now, kept for protocol compat)
+   */
+  unsubscribeTxs(ws, tokenAddress) {
+    // No live subscriptions to clean up — frontend just stops polling
+    console.log(`[PriceWebSocketServer] Client unsubscribed from txs for ${tokenAddress.substring(0, 8)}...`);
+  }
+
+  /**
+   * Clean up transaction subscriptions for a client (no-op now)
+   */
+  cleanupTxSubscriptions(ws) {
+    // No live subscriptions to clean up
   }
 
   /**

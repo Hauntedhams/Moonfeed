@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import CoinCard from './CoinCard';
 import MoonfeedInfoButton from './MoonfeedInfoModal';
+import InteractiveTutorial from './InteractiveTutorial';
 import { API_CONFIG, getApiUrl, getFullApiUrl } from '../config/api';
 import './ModernTokenScroller.css';
 
@@ -41,6 +42,8 @@ const ModernTokenScroller = ({
   const [expandedCoin, setExpandedCoin] = useState(null); // Track which coin is expanded
   const [retryCount, setRetryCount] = useState(0); // Track retry attempts
   const [isBackendLoading, setIsBackendLoading] = useState(false); // Track backend loading state
+  const [isTutorialActive, setIsTutorialActive] = useState(false); // Interactive tutorial mode
+  const [isFirstVisit, setIsFirstVisit] = useState(() => !InteractiveTutorial.hasCompleted()); // Show nudge for new users
   
   // Virtual scrolling DISABLED - was causing blank UI issues
   // Render distance optimized: Mobile ±2, Desktop ±3
@@ -51,6 +54,15 @@ const ModernTokenScroller = ({
   
   // API base configuration
   const API_BASE = API_CONFIG.COINS_API;
+
+  // Auto-dismiss nudge after 12 seconds so it doesn't persist forever
+  useEffect(() => {
+    if (!isFirstVisit) return;
+    const nudgeTimer = setTimeout(() => {
+      setIsFirstVisit(false);
+    }, 12000);
+    return () => clearTimeout(nudgeTimer);
+  }, [isFirstVisit]);
 
   // Update mobile detection on window resize
   useEffect(() => {
@@ -801,10 +813,6 @@ const ModernTokenScroller = ({
     const shouldShowChart = Math.abs(index - currentIndex) <= chartRenderDistance;
     const isVisible = Math.abs(index - currentIndex) <= 2; // Mark as visible if within ± 2
     
-    // Auto-load transactions for current coin only on mobile, current + 2 on desktop
-    const shouldAutoLoadTransactions = isMobileDevice 
-      ? index === currentIndex // Only current coin on mobile
-      : (index >= currentIndex && index <= currentIndex + 2); // Current + 2 ahead on desktop
     
     // Use enriched coin data if available
     const enrichedCoin = getEnrichedCoin(coin);
@@ -824,7 +832,6 @@ const ModernTokenScroller = ({
           isTrending={coin.source?.includes('trending')}
           isVisible={isVisible}
           onExpandChange={(isExpanded) => handleCoinExpandChange(isExpanded, coin.mintAddress || coin.tokenAddress)}
-          autoLoadTransactions={shouldAutoLoadTransactions}
           onEnrichmentComplete={handleEnrichmentComplete} // Pass handler to CoinCard
         />
       </div>
@@ -932,7 +939,13 @@ const ModernTokenScroller = ({
         {/* Moonfeed Info Button - top left */}
         <MoonfeedInfoButton 
           className="banner-positioned-left"
+          showNudge={isFirstVisit}
           onBuyMoo={handleBuyMoo}
+          onStartTutorial={() => {
+            console.log('🎓 Starting Interactive Tutorial...');
+            setIsFirstVisit(false);
+            setIsTutorialActive(true);
+          }}
         />
         
         {/* Search Button - top right (only show on main feed) */}
@@ -974,6 +987,16 @@ const ModernTokenScroller = ({
 
       
       {/* Scroll indicator removed - was blocking expand button interactions */}
+
+      {/* Interactive Tutorial Overlay */}
+      <InteractiveTutorial 
+        isActive={isTutorialActive} 
+        onClose={() => {
+          console.log('🎓 Tutorial closed');
+          setIsTutorialActive(false);
+          setIsFirstVisit(false);
+        }} 
+      />
     </div>
   );
 };

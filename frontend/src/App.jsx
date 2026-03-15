@@ -22,8 +22,7 @@ const OrdersView = lazy(() => import('./components/OrdersView'))
 const JupiterTradeModal = lazy(() => import('./components/JupiterTradeModal'))
 const AdvancedFilter = lazy(() => import('./components/AdvancedFilter'))
 
-// Import CommentsSection (not lazy loaded - it's lightweight)
-import CommentsSection from './components/CommentsSection'
+// CommentsSection now integrated into CoinCard's TikTok action bar
 
 function App() {
   // Build timestamp - only log once on initial load
@@ -430,12 +429,6 @@ function App() {
           onModalClose={() => setAdvancedFilterModalOpen(false)}
         />
       </Suspense>
-      
-      {/* Comments Section - Coin-specific comments */}
-      <CommentsSection 
-        coinAddress={currentViewedCoin?.mintAddress || currentViewedCoin?.address}
-        coinSymbol={currentViewedCoin?.symbol || currentViewedCoin?.ticker}
-      />
       
       {/* Wallet Debug Component - logs connection events to console */}
       <Suspense fallback={null}>

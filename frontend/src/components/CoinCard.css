@@ -4,7 +4,8 @@
 
 /* ⚡ MOBILE PERFORMANCE OPTIMIZATIONS - Disable animations on mobile devices */
 @media (max-width: 768px), (hover: none) {
-  /* COMPLETELY disable all animations on mobile for maximum performance */
+  /* COMPLETELY disable all animations on mobile for maximum performance
+     BUT exempt TikTok action bar & expand-handle elements so collapse/expand anims work */
   .enrichment-status-badge,
   .enrichment-status-badge span,
   .loading-spinner,
@@ -12,8 +13,8 @@
   .price-flash-red,
   .graduation-progress-glow,
   .shimmer-gradient,
-  *[class*="animate"],
-  *[class*="pulse"],
+  *[class*="animate"]:not(.expand-handle):not(.tiktok-action-btn),
+  *[class*="pulse"]:not(.expand-handle),
   *[class*="spin"],
   *[class*="bounce"] {
     animation: none !important;
@@ -21,31 +22,32 @@
     animation-iteration-count: 0 !important;
   }
   
-  /* Disable ALL transitions on mobile for instant interactions */
-  *,
-  *::before,
-  *::after {
+  /* Disable most transitions on mobile for instant interactions
+     BUT exempt TikTok action bar, expand-handle & info layer so they animate in BOTH directions */
+  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content),
+  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content)::before,
+  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content)::after {
     transition: none !important;
     transition-duration: 0s !important;
   }
   
-  /* Disable hover effects on touch devices */
+  /* Disable hover effects on touch devices (exempt TikTok action elements & expand-handle) */
   .coin-banner:hover,
   .info-layer-profile-image:hover,
   .header-metric:hover,
   .header-social-icon:hover,
-  *:hover {
+  *:not(.tiktok-action-btn):not(.expand-handle):not(.coin-info-layer):hover {
     transform: none !important;
     opacity: 1 !important;
   }
   
-  /* Reduce box-shadows for better performance */
-  * {
+  /* Reduce box-shadows for better performance (exempt action bar & expand-handle) */
+  *:not(.tiktok-action-btn):not(.expand-handle):not(.coin-info-layer) {
     box-shadow: none !important;
   }
   
-  /* Disable backdrop filters on mobile (very expensive) */
-  * {
+  /* Disable backdrop filters on mobile (very expensive) — exempt action buttons */
+  *:not(.tiktok-action-btn) {
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
   }
@@ -80,6 +82,347 @@
 
 .enrichment-status-badge span {
   animation: blink 1s ease-in-out infinite;
+}
+
+/* =============================================================================
+   TIKTOK-STYLE ACTION BUTTONS - Right side floating buttons
+   ============================================================================= */
+
+.tiktok-action-buttons {
+  position: absolute;
+  right: 18px;
+  bottom: 90px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  z-index: 100;
+  pointer-events: auto;
+  /* Use clip-path to mask from bottom → top during collapse */
+  clip-path: inset(0 0 0 0);
+  transition:
+    gap 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    clip-path 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* --- Collapsed state: clip the container from bottom→top & scale-down each button --- */
+.tiktok-action-buttons.collapsed {
+  pointer-events: none;
+  /* Clip from the bottom to the top — visually unmistakable upward collapse.
+     inset(0 0 100% 0) means the bottom edge rises to 100%, hiding everything from below. */
+  clip-path: inset(0 -20px 100% -20px);
+  transition:
+    gap 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+    clip-path 0.45s cubic-bezier(0.55, 0, 1, 0.45);
+}
+
+.tiktok-action-buttons.collapsed .tiktok-action-btn {
+  opacity: 0;
+  pointer-events: none;
+  /* Scale down toward the top of the container */
+  transform: scale(0.4) translateY(-30px);
+  border-color: transparent;
+  background: transparent !important;
+  box-shadow: none !important;
+  transition:
+    opacity 0.25s cubic-bezier(0.4, 0, 1, 1),
+    transform 0.35s cubic-bezier(0.55, 0, 1, 0.45),
+    background 0.12s ease,
+    border-color 0.12s ease,
+    box-shadow 0.12s ease;
+}
+
+/* Icons spin away during collapse */
+.tiktok-action-buttons.collapsed .tiktok-action-btn .tiktok-action-icon {
+  opacity: 0;
+  transform: scale(0) rotate(180deg);
+  transition: opacity 0.1s ease, transform 0.2s cubic-bezier(0.55, 0, 1, 0.45);
+}
+
+/* Labels vanish instantly */
+.tiktok-action-buttons.collapsed .tiktok-action-btn .tiktok-action-label {
+  opacity: 0;
+  transform: scale(0) translateY(-6px);
+  transition: opacity 0.06s ease, transform 0.06s ease;
+}
+
+/* Stagger collapse — bottom (Copy) disappears first → top (Fave) last
+   This creates the visual impression of being "sucked upward" since the
+   clip-path rises from the bottom and bottom items vanish first. */
+.tiktok-action-buttons.collapsed .tiktok-action-btn:nth-child(6) { transition-delay: 0s; }
+.tiktok-action-buttons.collapsed .tiktok-action-btn:nth-child(5) { transition-delay: 0.03s; }
+.tiktok-action-buttons.collapsed .tiktok-action-btn:nth-child(4) { transition-delay: 0.06s; }
+.tiktok-action-buttons.collapsed .tiktok-action-btn:nth-child(3) { transition-delay: 0.09s; }
+.tiktok-action-buttons.collapsed .tiktok-action-btn:nth-child(2) { transition-delay: 0.12s; }
+.tiktok-action-buttons.collapsed .tiktok-action-btn:nth-child(1) { transition-delay: 0.15s; }
+
+/* Stagger the icon during collapse */
+.tiktok-action-buttons.collapsed .tiktok-action-btn:nth-child(6) .tiktok-action-icon { transition-delay: 0s; }
+.tiktok-action-buttons.collapsed .tiktok-action-btn:nth-child(5) .tiktok-action-icon { transition-delay: 0.02s; }
+.tiktok-action-buttons.collapsed .tiktok-action-btn:nth-child(4) .tiktok-action-icon { transition-delay: 0.05s; }
+.tiktok-action-buttons.collapsed .tiktok-action-btn:nth-child(3) .tiktok-action-icon { transition-delay: 0.07s; }
+.tiktok-action-buttons.collapsed .tiktok-action-btn:nth-child(2) .tiktok-action-icon { transition-delay: 0.10s; }
+.tiktok-action-buttons.collapsed .tiktok-action-btn:nth-child(1) .tiktok-action-icon { transition-delay: 0.12s; }
+
+/* Expand-handle "absorbs" buttons — scale bump after last button collapses */
+@keyframes toggleAbsorb {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.28); }
+  65%  { transform: scale(0.9); }
+  100% { transform: scale(1); }
+}
+
+.expand-handle.absorbing {
+  animation: toggleAbsorb 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) 0.3s both;
+}
+
+/* Expand-handle "releases" buttons — reverse bounce when expanding */
+@keyframes toggleRelease {
+  0%   { transform: scale(1); }
+  25%  { transform: scale(0.82); }
+  55%  { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+
+.expand-handle.releasing {
+  animation: toggleRelease 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) 0s both;
+}
+
+/* --- Expanded state: buttons pop back into place, revealed by clip-path opening from top → bottom --- */
+.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+  transition:
+    opacity 0.28s cubic-bezier(0, 0, 0.2, 1),
+    transform 0.40s cubic-bezier(0.34, 1.56, 0.64, 1),
+    background 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+/* Icons unwind and pop in */
+.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn .tiktok-action-icon {
+  opacity: 1;
+  transform: scale(1) rotate(0deg);
+  transition: opacity 0.22s ease, transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Labels fade in with bounce */
+.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn .tiktok-action-label {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+  transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Stagger expand — top (Fave) drops in first → bottom (Copy) last
+   clip-path reveals from top downward, so top buttons appear first. */
+.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(1) { transition-delay: 0.05s; }
+.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(2) { transition-delay: 0.09s; }
+.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(3) { transition-delay: 0.13s; }
+.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(4) { transition-delay: 0.17s; }
+.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(5) { transition-delay: 0.21s; }
+.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(6) { transition-delay: 0.25s; }
+
+/* Stagger the icon pop during expand */
+.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(1) .tiktok-action-icon { transition-delay: 0.08s; }
+.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(2) .tiktok-action-icon { transition-delay: 0.12s; }
+.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(3) .tiktok-action-icon { transition-delay: 0.16s; }
+.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(4) .tiktok-action-icon { transition-delay: 0.20s; }
+.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(5) .tiktok-action-icon { transition-delay: 0.24s; }
+.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(6) .tiktok-action-icon { transition-delay: 0.28s; }
+
+/* Stagger the label during expand */
+.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(1) .tiktok-action-label { transition-delay: 0.12s; }
+.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(2) .tiktok-action-label { transition-delay: 0.16s; }
+.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(3) .tiktok-action-label { transition-delay: 0.20s; }
+.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(4) .tiktok-action-label { transition-delay: 0.24s; }
+.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(5) .tiktok-action-label { transition-delay: 0.28s; }
+.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(6) .tiktok-action-label { transition-delay: 0.32s; }
+
+/* --- Toggle arrow removed: expand-handle now serves as the collapse target --- */
+
+.tiktok-action-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  cursor: pointer;
+  transition: transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+  position: relative;
+  padding: 0;
+  justify-content: center;
+  /* Needed for collapse animation */
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.tiktok-action-btn .tiktok-action-icon {
+  font-size: 20px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.tiktok-action-btn .tiktok-action-icon svg {
+  display: block;
+  width: 20px;
+  height: 20px;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.4));
+}
+
+.tiktok-action-btn .tiktok-action-label {
+  position: absolute;
+  bottom: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 9px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.75);
+  white-space: nowrap;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+}
+
+.tiktok-action-btn:hover {
+  transform: scale(1.12);
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.tiktok-action-btn:active {
+  transform: scale(0.92);
+}
+
+/* Active state — currently toggled on */
+.tiktok-action-btn.active {
+  background: rgba(139, 92, 246, 0.35);
+  border-color: rgba(139, 92, 246, 0.5);
+  box-shadow: 0 0 12px rgba(139, 92, 246, 0.3);
+}
+
+.tiktok-action-btn.active .tiktok-action-label {
+  color: #c4b5fd;
+}
+
+.tiktok-action-btn.active .tiktok-action-icon svg {
+  stroke: #c4b5fd;
+}
+
+/* Trade button — accent color */
+.tiktok-action-btn.trade-btn {
+  background: rgba(34, 197, 94, 0.25);
+  border-color: rgba(34, 197, 94, 0.4);
+}
+
+.tiktok-action-btn.trade-btn:hover {
+  background: rgba(34, 197, 94, 0.4);
+  box-shadow: 0 0 16px rgba(34, 197, 94, 0.3);
+}
+
+.tiktok-action-btn.trade-btn .tiktok-action-label {
+  color: #86efac;
+}
+
+.tiktok-action-btn.trade-btn .tiktok-action-icon svg {
+  stroke: #86efac;
+}
+
+/* Copied feedback animation */
+.tiktok-action-btn.copied {
+  background: rgba(34, 197, 94, 0.4) !important;
+  border-color: rgba(34, 197, 94, 0.6) !important;
+}
+
+.tiktok-action-btn.copied .tiktok-action-icon::after {
+  content: '✓';
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  font-size: 12px;
+  background: #22c55e;
+  color: white;
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Initial mount animation — REMOVED: transitions handle both expand & collapse now */
+/* The staggered transitions on :not(.collapsed) provide the same springy pop-out effect */
+
+/* Desktop: Move buttons to right edge of left panel */
+@media (min-width: 1200px) {
+  .tiktok-action-buttons {
+    right: 20px;
+    bottom: 110px;
+    gap: 12px;
+  }
+  
+  .tiktok-action-btn {
+    width: 48px;
+    height: 48px;
+  }
+  
+  .tiktok-action-btn .tiktok-action-icon {
+    font-size: 22px;
+  }
+  
+  .tiktok-action-btn .tiktok-action-icon svg {
+    width: 22px;
+    height: 22px;
+  }
+}
+
+/* Small phones */
+@media (max-width: 380px) {
+  .tiktok-action-buttons {
+    right: 10px;
+    bottom: 70px;
+    gap: 8px;
+  }
+  
+  .tiktok-action-btn {
+    width: 38px;
+    height: 38px;
+  }
+  
+  .tiktok-action-btn .tiktok-action-icon {
+    font-size: 16px;
+  }
+  
+  .tiktok-action-btn .tiktok-action-icon svg {
+    width: 16px;
+    height: 16px;
+  }
+  
+  .tiktok-action-btn .tiktok-action-label {
+    font-size: 8px;
+    bottom: -12px;
+  }
+}
+
+/* Override mobile performance disabling for action buttons (they need transitions) */
+@media (max-width: 768px), (hover: none) {
+  .tiktok-action-btn {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: rgba(0, 0, 0, 0.5);
+  }
+  
+  /* When collapsed, override bg so it's truly transparent */
+  .tiktok-action-buttons.collapsed .tiktok-action-btn {
+    background: transparent !important;
+  }
 }
 
 /* =============================================================================
@@ -385,7 +728,6 @@
   z-index: 1;
   /* 🔥 FIX: Ensure banner is clickable */
   pointer-events: auto;
-  cursor: pointer;
 }
 
 .coin-banner::before {
@@ -740,7 +1082,7 @@
   width: 32px;
   height: 32px;
   cursor: pointer;
-  transition: transform 0.2s ease;
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
   position: relative;
   display: flex;
   align-items: flex-start; /* Changed from center - align charts to top */
@@ -759,6 +1101,8 @@
   /* Prevent touch gestures from causing scroll */
   touch-action: none;
   -webkit-touch-callout: none;
+  /* Rounded bg for better visual when absorbing */
+  border-radius: 50%;
 }
 
 .expand-handle::before {
@@ -2902,4 +3246,270 @@ html.dark-mode .description-modal-body,
   border-radius: 12px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
   animation: slideUp 0.3s ease;
+}
+
+/* =============================================================================
+   TIKTOK-STYLE BOTTOM SHEET — Comments-like panel for Txns & PNL
+   ============================================================================= */
+
+@keyframes sheetSlideUp {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+@keyframes sheetFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Overlay — dim background */
+.tiktok-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999990;
+  background: rgba(0, 0, 0, 0.55);
+  animation: sheetFadeIn 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+/* The sheet itself — slides up from bottom, about 60% height like TikTok comments */
+.tiktok-sheet {
+  position: relative;
+  width: 100%;
+  max-width: 500px;
+  margin: 0 auto;
+  max-height: 65vh;
+  background: #1a1a2e;
+  border-radius: 16px 16px 0 0;
+  display: flex;
+  flex-direction: column;
+  animation: sheetSlideUp 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+  box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+/* Handle bar — drag indicator at top */
+.tiktok-sheet-handle {
+  display: flex;
+  justify-content: center;
+  padding: 10px 0 4px;
+  flex-shrink: 0;
+}
+
+.tiktok-sheet-handle-bar {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Header row — title + close button */
+.tiktok-sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 16px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+
+.tiktok-sheet-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.tiktok-sheet-close {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 18px;
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background 0.15s;
+}
+
+.tiktok-sheet-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+/* Status bar — live indicator */
+.tiktok-sheet-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.45);
+  flex-shrink: 0;
+}
+
+.tiktok-sheet-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  flex-shrink: 0;
+}
+
+.tiktok-sheet-dot.live {
+  background: #4CAF50;
+  box-shadow: 0 0 6px rgba(76, 175, 80, 0.5);
+}
+
+.tiktok-sheet-dex {
+  margin-left: auto;
+  opacity: 0.6;
+}
+
+/* Body — scrollable content area */
+.tiktok-sheet-body {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: env(safe-area-inset-bottom, 12px);
+}
+
+/* Empty state */
+.tiktok-sheet-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 16px;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 14px;
+  text-align: center;
+}
+
+/* ---- Transaction row styling (inside the sheet) ---- */
+.tiktok-tx-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  transition: background 0.15s;
+}
+
+.tiktok-tx-row:first-child {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.tiktok-tx-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.tiktok-tx-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.tiktok-tx-side {
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  letter-spacing: 0.3px;
+}
+
+.tiktok-tx-wallet {
+  font-size: 12px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  color: rgba(255, 255, 255, 0.55);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.tiktok-tx-wallet:hover {
+  color: #8b5cf6;
+}
+
+.tiktok-tx-dex {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.tiktok-tx-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  flex-shrink: 0;
+  margin-left: 12px;
+}
+
+.tiktok-tx-amounts {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+
+.tiktok-tx-sol {
+  font-size: 12px;
+  font-weight: 600;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+.tiktok-tx-tokens {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+.tiktok-tx-time {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.3);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.tiktok-tx-time:hover {
+  color: #8b5cf6;
+}
+
+/* ---- Desktop: limit sheet width and center ---- */
+@media (min-width: 768px) {
+  .tiktok-sheet {
+    max-width: 480px;
+    border-radius: 16px 16px 0 0;
+  }
+}
+
+/* ---- Small phones ---- */
+@media (max-width: 380px) {
+  .tiktok-sheet {
+    max-height: 70vh;
+  }
+
+  .tiktok-sheet-title {
+    font-size: 14px;
+  }
+
+  .tiktok-tx-row {
+    padding: 8px 12px;
+  }
+}
+
+/* Override mobile perf disabling — sheets need animations */
+@media (max-width: 768px), (hover: none) {
+  .tiktok-sheet-overlay {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
 }

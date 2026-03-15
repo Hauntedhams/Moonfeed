@@ -8,6 +8,7 @@ import WalletPopup from './WalletPopup';
 import { useLiveData } from '../hooks/useLiveDataContext.jsx';
 import { useSolanaTransactions } from '../hooks/useSolanaTransactions.jsx';
 import { useOnDemandPrice } from '../hooks/useOnDemandPrice.js';
+import { useWallet } from '../contexts/WalletContext';
 import { API_CONFIG } from '../config/api.js';
 import { 
   calculateGraduationPercentage, 
@@ -18,6 +19,27 @@ import {
 import debug from '../utils/debug.js';
 import { rafManager, eventListenerManager, cleanupManager } from '../utils/mobileOptimizations.js';
 
+// Simple time-ago formatter for transaction timestamps
+function getTimeAgo(timestamp) {
+  const seconds = Math.floor((Date.now() - timestamp) / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  return `${days}d`;
+}
+
+// Compact number formatter for token amounts (e.g. 1234567 → "1.23M")
+function formatCompactNumber(num) {
+  if (num >= 1e9) return (num / 1e9).toFixed(2) + 'B';
+  if (num >= 1e6) return (num / 1e6).toFixed(2) + 'M';
+  if (num >= 1e3) return (num / 1e3).toFixed(1) + 'K';
+  if (num >= 1) return num.toFixed(1);
+  return num.toFixed(4);
+}
+
 const CoinCard = memo(({ 
   coin, 
   isFavorite, 
@@ -27,7 +49,6 @@ const CoinCard = memo(({
   isGraduating = false, // NEW: Is this a graduating Pump.fun token?
   onExpandChange,
   isVisible = true,
-  autoLoadTransactions = false, // NEW: auto-load transactions when true
   onEnrichmentComplete = null // Callback when enrichment completes
 }) => {
   // Generate unique component ID for cleanup tracking
@@ -42,7 +63,11 @@ const CoinCard = memo(({
   const [graduationIconPosition, setGraduationIconPosition] = useState(null);
   const [priceFlash, setPriceFlash] = useState('');
   const [showLiveTransactions, setShowLiveTransactions] = useState(false);
-  const [showTopTraders, setShowTopTraders] = useState(true); // Auto-load top traders
+  const [showTopTraders, setShowTopTraders] = useState(false); // Toggled via TikTok action button
+  const [showComments, setShowComments] = useState(false); // TikTok-style comments bottom sheet
+  const [comments, setComments] = useState([]); // Cached comments for count badge
+  const [showActionButtons, setShowActionButtons] = useState(true); // TikTok action bar visible by default
+  const [hasToggledActions, setHasToggledActions] = useState(false); // Track if user has toggled (avoids mount animation)
   const [selectedWallet, setSelectedWallet] = useState(null);
   const [showDescriptionModal, setShowDescriptionModal] = useState(false);
   const [chartHoveredPrice, setChartHoveredPrice] = useState(null); // Track hovered price from chart
@@ -79,6 +104,7 @@ const CoinCard = memo(({
   // Get live data from WebSocket (COMPLETELY disabled on mobile for performance)
   // 🔥 CRITICAL FIX: Get coins Map directly from context to force re-renders when it updates
   const { getCoin, getChart, connected, connectionStatus, coins, updateCount } = useLiveData();
+  const { walletAddress, connected: walletConnected } = useWallet();
   
   // 🔥 PRICE UPDATE FIX: Directly read from coins Map and use it to trigger re-renders
   const address = coin.mintAddress || coin.address;
@@ -97,11 +123,10 @@ const CoinCard = memo(({
     return getChart(address);
   }, [isMobile, isVisible, address, getChart]);
   
-  // 🔥 MOBILE FIX: Disable WebSocket connections on mobile to prevent crashes
+  // Mobile detection for other optimizations
   const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768;
   
-  // Solana RPC live transactions - auto-load when autoLoadTransactions is true
-  // 🔥 DISABLED on mobile to prevent memory crashes from multiple WebSocket connections
+  // Solana RPC live transactions - backend handles the heavy lifting now (works on mobile too)
   const mintAddress = coin.mintAddress || coin.mint || coin.address || coin.contract_address || coin.contractAddress || coin.tokenAddress;
   
   // 🔥 NEW: On-demand price fetching from Solana blockchain
@@ -122,7 +147,7 @@ const CoinCard = memo(({
   const displayPrice = onDemandPrice || livePrice || fallbackPrice;
   const { transactions, isConnected: txConnected, error: txError, clearTransactions } = useSolanaTransactions(
     mintAddress,
-    !isMobileDevice && (showLiveTransactions || autoLoadTransactions) // Only connect on desktop
+    showLiveTransactions // Only fetch when user explicitly opens the panel
   );
 
   // 🆕 ON-VIEW ENRICHMENT: Trigger enrichment when coin becomes visible
@@ -211,21 +236,37 @@ const CoinCard = memo(({
   }, [isDesktopMode]);
 
 
-  // Auto-show transactions UI when autoLoadTransactions is true
+  // Close transaction panel when coin becomes invisible
   useEffect(() => {
-    if (autoLoadTransactions && !showLiveTransactions) {
-      debug.log(`🔄 Auto-loading transactions for coin: ${coin.symbol || coin.name}`);
-      setShowLiveTransactions(true);
-    }
-    // Clean up when no longer auto-loading OR when coin becomes invisible
-    if ((!autoLoadTransactions && showLiveTransactions) || (!isVisible && showLiveTransactions)) {
-      debug.log(`🛑 Stopping transactions for coin: ${coin.symbol || coin.name} (${!isVisible ? 'not visible' : 'no longer auto-loading'})`);
+    if (!isVisible && showLiveTransactions) {
+      debug.log(`🛑 Closing transactions for coin: ${coin.symbol || coin.name} (not visible)`);
       setShowLiveTransactions(false);
       if (clearTransactions) {
         clearTransactions();
       }
     }
-  }, [autoLoadTransactions, isVisible, coin.symbol, coin.name]);
+    // Also close comments when not visible
+    if (!isVisible && showComments) {
+      setShowComments(false);
+    }
+  }, [isVisible, coin.symbol, coin.name]);
+
+  // Fetch comment count when card is visible (lightweight — just the count)
+  useEffect(() => {
+    if (!isVisible || !mintAddress) return;
+    const fetchCommentCount = async () => {
+      try {
+        const response = await fetch(`${API_CONFIG.baseUrl}/api/comments/${mintAddress}`);
+        if (response.ok) {
+          const data = await response.json();
+          setComments(data.comments || []);
+        }
+      } catch (err) {
+        // Silent fail — comment count is non-critical
+      }
+    };
+    fetchCommentCount();
+  }, [isVisible, mintAddress]);
 
   // Handle price flash animation (COMPLETELY DISABLED on mobile for performance)
   useEffect(() => {
@@ -360,7 +401,7 @@ const CoinCard = memo(({
         
         // Start the price changes section
         priceChangeInfo = '<div style="margin-top: 16px; padding: 12px; background: rgba(0,0,0,0.03); border-radius: 8px; border-left: 3px solid #4F46E5;">';
-        priceChangeInfo += '<div style="font-weight: 700; font-size: 0.85rem; color: #4F46E5; margin-bottom: 10px;">📊 PRICE CHANGES</div>';
+        priceChangeInfo += '<div style="font-weight: 700; font-size: 0.85rem; color: #4F46E5; margin-bottom: 10px;">PRICE CHANGES</div>';
         
         // Simplified check: just check if changes object exists
         if (changes) {
@@ -373,7 +414,7 @@ const CoinCard = memo(({
             const change5m = Number(changes.change5m);
             const color5m = change5m >= 0 ? '#16a34a' : '#dc2626';
             const bgColor5m = change5m >= 0 ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)';
-            const arrow5m = change5m >= 0 ? '📈' : '📉';
+            const arrow5m = change5m >= 0 ? '▲' : '▼';
             priceChangeInfo += `<div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; background: ${bgColor5m}; border-radius: 6px; margin-bottom: 6px;">`;
             priceChangeInfo += `<span style="font-size: 0.75rem; color: #64748b;">5 minutes:</span>`;
             priceChangeInfo += `<span style="font-size: 0.8rem; font-weight: 600; color: ${color5m};">${arrow5m} ${formatPercent(change5m)}</span>`;
@@ -386,7 +427,7 @@ const CoinCard = memo(({
             const change1h = Number(changes.change1h);
             const color1h = change1h >= 0 ? '#16a34a' : '#dc2626';
             const bgColor1h = change1h >= 0 ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)';
-            const arrow1h = change1h >= 0 ? '📈' : '📉';
+            const arrow1h = change1h >= 0 ? '▲' : '▼';
             priceChangeInfo += `<div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; background: ${bgColor1h}; border-radius: 6px; margin-bottom: 6px;">`;
             priceChangeInfo += `<span style="font-size: 0.75rem; color: #64748b;">1 hour:</span>`;
             priceChangeInfo += `<span style="font-size: 0.8rem; font-weight: 600; color: ${color1h};">${arrow1h} ${formatPercent(change1h)}</span>`;
@@ -399,7 +440,7 @@ const CoinCard = memo(({
             const change6h = Number(changes.change6h);
             const color6h = change6h >= 0 ? '#16a34a' : '#dc2626';
             const bgColor6h = change6h >= 0 ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)';
-            const arrow6h = change6h >= 0 ? '📈' : '📉';
+            const arrow6h = change6h >= 0 ? '▲' : '▼';
             priceChangeInfo += `<div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; background: ${bgColor6h}; border-radius: 6px; margin-bottom: 6px;">`;
             priceChangeInfo += `<span style="font-size: 0.75rem; color: #64748b;">6 hours:</span>`;
             priceChangeInfo += `<span style="font-size: 0.8rem; font-weight: 600; color: ${color6h};">${arrow6h} ${formatPercent(change6h)}</span>`;
@@ -412,7 +453,7 @@ const CoinCard = memo(({
             const change24h = Number(changes.change24h);
             const color24h = change24h >= 0 ? '#16a34a' : '#dc2626';
             const bgColor24h = change24h >= 0 ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)';
-            const arrow24h = change24h >= 0 ? '📈' : '📉';
+            const arrow24h = change24h >= 0 ? '▲' : '▼';
             priceChangeInfo += `<div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; background: ${bgColor24h}; border-radius: 6px; margin-bottom: 6px;">`;
             priceChangeInfo += `<span style="font-size: 0.75rem; color: #64748b;">24 hours:</span>`;
             priceChangeInfo += `<span style="font-size: 0.8rem; font-weight: 600; color: ${color24h};">${arrow24h} ${formatPercent(change24h)}</span>`;
@@ -429,18 +470,19 @@ const CoinCard = memo(({
           const sells = coin.dexscreener?.transactions?.sells24h || coin.sells24h || 0;
           if (buys > 0 || sells > 0) {
             priceChangeInfo += '<div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(0,0,0,0.1);">';
-            priceChangeInfo += '<div style="font-weight: 600; font-size: 0.75rem; color: #334155; margin-bottom: 6px;">📈 Transaction Activity</div>';
+            priceChangeInfo += '<div style="font-weight: 600; font-size: 0.75rem; color: #334155; margin-bottom: 6px;">Transaction Activity</div>';
             priceChangeInfo += '<div style="display: flex; justify-content: space-between; margin-bottom: 4px;">';
-            priceChangeInfo += `<span style="font-size: 0.75rem; color: #16a34a;">✅ Buys: ${buys}</span>`;
-            priceChangeInfo += `<span style="font-size: 0.75rem; color: #dc2626;">❌ Sells: ${sells}</span>`;
+            priceChangeInfo += `<span style="font-size: 0.75rem; color: #16a34a;">Buys: ${buys}</span>`;
+            priceChangeInfo += `<span style="font-size: 0.75rem; color: #dc2626;">Sells: ${sells}</span>`;
             priceChangeInfo += '</div>';
             const buyRatio = buys + sells > 0 ? ((buys / (buys + sells)) * 100).toFixed(1) : 0;
-            const sentiment = buyRatio > 60 ? '🟢 Bullish' : buyRatio < 40 ? '🔴 Bearish' : '🟡 Neutral';
-            priceChangeInfo += `<div style="font-size: 0.7rem; color: #64748b; text-align: center; margin-top: 4px;">${sentiment} (${buyRatio}% buys)</div>`;
+            const sentimentColor = buyRatio > 60 ? '#16a34a' : buyRatio < 40 ? '#dc2626' : '#ca8a04';
+            const sentimentLabel = buyRatio > 60 ? 'Bullish' : buyRatio < 40 ? 'Bearish' : 'Neutral';
+            priceChangeInfo += `<div style="font-size: 0.7rem; color: ${sentimentColor}; text-align: center; margin-top: 4px; font-weight: 600;">${sentimentLabel} (${buyRatio}% buys)</div>`;
             priceChangeInfo += '</div>';
           }
           
-          priceChangeInfo += '<div style="font-size: 0.7rem; color: #64748b; margin-top: 8px; text-align: center;">✅ Live price tracking</div>';
+          priceChangeInfo += '<div style="font-size: 0.7rem; color: #64748b; margin-top: 8px; text-align: center;">Live price tracking</div>';
           priceChangeInfo += '</div>';
         } else {
           // Fallback: show at least the 24h change we have
@@ -448,18 +490,18 @@ const CoinCard = memo(({
           if (change24h !== 0) {
             const color24h = change24h >= 0 ? '#16a34a' : '#dc2626';
             const bgColor24h = change24h >= 0 ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)';
-            const arrow24h = change24h >= 0 ? '📈' : '📉';
+            const arrow24h = change24h >= 0 ? '▲' : '▼';
             priceChangeInfo += `<div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; background: ${bgColor24h}; border-radius: 6px; margin-bottom: 6px;">`;
             priceChangeInfo += `<span style="font-size: 0.75rem; color: #64748b;">24 hours:</span>`;
             priceChangeInfo += `<span style="font-size: 0.8rem; font-weight: 600; color: ${color24h};">${arrow24h} ${formatPercent(change24h)}</span>`;
             priceChangeInfo += '</div>';
             // Only show "more timeframes available after enrichment" if coin is NOT yet enriched
             if (!coin.enriched && !coin.cleanChartData) {
-              priceChangeInfo += '<div style="font-size: 0.7rem; color: #64748b; margin-top: 8px; text-align: center;">📊 More timeframes available after enrichment</div>';
+              priceChangeInfo += '<div style="font-size: 0.7rem; color: #64748b; margin-top: 8px; text-align: center;">More timeframes available after enrichment</div>';
             }
           } else {
             priceChangeInfo += '<div style="padding: 16px; text-align: center;">';
-            priceChangeInfo += '<div style="font-size: 0.8rem; color: #64748b;">📊 Price change data will load shortly</div>';
+            priceChangeInfo += '<div style="font-size: 0.8rem; color: #64748b;">Price change data will load shortly</div>';
             priceChangeInfo += '</div>';
           }
           priceChangeInfo += '</div>';
@@ -714,6 +756,10 @@ const CoinCard = memo(({
     const next = !isExpanded;
     setIsExpanded(next);
     
+    // When expanding info → collapse action buttons; when collapsing → restore them
+    setShowActionButtons(!next);
+    setHasToggledActions(true); // Mark that user has interacted (enables animation)
+    
     // Call parent's expand change handler which should lock scrolling
     onExpandChange?.(next);
   };
@@ -907,6 +953,7 @@ const CoinCard = memo(({
       setShowPriceChangeModal(false);
       setShowLiveTransactions(false);
       setShowTopTraders(false);
+      setShowActionButtons(true);
       setSelectedWallet(null);
       setShowDescriptionModal(false);
       setIsExpanded(false);
@@ -1417,7 +1464,7 @@ const CoinCard = memo(({
 
             <div className="header-right">
               <div 
-                className="expand-handle" 
+                className={`expand-handle ${hasToggledActions ? (!showActionButtons ? 'absorbing' : 'releasing') : ''}`}
                 onClick={handleExpandToggle}
                 onMouseDown={(e) => e.stopPropagation()}
                 onTouchStart={(e) => e.stopPropagation()}
@@ -1597,127 +1644,170 @@ const CoinCard = memo(({
               <div className="live-transactions-content">
                   {txError && (
                     <div className="tx-error">
-                      ⚠️ {txError}
+                      {txError}
                     </div>
                   )}
 
-                  <div className="transactions-list">
+                  {/* Transaction table header */}
+                  <div className="tx-table-header" style={{
+                    display: 'grid',
+                    gridTemplateColumns: '42px 52px 1fr 72px 72px 38px',
+                    gap: '4px',
+                    padding: '6px 10px',
+                    fontSize: '10px',
+                    fontWeight: '600',
+                    color: 'rgba(255,255,255,0.4)',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    borderBottom: '1px solid rgba(255,255,255,0.08)',
+                  }}>
+                    <span>Type</span>
+                    <span>DEX</span>
+                    <span>Wallet</span>
+                    <span style={{ textAlign: 'right' }}>SOL</span>
+                    <span style={{ textAlign: 'right' }}>Tokens</span>
+                    <span style={{ textAlign: 'right' }}>Time</span>
+                  </div>
+
+                  <div className="transactions-list" style={{ maxHeight: '300px', overflowY: 'auto' }}>
                     {transactions.length === 0 ? (
                       <div className="transactions-empty">
                         <div className="empty-text">Waiting for transactions...</div>
-                        <div className="empty-subtext">Live monitoring is active</div>
+                        <div className="empty-subtext">
+                          {txConnected ? '🟢 Live monitoring active' : '⏳ Connecting...'}
+                        </div>
                       </div>
                     ) : (
-                      transactions.map((tx, index) => (
-                        <div key={`${tx.signature}-${index}`} className="transaction-item" style={{
-                          animation: index === 0 ? 'slideIn 0.3s ease-out' : 'none',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '6px',
-                          padding: '10px',
-                          borderBottom: '1px solid rgba(255,255,255,0.05)'
-                        }}>
-                          {/* First Row: Wallet + Type + Time */}
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div className="tx-wallet">
-                              <span 
-                                onClick={() => tx.feePayer && setSelectedWallet(tx.feePayer)}
-                                style={{ 
-                                  cursor: tx.feePayer ? 'pointer' : 'default',
-                                  color: tx.feePayer ? '#4FC3F7' : 'inherit',
-                                  textDecoration: tx.feePayer ? 'underline' : 'none',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '4px',
-                                  fontSize: '12px',
-                                  fontWeight: '500'
-                                }}
-                                title={tx.feePayer ? `Fee Payer: ${tx.feePayer}` : ''}
-                              >
-                                {tx.feePayer && <span style={{ fontSize: '10px' }}>👛</span>}
-                                {tx.feePayer ? `${tx.feePayer.substring(0, 4)}...${tx.feePayer.substring(tx.feePayer.length - 4)}` : 'Unknown'}
-                              </span>
-                            </div>
-                            <div className="tx-type-col">
-                              <span className="tx-type" style={{ 
+                      transactions.map((tx, index) => {
+                        const isBuy = tx.side === 'buy';
+                        const sideColor = isBuy ? '#4CAF50' : '#F44336';
+                        const sideBg = isBuy ? 'rgba(76, 175, 80, 0.1)' : 'rgba(244, 67, 54, 0.1)';
+                        const wallet = tx.wallet || tx.feePayer || 'Unknown';
+                        const solAmt = tx.solAmount || 0;
+                        const tokenAmt = tx.tokenAmount || tx.amount || 0;
+                        const age = tx.timestamp ? getTimeAgo(tx.timestamp) : '';
+                        const dexName = tx.dex || '';
+                        // Short DEX label for compact display
+                        const dexShort = dexName.replace(' V4', '').replace(' V2', '').replace(' V3', '').substring(0, 6);
+
+                        return (
+                          <div 
+                            key={`${tx.signature}-${index}`} 
+                            className="transaction-item" 
+                            style={{
+                              animation: index === 0 ? 'slideIn 0.3s ease-out' : 'none',
+                              display: 'grid',
+                              gridTemplateColumns: '42px 52px 1fr 72px 72px 38px',
+                              gap: '4px',
+                              padding: '7px 10px',
+                              alignItems: 'center',
+                              borderBottom: '1px solid rgba(255,255,255,0.04)',
+                              backgroundColor: index === 0 ? sideBg : 'transparent',
+                              transition: 'background-color 0.3s',
+                            }}
+                          >
+                            {/* Buy/Sell badge */}
+                            <span style={{
+                              fontSize: '11px',
+                              fontWeight: '700',
+                              color: sideColor,
+                              textTransform: 'uppercase',
+                            }}>
+                              {isBuy ? 'Buy' : 'Sell'}
+                            </span>
+
+                            {/* DEX badge */}
+                            <span style={{
+                              fontSize: '9px',
+                              fontWeight: '600',
+                              color: 'rgba(255,255,255,0.45)',
+                              background: 'rgba(255,255,255,0.06)',
+                              borderRadius: '3px',
+                              padding: '1px 4px',
+                              textAlign: 'center',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }} title={dexName}>
+                              {dexShort || '—'}
+                            </span>
+
+                            {/* Wallet address */}
+                            <span
+                              onClick={() => wallet !== 'Unknown' && setSelectedWallet(wallet)}
+                              style={{
                                 fontSize: '11px',
-                                padding: '2px 6px',
-                                borderRadius: '4px',
-                                backgroundColor: tx.type === 'SWAP' ? 'rgba(76, 175, 80, 0.2)' : 'rgba(33, 150, 243, 0.2)',
-                                color: tx.type === 'SWAP' ? '#4CAF50' : '#2196F3'
-                              }}>
-                                {tx.type}
-                              </span>
-                            </div>
-                            <div className="tx-time-col">
-                              <a 
-                                href={`https://solscan.io/tx/${tx.signature}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="tx-link"
-                                title="View on Solscan"
-                                style={{ fontSize: '11px', color: '#999' }}
-                              >
-                                {new Date(tx.timestamp).toLocaleTimeString()}
-                                <span className="external-icon" style={{ marginLeft: '4px' }}>↗</span>
-                              </a>
-                            </div>
-                          </div>
-                          
-                          {/* Second Row: Program + Amount + Error */}
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: '#999' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              {tx.program && tx.program !== 'Unknown' && (
-                                <span style={{ color: '#FFB74D' }}>
-                                  📊 {tx.program}
-                                </span>
-                              )}
-                              {tx.amount && (
-                                <span style={{ color: '#66BB6A' }}>
-                                  💰 {tx.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                                </span>
-                              )}
-                            </div>
-                            {tx.err && (
-                              <span className="tx-error-badge" style={{ 
+                                color: '#4FC3F7',
+                                cursor: wallet !== 'Unknown' ? 'pointer' : 'default',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                              }}
+                              title={wallet}
+                            >
+                              {wallet !== 'Unknown' ? `${wallet.substring(0, 4)}...${wallet.substring(wallet.length - 4)}` : 'Unknown'}
+                            </span>
+
+                            {/* SOL amount */}
+                            <span style={{
+                              fontSize: '11px',
+                              fontWeight: '600',
+                              color: sideColor,
+                              textAlign: 'right',
+                              fontFamily: 'monospace',
+                            }}>
+                              {solAmt > 0 ? `${solAmt < 0.01 ? solAmt.toFixed(4) : solAmt.toFixed(2)}` : '—'}
+                            </span>
+
+                            {/* Token amount */}
+                            <span style={{
+                              fontSize: '11px',
+                              color: 'rgba(255,255,255,0.6)',
+                              textAlign: 'right',
+                              fontFamily: 'monospace',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                            }}>
+                              {tokenAmt > 0 ? formatCompactNumber(tokenAmt) : '—'}
+                            </span>
+
+                            {/* Time + link */}
+                            <a
+                              href={`https://solscan.io/tx/${tx.signature}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{
                                 fontSize: '10px',
-                                padding: '2px 6px',
-                                borderRadius: '4px',
-                                backgroundColor: 'rgba(244, 67, 54, 0.2)',
-                                color: '#F44336'
-                              }}>
-                                Failed
-                              </span>
-                            )}
+                                color: 'rgba(255,255,255,0.35)',
+                                textAlign: 'right',
+                                textDecoration: 'none',
+                              }}
+                              title="View on Solscan"
+                            >
+                              {age}
+                            </a>
                           </div>
-                          
-                          {/* Third Row: Additional Wallets (if any) */}
-                          {tx.walletAddresses && tx.walletAddresses.length > 1 && (
-                            <div style={{ fontSize: '10px', color: '#666', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                              <span>Other wallets:</span>
-                              {tx.walletAddresses.slice(1, 4).map((addr, i) => (
-                                <span 
-                                  key={i}
-                                  onClick={() => setSelectedWallet(addr)}
-                                  style={{ 
-                                    cursor: 'pointer',
-                                    color: '#4FC3F7',
-                                    textDecoration: 'underline'
-                                  }}
-                                  title={addr}
-                                >
-                                  {addr.substring(0, 4)}...{addr.substring(addr.length - 4)}
-                                </span>
-                              ))}
-                              {tx.walletAddresses.length > 4 && (
-                                <span>+{tx.walletAddresses.length - 4} more</span>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      ))
+                        );
+                      })
                     )}
                   </div>
+
+                  {/* Connection status footer */}
+                  {txConnected && (
+                    <div style={{
+                      padding: '4px 10px',
+                      fontSize: '10px',
+                      color: 'rgba(255,255,255,0.3)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      borderTop: '1px solid rgba(255,255,255,0.06)',
+                    }}>
+                      <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', backgroundColor: '#4CAF50' }}></span>
+                      Live · {transactions.length} transactions
+                      {transactions[0]?.dex && ` · via ${transactions[0].dex}`}
+                    </div>
+                  )}
                 </div>
             )}
           </div>
@@ -2101,6 +2191,94 @@ const CoinCard = memo(({
       </div>
       </div> {/* Close coin-card-left-panel */}
 
+      {/* TikTok-style Action Buttons - Right side floating */}
+      <div className={`tiktok-action-buttons ${showActionButtons ? '' : 'collapsed'}`}>
+        {/* Favorite / Like */}
+        <button 
+          className={`tiktok-action-btn ${isFavorite ? 'active' : ''}`}
+          onClick={(e) => { e.stopPropagation(); onFavoriteToggle && onFavoriteToggle(coin); }}
+          title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+        >
+          <span className="tiktok-action-icon">
+            {isFavorite ? (
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="#ff2d55" stroke="#ff2d55" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            ) : (
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            )}
+          </span>
+          <span className="tiktok-action-label">Fave</span>
+        </button>
+
+        {/* Live Transactions */}
+        <button 
+          className={`tiktok-action-btn ${showLiveTransactions ? 'active' : ''}`}
+          onClick={(e) => { e.stopPropagation(); setShowLiveTransactions(prev => !prev); }}
+          title="Live Transactions"
+        >
+          <span className="tiktok-action-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          </span>
+          <span className="tiktok-action-label">Txns</span>
+        </button>
+
+        {/* Top Traders / PNL */}
+        <button 
+          className={`tiktok-action-btn ${showTopTraders ? 'active' : ''}`}
+          onClick={(e) => { e.stopPropagation(); setShowTopTraders(prev => !prev); }}
+          title="Top PNL Traders"
+        >
+          <span className="tiktok-action-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+          </span>
+          <span className="tiktok-action-label">PNL</span>
+        </button>
+
+        {/* Comments */}
+        <button 
+          className={`tiktok-action-btn ${showComments ? 'active' : ''}`}
+          onClick={(e) => { e.stopPropagation(); setShowComments(prev => !prev); }}
+          title="Comments"
+        >
+          <span className="tiktok-action-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          </span>
+          <span className="tiktok-action-label">{comments.length > 0 ? comments.length : 'Chat'}</span>
+        </button>
+
+        {/* Trade */}
+        <button 
+          className="tiktok-action-btn trade-btn"
+          onClick={(e) => { e.stopPropagation(); onTradeClick && onTradeClick(coin); }}
+          title="Trade this token"
+        >
+          <span className="tiktok-action-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          </span>
+          <span className="tiktok-action-label">Trade</span>
+        </button>
+
+        {/* Share / Copy Address */}
+        <button 
+          className="tiktok-action-btn"
+          onClick={(e) => { 
+            e.stopPropagation(); 
+            const addr = coin.mintAddress || coin.mint || coin.address || '';
+            if (addr) {
+              navigator.clipboard.writeText(addr);
+              // Brief visual feedback
+              e.currentTarget.classList.add('copied');
+              setTimeout(() => e.currentTarget.classList.remove('copied'), 1200);
+            }
+          }}
+          title="Copy token address"
+        >
+          <span className="tiktok-action-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          </span>
+          <span className="tiktok-action-label">Copy</span>
+        </button>
+      </div>
+
       {/* Right Panel - Desktop only chart container */}
       <div className="coin-card-right-panel" ref={rightPanelRef}>
         {/* Desktop: Chart renders here */}
@@ -2123,6 +2301,7 @@ const CoinCard = memo(({
           coin={coin}
           isActive={isExpanded && isVisible}
           isDesktopMode={false}
+          showPriceScale={isExpanded}
           onCrosshairMove={handleChartCrosshairMove}
           onFirstPriceUpdate={handleFirstPriceUpdate}
         />,
@@ -2325,6 +2504,232 @@ const CoinCard = memo(({
             borderRight: 'none',
             transform: 'rotate(45deg)'
           }}></div>
+        </div>,
+        document.body
+      )}
+
+      {/* ====== TIKTOK-STYLE BOTTOM SHEET: Live Transactions ====== */}
+      {showLiveTransactions && createPortal(
+        <div className="tiktok-sheet-overlay" onClick={() => setShowLiveTransactions(false)}>
+          <div className="tiktok-sheet" onClick={(e) => e.stopPropagation()}>
+            {/* Handle bar */}
+            <div className="tiktok-sheet-handle">
+              <div className="tiktok-sheet-handle-bar" />
+            </div>
+
+            {/* Header */}
+            <div className="tiktok-sheet-header">
+              <span className="tiktok-sheet-title">
+                {transactions.length} Transactions
+              </span>
+              <button className="tiktok-sheet-close" onClick={() => setShowLiveTransactions(false)}>✕</button>
+            </div>
+
+            {/* Status bar */}
+            <div className="tiktok-sheet-status">
+              <span className={`tiktok-sheet-dot ${txConnected ? 'live' : ''}`} />
+              {txConnected ? 'Live' : 'Connecting...'}
+              {transactions[0]?.dex && <span className="tiktok-sheet-dex">via {transactions[0].dex}</span>}
+            </div>
+
+            {/* Transaction list */}
+            <div className="tiktok-sheet-body">
+              {transactions.length === 0 ? (
+                <div className="tiktok-sheet-empty">
+                  <div style={{ fontSize: '32px', marginBottom: '8px' }}>📊</div>
+                  <div>Waiting for transactions...</div>
+                  <div style={{ fontSize: '12px', opacity: 0.5, marginTop: '4px' }}>
+                    {txConnected ? 'Monitoring live swaps' : 'Connecting to backend...'}
+                  </div>
+                </div>
+              ) : (
+                transactions.map((tx, index) => {
+                  const isBuy = tx.side === 'buy';
+                  const sideColor = isBuy ? '#4CAF50' : '#F44336';
+                  const wallet = tx.wallet || tx.feePayer || 'Unknown';
+                  const solAmt = tx.solAmount || 0;
+                  const tokenAmt = tx.tokenAmount || tx.amount || 0;
+                  const age = tx.timestamp ? getTimeAgo(tx.timestamp) : '';
+                  const dexName = tx.dex || '';
+                  const dexShort = dexName.replace(' V4', '').replace(' V2', '').replace(' V3', '').substring(0, 8);
+
+                  return (
+                    <div key={`${tx.signature}-${index}`} className="tiktok-tx-row">
+                      {/* Left: side indicator + wallet */}
+                      <div className="tiktok-tx-left">
+                        <span className="tiktok-tx-side" style={{ color: sideColor }}>
+                          {isBuy ? '● BUY' : '● SELL'}
+                        </span>
+                        <a
+                          className="tiktok-tx-wallet"
+                          href={`https://solscan.io/account/${wallet}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {wallet.substring(0, 4)}...{wallet.slice(-4)}
+                        </a>
+                        {dexShort && <span className="tiktok-tx-dex">{dexShort}</span>}
+                      </div>
+
+                      {/* Right: amounts + time */}
+                      <div className="tiktok-tx-right">
+                        <div className="tiktok-tx-amounts">
+                          {solAmt > 0 && (
+                            <span className="tiktok-tx-sol" style={{ color: sideColor }}>
+                              {solAmt < 0.01 ? solAmt.toFixed(4) : solAmt.toFixed(2)} SOL
+                            </span>
+                          )}
+                          {tokenAmt > 0 && (
+                            <span className="tiktok-tx-tokens">
+                              {formatCompactNumber(tokenAmt)} tokens
+                            </span>
+                          )}
+                        </div>
+                        <a
+                          className="tiktok-tx-time"
+                          href={`https://solscan.io/tx/${tx.signature}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {age}
+                        </a>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ====== TIKTOK-STYLE BOTTOM SHEET: Top PNL Traders ====== */}
+      {showTopTraders && createPortal(
+        <div className="tiktok-sheet-overlay" onClick={() => setShowTopTraders(false)}>
+          <div className="tiktok-sheet" onClick={(e) => e.stopPropagation()}>
+            {/* Handle bar */}
+            <div className="tiktok-sheet-handle">
+              <div className="tiktok-sheet-handle-bar" />
+            </div>
+
+            {/* Header */}
+            <div className="tiktok-sheet-header">
+              <span className="tiktok-sheet-title">🏆 Top PNL Traders</span>
+              <button className="tiktok-sheet-close" onClick={() => setShowTopTraders(false)}>✕</button>
+            </div>
+
+            {/* Top Traders content */}
+            <div className="tiktok-sheet-body">
+              <TopTradersList coinAddress={mintAddress} isExpanded={true} />
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ====== TIKTOK-STYLE BOTTOM SHEET: Comments ====== */}
+      {showComments && createPortal(
+        <div className="tiktok-sheet-overlay" onClick={() => setShowComments(false)}>
+          <div className="tiktok-sheet tiktok-sheet-comments" onClick={(e) => e.stopPropagation()}>
+            {/* Handle bar */}
+            <div className="tiktok-sheet-handle">
+              <div className="tiktok-sheet-handle-bar" />
+            </div>
+
+            {/* Header */}
+            <div className="tiktok-sheet-header">
+              <span className="tiktok-sheet-title">
+                💬 {comments.length} {comments.length === 1 ? 'Comment' : 'Comments'}
+              </span>
+              <button className="tiktok-sheet-close" onClick={() => setShowComments(false)}>✕</button>
+            </div>
+
+            {/* Comment input */}
+            <div className="tiktok-sheet-comment-input">
+              {walletConnected ? (
+                <form 
+                  className="tiktok-comment-form"
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    const textarea = e.target.querySelector('textarea');
+                    const text = textarea?.value?.trim();
+                    if (!text || !walletAddress) return;
+                    try {
+                      const response = await fetch(`${API_CONFIG.baseUrl}/api/comments`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          coinAddress: mintAddress,
+                          coinSymbol: coin.symbol || coin.name || '',
+                          walletAddress,
+                          comment: text,
+                        }),
+                      });
+                      if (response.ok) {
+                        textarea.value = '';
+                        // Refresh comments
+                        const res = await fetch(`${API_CONFIG.baseUrl}/api/comments/${mintAddress}`);
+                        if (res.ok) {
+                          const data = await res.json();
+                          setComments(data.comments || []);
+                        }
+                      }
+                    } catch (err) {
+                      console.error('Error posting comment:', err);
+                    }
+                  }}
+                >
+                  <textarea 
+                    className="tiktok-comment-textarea"
+                    placeholder="Share your thoughts..."
+                    maxLength={500}
+                    rows={1}
+                    onInput={(e) => {
+                      e.target.style.height = 'auto';
+                      e.target.style.height = Math.min(e.target.scrollHeight, 100) + 'px';
+                    }}
+                  />
+                  <button type="submit" className="tiktok-comment-send">↑</button>
+                </form>
+              ) : (
+                <div className="tiktok-comment-connect">
+                  🔒 Connect wallet to comment
+                </div>
+              )}
+            </div>
+
+            {/* Comments list */}
+            <div className="tiktok-sheet-body">
+              {comments.length === 0 ? (
+                <div className="tiktok-sheet-empty">
+                  <div style={{ fontSize: '32px', marginBottom: '8px' }}>💭</div>
+                  <div>No comments yet</div>
+                  <div style={{ fontSize: '12px', opacity: 0.5, marginTop: '4px' }}>
+                    Be the first to share your thoughts!
+                  </div>
+                </div>
+              ) : (
+                comments.map((comment) => (
+                  <div key={comment._id || comment.id} className="tiktok-comment-row">
+                    <div className="tiktok-comment-header">
+                      <span className="tiktok-comment-wallet">
+                        👛 {comment.walletAddress ? 
+                          `${comment.walletAddress.substring(0, 4)}..${comment.walletAddress.slice(-4)}` 
+                          : 'Anon'}
+                      </span>
+                      <span className="tiktok-comment-time">
+                        {comment.timestamp ? getTimeAgo(comment.timestamp) : ''}
+                      </span>
+                    </div>
+                    <div className="tiktok-comment-text">{comment.comment}</div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </div>,
         document.body
       )}

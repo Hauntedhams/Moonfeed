@@ -27,6 +27,7 @@ const dextrendingAutoRefresher = require('./dextrendingAutoRefresher');
 const JupiterTokenService = require('./jupiterTokenService');
 const JupiterDataService = require('./jupiterDataService');
 const TokenMetadataService = require('./tokenMetadataService');
+const solanaTransactionService = require('./solanaTransactionService');
 const walletRoutes = require('./routes/walletRoutes');
 const triggerRoutes = require('./routes/trigger');
 const searchRoutes = require('./routes/search');
@@ -1520,6 +1521,32 @@ app.get('/api/price/:mintAddress', async (req, res) => {
 // ========================================
 // API ROUTES
 // ========================================
+
+// TRANSACTIONS endpoint - Get recent transactions for a token using Solana RPC
+app.get('/api/transactions/:mintAddress', async (req, res) => {
+  try {
+    const { mintAddress } = req.params;
+    const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+    
+    if (!mintAddress) {
+      return res.status(400).json({ error: 'Missing mintAddress' });
+    }
+
+    console.log(`[API] Fetching ${limit} transactions for ${mintAddress.substring(0, 8)}...`);
+    
+    const transactions = await solanaTransactionService.getRecentTransactions(mintAddress, limit);
+    
+    res.json({
+      success: true,
+      mint: mintAddress,
+      count: transactions.length,
+      transactions,
+    });
+  } catch (error) {
+    console.error('[API] Transaction fetch error:', error.message);
+    res.status(500).json({ error: 'Failed to fetch transactions' });
+  }
+});
 
 // TOP TRADERS endpoint - Get top traders for a specific coin
 app.get('/api/top-traders/:coinAddress', async (req, res) => {

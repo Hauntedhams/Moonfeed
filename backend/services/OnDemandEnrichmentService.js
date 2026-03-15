@@ -214,6 +214,22 @@ class OnDemandEnrichmentService {
         console.log(`✅ Phase 1: DexScreener applied (${Date.now() - startTime}ms)`);
       }
 
+      // 🆕 FALLBACK: If DexScreener has no data, try GeckoTerminal for pool address
+      // This is critical for Moonshot-launched coins that DexScreener doesn't index
+      if (!hasDexScreenerData) {
+        console.log(`⚠️ DexScreener has no data for ${coin.symbol || mintAddress}, trying GeckoTerminal fallback...`);
+        try {
+          const geckoPoolData = await this.fetchGeckoTerminalPool(mintAddress);
+          if (geckoPoolData) {
+            Object.assign(enrichedData, geckoPoolData);
+            hasDexScreenerData = true; // Treat GeckoTerminal data like DexScreener data
+            console.log(`✅ GeckoTerminal fallback applied for ${coin.symbol}: pool=${geckoPoolData.pairAddress} (${Date.now() - startTime}ms)`);
+          }
+        } catch (geckoError) {
+          console.warn(`⚠️ GeckoTerminal fallback also failed for ${coin.symbol}:`, geckoError.message);
+        }
+      }
+
       // 🌙 Apply Moonshot metadata (high priority for images)
       if (moonshotResult.status === 'fulfilled' && moonshotResult.value) {
         const moonshotData = moonshotResult.value;
@@ -285,11 +301,11 @@ class OnDemandEnrichmentService {
       // Priority: coin.price_usd (Jupiter) > enrichedData.price_usd (DexScreener)
       const livePrice = coin.price_usd || coin.priceUsd || coin.price || enrichedData.price_usd;
       
-      // 🌙 MOONFEED SPECIAL HANDLING: For coins without DEX data (pre-bonding curve)
+      // 🌙 MOONFEED SPECIAL HANDLING: For coins without ANY DEX data (pre-bonding curve)
+      // Note: $MOO and other Moonshot coins should have data via GeckoTerminal fallback now
       const isMoonfeedNative = !hasDexScreenerData && (
         coin.source === 'moonfeed' || 
-        coin.isMoonfeedNative ||
-        mintAddress === 'FeqAiLPejhkTJ2nEiCCL7JdtJkZdPNTYSm8vAjrZmoon' // $MOO token
+        coin.isMoonfeedNative
       );
       
       if (isMoonfeedNative) {
@@ -608,6 +624,92 @@ class OnDemandEnrichmentService {
       return null;
     } catch (error) {
       console.warn(`⚠️ DexScreener failed for ${mintAddress}:`, error.message);
+      return null;
+    }
+  }
+
+  /**
+   * Fetch pool data from GeckoTerminal as fallback when DexScreener has no data
+   * This covers Moonshot-launched tokens and other coins not indexed by DexScreener
+   */
+  async fetchGeckoTerminalPool(mintAddress) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    try {
+      const response = await fetch(
+        `https://api.geckoterminal.com/api/v2/networks/solana/tokens/${mintAddress}/pools?page=1`,
+        {
+          headers: {
+            'Accept': 'application/json',
+            'User-Agent': 'Moonfeed/1.0'
+          },
+          signal: controller.signal,
+          agent: getAgent('https://api.geckoterminal.com')
+        }
+      );
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`GeckoTerminal API returned ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (!data.data || data.data.length === 0) {
+        console.log(`⚠️ GeckoTerminal has no pools for ${mintAddress}`);
+        return null;
+      }
+
+      // Pick the pool with the highest reserve (liquidity)
+      const bestPool = data.data.reduce((best, current) => {
+        const currentReserve = parseFloat(current.attributes?.reserve_in_usd || '0');
+        const bestReserve = parseFloat(best.attributes?.reserve_in_usd || '0');
+        return currentReserve > bestReserve ? current : best;
+      });
+
+      const attrs = bestPool.attributes;
+      if (!attrs) return null;
+
+      const poolAddress = attrs.address;
+      console.log(`✅ GeckoTerminal found pool for ${mintAddress}: ${poolAddress} (${attrs.name})`);
+      console.log(`   Reserve: $${attrs.reserve_in_usd}, Price: $${attrs.base_token_price_usd}`);
+
+      // Parse price changes
+      const priceChange = {};
+      if (attrs.price_change_percentage) {
+        priceChange.m5 = parseFloat(attrs.price_change_percentage.m5 || '0');
+        priceChange.h1 = parseFloat(attrs.price_change_percentage.h1 || '0');
+        priceChange.h6 = parseFloat(attrs.price_change_percentage.h6 || '0');
+        priceChange.h24 = parseFloat(attrs.price_change_percentage.h24 || '0');
+      }
+
+      return {
+        pairAddress: poolAddress,
+        poolAddress: poolAddress,
+        price_usd: parseFloat(attrs.base_token_price_usd || '0'),
+        priceUsd: parseFloat(attrs.base_token_price_usd || '0'),
+        liquidity_usd: parseFloat(attrs.reserve_in_usd || '0'),
+        liquidity: { usd: parseFloat(attrs.reserve_in_usd || '0') },
+        volume_24h_usd: parseFloat(attrs.volume_usd?.h24 || '0'),
+        volume24h: parseFloat(attrs.volume_usd?.h24 || '0'),
+        priceChange24h: priceChange.h24 || 0,
+        change_24h: priceChange.h24 || 0,
+        change24h: priceChange.h24 || 0,
+        priceChange,
+        priceChanges: priceChange,
+        fdv: parseFloat(attrs.fdv_usd || '0'),
+        marketCap: parseFloat(attrs.market_cap_usd || '0'),
+        market_cap_usd: parseFloat(attrs.market_cap_usd || '0'),
+        buys24h: attrs.transactions?.h24?.buys || 0,
+        sells24h: attrs.transactions?.h24?.sells || 0,
+        created_timestamp: attrs.pool_created_at,
+        dexscreenerUrl: `https://dexscreener.com/solana/${poolAddress}`,
+        enrichmentSource: 'geckoterminal'
+      };
+    } catch (error) {
+      clearTimeout(timeoutId);
+      const reason = error.name === 'AbortError' ? 'timeout' : error.message;
+      console.warn(`⚠️ GeckoTerminal pool lookup failed for ${mintAddress}: ${reason}`);
       return null;
     }
   }
