@@ -7,8 +7,6 @@ import './TwelveDataChart.css';
 const BACKEND_API = import.meta.env.PROD 
   ? 'https://api.moonfeed.app'
   : 'http://localhost:3001';
-const SOLANASTREAM_API_KEY = '011b8a15bb61a3cd81bfa19fd7a52ea3';
-const SOLANASTREAM_WS = `wss://api.solanastreaming.com/v1/stream?apiKey=${SOLANASTREAM_API_KEY}`;
 const PRICE_UPDATE_INTERVAL = 3000; // Poll for price updates every 3 seconds (fallback only — WebSocket is primary)
 
 // Client-side cache for chart data (shared across all chart instances)
@@ -48,9 +46,8 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, showPr
   const [chartInitialized, setChartInitialized] = useState(false); // Track when chart is fully initialized
   const [tooltipData, setTooltipData] = useState(null); // Track tooltip data for click/hover display
 
-  // Extract pairAddress for historical data and tokenMint for real-time subscription
-  // IMPORTANT: Don't fall back to coin.address here — it's often the mint address, not a pool address.
-  // Using a mint address as pairAddress causes GeckoTerminal 404 errors.
+  // Extract pairAddress for advanced Dexscreener embed, and tokenMint for chart data + real-time subscription
+  // Our chart data now comes from Helius RPC via /api/chart-data/:mintAddress — no GeckoTerminal needed.
   const pairAddress = coin?.pairAddress || 
                       coin?.poolAddress || 
                       coin?.ammAccount ||
@@ -456,7 +453,8 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, showPr
     }
   };
 
-  // Timeframe configuration for GeckoTerminal API
+  // Timeframe configuration — used for bucket intervals and UI labels
+  // Backend handles the actual data bucketing via Helius RPC
   const TIMEFRAME_CONFIG = {
     'tick': { timeframe: 'minute', aggregate: 1, limit: 100, label: 'Tick', intervalSeconds: 5 }, // 5-second "tick" buckets — every trade creates visible movement
     '1m': { timeframe: 'minute', aggregate: 1, limit: 100, label: '1m', intervalSeconds: 60 },
@@ -468,256 +466,157 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, showPr
   };
 
   // Check if this is a Moonfeed-native coin (not on DEX yet)
+  // NOTE: With the unified Helius RPC backend, this is mainly used for UI messaging.
+  // All coins with a mint address get chart data from on-chain swaps.
   const isMoonfeedNative = () => {
-    // Only treat as "native" if it truly has no DEX pool data
-    // If pairAddress or poolAddress exists (from DexScreener or GeckoTerminal), use normal chart flow
     if (coin?.pairAddress || coin?.poolAddress) return false;
-    
     return coin?.source === 'moonfeed' || 
            coin?.isMoonfeedNative || 
-           (!coin?.poolAddress && !coin?.pairAddress && coin?.mintAddress); // Has mint but no DEX pair
+           (!coin?.poolAddress && !coin?.pairAddress && coin?.mintAddress);
   };
 
-  // Fetch historical OHLCV data from GeckoTerminal via backend proxy
-  const fetchHistoricalData = async (poolAddress, timeframeKey = '5m') => {
+  // Fetch chart data from our unified backend endpoint (Helius RPC — no GeckoTerminal)
+  const fetchHistoricalData = async (_unused, timeframeKey = '5m') => {
     const config = TIMEFRAME_CONFIG[timeframeKey];
     if (!config) {
       throw new Error(`Invalid timeframe: ${timeframeKey}`);
     }
 
-    const { timeframe, aggregate, limit } = config;
-    const cacheKey = `${poolAddress}-${timeframeKey}`;
+    // Use tokenMint (mint address) — our backend works with ANY mint, no pool address needed
+    const mint = tokenMint;
+    if (!mint) {
+      console.warn('⚠️ No mint address available for chart data fetch');
+      return [];
+    }
+
+    const cacheKey = `${mint}-${timeframeKey}`;
     const now = Date.now();
-    
+
     // 🚀 OPTIMIZATION: Check if coin already has preloaded chart data from backend
     if (coin?.chartData && timeframeKey === '1m' && Array.isArray(coin.chartData)) {
       console.log(`📦 Using preloaded chart data for ${coin.symbol} (${coin.chartData.length} candles)`);
-      
-      // Convert preloaded OHLCV to chart format
+
       const chartData = coin.chartData.map(candle => ({
         time: candle[0],
         value: parseFloat(candle[4]) // Close price
       })).sort((a, b) => a.time - b.time);
-      
-      // Cache it for future timeframe changes
+
       chartDataCache.set(cacheKey, { data: chartData, timestamp: now });
-      
       return chartData;
     }
-    
-    // 🌙 MOONFEED FALLBACK: For coins not on DEX yet, create chart from current price
-    if (isMoonfeedNative()) {
-      console.log('🌙 Moonfeed-native coin detected, using RPC price data');
-      
-      // Check if we have a current price from the coin object
-      const currentPrice = coin?.priceUsd || coin?.price || coin?.baseTokenPrice;
-      
-      if (currentPrice && !isNaN(currentPrice)) {
-        console.log(`💰 Using current price: $${currentPrice}`);
-        
-        // Create a simple flat chart showing current price over last hour
-        // This will update live via WebSocket
-        const currentTime = Math.floor(Date.now() / 1000);
-        const intervalSeconds = config.intervalSeconds || 300;
-        const numPoints = Math.min(limit, 12); // 12 points for 1 hour at 5min intervals
-        
-        const chartData = [];
-        for (let i = numPoints - 1; i >= 0; i--) {
-          chartData.push({
-            time: currentTime - (i * intervalSeconds),
-            value: parseFloat(currentPrice)
-          });
-        }
-        
-        console.log(`📊 Created ${chartData.length} data points from current price`);
-        chartDataCache.set(cacheKey, { data: chartData, timestamp: now });
-        
-        return chartData;
-      } else {
-        console.warn('⚠️ No price data available for Moonfeed coin');
-        // Return empty array to show placeholder
-        return [];
-      }
-    }
-    
-    // Check cache first
+
+    // Check client-side cache first
     const cachedData = chartDataCache.get(cacheKey);
     if (cachedData && now - cachedData.timestamp < CHART_CACHE_DURATION) {
       console.log(`📊 ✅ Cache hit: ${cacheKey} (age: ${Math.round((now - cachedData.timestamp) / 1000)}s)`);
       return cachedData.data;
     }
 
-    // If no pool address available (and not handled by preloaded/moonfeed fallback above), return empty
-    if (!poolAddress) {
-      console.warn('⚠️ No pool address available for chart data fetch');
-      return [];
-    }
-    
     // Check if there's already a pending fetch for this data
     if (pendingFetches.has(cacheKey)) {
-      console.log(`📊 � Deduplicating fetch: ${cacheKey}`);
+      console.log(`📊 Deduplicating fetch: ${cacheKey}`);
       return pendingFetches.get(cacheKey);
     }
-    
+
     // Create the fetch promise
     const fetchPromise = (async () => {
       try {
-        // Use backend proxy to avoid CORS errors
-        const url = `${BACKEND_API}/api/geckoterminal/ohlcv/solana/${poolAddress}/${timeframe}?aggregate=${aggregate}&limit=${limit}`;
-        
-        console.log('📊 Fetching historical data:', { timeframeKey, timeframe, aggregate, limit });
-        
+        const url = `${BACKEND_API}/api/chart-data/${mint}?timeframe=${timeframeKey}`;
+
+        console.log('📊 Fetching chart data from Helius RPC:', { mint: mint.substring(0, 8), timeframeKey });
+
         const response = await fetch(url);
+
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-          
-          // Special handling for 404 (coin not on DEX yet) - likely a Moonfeed coin
-          if (response.status === 404 || errorData.status === 404 || errorData.error?.includes('404 Not Found')) {
-            console.warn('⚠️ Coin not found on GeckoTerminal (likely pre-DEX Moonfeed coin)');
-            
-            // Try Moonfeed fallback
-            const fallbackData = await fetchHistoricalData(poolAddress, timeframeKey);
-            if (fallbackData && fallbackData.length > 0) {
-              return fallbackData;
-            }
-            
-            // Return empty to show friendly message
-            console.log('💤 No data available yet for this coin');
+
+          if (response.status === 404) {
+            console.log('💤 No chart data available yet for this token');
             return [];
           }
-          
-          // Special handling for rate limiting or service unavailable
-          if (response.status === 429 || response.status === 503 || errorData.status === 429 || errorData.status === 403) {
-            console.warn('⚠️ API temporarily unavailable (status:', response.status, ')');
-            
-            // Check if we have cached data for this coin
+
+          if (response.status === 429 || response.status === 503) {
+            console.warn('⚠️ Backend temporarily unavailable (status:', response.status, ')');
+            // Return stale cache if available
             if (cachedData) {
               console.log('📦 Using stale cached data (age:', Math.round((now - cachedData.timestamp) / 60000), 'min)');
               return cachedData.data;
             }
-            
-            // No cache available - return empty array to show placeholder
-            // Don't throw error, just defer loading
-            console.log('💤 No cache available, chart will retry when scrolled to');
-            return []; // Return empty array instead of throwing
+            return [];
           }
-          
-          console.error('❌ Backend proxy error:', response.status, errorData);
-          throw new Error(`Backend proxy error: ${response.status} - ${errorData.error || response.statusText}`);
+
+          console.error('❌ Chart data error:', response.status, errorData);
+          throw new Error(`Chart data error: ${response.status} - ${errorData.error || response.statusText}`);
         }
-        
+
         const data = await response.json();
-        
-        // Enhanced validation with better error messages
-        if (!data) {
-          throw new Error('No data received from backend');
+
+        if (!data?.success || !Array.isArray(data.data) || data.data.length === 0) {
+          console.warn('⚠️ No chart data in response');
+          return [];
         }
-        
-        if (!data.data) {
-          console.error('❌ Missing data.data in response:', data);
-          throw new Error('Invalid response structure: missing data object');
-        }
-        
-        if (!data.data.attributes) {
-          console.error('❌ Missing data.data.attributes in response:', data);
-          throw new Error('Invalid response structure: missing attributes');
-        }
-        
-        if (!data.data.attributes.ohlcv_list || !Array.isArray(data.data.attributes.ohlcv_list)) {
-          console.error('❌ Missing or invalid ohlcv_list in response:', data.data.attributes);
-          throw new Error('Invalid response structure: missing or invalid ohlcv_list');
-        }
-        
-        if (data.data.attributes.ohlcv_list.length === 0) {
-          throw new Error('No OHLCV data available for this pool');
-        }
-        
-        // Convert OHLCV to line chart data (using close prices)
-        const chartData = data.data.attributes.ohlcv_list.map((candle, index) => {
-          if (!Array.isArray(candle) || candle.length < 5) {
-            console.error(`❌ Invalid candle format at index ${index}:`, candle);
-            throw new Error(`Invalid candle data at index ${index}`);
-          }
-          
-          return {
-            time: candle[0], // Unix timestamp
-            value: parseFloat(candle[4]), // Close price
-          };
-        });
-        
-        // CRITICAL: Ensure data is sorted in ascending order by timestamp
-        // The chart library requires strictly ascending time order
-        chartData.sort((a, b) => a.time - b.time);
-        
-        // Validate that data is now properly sorted
+
+        // Data comes pre-sorted from backend as { time, value } — exactly what lightweight-charts needs
+        const chartData = data.data;
+
+        // Remove duplicate timestamps (safety check)
         for (let i = 1; i < chartData.length; i++) {
           if (chartData[i].time <= chartData[i - 1].time) {
-            console.error('❌ Duplicate or out-of-order timestamps detected:', {
-              index: i,
-              prev: { time: chartData[i - 1].time, date: new Date(chartData[i - 1].time * 1000).toISOString() },
-              current: { time: chartData[i].time, date: new Date(chartData[i].time * 1000).toISOString() }
-            });
-            // Remove duplicate timestamp entries
             chartData.splice(i, 1);
-            i--; // Recheck this index
+            i--;
           }
         }
-        
-        console.log('✅ Historical data fetched:', chartData.length, 'candles');
+
+        console.log('✅ Chart data fetched:', chartData.length, 'candles from', data.source);
         if (chartData.length > 0) {
-          console.log('   Time range:', 
-            new Date(chartData[0].time * 1000).toLocaleTimeString(), 
-            '→', 
+          console.log('   Time range:',
+            new Date(chartData[0].time * 1000).toLocaleTimeString(),
+            '→',
             new Date(chartData[chartData.length - 1].time * 1000).toLocaleTimeString()
           );
         }
-        
+
         // Cache the fetched data
         chartDataCache.set(cacheKey, { data: chartData, timestamp: Date.now() });
-        
+
         // Clean up old cache entries (keep last 100)
         if (chartDataCache.size > 100) {
           const firstKey = chartDataCache.keys().next().value;
           chartDataCache.delete(firstKey);
         }
-        
+
         return chartData;
       } catch (err) {
-        console.error('❌ Error fetching historical data:', err);
+        console.error('❌ Error fetching chart data:', err);
         throw err;
       } finally {
-        // Always remove from pending fetches
         pendingFetches.delete(cacheKey);
       }
     })();
-    
+
     // Store the promise to deduplicate concurrent requests
     pendingFetches.set(cacheKey, fetchPromise);
     return fetchPromise;
   };
 
-  // Fetch latest price from GeckoTerminal via backend proxy
-  const fetchLatestPrice = async (poolAddress) => {
+  // Fetch latest price from our unified backend (Helius RPC — no GeckoTerminal)
+  const fetchLatestPrice = async () => {
     try {
-      // Use backend proxy to avoid CORS errors
-      const url = `${BACKEND_API}/api/geckoterminal/pool/solana/${poolAddress}`;
-      
+      const mint = tokenMint;
+      if (!mint) return null;
+
+      const url = `${BACKEND_API}/api/chart-data/${mint}?timeframe=tick`;
+
       const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`Backend proxy error: ${response.status}`);
-      }
-      
+      if (!response.ok) return null;
+
       const data = await response.json();
-      
-      if (!data?.data?.attributes?.base_token_price_usd) {
-        console.warn('No price data in response');
-        return null;
-      }
-      
-      const price = parseFloat(data.data.attributes.base_token_price_usd);
-      const timestamp = Math.floor(Date.now() / 1000);
-      
-      return { price, timestamp };
+
+      if (!data?.success || !Array.isArray(data.data) || data.data.length === 0) return null;
+
+      // Use the last candle's value as the current price
+      const lastCandle = data.data[data.data.length - 1];
+      return { price: lastCandle.value, timestamp: lastCandle.time };
     } catch (err) {
       console.error('Error fetching latest price:', err);
       return null;
@@ -726,10 +625,9 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, showPr
 
   // Initialize chart and load data (only once)
   useEffect(() => {
-    // Initialize chart when pairAddress is available (works in both collapsed and expanded views)
-    // Skip initialization if in advanced mode or chart already exists
-    // ALSO allow initialization for Moonfeed-native coins that have a price but no DEX pair
-    const canInitialize = pairAddress || isMoonfeedNative();
+    // Initialize chart when tokenMint is available (works for ALL coins — no pairAddress needed)
+    // Our backend uses Helius RPC directly with mint addresses
+    const canInitialize = tokenMint || pairAddress || isMoonfeedNative();
     if (!canInitialize || chartRef.current || showAdvanced) return;
     
     let mounted = true;
@@ -985,11 +883,11 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, showPr
           }, 100);
         });
 
-        console.log('✅ Chart created, fetching historical data...');
+        console.log('✅ Chart created, fetching chart data from Helius RPC...');
         
-        // Fetch and set historical data
+        // Fetch and set historical data (uses tokenMint via backend — no pairAddress needed)
         setLoading(true);
-        let historicalData = await fetchHistoricalData(pairAddress, selectedTimeframe);
+        let historicalData = await fetchHistoricalData(null, selectedTimeframe);
         
         if (!mounted) return;
         
@@ -1007,7 +905,7 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, showPr
             if (fallbackTf === selectedTimeframe) continue; // Skip if already tried
             try {
               console.log(`📊 Trying ${fallbackTf} timeframe...`);
-              const fallbackData = await fetchHistoricalData(pairAddress, fallbackTf);
+              const fallbackData = await fetchHistoricalData(null, fallbackTf);
               if (fallbackData.length >= 3) {
                 console.log(`✅ Found ${fallbackData.length} candles at ${fallbackTf} timeframe`);
                 historicalData = fallbackData;
@@ -1021,33 +919,25 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, showPr
         
         if (!mounted) return;
         
-        // If no data available (API rate limited and no cache), show friendly message
+        // If no data available, show friendly message
         if (historicalData.length === 0) {
           console.log('📊 No data available yet');
           setLoading(false);
+          setError('📊 No trade data yet — chart will appear after first trades');
           
-          // Check if this is a Moonfeed coin
-          if (isMoonfeedNative()) {
-            // Show a friendly pre-launch message for Moonfeed coins without price
-            setError('🌙 Awaiting first trade - Chart will update live when trading begins');
-          } else {
-            setError('Chart data loading... Auto-retry in 5s');
-            
-            // Auto-retry after 5 seconds for regular DEX coins
-            setTimeout(() => {
-              if (mounted) {
-                console.log('🔄 Auto-retrying chart load...');
-                setError(null);
-                setShouldLoad(false);
-                // Re-trigger lazy load on next scroll
-                setTimeout(() => {
-                  if (mounted) {
-                    setShouldLoad(true);
-                  }
-                }, 100);
-              }
-            }, 5000);
-          }
+          // Auto-retry after 10 seconds
+          setTimeout(() => {
+            if (mounted) {
+              console.log('🔄 Auto-retrying chart load...');
+              setError(null);
+              setShouldLoad(false);
+              setTimeout(() => {
+                if (mounted) {
+                  setShouldLoad(true);
+                }
+              }, 100);
+            }
+          }, 10000);
           
           // Clean up chart since we can't display anything
           if (chartRef.current) {
@@ -1158,7 +1048,7 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, showPr
         if (!wsConnected) {
           console.log('⚠️ WebSocket failed, using polling fallback');
           setUsePolling(true);
-          setupPricePolling(pairAddress, lineSeries);
+          setupPricePolling(lineSeries);
         } else {
           console.log('✅ RPC WebSocket connected successfully!');
         }
@@ -1367,11 +1257,11 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, showPr
       });
     };
 
-    const setupPricePolling = (poolAddress, lineSeries) => {
+    const setupPricePolling = (lineSeries) => {
       console.log('🔄 Starting price polling (every', PRICE_UPDATE_INTERVAL / 1000, 'seconds)');
       
       const pollPrice = async () => {
-        const priceData = await fetchLatestPrice(poolAddress);
+        const priceData = await fetchLatestPrice();
         
         if (priceData && lineSeries) {
           const { price, timestamp } = priceData;
@@ -1428,7 +1318,7 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, showPr
       lineSeriesRef.current = null;
       setChartInitialized(false); // Reset initialization state
     };
-  }, [pairAddress, selectedTimeframe, shouldLoad, showAdvanced]); // Re-initialize if pairAddress, timeframe, shouldLoad, or showAdvanced changes
+  }, [tokenMint, pairAddress, selectedTimeframe, shouldLoad, showAdvanced]); // Re-initialize if tokenMint, pairAddress, timeframe, shouldLoad, or showAdvanced changes
 
   // 🔥 CRITICAL FIX: Separate effect for crosshair subscription to avoid stale callback
   // This effect runs whenever the chart is initialized or callback changes

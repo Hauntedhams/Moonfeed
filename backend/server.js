@@ -35,6 +35,7 @@ const affiliateRoutes = require('./routes/affiliates');
 const commentsRoutes = require('./routes/comments');
 const onDemandEnrichment = require('./services/OnDemandEnrichmentService');
 const geckoTerminalService = require('./geckoTerminalService');
+const chartDataService = require('./chartDataService');
 const { getJupiterReferralService } = require('./services/jupiterReferralService');
 
 const app = express();
@@ -248,6 +249,51 @@ app.get('/api/jupiter/referral/link/:tokenMint', (req, res) => {
 
 // ═══════════════════════════════════════════════════════════════
 
+// 📊 Unified Chart Data endpoint — Helius RPC (no GeckoTerminal dependency)
+// Works for ANY token with a mint address, across ALL feeds
+app.get('/api/chart-data/:mintAddress', async (req, res) => {
+  try {
+    const { mintAddress } = req.params;
+    const { timeframe = '5m' } = req.query;
+
+    if (!mintAddress || mintAddress.length < 30) {
+      return res.status(400).json({ error: 'Invalid mint address' });
+    }
+
+    const result = await chartDataService.getChartData(mintAddress, timeframe);
+
+    if (!result.data || result.data.length === 0) {
+      return res.status(404).json({
+        error: 'No chart data available yet',
+        source: result.source,
+        mintAddress,
+        timeframe,
+      });
+    }
+
+    res.json({
+      success: true,
+      data: result.data,
+      source: result.source,
+      pricePoints: result.pricePoints,
+      solPriceUsd: result.solPriceUsd,
+      candles: result.data.length,
+      timeframe,
+      mintAddress,
+      timestamp: new Date().toISOString(),
+    });
+
+  } catch (error) {
+    console.error(`❌ [ChartData] Error for ${req.params.mintAddress}:`, error.message);
+    res.status(500).json({
+      error: 'Failed to fetch chart data',
+      details: error.message,
+    });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+
 // 📊 GeckoTerminal Historical Price Data endpoint
 app.get('/api/coins/:tokenAddress/historical-prices', async (req, res) => {
   try {
@@ -316,6 +362,112 @@ const GECKO_STALE_CACHE_MAX = 24 * 60 * 60 * 1000; // Use stale cache up to 24 h
 
 // Request deduplication - prevent multiple simultaneous requests to same endpoint
 const pendingGeckoRequests = new Map();
+
+// ─── Pool Address Resolver ───────────────────────────────────────
+// Many feeds (trending, new, graduating) only have a mintAddress but no
+// pairAddress / poolAddress.  The chart needs a pool address to fetch OHLCV
+// data from GeckoTerminal.  This resolver looks up the top pool for a mint
+// via DexScreener's token endpoint and caches the result for 2 hours.
+const poolAddressCache = new Map(); // mintAddress -> { poolAddress, timestamp }
+const POOL_CACHE_TTL = 2 * 60 * 60 * 1000; // 2 hours
+const pendingPoolLookups = new Map(); // dedup concurrent lookups
+
+/**
+ * Resolve the best pool/pair address for a given mint address.
+ * Uses DexScreener token endpoint (already proven in fetchDexscreenerTrendingBatch).
+ * Returns the pairAddress of the highest-liquidity Solana pool, or null.
+ */
+async function resolvePoolAddress(mintAddress) {
+  if (!mintAddress) return null;
+
+  // Check cache
+  const cached = poolAddressCache.get(mintAddress);
+  if (cached && Date.now() - cached.timestamp < POOL_CACHE_TTL) {
+    return cached.poolAddress;
+  }
+
+  // Dedup concurrent lookups for the same mint
+  if (pendingPoolLookups.has(mintAddress)) {
+    return pendingPoolLookups.get(mintAddress);
+  }
+
+  const lookupPromise = (async () => {
+    try {
+      const fetch = require('node-fetch');
+      const resp = await fetch(
+        `https://api.dexscreener.com/latest/dex/tokens/${mintAddress}`,
+        { headers: { 'User-Agent': 'Moonfeed/1.0' }, timeout: 8000 }
+      );
+      if (!resp.ok) return null;
+
+      const data = await resp.json();
+      if (!data.pairs || data.pairs.length === 0) return null;
+
+      // Pick the Solana pair with the highest liquidity
+      const solanaPairs = data.pairs.filter(p => p.chainId === 'solana');
+      if (solanaPairs.length === 0) return null;
+
+      solanaPairs.sort((a, b) =>
+        (parseFloat(b.liquidity?.usd) || 0) - (parseFloat(a.liquidity?.usd) || 0)
+      );
+
+      const bestPool = solanaPairs[0].pairAddress || null;
+
+      // Cache result (even null to avoid re-fetching)
+      poolAddressCache.set(mintAddress, { poolAddress: bestPool, timestamp: Date.now() });
+
+      // Evict oldest entries if cache grows too large
+      if (poolAddressCache.size > 2000) {
+        const oldest = poolAddressCache.keys().next().value;
+        poolAddressCache.delete(oldest);
+      }
+
+      return bestPool;
+    } catch (err) {
+      console.warn(`[PoolResolver] Failed for ${mintAddress.substring(0, 8)}:`, err.message);
+      return null;
+    } finally {
+      pendingPoolLookups.delete(mintAddress);
+    }
+  })();
+
+  pendingPoolLookups.set(mintAddress, lookupPromise);
+  return lookupPromise;
+}
+
+/**
+ * Batch-resolve pool addresses for an array of coins that are missing pairAddress.
+ * Processes in batches of 5 with a 300ms delay to stay under DexScreener rate limits.
+ * Mutates the coin objects in place (adds pairAddress + poolAddress).
+ */
+async function resolvePoolAddressesForCoins(coins) {
+  const needsLookup = coins.filter(c => !c.pairAddress && !c.poolAddress && c.mintAddress);
+  if (needsLookup.length === 0) return;
+
+  const BATCH = 5;
+  let resolved = 0;
+
+  for (let i = 0; i < needsLookup.length; i += BATCH) {
+    const batch = needsLookup.slice(i, i + BATCH);
+
+    await Promise.all(batch.map(async (coin) => {
+      const pool = await resolvePoolAddress(coin.mintAddress);
+      if (pool) {
+        coin.pairAddress = pool;
+        coin.poolAddress = pool;
+        resolved++;
+      }
+    }));
+
+    // Small delay between batches
+    if (i + BATCH < needsLookup.length) {
+      await new Promise(r => setTimeout(r, 300));
+    }
+  }
+
+  console.log(`[PoolResolver] Resolved ${resolved}/${needsLookup.length} pool addresses`);
+}
+// ─────────────────────────────────────────────────────────────────
 
 /**
  * 📊 Preload chart data for multiple coins in batches
@@ -1712,7 +1864,20 @@ app.get('/api/coins/new', async (req, res) => {
     // Apply live Jupiter prices before returning
     const coinsWithLivePrices = applyLivePrices(limitedCoins);
     
-    // 📊 Preload chart data in background (DON'T WAIT - let response return immediately)
+    // � Resolve pool addresses for coins missing pairAddress (top 10 eagerly, rest in background)
+    const EAGER_RESOLVE_NEW = 10;
+    const newNeedingPools = coinsWithLivePrices.filter(c => !c.pairAddress && !c.poolAddress && c.mintAddress);
+    if (newNeedingPools.length > 0) {
+      console.log(`🔗 Resolving pool addresses for ${newNeedingPools.length} new coins (${EAGER_RESOLVE_NEW} eagerly)...`);
+      await resolvePoolAddressesForCoins(newNeedingPools.slice(0, EAGER_RESOLVE_NEW));
+      if (newNeedingPools.length > EAGER_RESOLVE_NEW) {
+        resolvePoolAddressesForCoins(newNeedingPools.slice(EAGER_RESOLVE_NEW)).catch(err =>
+          console.warn('⚠️ Background pool resolution error:', err.message)
+        );
+      }
+    }
+    
+    // �📊 Preload chart data in background (DON'T WAIT - let response return immediately)
     console.log(`📊 Starting background chart preload for ${coinsWithLivePrices.length} coins...`);
     preloadChartData(coinsWithLivePrices, {
       batchSize: 3, // Process 3 at a time
@@ -1862,7 +2027,21 @@ app.get('/api/coins/trending', async (req, res) => {
     // Apply live Jupiter prices before returning
     const coinsWithLivePrices = applyLivePrices(limitedCoins);
     
-    // 📊 Preload chart data in background (DON'T WAIT - let response return immediately)
+    // � Resolve pool addresses for coins missing pairAddress (top 10 eagerly, rest in background)
+    // This is critical for chart loading — without pairAddress the chart can't fetch OHLCV data
+    const EAGER_RESOLVE_TRENDING = 10;
+    const trendingNeedingPools = coinsWithLivePrices.filter(c => !c.pairAddress && !c.poolAddress && c.mintAddress);
+    if (trendingNeedingPools.length > 0) {
+      console.log(`🔗 Resolving pool addresses for ${trendingNeedingPools.length} trending coins (${EAGER_RESOLVE_TRENDING} eagerly)...`);
+      await resolvePoolAddressesForCoins(trendingNeedingPools.slice(0, EAGER_RESOLVE_TRENDING));
+      if (trendingNeedingPools.length > EAGER_RESOLVE_TRENDING) {
+        resolvePoolAddressesForCoins(trendingNeedingPools.slice(EAGER_RESOLVE_TRENDING)).catch(err =>
+          console.warn('⚠️ Background pool resolution error:', err.message)
+        );
+      }
+    }
+    
+    // �📊 Preload chart data in background (DON'T WAIT - let response return immediately)
     console.log(`📊 Starting background chart preload for ${coinsWithLivePrices.length} coins...`);
     preloadChartData(coinsWithLivePrices, {
       batchSize: 3, // Process 3 at a time
