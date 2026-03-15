@@ -545,6 +545,13 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, showPr
             return [];
           }
 
+          // For 500 errors, log but don't throw — treat as "no data yet"
+          if (response.status === 500) {
+            console.warn('⚠️ Backend error (500) — will retry:', errorData.details || errorData.error);
+            if (cachedData) return cachedData.data;
+            return [];
+          }
+
           console.error('❌ Chart data error:', response.status, errorData);
           throw new Error(`Chart data error: ${response.status} - ${errorData.error || response.statusText}`);
         }

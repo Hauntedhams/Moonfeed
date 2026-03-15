@@ -12,7 +12,7 @@ const axios = require('axios');
  *   3. No live subscriptions (frontend polls every 10s instead)
  */
 
-const HELIUS_API_KEY = process.env.HELIUS_API_KEY || process.env.HELIUS_KEY || '';
+const HELIUS_API_KEY = process.env.HELIUS_API_KEY || process.env.HELIUS_KEY || '05a97104-cba1-4284-aed6-e0ad21af8b33';
 const HELIUS_RPC = HELIUS_API_KEY 
   ? `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`
   : null;
