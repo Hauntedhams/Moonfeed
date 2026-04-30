@@ -1,80 +1,114 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
 /**
- * useSolanaTransactions — Simple hook for token transaction history.
+ * useSolanaTransactions — Live transaction stream via backend WebSocket.
  *
  * Strategy:
- *   1. On activate → fetch recent transactions via REST (fast, reliable).
- *   2. Optionally poll every 10s for new transactions.
- *   3. That's it. No extra WebSocket — keeps things simple.
+ *   1. Connect to backend /ws/price WebSocket.
+ *   2. Send `subscribe-txs` → backend replies with `tx-history` (recent swaps)
+ *      and registers the client on a shared Helius logsSubscribe stream.
+ *   3. Backend pushes `tx-new` whenever new confirmed swaps arrive (~200ms latency).
+ *   4. On deactivate → send `unsubscribe-txs` and close the WS.
  *
- * The REST endpoint hits the backend's solanaTransactionService which
- * caches results for 15s, so rapid re-fetches are cheap.
+ * Cost: ONE persistent Helius WS per unique token on the backend (shared across
+ * all clients watching the same token). No polling.
  */
 
-const BACKEND_API = import.meta.env.PROD
-  ? 'https://api.moonfeed.app'
-  : 'http://localhost:3001';
+const BACKEND_WS = import.meta.env.PROD
+  ? 'wss://api.moonfeed.app/ws/price'
+  : 'ws://localhost:3001/ws/price';
 
 export const useSolanaTransactions = (mintAddress, isActive) => {
   const [transactions, setTransactions] = useState([]);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState(null);
-  const pollRef = useRef(null);
+  const wsRef = useRef(null);
 
   const clearTransactions = useCallback(() => {
     setTransactions([]);
   }, []);
 
-  // Single fetch function — used on mount and for polling
-  const fetchTransactions = useCallback(async (mint, isInitial = false) => {
-    try {
-      const res = await fetch(`${BACKEND_API}/api/transactions/${mint}?limit=50`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-
-      if (data.success && Array.isArray(data.transactions)) {
-        setTransactions(prev => {
-          // On initial load, just set. On poll, merge new ones in front.
-          if (isInitial || prev.length === 0) return data.transactions;
-
-          // Merge: prepend any new txs (by signature) we don't already have
-          const existingSigs = new Set(prev.map(t => t.signature));
-          const newTxs = data.transactions.filter(t => !existingSigs.has(t.signature));
-          if (newTxs.length === 0) return prev; // no change
-          return [...newTxs, ...prev].slice(0, 50);
-        });
-        setIsConnected(true);
-        setError(null);
-      }
-    } catch (err) {
-      console.warn('[useSolanaTx] Fetch failed:', err.message);
-      // Only set error on initial load, not polling hiccups
-      if (isInitial) setError(err.message);
-    }
-  }, []);
-
   useEffect(() => {
     if (!mintAddress || !isActive) {
+      // Deactivate: send unsubscribe and close
+      if (wsRef.current) {
+        const ws = wsRef.current;
+        wsRef.current = null;
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'unsubscribe-txs', token: mintAddress }));
+        }
+        ws.close();
+      }
       setIsConnected(false);
-      clearInterval(pollRef.current);
-      pollRef.current = null;
       return;
     }
 
-    // 1. Fetch immediately
-    fetchTransactions(mintAddress, true);
+    const ws = new WebSocket(BACKEND_WS);
+    wsRef.current = ws;
 
-    // 2. Poll every 5s for new transactions (faster for live feel)
-    pollRef.current = setInterval(() => {
-      fetchTransactions(mintAddress, false);
-    }, 5000);
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: 'subscribe-txs', token: mintAddress }));
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        switch (msg.type) {
+          case 'tx-history':
+            // Initial batch of recent swaps
+            if (Array.isArray(msg.transactions)) {
+              setTransactions(msg.transactions);
+              setIsConnected(true);
+              setError(null);
+            }
+            break;
+
+          case 'txs-subscribed':
+            // Confirmed live subscription (no history yet = token is very new)
+            setIsConnected(true);
+            break;
+
+          case 'tx-new':
+            // Live swaps pushed from Helius logsSubscribe
+            if (Array.isArray(msg.transactions) && msg.transactions.length > 0) {
+              setTransactions(prev => {
+                const existingSigs = new Set(prev.map(t => t.signature));
+                const newTxs = msg.transactions.filter(t => !existingSigs.has(t.signature));
+                if (!newTxs.length) return prev;
+                return [...newTxs, ...prev].slice(0, 50);
+              });
+            }
+            break;
+
+          case 'error':
+            setError(msg.message);
+            break;
+
+          default:
+            break;
+        }
+      } catch (e) {
+        // Ignore parse errors
+      }
+    };
+
+    ws.onerror = () => {
+      setError('Connection error');
+      setIsConnected(false);
+    };
+
+    ws.onclose = () => {
+      setIsConnected(false);
+    };
 
     return () => {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
+      wsRef.current = null;
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'unsubscribe-txs', token: mintAddress }));
+      }
+      ws.close();
     };
-  }, [mintAddress, isActive, fetchTransactions, clearTransactions]);
+  }, [mintAddress, isActive]);
 
   return { transactions, isConnected, error, clearTransactions };
 };

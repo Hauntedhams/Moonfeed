@@ -12,6 +12,7 @@
 const WebSocket = require('ws');
 const PureRpcMonitor = require('./pureRpcMonitor');
 const solanaTransactionService = require('./solanaTransactionService');
+const heliusTxStreamer = require('./heliusTxStreamer');
 
 class PriceWebSocketServer {
   constructor(solanaRpcEndpoint = 'https://api.mainnet-beta.solana.com') {
@@ -208,13 +209,13 @@ class PriceWebSocketServer {
   }
 
   /**
-   * Subscribe client to transaction history for a token.
-   * Sends recent swap history via the REST-backed service.
-   * (Live streaming removed — frontend polls REST every 10s instead.)
+   * Subscribe client to transaction history + live Helius WS stream.
+   * 1. Sends recent history immediately (from cache/REST).
+   * 2. Registers client with heliusTxStreamer for real-time `tx-new` pushes.
    */
   async subscribeTxs(ws, tokenAddress) {
     try {
-      // Send recent transaction history
+      // 1. Send recent history immediately
       const history = await solanaTransactionService.getRecentTransactions(tokenAddress, 50);
       this.sendMessage(ws, {
         type: 'tx-history',
@@ -223,6 +224,9 @@ class PriceWebSocketServer {
         timestamp: Date.now(),
       });
 
+      // 2. Register for live Helius WebSocket stream
+      heliusTxStreamer.subscribe(tokenAddress, ws);
+
       this.sendMessage(ws, {
         type: 'txs-subscribed',
         token: tokenAddress,
@@ -230,30 +234,30 @@ class PriceWebSocketServer {
         timestamp: Date.now(),
       });
 
-      console.log(`[PriceWebSocketServer] Sent ${history.length} txs for ${tokenAddress.substring(0, 8)}...`);
+      console.log(`[PriceWebSocketServer] Sent ${history.length} history txs + live stream opened for ${tokenAddress.substring(0, 8)}...`);
     } catch (error) {
-      console.error(`[PriceWebSocketServer] Error fetching txs:`, error.message);
+      console.error(`[PriceWebSocketServer] Error subscribing txs:`, error.message);
       this.sendMessage(ws, {
         type: 'error',
-        message: `Failed to fetch transactions: ${error.message}`,
+        message: `Failed to subscribe to transactions: ${error.message}`,
         token: tokenAddress,
       });
     }
   }
 
   /**
-   * Unsubscribe client from transaction stream (no-op now, kept for protocol compat)
+   * Unsubscribe client from live transaction stream.
    */
   unsubscribeTxs(ws, tokenAddress) {
-    // No live subscriptions to clean up — frontend just stops polling
+    heliusTxStreamer.unsubscribe(tokenAddress, ws);
     console.log(`[PriceWebSocketServer] Client unsubscribed from txs for ${tokenAddress.substring(0, 8)}...`);
   }
 
   /**
-   * Clean up transaction subscriptions for a client (no-op now)
+   * Clean up all transaction subscriptions for a disconnected client.
    */
   cleanupTxSubscriptions(ws) {
-    // No live subscriptions to clean up
+    heliusTxStreamer.removeClient(ws);
   }
 
   /**
