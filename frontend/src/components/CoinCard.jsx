@@ -148,7 +148,7 @@ const CoinCard = memo(({
   const displayPrice = onDemandPrice || livePrice || fallbackPrice;
   const { transactions, isConnected: txConnected, error: txError, clearTransactions } = useSolanaTransactions(
     mintAddress,
-    showLiveTransactions // Only fetch when user explicitly opens the panel
+    isExpanded || showLiveTransactions // Auto-load when card is expanded or sheet is open
   );
 
   // 🆕 ON-VIEW ENRICHMENT: Trigger enrichment when coin becomes visible
@@ -1632,17 +1632,7 @@ const CoinCard = memo(({
             <div className="transactions-section-header">
               Transactions
             </div>
-            {!showLiveTransactions ? (
-              <div className="load-transactions-wrapper">
-                <button 
-                    className="load-live-transactions-btn"
-                    onClick={() => setShowLiveTransactions(true)}
-                  >
-                    Load Live Transactions
-                  </button>
-                </div>
-            ) : (
-              <div className="live-transactions-content">
+            <div className="live-transactions-content">
                   {txError && (
                     <div className="tx-error">
                       {txError}
@@ -1810,7 +1800,6 @@ const CoinCard = memo(({
                     </div>
                   )}
                 </div>
-            )}
           </div>
 
           {/* Top Traders Section - Loaded when expanded */}
