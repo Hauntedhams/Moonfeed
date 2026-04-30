@@ -49,6 +49,7 @@ const CoinCard = memo(({
   isGraduating = false, // NEW: Is this a graduating Pump.fun token?
   onExpandChange,
   isVisible = true,
+  isCurrentCard = false, // True only for the single card currently in view — gates DexScreener embed load
   onEnrichmentComplete = null // Callback when enrichment completes
 }) => {
   // Generate unique component ID for cleanup tracking
@@ -2286,7 +2287,7 @@ const CoinCard = memo(({
           <TwelveDataChart 
             key={`chart-desktop-${mintAddress}`}
             coin={coin}
-            isActive={isExpanded && isVisible}
+            isActive={isCurrentCard || isDesktopMode}
             isDesktopMode={true}
             onCrosshairMove={handleChartCrosshairMove}
             onFirstPriceUpdate={handleFirstPriceUpdate}
@@ -2299,7 +2300,7 @@ const CoinCard = memo(({
         <TwelveDataChart 
           key={`chart-mobile-${mintAddress}`}
           coin={coin}
-          isActive={isExpanded && isVisible}
+          isActive={isCurrentCard}
           isDesktopMode={false}
           showPriceScale={isExpanded}
           onCrosshairMove={handleChartCrosshairMove}

@@ -832,6 +832,7 @@ const ModernTokenScroller = ({
           isTrending={coin.source?.includes('trending')}
           isVisible={isVisible}
           onExpandChange={(isExpanded) => handleCoinExpandChange(isExpanded, coin.mintAddress || coin.tokenAddress)}
+          isCurrentCard={isCurrentCoin}
           onEnrichmentComplete={handleEnrichmentComplete} // Pass handler to CoinCard
         />
       </div>

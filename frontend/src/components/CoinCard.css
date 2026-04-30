@@ -1030,9 +1030,7 @@
   backdrop-filter: blur(20px);
   border-top-left-radius: 24px;
   border-top-right-radius: 24px;
-  transition: transform 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94), 
-              height 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-  transform: translateY(0%);
+  transition: height 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
   /* Adjust height to work with the new shorter banner size */
   /* +24px overlap so rounded corners tuck under the banner, hiding exposed corners */
   height: calc(100dvh - clamp(180px, 30vh, 250px) + 24px);
@@ -1046,7 +1044,6 @@
 /* 🔥 FIX: When expanded, enable pointer events for scrolling within */
 .coin-info-layer.expanded {
   pointer-events: auto;
-  transform: translateY(0%);
   height: calc(100dvh - 80px); /* Fill viewport minus bottom nav bar */
 }
 
