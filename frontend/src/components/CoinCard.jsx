@@ -148,7 +148,7 @@ const CoinCard = memo(({
   const displayPrice = onDemandPrice || livePrice || fallbackPrice;
   const { transactions, isConnected: txConnected, error: txError, clearTransactions } = useSolanaTransactions(
     mintAddress,
-    isExpanded || showLiveTransactions // Auto-load when card is expanded or sheet is open
+    isExpanded || showLiveTransactions || (isDesktopMode && isCurrentCard) // Auto-load when expanded, sheet open, or desktop card is active
   );
 
   // 🆕 ON-VIEW ENRICHMENT: Trigger enrichment when coin becomes visible
@@ -2289,7 +2289,7 @@ const CoinCard = memo(({
         <TwelveDataChart 
           key={`chart-mobile-${mintAddress}`}
           coin={coin}
-          isActive={isCurrentCard}
+          isActive={isVisible} // Preload when card enters viewport, not just when it's the exact current card
           isDesktopMode={false}
           showPriceScale={isExpanded}
           onCrosshairMove={handleChartCrosshairMove}
