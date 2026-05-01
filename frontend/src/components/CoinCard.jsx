@@ -83,6 +83,8 @@ const CoinCard = memo(({
   
   // Track desktop mode for responsive chart positioning
   const [isDesktopMode, setIsDesktopMode] = useState(() => window.innerWidth >= 1200);
+  // Track when mobile chart portal target ref is available (refs are null on first render)
+  const [mobileTargetMounted, setMobileTargetMounted] = useState(false);
 
   // Track if coin is enriched (has banner, socials, rugcheck, etc.)
   const isEnriched = !!(
@@ -222,6 +224,11 @@ const CoinCard = memo(({
       enrichCoin();
     }
   }, [isVisible, isEnriched, enrichmentRequested, mintAddress, coin, onEnrichmentComplete]);
+
+  // Signal that the mobile chart portal target div is mounted and ref is available
+  useEffect(() => {
+    setMobileTargetMounted(true);
+  }, []);
 
   // 📱 RESPONSIVE CHART FIX: Track window size for single responsive chart
   useEffect(() => {
@@ -2276,7 +2283,7 @@ const CoinCard = memo(({
           <TwelveDataChart 
             key={`chart-desktop-${mintAddress}`}
             coin={coin}
-            isActive={isCurrentCard || isDesktopMode}
+            isActive={isCurrentCard}
             isDesktopMode={true}
             onCrosshairMove={handleChartCrosshairMove}
             onFirstPriceUpdate={handleFirstPriceUpdate}
@@ -2285,11 +2292,11 @@ const CoinCard = memo(({
       </div>
 
       {/* Mobile Chart - Rendered via portal into mobile-chart-target */}
-      {!isDesktopMode && mobileChartTargetRef.current && createPortal(
+      {!isDesktopMode && mobileTargetMounted && mobileChartTargetRef.current && createPortal(
         <TwelveDataChart 
           key={`chart-mobile-${mintAddress}`}
           coin={coin}
-          isActive={isVisible} // Preload when card enters viewport, not just when it's the exact current card
+          isActive={isCurrentCard} // Only the current card — prevents multiple simultaneous DexScreener WebSocket connections which cause rate-limiting ("Loading pair…" forever)
           isDesktopMode={false}
           showPriceScale={isExpanded}
           onCrosshairMove={handleChartCrosshairMove}

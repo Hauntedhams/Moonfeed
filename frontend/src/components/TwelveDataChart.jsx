@@ -12,9 +12,10 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, showPr
                       null;
 
   useEffect(() => {
-    const shouldLoad = isActive || isDesktopMode;
-
-    if (!shouldLoad || !pairAddress) {
+    // isDesktopMode only controls layout — never loading.
+    // Only isActive (driven by isCurrentCard) gates the WebSocket connection
+    // so at most ONE DexScreener iframe is live at a time, preventing rate-limiting.
+    if (!isActive || !pairAddress) {
       setSrcReady(false);
       return;
     }
@@ -31,13 +32,12 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, showPr
     return () => {
       cancelAnimationFrame(raf1);
       cancelAnimationFrame(raf2);
-      // CRITICAL: tear down the iframe when this card scrolls off-screen.
-      // Without this, every card you scroll past keeps a live DexScreener
-      // WebSocket connection open. Once 3-4 accumulate, DexScreener's rate
-      // limiter kicks in and new ones get stuck on "Loading pair…" forever.
+      // Tear down the iframe when this card is no longer the active one.
+      // Without this, scrolled-past cards keep live WebSocket connections open
+      // and DexScreener's rate limiter causes "Loading pair…" forever.
       setSrcReady(false);
     };
-  }, [isActive, isDesktopMode, pairAddress]);
+  }, [isActive, pairAddress]);
 
   const iframeSrc = srcReady && pairAddress
     ? `https://dexscreener.com/solana/${pairAddress}?embed=1&theme=${contextDarkMode ? 'dark' : 'light'}&trades=0&info=0`
