@@ -292,6 +292,28 @@ html.dark-mode .timeframe-button.active {
   overflow: hidden;
 }
 
+/* Right-side mask: covers the price-scale labels from the DexScreener iframe
+   so they don't bleed into the action buttons.
+   Sits above the iframe (z-index 2) but below the action buttons (z-index 100).
+   Hidden when action buttons are collapsed (.no-mask). */
+.dexscreener-advanced-container::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 80px;
+  height: 100%;
+  background: linear-gradient(to right, transparent, #181A24 15%);
+  z-index: 2;
+  pointer-events: none;
+  transition: opacity 0.35s ease;
+}
+
+.dexscreener-advanced-container.no-mask::after {
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* Desktop mode - allow taller chart */
 @media (min-width: 1200px) {
   .dexscreener-advanced-container {

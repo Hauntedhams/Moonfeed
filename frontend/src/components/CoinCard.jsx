@@ -2285,6 +2285,7 @@ const CoinCard = memo(({
             coin={coin}
             isActive={isCurrentCard}
             isDesktopMode={true}
+            showActionButtons={showActionButtons}
             onCrosshairMove={handleChartCrosshairMove}
             onFirstPriceUpdate={handleFirstPriceUpdate}
           />
@@ -2299,6 +2300,7 @@ const CoinCard = memo(({
           isActive={isCurrentCard} // Only the current card — prevents multiple simultaneous DexScreener WebSocket connections which cause rate-limiting ("Loading pair…" forever)
           isDesktopMode={false}
           showPriceScale={isExpanded}
+          showActionButtons={showActionButtons}
           onCrosshairMove={handleChartCrosshairMove}
           onFirstPriceUpdate={handleFirstPriceUpdate}
         />,

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useDarkMode } from '../contexts/DarkModeContext';
 import './TwelveDataChart.css';
 
-const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, showPriceScale, onCrosshairMove, onFirstPriceUpdate }) => {
+const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, showPriceScale, showActionButtons = true, onCrosshairMove, onFirstPriceUpdate }) => {
   const { isDarkMode: contextDarkMode } = useDarkMode();
   const [srcReady, setSrcReady] = useState(false);
 
@@ -61,7 +61,7 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, showPr
       }}
     >
       <div
-        className="dexscreener-advanced-container"
+        className={`dexscreener-advanced-container${showActionButtons ? '' : ' no-mask'}`}
         style={{
           width: '100%',
           height: isDesktopMode ? '100%' : '380px',
