@@ -11,10 +11,10 @@ export const useDarkMode = () => {
 };
 
 export const DarkModeProvider = ({ children }) => {
-  // Check localStorage for saved preference, default to light mode
+  // Check localStorage for saved preference, default to dark mode
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('darkMode');
-    return saved ? JSON.parse(saved) : false;
+    return saved !== null ? JSON.parse(saved) : true;
   });
 
   // Update localStorage and document class when dark mode changes
