@@ -18,36 +18,43 @@ const BACKEND_WS = import.meta.env.PROD
   ? 'wss://api.moonfeed.app/ws/price'
   : 'ws://localhost:3001/ws/price';
 
+const RECONNECT_DELAY_MS = 3000;
+const MAX_RECONNECT_ATTEMPTS = 5;
+
 export const useSolanaTransactions = (mintAddress, isActive) => {
   const [transactions, setTransactions] = useState([]);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState(null);
   const wsRef = useRef(null);
+  const reconnectAttemptsRef = useRef(0);
+  const reconnectTimerRef = useRef(null);
+  const isActiveRef = useRef(isActive);
+  const mintRef = useRef(mintAddress);
+
+  // Keep refs in sync
+  isActiveRef.current = isActive;
+  mintRef.current = mintAddress;
 
   const clearTransactions = useCallback(() => {
     setTransactions([]);
   }, []);
 
-  useEffect(() => {
-    if (!mintAddress || !isActive) {
-      // Deactivate: send unsubscribe and close
-      if (wsRef.current) {
-        const ws = wsRef.current;
-        wsRef.current = null;
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'unsubscribe-txs', token: mintAddress }));
-        }
-        ws.close();
-      }
-      setIsConnected(false);
-      return;
+  const connect = useCallback((mint) => {
+    if (wsRef.current) {
+      wsRef.current.onopen = null;
+      wsRef.current.onmessage = null;
+      wsRef.current.onerror = null;
+      wsRef.current.onclose = null;
+      wsRef.current.close();
+      wsRef.current = null;
     }
 
     const ws = new WebSocket(BACKEND_WS);
     wsRef.current = ws;
 
     ws.onopen = () => {
-      ws.send(JSON.stringify({ type: 'subscribe-txs', token: mintAddress }));
+      reconnectAttemptsRef.current = 0;
+      ws.send(JSON.stringify({ type: 'subscribe-txs', token: mint }));
     };
 
     ws.onmessage = (event) => {
@@ -55,7 +62,6 @@ export const useSolanaTransactions = (mintAddress, isActive) => {
         const msg = JSON.parse(event.data);
         switch (msg.type) {
           case 'tx-history':
-            // Initial batch of recent swaps
             if (Array.isArray(msg.transactions)) {
               setTransactions(msg.transactions);
               setIsConnected(true);
@@ -64,12 +70,10 @@ export const useSolanaTransactions = (mintAddress, isActive) => {
             break;
 
           case 'txs-subscribed':
-            // Confirmed live subscription (no history yet = token is very new)
             setIsConnected(true);
             break;
 
           case 'tx-new':
-            // Live swaps pushed from Helius logsSubscribe
             if (Array.isArray(msg.transactions) && msg.transactions.length > 0) {
               setTransactions(prev => {
                 const existingSigs = new Set(prev.map(t => t.signature));
@@ -99,16 +103,60 @@ export const useSolanaTransactions = (mintAddress, isActive) => {
 
     ws.onclose = () => {
       setIsConnected(false);
+      wsRef.current = null;
+
+      // Reconnect if still active
+      if (isActiveRef.current && mintRef.current && reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
+        reconnectAttemptsRef.current += 1;
+        reconnectTimerRef.current = setTimeout(() => {
+          if (isActiveRef.current && mintRef.current) {
+            connect(mintRef.current);
+          }
+        }, RECONNECT_DELAY_MS);
+      }
     };
+  }, []);
+
+  useEffect(() => {
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+
+    if (!mintAddress || !isActive) {
+      if (wsRef.current) {
+        const ws = wsRef.current;
+        wsRef.current = null;
+        ws.onclose = null; // Prevent reconnect on intentional close
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'unsubscribe-txs', token: mintAddress }));
+        }
+        ws.close();
+      }
+      setIsConnected(false);
+      reconnectAttemptsRef.current = 0;
+      return;
+    }
+
+    reconnectAttemptsRef.current = 0;
+    connect(mintAddress);
 
     return () => {
-      wsRef.current = null;
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'unsubscribe-txs', token: mintAddress }));
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
       }
-      ws.close();
+      const ws = wsRef.current;
+      wsRef.current = null;
+      if (ws) {
+        ws.onclose = null; // Prevent reconnect on cleanup
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'unsubscribe-txs', token: mintAddress }));
+        }
+        ws.close();
+      }
     };
-  }, [mintAddress, isActive]);
+  }, [mintAddress, isActive, connect]);
 
   return { transactions, isConnected, error, clearTransactions };
 };

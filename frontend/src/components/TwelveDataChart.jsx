@@ -1,10 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useDarkMode } from '../contexts/DarkModeContext';
 import './TwelveDataChart.css';
 
 const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, showPriceScale, showActionButtons = true, onCrosshairMove, onFirstPriceUpdate }) => {
   const { isDarkMode: contextDarkMode } = useDarkMode();
   const [srcReady, setSrcReady] = useState(false);
+  const containerRef = useRef(null);
+  const observerRef = useRef(null);
+  const fallbackTimerRef = useRef(null);
 
   const pairAddress = coin?.pairAddress ||
                       coin?.poolAddress ||
@@ -12,29 +15,59 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, showPr
                       null;
 
   useEffect(() => {
-    // isDesktopMode only controls layout — never loading.
-    // Only isActive (driven by isCurrentCard) gates the WebSocket connection
-    // so at most ONE DexScreener iframe is live at a time, preventing rate-limiting.
     if (!isActive || !pairAddress) {
       setSrcReady(false);
       return;
     }
 
-    // Double-rAF: ensure browser has painted the DOM and the iframe container
-    // has real layout dimensions before DexScreener's embed initialises.
-    let raf1, raf2;
-    raf1 = requestAnimationFrame(() => {
-      raf2 = requestAnimationFrame(() => {
-        setSrcReady(true);
+    setSrcReady(false);
+
+    // Wait until the container div has real non-zero dimensions before injecting
+    // the iframe src. DexScreener's embed reads the container size on init —
+    // if it gets 0×0 it stalls on "Loading pair…" forever.
+    const activate = () => {
+      if (observerRef.current) { observerRef.current.disconnect(); observerRef.current = null; }
+      if (fallbackTimerRef.current) { clearTimeout(fallbackTimerRef.current); fallbackTimerRef.current = null; }
+      setSrcReady(true);
+    };
+
+    const tryObserve = () => {
+      const el = containerRef.current;
+      if (!el) {
+        // DOM not mounted yet — wait one frame and retry
+        const raf = requestAnimationFrame(tryObserve);
+        return () => cancelAnimationFrame(raf);
+      }
+
+      const { width, height } = el.getBoundingClientRect();
+      if (width > 0 && height > 0) {
+        // Container already has dimensions — inject immediately
+        activate();
+        return;
+      }
+
+      // Container is 0×0 — observe until it has real dimensions
+      const ro = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          const { width: w, height: h } = entry.contentRect;
+          if (w > 0 && h > 0) {
+            activate();
+            break;
+          }
+        }
       });
-    });
+      ro.observe(el);
+      observerRef.current = ro;
+
+      // Safety fallback: if ResizeObserver never fires with good dims, inject after 500ms
+      fallbackTimerRef.current = setTimeout(activate, 500);
+    };
+
+    tryObserve();
 
     return () => {
-      cancelAnimationFrame(raf1);
-      cancelAnimationFrame(raf2);
-      // Tear down the iframe when this card is no longer the active one.
-      // Without this, scrolled-past cards keep live WebSocket connections open
-      // and DexScreener's rate limiter causes "Loading pair…" forever.
+      if (observerRef.current) { observerRef.current.disconnect(); observerRef.current = null; }
+      if (fallbackTimerRef.current) { clearTimeout(fallbackTimerRef.current); fallbackTimerRef.current = null; }
       setSrcReady(false);
     };
   }, [isActive, pairAddress]);
@@ -61,6 +94,7 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, showPr
       }}
     >
       <div
+        ref={containerRef}
         className={`dexscreener-advanced-container${showActionButtons ? '' : ' no-mask'}`}
         style={{
           width: '100%',

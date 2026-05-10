@@ -15,10 +15,11 @@ const WebSocket = require('ws');
 const axios = require('axios');
 const solanaTransactionService = require('./solanaTransactionService');
 
-const HELIUS_API_KEY = process.env.HELIUS_API_KEY || process.env.HELIUS_KEY || '05a97104-cba1-4284-aed6-e0ad21af8b33';
+const HELIUS_API_KEY = process.env.HELIUS_API_KEY || process.env.HELIUS_KEY || '26240c3d-8cce-414e-95f7-5c0c75c1a2cb';
 const HELIUS_WS_URL = `wss://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
 const FLUSH_DEBOUNCE_MS = 500; // Batch signatures for 500ms before parsing
 const MAX_BATCH_SIZE = 20;     // Max signatures per Helius Enhanced API call
+const PING_INTERVAL_MS = 30_000; // Send ping every 30s to keep Helius WS alive
 
 class HeliusTxStreamer {
   constructor() {
@@ -39,6 +40,7 @@ class HeliusTxStreamer {
         clients: new Set(),
         sigQueue: [],
         flushTimer: null,
+        pingInterval: null,
       };
       this.streams.set(mintAddress, stream);
       this._openStream(mintAddress, stream);
@@ -91,6 +93,14 @@ class HeliusTxStreamer {
           method: 'logsSubscribe',
           params: [{ mentions: [mintAddress] }, { commitment: 'confirmed' }],
         }));
+
+        // Keepalive ping every 30s to prevent idle disconnect
+        if (stream.pingInterval) clearInterval(stream.pingInterval);
+        stream.pingInterval = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.ping();
+          }
+        }, PING_INTERVAL_MS);
       });
 
       ws.on('message', (data) => {
@@ -129,6 +139,10 @@ class HeliusTxStreamer {
       ws.on('close', () => {
         console.log(`[TxStreamer] Helius WS closed for ${mintAddress.substring(0, 8)}`);
         stream.ws = null;
+        if (stream.pingInterval) {
+          clearInterval(stream.pingInterval);
+          stream.pingInterval = null;
+        }
 
         // Reconnect if clients still subscribed
         if (this.streams.has(mintAddress) && stream.clients.size > 0) {
@@ -187,6 +201,10 @@ class HeliusTxStreamer {
     if (stream.flushTimer) {
       clearTimeout(stream.flushTimer);
       stream.flushTimer = null;
+    }
+    if (stream.pingInterval) {
+      clearInterval(stream.pingInterval);
+      stream.pingInterval = null;
     }
     if (!stream.ws) return;
     try {

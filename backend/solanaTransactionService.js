@@ -12,7 +12,7 @@ const axios = require('axios');
  *   3. No live subscriptions (frontend polls every 10s instead)
  */
 
-const HELIUS_API_KEY = process.env.HELIUS_API_KEY || process.env.HELIUS_KEY || '05a97104-cba1-4284-aed6-e0ad21af8b33';
+const HELIUS_API_KEY = process.env.HELIUS_API_KEY || process.env.HELIUS_KEY || '26240c3d-8cce-414e-95f7-5c0c75c1a2cb';
 const HELIUS_RPC = HELIUS_API_KEY 
   ? `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`
   : null;
@@ -82,52 +82,33 @@ class SolanaTransactionService {
   }
 
   /**
-   * Fetch via Helius enhanced transactions API.
-   * Returns pre-parsed swap data — no raw transaction parsing needed.
-   * 
-   * Fetches extra signatures to compensate for filtering (many tx types
-   * like UNKNOWN, INITIALIZE_ACCOUNT get filtered out). Uses pagination
-   * to ensure we reach the requested limit of actual swaps.
+   * Fetch via Helius enhanced address transactions API.
+   * Uses GET /v0/addresses/{address}/transactions — returns pre-parsed data
+   * with proper swap detection, no two-step signature+parse required.
    */
   async fetchViaHelius(mintAddress, limit) {
     try {
       const parsed = [];
-      let beforeSig = undefined; // for pagination
-      const MAX_PAGES = 3; // max pagination rounds to avoid infinite loops
+      let beforeSig = undefined;
+      const MAX_PAGES = 3;
 
       for (let page = 0; page < MAX_PAGES && parsed.length < limit; page++) {
-        // Fetch more signatures than needed — many won't be swaps
-        const fetchCount = Math.min((limit - parsed.length) * 3, 100);
+        const pageLimit = Math.min(limit * 2, 100); // fetch extra to compensate for filtered non-swaps
 
-        const sigParams = { limit: fetchCount };
-        if (beforeSig) sigParams.before = beforeSig;
+        const params = new URLSearchParams({
+          'api-key': HELIUS_API_KEY,
+          limit: pageLimit,
+        });
+        if (beforeSig) params.set('before', beforeSig);
 
-        const sigResponse = await axios.post(HELIUS_RPC, {
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'getSignaturesForAddress',
-          params: [mintAddress, sigParams],
-        }, { timeout: 8000 });
-
-        const signatures = sigResponse.data?.result;
-        if (!signatures || signatures.length === 0) break;
-
-        // Track last signature for pagination
-        beforeSig = signatures[signatures.length - 1].signature;
-
-        const sigList = signatures.map(s => s.signature);
-
-        // Parse transactions via Helius enhanced API
-        const parseResponse = await axios.post(
-          `https://api.helius.xyz/v0/transactions?api-key=${HELIUS_API_KEY}`,
-          { transactions: sigList },
+        const response = await axios.get(
+          `https://api.helius.xyz/v0/addresses/${mintAddress}/transactions?${params.toString()}`,
           { timeout: 10000 }
         );
 
-        if (!Array.isArray(parseResponse.data)) break;
+        if (!Array.isArray(response.data) || response.data.length === 0) break;
 
-        // Extract swap data from Helius parsed format
-        for (const tx of parseResponse.data) {
+        for (const tx of response.data) {
           const swap = this.extractSwapFromHelius(tx, mintAddress);
           if (swap) {
             parsed.push(swap);
@@ -135,8 +116,12 @@ class SolanaTransactionService {
           }
         }
 
-        // If we got fewer signatures than requested, no more pages exist
-        if (signatures.length < fetchCount) break;
+        // Pagination: use last signature if we got a full page
+        if (response.data.length === pageLimit) {
+          beforeSig = response.data[response.data.length - 1].signature;
+        } else {
+          break;
+        }
       }
 
       console.log(`[TxService] Helius returned ${parsed.length} swaps for ${mintAddress.substring(0, 8)}`);

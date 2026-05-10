@@ -10,6 +10,8 @@ services:
         value: production
       - key: PORT
         value: 10000
+      - key: HELIUS_API_KEY
+        sync: false
     healthCheckPath: /api/health
     autoDeploy: true
     # Health check configuration - increased for slow cold starts
