@@ -569,10 +569,12 @@
   }
 
   /* Adjust info layer positioning for left panel - NO overlap with banner */
+  /* Force transparent so the always-dark left panel gradient shows through */
   .coin-card-left-panel .coin-info-layer {
     position: relative !important;
     margin-top: 0 !important; /* Remove negative margin - no overlap */
     height: auto !important;
+    background: transparent !important;
     /* Start mostly visible, slide up a bit when expanded */
     transform: translateY(0) !important; /* Default: show full content */
     transition: transform 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
@@ -629,8 +631,10 @@
   }
 
   /* Tighten spacing in desktop mode - bring header closer to profile/price */
+  /* Also force dark background so sticky header matches the always-dark left panel */
   .coin-card-left-panel .info-layer-header {
     padding: 12px 20px 4px; /* Reduced top padding from 16px to 12px */
+    background: rgba(11, 18, 32, 0.98) !important;
   }
 
   .coin-card-left-panel .desktop-coin-header {
@@ -641,6 +645,106 @@
   /* Make metrics more compact */
   .coin-card-left-panel .header-metrics {
     gap: 8px;
+  }
+
+  /* ---- Always-dark text overrides for the always-dark left panel ---- */
+  /* The left panel gradient is unconditionally dark, so force all text light
+     regardless of whether the dark-mode class is present on <html>. */
+
+  /* Price display */
+  .coin-card-left-panel .coin-price {
+    color: #ffffff !important;
+  }
+
+  /* Market metrics: label + value */
+  .coin-card-left-panel .header-metric-label {
+    color: rgba(255, 255, 255, 0.6) !important;
+  }
+
+  .coin-card-left-panel .header-metric-value,
+  .coin-card-left-panel .header-metric-value-with-icon {
+    color: rgba(255, 255, 255, 0.9) !important;
+  }
+
+  .coin-card-left-panel .header-metric:hover {
+    background: rgba(255, 255, 255, 0.05) !important;
+  }
+
+  /* Metrics row separator */
+  .coin-card-left-panel .header-metrics-row {
+    border-bottom-color: rgba(255, 255, 255, 0.08) !important;
+  }
+
+  /* Social icons */
+  .coin-card-left-panel .header-social-icon {
+    color: rgba(255, 255, 255, 0.6) !important;
+  }
+
+  .coin-card-left-panel .header-social-icon:hover {
+    color: rgba(255, 255, 255, 0.9) !important;
+    background: rgba(255, 255, 255, 0.1) !important;
+  }
+
+  /* Profile placeholder letter */
+  .coin-card-left-panel .info-layer-profile-placeholder {
+    color: rgba(255, 255, 255, 0.7) !important;
+  }
+
+  /* Profile image border */
+  .coin-card-left-panel .info-layer-profile-image {
+    border-color: rgba(255, 255, 255, 0.15) !important;
+    background: rgba(255, 255, 255, 0.06) !important;
+  }
+
+  /* Desktop coin header separator */
+  .coin-card-left-panel .desktop-coin-header {
+    border-bottom-color: rgba(255, 255, 255, 0.08) !important;
+  }
+
+  /* Follow button */
+  .coin-card-left-panel .banner-follow-button {
+    background: rgba(255, 255, 255, 0.08) !important;
+    border-color: rgba(255, 255, 255, 0.25) !important;
+    color: rgba(255, 255, 255, 0.8) !important;
+  }
+
+  .coin-card-left-panel .banner-follow-button:hover {
+    background: rgba(255, 255, 255, 0.15) !important;
+    border-color: rgba(255, 255, 255, 0.4) !important;
+  }
+
+  /* ---- Always-dark transactions section in the always-dark left panel ---- */
+  /* The left panel has a hardcoded dark gradient regardless of light/dark mode,
+     so force the transactions area dark to match and keep white text readable. */
+  .coin-card-left-panel .transactions-section {
+    background: linear-gradient(135deg, rgba(79, 195, 247, 0.08) 0%, rgba(103, 126, 234, 0.08) 100%) !important;
+    border-color: rgba(79, 195, 247, 0.25) !important;
+  }
+
+  .coin-card-left-panel .transactions-section-header {
+    color: #8b9bff !important;
+    border-bottom-color: rgba(79, 195, 247, 0.25) !important;
+  }
+
+  .coin-card-left-panel .live-transactions-content {
+    color: rgba(255, 255, 255, 0.8) !important;
+    background: transparent !important;
+  }
+
+  .coin-card-left-panel .transactions-empty {
+    color: rgba(255, 255, 255, 0.5) !important;
+  }
+
+  .coin-card-left-panel .empty-text {
+    color: rgba(255, 255, 255, 0.7) !important;
+  }
+
+  .coin-card-left-panel .empty-subtext {
+    color: rgba(255, 255, 255, 0.5) !important;
+  }
+
+  .coin-card-left-panel .tx-error {
+    color: #ef4444 !important;
   }
 }
 
