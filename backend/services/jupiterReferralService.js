@@ -17,7 +17,7 @@ class JupiterReferralService {
     );
     
     // Your Jupiter Ultra referral account (PDA created under Jupiter Ultra Referral Project)
-    this.referralAccount = process.env.JUPITER_REFERRAL_ACCOUNT || '42DqmQMZrVeZkP2Btj2cS96Ej81jVxFqwUZWazVvhUPt';
+    this.referralAccount = process.env.JUPITER_REFERRAL_ACCOUNT || 'Gy6SuRWnn4garDXHwXc9usuF7rKrbQS7TxKH9rJjGfxt';
     this.feeBps = parseInt(process.env.JUPITER_REFERRAL_FEE_BPS || '100'); // 1%
     
     console.log(`🪐 Jupiter Referral Service initialized`);

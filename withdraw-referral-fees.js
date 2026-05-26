@@ -49,7 +49,7 @@ const { getAssociatedTokenAddress, createTransferInstruction, createAssociatedTo
 
 // Configuration
 const RPC_ENDPOINT = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
-const REFERRAL_ACCOUNT = '42DqmQMZrVeZkP2Btj2cS96Ej81jVxFqwUZWazVvhUPt'; // Your Ultra referral account
+const REFERRAL_ACCOUNT = 'Gy6SuRWnn4garDXHwXc9usuF7rKrbQS7TxKH9rJjGfxt'; // Your Ultra referral account
 
 // 🎯 DESTINATION WALLET - Where all claimed fees will be sent
 const DESTINATION_WALLET = '34GAnxxnJQpSbPbe7sbgDTdBzBD4Hq74bSZicZiyRpmd';

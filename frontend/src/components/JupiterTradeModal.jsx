@@ -115,12 +115,11 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError }
       setIsLoading(true);
       setError(null);
       
-      // Validate coin
       if (!coin?.mintAddress) {
         throw new Error('Invalid coin');
       }
       
-      console.log('🪐 Loading Jupiter for', coin.symbol);
+      console.log('🪐 Loading Jupiter Plugin for', coin.symbol);
       
       // Close existing instance
       if (window.Jupiter._instance) {
@@ -131,110 +130,48 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError }
         }
       }
 
-      // Fetch referral configuration from backend
-      let referralConfig = null;
-      try {
-        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
-        const response = await fetch(`${backendUrl}/api/jupiter/referral/config/${coin.mintAddress}`);
-        if (response.ok) {
-          const data = await response.json();
-          if (data.success) {
-            referralConfig = data;
-            console.log('✅ Loaded referral config:', {
-              feeAccount: data.feeAccount,
-              feeBps: data.feeBps
-            });
-          }
-        }
-      } catch (error) {
-        console.warn('⚠️ Could not load referral config:', error.message);
-      }
-
-      // Initialize Jupiter Terminal v4
-      // NOTE: v4 automatically detects and uses connected wallets (Phantom/Solflare)
-      // No need to manually pass wallet - it uses Unified Wallet Kit
-      
-      // Build feeAccounts Map with both SOL and the token
-      // This ensures fees work for both buy (SOL→Token) and sell (Token→SOL) directions
-      const SOL_MINT = "So11111111111111111111111111111111111111112";
-      const feeAccountsMap = new Map();
-      
-      if (referralConfig?.feeAccount) {
-        // Add the token's fee account from backend
-        feeAccountsMap.set(coin.mintAddress, referralConfig.feeAccount);
-        console.log('📊 Fee account mapping:', coin.mintAddress, '→', referralConfig.feeAccount);
-      }
-      
-      console.log('🔑 Jupiter config - referralFee: 100 (1%), referralAccount:', "42DqmQMZrVeZkP2Btj2cS96Ej81jVxFqwUZWazVvhUPt");
-      
-      const jupiterConfig = {
+      // Jupiter Plugin v1 (RPC-less Ultra Swap)
+      // No endpoint needed — Plugin uses Jupiter's Ultra API for all routing/balance/tx.
+      // referralAccount + referralFee go in formProps per the official Plugin API.
+      window.Jupiter.init({
         displayMode: "integrated",
         integratedTargetId: "jupiter-container",
-        endpoint: "https://api.mainnet-beta.solana.com",
-        
-        // 🔑 WALLET PASSTHROUGH - Use the app's wallet connection from UnifiedWalletProvider
-        // This makes Jupiter Terminal share the same wallet state as the rest of the app
-        // When user connects via Jupiter, the app sees it. When connected via app buttons, Jupiter sees it.
+
+        // Wallet passthrough — shares the app's connected wallet with the Plugin
         enableWalletPassthrough: true,
-      };
-      
-      // Add formProps with referral configuration
-      // NEW Jupiter Plugin API uses referralAccount and referralFee inside formProps
-      jupiterConfig.formProps = {
-        // Set default direction: Buy token with SOL
-        initialInputMint: "So11111111111111111111111111111111111111112", // SOL
-        initialOutputMint: coin.mintAddress, // Meme token
-        
-        // 🔑 KEY FIX: Don't fix the mints - allow Jupiter's swap arrow to work
-        // This enables the built-in swap direction button in Jupiter UI
-        fixedInputMint: false,
-        fixedOutputMint: false,
-        
-        // 🔑 REFERRAL FEE CONFIGURATION (1% = 100 BPS)
-        // According to Jupiter Plugin docs: https://dev.jup.ag/tool-kits/plugin/customization
-        // This is the Jupiter Ultra Referral Account (PDA)
-        referralAccount: "42DqmQMZrVeZkP2Btj2cS96Ej81jVxFqwUZWazVvhUPt",
-        referralFee: 100, // 100 BPS = 1%
-      };
+        passthroughWalletContextState: jupiterWallet,
 
-      jupiterConfig.strictTokenList = false;
-      
-      jupiterConfig.containerStyles = {
-        borderRadius: '16px',
-        backgroundColor: 'rgba(16, 23, 31, 0.95)',
-      };
+        formProps: {
+          initialInputMint: "So11111111111111111111111111111111111111112", // SOL
+          initialOutputMint: coin.mintAddress,
+          // Referral fees: collected via Jupiter Referral Program
+          // Fee accounts must be created at https://referral.jup.ag/dashboard first
+          referralAccount: "Gy6SuRWnn4garDXHwXc9usuF7rKrbQS7TxKH9rJjGfxt",
+          referralFee: 100, // 100 BPS = 1%
+        },
 
-      jupiterConfig.onSuccess = ({ txid, swapResult }) => {
-        console.log('✅ Swap success:', txid);
-        
-        // Track trade for affiliate system
-        trackTradeWithAffiliate(txid, swapResult);
-        
-        // Pass walletAddress along with the success callback for transaction storage
-        onSwapSuccess?.({ txid, swapResult, coin, walletAddress });
-      };
+        containerStyles: {
+          borderRadius: '16px',
+          backgroundColor: 'rgba(16, 23, 31, 0.95)',
+        },
 
-      jupiterConfig.onError = ({ error }) => {
-        console.error('❌ Swap error:', error);
-        onSwapError?.({ error, coin });
-      };
+        onSuccess: ({ txid, swapResult }) => {
+          console.log('✅ Swap success:', txid);
+          trackTradeWithAffiliate(txid, swapResult);
+          onSwapSuccess?.({ txid, swapResult, coin, walletAddress });
+        },
 
-      jupiterConfig.onScreenUpdate = (screen) => {
-        if (screen) {
-          setIsLoading(false);
-        }
-      };
-      
-      // 🔑 WALLET PASSTHROUGH: Pass the current wallet state so Jupiter Terminal 
-      // shows the same connected wallet as the rest of the app
-      jupiterConfig.passthroughWalletContextState = jupiterWallet;
+        onSwapError: ({ error }) => {
+          console.error('❌ Swap error:', error);
+          onSwapError?.({ error, coin });
+        },
 
-      // Initialize Jupiter with the config
-      window.Jupiter.init(jupiterConfig);
+        onScreenUpdate: (screen) => {
+          if (screen) setIsLoading(false);
+        },
+      });
 
       jupiterInitialized.current = true;
-      
-      // Fallback to hide loading
       setTimeout(() => setIsLoading(false), 1000);
       
     } catch (err) {
