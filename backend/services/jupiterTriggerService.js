@@ -27,14 +27,15 @@ function getCachedTokenMetadata(tokenMint) {
   }
   
   console.log(`[Cache] ✅ HIT: Token metadata for ${tokenMint.slice(0, 8)}... (${Math.round(age/1000)}s old)`);
-  return { symbol: cached.symbol, name: cached.name, decimals: cached.decimals };
+  return { symbol: cached.symbol, name: cached.name, decimals: cached.decimals, logoUri: cached.logoUri || null };
 }
 
-function setCachedTokenMetadata(tokenMint, symbol, name, decimals) {
+function setCachedTokenMetadata(tokenMint, symbol, name, decimals, logoUri) {
   tokenMetadataCache.set(tokenMint, {
     symbol,
     name,
     decimals,
+    logoUri: logoUri || null,
     timestamp: Date.now()
   });
   console.log(`[Cache] 💾 STORED: Token metadata for ${tokenMint.slice(0, 8)}...`);
@@ -492,6 +493,9 @@ async function getTriggerOrders({
       let tokenSymbol = null;
       let tokenDecimals = 9; // Default to 9 decimals
       let tokenName = null;
+      let tokenLogoUri = null;
+      let tokenBannerImage = null;
+      let tokenPairAddress = null;
       
       // Check cache first
       const cachedMetadata = getCachedTokenMetadata(tokenMint);
@@ -499,6 +503,7 @@ async function getTriggerOrders({
         tokenSymbol = cachedMetadata.symbol;
         tokenName = cachedMetadata.name;
         tokenDecimals = cachedMetadata.decimals;
+        tokenLogoUri = cachedMetadata.logoUri || null;
         console.log(`[Jupiter Trigger] 🚀 Using cached metadata: ${tokenSymbol}`);
       } else {
         // Fetch from APIs if not in cache
@@ -513,9 +518,10 @@ async function getTriggerOrders({
             tokenSymbol = tokenResponse.data.symbol || null;
             tokenDecimals = tokenResponse.data.decimals || tokenDecimals;
             tokenName = tokenResponse.data.name || null;
+            tokenLogoUri = tokenResponse.data.logoURI || tokenResponse.data.logoUri || null;
             
             // Cache the metadata
-            setCachedTokenMetadata(tokenMint, tokenSymbol, tokenName, tokenDecimals);
+            setCachedTokenMetadata(tokenMint, tokenSymbol, tokenName, tokenDecimals, tokenLogoUri);
           }
         } catch (tokenError) {
           console.log(`[Jupiter Trigger] Could not fetch token metadata from Jupiter for ${tokenMint}`);
@@ -547,28 +553,24 @@ async function getTriggerOrders({
           }
         }
         
-        // Fallback 2: Try Dexscreener API (great for obscure meme coins)
+        // Fallback 2: Try Dexscreener API for obscure meme coin symbols + image
         if (!tokenSymbol) {
           try {
             const dexscreenerResponse = await axios.get(
               `https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`,
               { timeout: 5000 }
             );
-            
             if (dexscreenerResponse.data?.pairs?.[0]) {
               const pair = dexscreenerResponse.data.pairs[0];
-              // Determine which token in the pair is our token
               const isBaseToken = pair.baseToken.address.toLowerCase() === tokenMint.toLowerCase();
               const tokenInfo = isBaseToken ? pair.baseToken : pair.quoteToken;
-              
               tokenSymbol = tokenInfo.symbol || null;
-              if (!tokenName) {
-                tokenName = tokenInfo.name || null;
-              }
-              console.log(`[Jupiter Trigger] ✅ Token metadata from Dexscreener: ${tokenSymbol}`);
-              
-              // Cache the metadata
-              setCachedTokenMetadata(tokenMint, tokenSymbol, tokenName, tokenDecimals);
+              if (!tokenName) tokenName = tokenInfo.name || null;
+              if (!tokenLogoUri) tokenLogoUri = pair.info?.imageUrl || null;
+              if (!tokenBannerImage) tokenBannerImage = pair.info?.header || null;
+              if (!tokenPairAddress) tokenPairAddress = pair.pairAddress || null;
+              console.log(`[Jupiter Trigger] ✅ Token metadata from Dexscreener: ${tokenSymbol}, image: ${tokenLogoUri ? 'yes' : 'no'}`);
+              setCachedTokenMetadata(tokenMint, tokenSymbol, tokenName, tokenDecimals, tokenLogoUri);
             }
           } catch (dexscreenerError) {
             console.log(`[Jupiter Trigger] Could not fetch token metadata from Dexscreener for ${tokenMint}`);
@@ -586,7 +588,44 @@ async function getTriggerOrders({
           tokenName = tokenSymbol;
         }
       }
-      
+
+      // ── Banner / pairAddress / logo fetch (runs even on cache hits) ─────
+      // Conditions: run if missing logo OR missing banner OR missing pairAddress
+      // This ensures tokens like RICHGUY (logo from Jupiter) still get banner+pair
+      if (!tokenLogoUri || !tokenBannerImage || !tokenPairAddress) {
+        try {
+          const dexRes = await axios.get(
+            `https://api.dexscreener.com/latest/dex/tokens/${tokenMint}`,
+            { timeout: 5000 }
+          );
+          if (dexRes.data?.pairs?.[0]) {
+            const dexPair = dexRes.data.pairs[0];
+            if (!tokenLogoUri) tokenLogoUri = dexPair.info?.imageUrl || null;
+            if (!tokenBannerImage) tokenBannerImage = dexPair.info?.header || dexPair.info?.imageUrl || null;
+            if (!tokenPairAddress) tokenPairAddress = dexPair.pairAddress || null;
+            console.log(`[Jupiter Trigger] Dexscreener extra — banner: ${tokenBannerImage ? 'yes' : 'no'}, pair: ${tokenPairAddress || 'none'}`);
+            if (tokenLogoUri) setCachedTokenMetadata(tokenMint, tokenSymbol, tokenName, tokenDecimals, tokenLogoUri);
+          }
+        } catch (_) { /* silent */ }
+      }
+      // Pump.fun fallback — also captures header_image banner
+      if (!tokenLogoUri || !tokenBannerImage) {
+        try {
+          const pumpRes = await axios.get(
+            `https://frontend-api.pump.fun/coins/${tokenMint}`,
+            { timeout: 5000 }
+          );
+          if (pumpRes.data) {
+            if (!tokenLogoUri && pumpRes.data.image_uri) tokenLogoUri = pumpRes.data.image_uri;
+            if (!tokenBannerImage && pumpRes.data.header_image) tokenBannerImage = pumpRes.data.header_image;
+            if (!tokenSymbol && pumpRes.data.symbol) tokenSymbol = pumpRes.data.symbol;
+            if (!tokenName && pumpRes.data.name) tokenName = pumpRes.data.name;
+            console.log(`[Jupiter Trigger] Pump.fun — logo: ${tokenLogoUri ? 'yes' : 'no'}, banner: ${tokenBannerImage ? 'yes' : 'no'}`);
+            if (tokenLogoUri) setCachedTokenMetadata(tokenMint, tokenSymbol, tokenName, tokenDecimals, tokenLogoUri);
+          }
+        } catch (_) { /* silent */ }
+      }
+
       // Calculate amounts with correct decimals
       const makingAmountNum = parseFloat(makingAmount) / Math.pow(10, isBuy ? 9 : tokenDecimals);
       const takingAmountNum = parseFloat(takingAmount) / Math.pow(10, isBuy ? tokenDecimals : 9);
@@ -831,6 +870,9 @@ async function getTriggerOrders({
         tokenSymbol,
         tokenName,
         tokenMint,
+        tokenImage: tokenLogoUri,
+        tokenBannerImage: tokenBannerImage,
+        tokenPairAddress: tokenPairAddress,
         type: isBuy ? 'buy' : 'sell',
         status: orderStatus === 'active' ? 'active' : order.status || 'executed',
         triggerPrice: triggerPrice,

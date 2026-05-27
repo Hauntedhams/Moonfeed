@@ -58,6 +58,7 @@ function App() {
   const [coinListModalFilter, setCoinListModalFilter] = useState(null); // Filter type for coin list modal
   const [currentCoinIndex, setCurrentCoinIndex] = useState(0); // Current coin index in scroller
   const [totalCoinsInList, setTotalCoinsInList] = useState(0); // Total coins in current list
+  const [previousTab, setPreviousTab] = useState('home'); // Tab to go back to from coin-detail
 
   // Initialize referral tracking, mobile optimizer, and performance monitoring on app load
   useEffect(() => {
@@ -90,8 +91,9 @@ function App() {
 
   // Handle coin click from favorites grid
   const handleCoinClick = (coin) => {
+    setPreviousTab('favorites');
     setSelectedCoin(coin);
-    setCurrentViewedCoin(coin); // Ensure the current viewed coin is set
+    setCurrentViewedCoin(coin);
     setActiveTab('coin-detail');
   };
 
@@ -175,6 +177,7 @@ function App() {
   // Handle coin selection from coin list modal
   const handleCoinFromList = (coin) => {
     console.log('🪙 Coin selected from list:', coin.symbol);
+    setPreviousTab('home');
     setSelectedCoin(coin);
     setCurrentViewedCoin(coin);
     setActiveTab('coin-detail');
@@ -204,6 +207,7 @@ function App() {
     });
     
     // Set the found coin as selected and navigate to coin detail view
+    setPreviousTab('home');
     setSelectedCoin(newCoinData);
     setCurrentViewedCoin(newCoinData);
     setActiveTab('coin-detail');
@@ -302,13 +306,20 @@ function App() {
         </Suspense>
       ) : activeTab === 'orders' ? (
         <Suspense fallback={<div style={{ padding: '20px', textAlign: 'center' }}>Loading...</div>}>
-          <OrdersView />
+          <OrdersView
+            onCoinClick={(coinData) => {
+              setPreviousTab('orders');
+              setSelectedCoin(coinData);
+              setCurrentViewedCoin(coinData);
+              setActiveTab('coin-detail');
+            }}
+          />
         </Suspense>
       ) : activeTab === 'coin-detail' && selectedCoin ? (
         <div style={{ position: 'relative' }}>
           {/* Back button for coin detail view */}
           <button
-            onClick={() => setActiveTab('favorites')}
+            onClick={() => setActiveTab(previousTab || 'home')}
             style={{
               position: 'fixed',
               top: 20,
@@ -338,7 +349,7 @@ function App() {
               e.target.style.background = 'rgba(0, 0, 0, 0.9)';
               e.target.style.transform = 'scale(1)';
             }}
-            title="Back to favorites"
+            title={`Back to ${previousTab || 'home'}`}
           >
             ←
           </button>

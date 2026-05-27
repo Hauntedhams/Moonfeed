@@ -228,7 +228,9 @@ class SolanaTransactionService {
    * Uses the public endpoint or HELIUS_RPC — slower but works as backup.
    */
   async fetchViaSolanaRpc(mintAddress, limit) {
-    const rpcUrl = HELIUS_RPC || 'https://api.mainnet-beta.solana.com';
+    // Always use public Solana RPC for this fallback — NOT Helius RPC,
+    // since Helius RPC uses the same API key that may be rate-limited.
+    const rpcUrl = 'https://api.mainnet-beta.solana.com';
     
     try {
       // Fetch more signatures than needed because many won't be swaps
@@ -275,8 +277,8 @@ class SolanaTransactionService {
           if (swap) parsed.push(swap);
         }
 
-        // Small delay between batches on public RPC
-        if (!HELIUS_RPC && i + BATCH < signatures.length) {
+        // Small delay between batches on public RPC to avoid rate limits
+        if (i + BATCH < signatures.length) {
           await new Promise(r => setTimeout(r, 200));
         }
       }

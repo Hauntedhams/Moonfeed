@@ -5,7 +5,7 @@ import { getFullApiUrl } from '../config/api';
 import { getTransactions, deleteTransaction, storeTransaction, clearTransactions } from '../utils/transactionStorage';
 import './OrdersView.css';
 
-const OrdersView = () => {
+const OrdersView = ({ onCoinClick }) => {
   // Use Jupiter Wallet Kit adapter for universal wallet connection
   const jupiterWallet = useJupiterWallet();
   const publicKey = jupiterWallet.publicKey;
@@ -20,6 +20,8 @@ const OrdersView = () => {
   const [cancellingOrder, setCancellingOrder] = useState(null);
   const [showLimitOrderInfo, setShowLimitOrderInfo] = useState(false);
   const [activeSection, setActiveSection] = useState('orders'); // 'orders' or 'transactions'
+  // Map of tokenMint -> banner URL fetched directly from Dexscreener
+  const [coinBanners, setCoinBanners] = useState(new Map());
 
   // Fetch orders when wallet connects or filter changes
   useEffect(() => {
@@ -180,6 +182,26 @@ const OrdersView = () => {
     }
   };
 
+  // Fetch banners directly from Dexscreener for each unique token in orders
+  const fetchCoinBanners = async (orderList) => {
+    const uniqueMints = [...new Set(orderList.map(o => o.tokenMint).filter(Boolean))];
+    if (!uniqueMints.length) return;
+    const updates = new Map();
+    await Promise.all(uniqueMints.map(async (mint) => {
+      try {
+        const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
+        const data = await res.json();
+        const pair = data?.pairs?.[0];
+        if (pair) {
+          const banner = pair.info?.header || pair.info?.imageUrl || null;
+          const pairAddress = pair.pairAddress || null;
+          if (banner || pairAddress) updates.set(mint, { banner, pairAddress });
+        }
+      } catch (_) { /* silent */ }
+    }));
+    if (updates.size) setCoinBanners(prev => new Map([...prev, ...updates]));
+  };
+
   // Fetch active orders
   const fetchOrders = async () => {
     if (!publicKey) return;
@@ -268,6 +290,7 @@ const OrdersView = () => {
           
           // Only show non-expired orders in active tab
           setOrders(activeOrders);
+          fetchCoinBanners(activeOrders);
         } else {
           // For history tab, mark expired orders with a flag
           fetchedOrders = fetchedOrders.map(order => ({
@@ -276,6 +299,7 @@ const OrdersView = () => {
           }));
           
           setOrders(fetchedOrders);
+          fetchCoinBanners(fetchedOrders);
         }
       } else {
         throw new Error(result.error || 'Unknown error');
@@ -516,18 +540,6 @@ const OrdersView = () => {
     return (
       <div className="orders-view">
         <div className="orders-container">
-          {/* Header */}
-          <div className="orders-page-header">
-            <div className="orders-icon">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M9 12h6M9 16h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </div>
-            <h1>Orders & Transactions</h1>
-            <p className="orders-subtitle">Connect your wallet to view limit orders and transaction history</p>
-          </div>
-
           {/* Wallet Connection Section */}
           <div className="wallet-connection-section">
             <div className="connection-card">
@@ -546,66 +558,22 @@ const OrdersView = () => {
   return (
     <div className="orders-view">
       <div className="orders-container">
-        {/* Header */}
-        <div className="orders-page-header">
-          <div className="orders-icon">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M9 12h6M9 16h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </div>
-          <h1>Orders & Transactions</h1>
-          <p className="orders-subtitle">Manage limit orders and view your recent buys</p>
-        </div>
-
-        {/* Section Tabs */}
-        <div className="section-tabs">
-          <button
-            className={`section-tab ${activeSection === 'orders' ? 'active' : ''}`}
-            onClick={() => setActiveSection('orders')}
-          >
-            <span className="tab-icon">📋</span>
-            <span className="tab-label">Limit Orders</span>
-            {orders.length > 0 && <span className="tab-count">{orders.length}</span>}
-          </button>
-          <button
-            className={`section-tab ${activeSection === 'transactions' ? 'active' : ''}`}
-            onClick={() => setActiveSection('transactions')}
-          >
-            <span className="tab-icon">💸</span>
-            <span className="tab-label">Transactions</span>
-            {transactions.length > 0 && <span className="tab-count">{transactions.length}</span>}
-          </button>
-        </div>
-
         {/* Limit Orders Section */}
-        {activeSection === 'orders' && (
-          <div className="orders-section">
-            <div className="orders-header">
-              <h3>Limit Orders</h3>
-              <div className="orders-header-right">
-                <button 
-                  className="what-are-limit-orders-link"
-                  onClick={() => setShowLimitOrderInfo(true)}
-                >
-                  What are limit orders?
-                </button>
-                <div className="orders-filter">
-                  <button
-                    className={`filter-btn ${statusFilter === 'active' ? 'active' : ''}`}
-                    onClick={() => setStatusFilter('active')}
-                  >
-                    Active
-                  </button>
-                  <button
-                    className={`filter-btn ${statusFilter === 'history' ? 'active' : ''}`}
-                    onClick={() => setStatusFilter('history')}
-                  >
-                    History
-                  </button>
-                </div>
-              </div>
-            </div>
+        <div className="orders-section">
+          <div className="orders-filter">
+            <button
+              className={`filter-btn ${statusFilter === 'active' ? 'active' : ''}`}
+              onClick={() => setStatusFilter('active')}
+            >
+              Active
+            </button>
+            <button
+              className={`filter-btn ${statusFilter === 'history' ? 'active' : ''}`}
+              onClick={() => setStatusFilter('history')}
+            >
+              History
+            </button>
+          </div>
 
           {loadingOrders ? (
             <div className="orders-loading">
@@ -755,7 +723,123 @@ const OrdersView = () => {
                   expiryText = '⚠️ Parse error';
                   expiryWarning = true;
                 }
-                
+
+                // ── New visual card for active orders ──────────────────────
+                if (status === 'active') {
+                  const progressPct = triggerPrice > 0
+                    ? Math.min(100, Math.max(0, (currentPrice / triggerPrice) * 100))
+                    : 0;
+                  const isCancelling = cancellingOrder === orderId;
+                  const dexBanner = coinBanners.get(order.tokenMint);
+                  const bannerSrc = dexBanner?.banner || order.tokenBannerImage || order.tokenImage || null;
+                  const resolvedPairAddress = dexBanner?.pairAddress || order.tokenPairAddress || null;
+
+                  return (
+                    <div
+                      key={orderId}
+                      className={`order-card-visual${isExpired ? ' order-card-expired' : ''}`}
+                      onClick={() => onCoinClick?.({
+                        mintAddress: order.tokenMint,
+                        address: order.tokenMint,
+                        symbol: order.tokenSymbol,
+                        name: order.tokenName,
+                        image: order.tokenImage,
+                        banner: dexBanner?.banner || order.tokenBannerImage || null,
+                        pairAddress: resolvedPairAddress,
+                      })}
+                    >
+                      {/* Blurred banner background — prefer wide Dexscreener banner */}
+                      {bannerSrc && (
+                        <img
+                          src={bannerSrc}
+                          alt=""
+                          className="order-card-bg"
+                          onError={(e) => { e.target.style.display = 'none'; }}
+                        />
+                      )}
+                      <div className="order-card-bg-overlay" />
+
+                      {/* Top row: profile pic + name + badge + cancel */}
+                      <div className="order-card-top-row">
+                        <div className="order-card-left">
+                          <img
+                            src={order.tokenImage || ''}
+                            alt={tokenSymbol}
+                            className="order-card-coin-avatar"
+                            style={{ display: order.tokenImage ? 'block' : 'none' }}
+                            onError={(e) => {
+                              e.target.style.display = 'none';
+                              e.target.nextElementSibling.style.display = 'flex';
+                            }}
+                          />
+                          <div
+                            className="order-card-coin-avatar order-card-coin-avatar-placeholder"
+                            style={{ display: order.tokenImage ? 'none' : 'flex' }}
+                          >
+                            {tokenSymbol.slice(0, 2)}
+                          </div>
+                          <div className="order-card-token-info">
+                            <span className="order-card-symbol">{tokenSymbol}</span>
+                            <span className="order-card-name">{tokenName}</span>
+                          </div>
+                        </div>
+                        <div className="order-card-right">
+                          <span className={`order-card-type-badge order-card-type-${orderType}`}>
+                            {orderType === 'sell' ? '↑ SELL' : '↓ BUY'}
+                          </span>
+                          <button
+                            className="order-card-cancel-x"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleCancelOrder(orderId);
+                            }}
+                            disabled={isCancelling}
+                            title="Cancel order"
+                          >
+                            {isCancelling ? '…' : '×'}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Progress section */}
+                      <div className="order-card-progress-section">
+                        <div className="order-card-price-row">
+                          <span className="order-card-price-label">Now</span>
+                          <span className="order-card-price-val">{formatPrice(currentPrice)} SOL</span>
+                          <span className="order-card-price-arrow">›</span>
+                          <span className="order-card-price-val order-card-price-target">{formatPrice(triggerPrice)} SOL</span>
+                          <span className="order-card-price-label">Target</span>
+                        </div>
+
+                        <div className="order-card-progress-track">
+                          <div
+                            className={`order-card-progress-fill${progressPct >= 100 ? ' complete' : ''}`}
+                            style={{ width: `${progressPct}%` }}
+                          />
+                        </div>
+
+                        <div className="order-card-progress-footer">
+                          <span className={`order-card-diff${isPriceAboveTrigger ? ' above' : ''}`}>
+                            {isPriceAboveTrigger ? '✓ Target reached' : `${Math.abs(priceDiffPercent)}% to go`}
+                          </span>
+                          <span className={`order-card-expiry-pill${expiryWarning ? ' warn' : ''}`}>
+                            ⏱ {expiryText}
+                          </span>
+                        </div>
+                      </div>
+
+                      {isPriceAboveTrigger && (
+                        <div className="order-card-executing-banner">
+                          <span className="order-card-executing-dot" />
+                          Queued for execution
+                          <span className="order-card-executing-sub">Check History tab once filled</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+                // ── End visual card ─────────────────────────────────────────
+
                 return (
                   <div key={orderId} className={`order-card ${status === 'active' ? 'active-order' : ''}`}>
                     {/* Order Header */}
@@ -1154,135 +1238,6 @@ const OrdersView = () => {
             </div>
           )}
         </div>
-      )}
-
-        {/* Transactions Section */}
-        {activeSection === 'transactions' && (
-          <div className="transactions-section">
-            <div className="transactions-header">
-              <div className="transactions-header-top">
-                <h3>Recent Transactions</h3>
-                <div className="transactions-header-buttons">
-                  <button 
-                    className="sync-blockchain-btn"
-                    onClick={fetchTransactions}
-                    disabled={loadingTransactions}
-                    title="Sync with blockchain"
-                  >
-                    {loadingTransactions ? '🔄' : '🔄 Sync'}
-                  </button>
-                  <button 
-                    className="clear-refresh-btn"
-                    onClick={handleClearAndRefresh}
-                    disabled={loadingTransactions}
-                    title="Clear cache and refresh from blockchain"
-                  >
-                    🗑️ Refresh
-                  </button>
-                </div>
-              </div>
-              <p className="transactions-subtitle">Your swap transactions on Solana</p>
-            </div>
-
-            {loadingTransactions ? (
-              <div className="transactions-loading">
-                <div className="loading-spinner"></div>
-                <p>Loading transactions...</p>
-              </div>
-            ) : transactions.length === 0 ? (
-              <div className="transactions-empty">
-                <div className="empty-icon">💸</div>
-                <p>No transactions yet</p>
-                <span className="empty-hint">
-                  Your meme coin purchases will appear here when you buy through Moonfeed
-                </span>
-              </div>
-            ) : (
-              <div className="transactions-list">
-                {transactions.map((tx) => {
-                  const timeAgo = formatTimeAgo(tx.timestamp);
-                  
-                  return (
-                    <div key={tx.id || tx.signature} className="transaction-card">
-                      <div className="transaction-header">
-                        <div className="transaction-token">
-                          {tx.tokenImage ? (
-                            <img 
-                              src={tx.tokenImage} 
-                              alt={tx.tokenSymbol}
-                              className="transaction-token-image"
-                              onError={(e) => {
-                                e.target.style.display = 'none';
-                                e.target.nextSibling.style.display = 'flex';
-                              }}
-                            />
-                          ) : null}
-                          <div className="transaction-token-placeholder" style={{ display: tx.tokenImage ? 'none' : 'flex' }}>
-                            {tx.tokenSymbol?.charAt(0) || '?'}
-                          </div>
-                          <div className="transaction-token-info">
-                            <span className="transaction-symbol">{tx.tokenSymbol || 'Unknown'}</span>
-                            <span className="transaction-name">{tx.tokenName || tx.tokenSymbol}</span>
-                          </div>
-                        </div>
-                        <div className={`transaction-type ${tx.type}`}>
-                          {tx.type === 'buy' ? '🟢 Buy' : '🔴 Sell'}
-                        </div>
-                      </div>
-
-                      <div className="transaction-details">
-                        <div className="transaction-detail-row">
-                          <span className="detail-label">Amount Spent:</span>
-                          <span className="detail-value">{tx.inputAmount?.toFixed(4) || '0'} SOL</span>
-                        </div>
-                        <div className="transaction-detail-row">
-                          <span className="detail-label">Tokens Received:</span>
-                          <span className="detail-value">
-                            {tx.outputAmount ? tx.outputAmount.toLocaleString(undefined, {
-                              maximumFractionDigits: 2
-                            }) : '0'} {tx.tokenSymbol}
-                          </span>
-                        </div>
-                        {tx.pricePerToken > 0 && (
-                          <div className="transaction-detail-row">
-                            <span className="detail-label">Price per Token:</span>
-                            <span className="detail-value">
-                              {tx.pricePerToken < 0.000001 
-                                ? tx.pricePerToken.toExponential(4) 
-                                : tx.pricePerToken.toFixed(8)} SOL
-                            </span>
-                          </div>
-                        )}
-                        <div className="transaction-detail-row">
-                          <span className="detail-label">Time:</span>
-                          <span className="detail-value">{timeAgo}</span>
-                        </div>
-                      </div>
-
-                      <div className="transaction-actions">
-                        <a
-                          href={`https://solscan.io/tx/${tx.signature}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="view-tx-btn"
-                        >
-                          View on Solscan ↗
-                        </a>
-                        <button
-                          className="delete-tx-btn"
-                          onClick={() => handleDeleteTransaction(tx.signature)}
-                          title="Remove from history"
-                        >
-                          🗑️
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
       </div>
 
       {/* Limit Order Info Modal */}

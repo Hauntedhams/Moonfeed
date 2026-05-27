@@ -24,6 +24,7 @@ const MAX_RECONNECT_ATTEMPTS = 5;
 export const useSolanaTransactions = (mintAddress, isActive) => {
   const [transactions, setTransactions] = useState([]);
   const [isConnected, setIsConnected] = useState(false);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
   const [error, setError] = useState(null);
   const wsRef = useRef(null);
   const reconnectAttemptsRef = useRef(0);
@@ -37,6 +38,7 @@ export const useSolanaTransactions = (mintAddress, isActive) => {
 
   const clearTransactions = useCallback(() => {
     setTransactions([]);
+    setHistoryLoaded(false);
   }, []);
 
   const connect = useCallback((mint) => {
@@ -65,6 +67,7 @@ export const useSolanaTransactions = (mintAddress, isActive) => {
             if (Array.isArray(msg.transactions)) {
               setTransactions(msg.transactions);
               setIsConnected(true);
+              setHistoryLoaded(true);
               setError(null);
             }
             break;
@@ -134,11 +137,13 @@ export const useSolanaTransactions = (mintAddress, isActive) => {
         ws.close();
       }
       setIsConnected(false);
+      setHistoryLoaded(false);
       reconnectAttemptsRef.current = 0;
       return;
     }
 
     reconnectAttemptsRef.current = 0;
+    setHistoryLoaded(false);
     connect(mintAddress);
 
     return () => {
@@ -158,5 +163,5 @@ export const useSolanaTransactions = (mintAddress, isActive) => {
     };
   }, [mintAddress, isActive, connect]);
 
-  return { transactions, isConnected, error, clearTransactions };
+  return { transactions, isConnected, historyLoaded, error, clearTransactions };
 };

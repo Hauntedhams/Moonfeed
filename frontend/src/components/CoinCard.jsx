@@ -148,7 +148,7 @@ const CoinCard = memo(({
   const livePrice = liveData?.price;
   const fallbackPrice = coin.price_usd || coin.priceUsd || coin.price || 0;
   const displayPrice = onDemandPrice || livePrice || fallbackPrice;
-  const { transactions, isConnected: txConnected, error: txError, clearTransactions } = useSolanaTransactions(
+  const { transactions, isConnected: txConnected, historyLoaded: txHistoryLoaded, error: txError, clearTransactions } = useSolanaTransactions(
     mintAddress,
     isExpanded || showLiveTransactions || (isDesktopMode && isCurrentCard) // Auto-load when expanded, sheet open, or desktop card is active
   );
@@ -1670,9 +1670,13 @@ const CoinCard = memo(({
                   <div className="transactions-list" style={{ maxHeight: '300px', overflowY: 'auto' }}>
                     {transactions.length === 0 ? (
                       <div className="transactions-empty">
-                        <div className="empty-text">Waiting for transactions...</div>
+                        <div className="empty-text">
+                          {txHistoryLoaded ? 'No recent transactions' : 'Waiting for transactions...'}
+                        </div>
                         <div className="empty-subtext">
-                          {txConnected ? '🟢 Live monitoring active' : '⏳ Connecting...'}
+                          {txConnected
+                            ? (txHistoryLoaded ? '🟢 Listening for new swaps' : '🟢 Live monitoring active')
+                            : '⏳ Connecting...'}
                         </div>
                       </div>
                     ) : (
@@ -2536,9 +2540,13 @@ const CoinCard = memo(({
               {transactions.length === 0 ? (
                 <div className="tiktok-sheet-empty">
                   <div style={{ fontSize: '32px', marginBottom: '8px' }}>📊</div>
-                  <div>Waiting for transactions...</div>
+                  <div>
+                    {txHistoryLoaded ? 'No recent transactions' : 'Waiting for transactions...'}
+                  </div>
                   <div style={{ fontSize: '12px', opacity: 0.5, marginTop: '4px' }}>
-                    {txConnected ? 'Monitoring live swaps' : 'Connecting to backend...'}
+                    {txConnected
+                      ? (txHistoryLoaded ? 'Listening for new swaps' : 'Monitoring live swaps')
+                      : 'Connecting to backend...'}
                   </div>
                 </div>
               ) : (

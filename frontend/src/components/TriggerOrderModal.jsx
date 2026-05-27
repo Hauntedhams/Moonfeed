@@ -24,6 +24,12 @@ const TriggerOrderModal = ({
   const [sliderValue, setSliderValue] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
 
+  // Stop Loss state
+  const [stopLossEnabled, setStopLossEnabled] = useState(false);
+  const [stopLossPrice, setStopLossPrice] = useState('');
+  const [stopLossSliderValue, setStopLossSliderValue] = useState(0);
+  const [stopLossPct, setStopLossPct] = useState(-20);
+
   // Force recheck wallet connection when modal opens
   useEffect(() => {
     if (isOpen && recheckConnection) {
@@ -64,11 +70,26 @@ const TriggerOrderModal = ({
     return { min, max, step };
   }, [currentPrice]);
 
+  // Stop-loss slider range: -80% to -1% of current price
+  const slRange = useMemo(() => {
+    if (currentPrice <= 0) return { min: 0, max: 1, step: 0.01 };
+    const min = currentPrice * 0.20; // -80%
+    const max = currentPrice * 0.99; // -1%
+    const step = (max - min) / 500;
+    return { min, max, step };
+  }, [currentPrice]);
+
   // Initialize slider value when modal opens or price changes
   useEffect(() => {
     if (isOpen && currentPrice > 0 && sliderValue === 0) {
       setSliderValue(currentPrice);
       setTriggerPrice(currentPrice.toFixed(8));
+    }
+    // Init stop-loss at -20% of current price
+    if (isOpen && currentPrice > 0 && stopLossSliderValue === 0) {
+      const defaultSL = currentPrice * 0.80;
+      setStopLossSliderValue(defaultSL);
+      setStopLossPrice(defaultSL.toFixed(8));
     }
   }, [isOpen, currentPrice]);
 
@@ -83,6 +104,17 @@ const TriggerOrderModal = ({
     if (currentPrice > 0) {
       const pct = ((value - currentPrice) / currentPrice) * 100;
       setPercentage(pct.toFixed(2));
+    }
+  }, [currentPrice]);
+
+  // Handle stop-loss slider change
+  const handleStopLossSliderChange = useCallback((e) => {
+    const value = parseFloat(e.target.value);
+    setStopLossSliderValue(value);
+    setStopLossPrice(value.toFixed(8));
+    if (currentPrice > 0) {
+      const pct = ((value - currentPrice) / currentPrice) * 100;
+      setStopLossPct(parseFloat(pct.toFixed(2)));
     }
   }, [currentPrice]);
 
@@ -169,14 +201,28 @@ const TriggerOrderModal = ({
       const inputMint = side === 'buy' ? SOL_MINT : coin.mintAddress;
       const outputMint = side === 'buy' ? coin.mintAddress : SOL_MINT;
 
-      // Convert amounts to smallest unit (assuming 9 decimals for SOL and token)
-      const makingAmount = (parseFloat(inputAmount) * 1e9).toFixed(0);
-      
+      // Fetch actual token decimals (Pump.fun tokens use 6, not 9)
+      let tokenDecimals = 6; // safe default for meme/pump tokens
+      try {
+        const metaRes = await fetch(`https://tokens.jup.ag/token/${coin.mintAddress}`);
+        if (metaRes.ok) {
+          const meta = await metaRes.json();
+          if (typeof meta.decimals === 'number') tokenDecimals = meta.decimals;
+        }
+      } catch (_) { /* use default */ }
+      const tokenMultiplier = Math.pow(10, tokenDecimals);
+
+      // Convert amounts to smallest unit using correct decimals
+      // SOL always uses 9 decimals (lamports); token uses fetched decimals
+      const makingAmount = side === 'buy'
+        ? (parseFloat(inputAmount) * 1e9).toFixed(0)          // SOL → lamports
+        : (parseFloat(inputAmount) * tokenMultiplier).toFixed(0); // token → smallest unit
+
       // Calculate minimum output based on trigger price
-      // For buy: outputAmount = inputAmount / triggerPrice
-      // For sell: outputAmount = inputAmount * triggerPrice
-      const minOutput = side === 'buy' 
-        ? (parseFloat(inputAmount) / parseFloat(triggerPrice)) * 1e9
+      // For buy:  outputAmount = inputAmount / triggerPrice  (tokens out)
+      // For sell: outputAmount = inputAmount * triggerPrice  (SOL out in lamports)
+      const minOutput = side === 'buy'
+        ? (parseFloat(inputAmount) / parseFloat(triggerPrice)) * tokenMultiplier
         : (parseFloat(inputAmount) * parseFloat(triggerPrice)) * 1e9;
       const takingAmount = minOutput.toFixed(0);
 
@@ -258,6 +304,44 @@ const TriggerOrderModal = ({
           maker: walletAddress,
           orderType: 'create'
         });
+      }
+
+      // ── Stop Loss order (second Jupiter trigger order) ──────────────
+      if (stopLossEnabled && side === 'sell' && stopLossPrice && parseFloat(stopLossPrice) > 0) {
+        try {
+          const slMakingAmount = (parseFloat(inputAmount) * tokenMultiplier).toFixed(0);
+          const slTakingAmount = ((parseFloat(inputAmount) * parseFloat(stopLossPrice)) * 1e9).toFixed(0);
+          const slResponse = await fetch(getFullApiUrl('/api/trigger/create-order'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              maker: walletAddress,
+              payer: walletAddress,
+              inputMint: coin.mintAddress,
+              outputMint: 'So11111111111111111111111111111111111111112',
+              makingAmount: slMakingAmount,
+              takingAmount: slTakingAmount,
+              expiredAt,
+              orderType: 'stop'
+            })
+          });
+          const slResult = await slResponse.json();
+          if (slResult.success) {
+            console.log('🛡️ Signing stop-loss order...');
+            const slSignedTx = await signTransaction(slResult.data.transaction);
+            await fetch(getFullApiUrl('/api/trigger/execute'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                signedTransaction: slSignedTx,
+                requestId: slResult.data.requestId,
+              })
+            });
+            console.log('✅ Stop-loss order placed at', stopLossPrice);
+          }
+        } catch (slErr) {
+          console.warn('⚠️ Stop-loss order failed (main order succeeded):', slErr.message);
+        }
       }
 
       setSuccess(true);
@@ -436,6 +520,84 @@ const TriggerOrderModal = ({
                 </div>
               )}
             </div>
+
+            {/* Stop Loss Section — shown when selling and price data available */}
+            {side === 'sell' && currentPrice > 0 && (
+              <div className={`stop-loss-section${stopLossEnabled ? ' sl-active' : ''}`}>
+                <div className="sl-header">
+                  <div className="sl-title-group">
+                    <span className="sl-shield">🛡️</span>
+                    <div>
+                      <span className="sl-title">Stop Loss</span>
+                      <span className="sl-subtitle">Auto-sell if price drops</span>
+                    </div>
+                  </div>
+                  <label className="sl-toggle">
+                    <input
+                      type="checkbox"
+                      checked={stopLossEnabled}
+                      onChange={(e) => setStopLossEnabled(e.target.checked)}
+                    />
+                    <span className="sl-toggle-track">
+                      <span className="sl-toggle-thumb" />
+                    </span>
+                  </label>
+                </div>
+
+                {stopLossEnabled && (
+                  <div className="sl-body">
+                    <div className="sl-display">
+                      <div className="sl-price-group">
+                        <span className="sl-label">Sell if price falls to</span>
+                        <span className="sl-price-value">${formatPrice(stopLossPrice)}</span>
+                      </div>
+                      <span className="sl-pct-badge">{stopLossPct >= 0 ? '+' : ''}{stopLossPct.toFixed(1)}%</span>
+                    </div>
+
+                    <div className="slider-wrapper-hero sl-slider-wrapper">
+                      <div
+                        className="slider-track-fill sl-track-fill"
+                        style={{
+                          left: `${((stopLossSliderValue - slRange.min) / (slRange.max - slRange.min)) * 100}%`,
+                          width: `${((slRange.max - stopLossSliderValue) / (slRange.max - slRange.min)) * 100}%`,
+                        }}
+                      />
+                      <input
+                        type="range"
+                        min={slRange.min}
+                        max={slRange.max}
+                        step={slRange.step}
+                        value={stopLossSliderValue || slRange.min}
+                        onChange={handleStopLossSliderChange}
+                        className="price-slider-input sl-slider-input"
+                      />
+                    </div>
+
+                    <div className="slider-labels">
+                      <span>-80%</span>
+                      <span>-1%</span>
+                    </div>
+
+                    <div className="quick-chips sl-chips">
+                      {[-5, -10, -20, -30, -50].map(pct => (
+                        <button
+                          key={pct}
+                          className={`chip negative${Math.abs(stopLossPct - pct) < 0.5 ? ' selected' : ''}`}
+                          onClick={() => {
+                            const price = currentPrice * (1 + pct / 100);
+                            setStopLossPct(pct);
+                            setStopLossPrice(price.toFixed(8));
+                            setStopLossSliderValue(price);
+                          }}
+                        >
+                          {pct}%
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Compact Amount + Expiry Row */}
             <div className="input-row">

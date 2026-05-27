@@ -478,6 +478,158 @@
 }
 
 /* ============================================
+   STOP LOSS SECTION
+   ============================================ */
+.stop-loss-section {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(239, 68, 68, 0.03);
+  transition: background 0.25s ease;
+}
+
+.stop-loss-section.sl-active {
+  background: rgba(239, 68, 68, 0.07);
+}
+
+.sl-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  cursor: pointer;
+}
+
+.sl-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sl-shield {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.sl-title {
+  display: block;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.sl-subtitle {
+  display: block;
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.4);
+  margin-top: 1px;
+}
+
+/* Toggle Switch */
+.sl-toggle {
+  position: relative;
+  display: inline-block;
+  cursor: pointer;
+}
+
+.sl-toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.sl-toggle-track {
+  display: block;
+  width: 44px;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  position: relative;
+  transition: background 0.25s ease;
+}
+
+.sl-toggle input:checked + .sl-toggle-track {
+  background: #ef4444;
+}
+
+.sl-toggle-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.25s ease;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+}
+
+.sl-toggle input:checked ~ .sl-toggle-track .sl-toggle-thumb {
+  transform: translateX(20px);
+}
+
+/* Stop Loss Body */
+.sl-body {
+  padding: 0 20px 16px;
+}
+
+.sl-display {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.sl-price-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sl-label {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.45);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.sl-price-value {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #ef4444;
+  font-family: 'SF Mono', 'JetBrains Mono', monospace;
+}
+
+.sl-pct-badge {
+  font-size: 0.95rem;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 8px;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.15);
+}
+
+/* Reuse slider-wrapper-hero but override the track fill color */
+.sl-slider-wrapper {
+  margin-bottom: 4px;
+}
+
+.sl-track-fill {
+  background: linear-gradient(90deg, #ef4444, #dc2626) !important;
+  border-radius: 3px;
+}
+
+.sl-slider-input::-webkit-slider-thumb {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), 0 0 0 3px rgba(239, 68, 68, 0.45) !important;
+}
+
+.sl-chips {
+  justify-content: flex-start;
+}
+
+
+
+/* ============================================
    ERROR/WARNING MESSAGES
    ============================================ */
 .inline-error {

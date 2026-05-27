@@ -4,6 +4,7 @@
  */
 
 const CACHE_KEY_PREFIX = 'order_cache_';
+const CACHE_VERSION = 'v2'; // bump to bust stale caches missing tokenBannerImage/tokenPairAddress
 const CACHE_DURATION = 30000; // 30 seconds
 
 /**
@@ -13,7 +14,7 @@ const CACHE_DURATION = 30000; // 30 seconds
  * @returns {string} Cache key
  */
 function getCacheKey(walletAddress, statusFilter) {
-  return `${CACHE_KEY_PREFIX}${walletAddress}_${statusFilter}`;
+  return `${CACHE_KEY_PREFIX}${CACHE_VERSION}_${walletAddress}_${statusFilter}`;
 }
 
 /**

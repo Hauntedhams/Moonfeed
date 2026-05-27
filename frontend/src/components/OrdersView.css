@@ -13,7 +13,7 @@
 .orders-container {
   max-width: 600px;
   margin: 0 auto;
-  padding: 30px 20px;
+  padding: 16px 16px;
   padding-bottom: 100px; /* Space for bottom nav */
   background: var(--bg-primary);
   transition: background-color 0.3s ease;
@@ -118,6 +118,7 @@
 .orders-filter {
   display: flex;
   gap: 8px;
+  margin-bottom: 14px;
 }
 
 .filter-btn {
@@ -1427,4 +1428,310 @@
   .transaction-name {
     max-width: 80px;
   }
+}
+
+/* ── Visual Active Order Cards ──────────────────────────────────── */
+.order-card-visual {
+  position: relative;
+  border-radius: 16px;
+  overflow: hidden;
+  cursor: pointer;
+  margin-bottom: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  background: #0f1923;
+  min-height: 130px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.order-card-visual:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.order-card-visual.order-card-expired {
+  border-color: rgba(248, 113, 113, 0.3);
+}
+
+/* Blurred banner background — img fills the card, blurred + dimmed */
+.order-card-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(10px) saturate(1.6);
+  transform: scale(1.08);
+  opacity: 0.80;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.order-card-bg-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    160deg,
+    rgba(6, 10, 20, 0.32) 0%,
+    rgba(6, 10, 20, 0.18) 100%
+  );
+  z-index: 1;
+}
+
+/* Target reached executing pulse */
+@keyframes order-executing-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+.order-card-executing-banner {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  padding: 8px 14px 12px;
+  background: rgba(16, 210, 100, 0.10);
+  border: none;
+  border-top: 1px solid rgba(16, 210, 100, 0.25);
+  border-radius: 0 0 16px 16px;
+  font-size: 11.5px;
+  color: #10d264;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.order-card-executing-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #10d264;
+  flex-shrink: 0;
+  animation: order-executing-pulse 1.2s ease-in-out infinite;
+}
+.order-card-executing-sub {
+  font-size: 10px;
+  font-weight: 400;
+  color: rgba(16, 210, 100, 0.75);
+  margin-left: auto;
+}
+
+/* Top row */
+.order-card-top-row {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 14px 8px;
+  gap: 10px;
+}
+
+.order-card-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.order-card-coin-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.order-card-coin-avatar-placeholder {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(79, 195, 247, 0.2);
+  border: 2px solid rgba(79, 195, 247, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: #4FC3F7;
+  flex-shrink: 0;
+}
+
+.order-card-token-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.order-card-symbol {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.order-card-name {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+}
+
+.order-card-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.order-card-type-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 6px;
+  letter-spacing: 0.5px;
+}
+
+.order-card-type-sell {
+  background: rgba(16, 185, 129, 0.2);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.order-card-type-buy {
+  background: rgba(79, 195, 247, 0.2);
+  color: #4FC3F7;
+  border: 1px solid rgba(79, 195, 247, 0.3);
+}
+
+.order-card-cancel-x {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+
+.order-card-cancel-x:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.25);
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.4);
+}
+
+.order-card-cancel-x:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Progress section */
+.order-card-progress-section {
+  position: relative;
+  z-index: 2;
+  padding: 4px 14px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.order-card-price-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.order-card-price-label {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  flex-shrink: 0;
+}
+
+.order-card-price-val {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+  white-space: nowrap;
+}
+
+.order-card-price-target {
+  color: #10b981;
+}
+
+.order-card-price-arrow {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.3);
+  flex: 1;
+  text-align: center;
+}
+
+/* Progress bar */
+.order-card-progress-track {
+  width: 100%;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.order-card-progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #4FC3F7, #10b981);
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  min-width: 4px;
+}
+
+.order-card-progress-fill.complete {
+  background: #10b981;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+}
+
+/* Progress footer */
+.order-card-progress-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.order-card-diff {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
+  font-weight: 500;
+}
+
+.order-card-diff.above {
+  color: #10b981;
+}
+
+.order-card-expiry-pill {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 2px 7px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.order-card-expiry-pill.warn {
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.1);
+  border-color: rgba(251, 191, 36, 0.3);
 }
