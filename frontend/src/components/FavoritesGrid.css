@@ -1,514 +1,223 @@
 /* Favorites List Container */
 .favorites-list-container {
   padding: 0;
-  background: #ffffff;
+  background: #0c0f18;
   min-height: 100vh;
   width: 100%;
   height: 100vh;
-  overflow: hidden; /* Let ModernTokenScroller handle scrolling */
+  overflow: hidden;
   position: relative;
-  /* No padding-top needed - tabs will overlay the content */
 }
 
-/* Notifications Placeholder */
-.notifications-placeholder {
-  height: calc(100vh - 180px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 40px 20px;
+/* Scrollable wrapper below the top tabs */
+.fav-grid-scroll {
+  height: 100vh;
+  overflow-y: auto;
+  padding: 72px 12px 80px; /* 72px top clears the fixed TopTabs bar */
+  -webkit-overflow-scrolling: touch;
 }
 
-.notifications-empty {
-  text-align: center;
-  max-width: 400px;
-}
-
-.notifications-icon {
-  font-size: 64px;
-  margin-bottom: 20px;
-  opacity: 0.4;
-}
-
-.notifications-empty h2 {
-  font-size: 24px;
-  font-weight: 700;
-  color: #000000;
-  margin: 0 0 12px 0;
-}
-
-.notifications-empty p {
-  font-size: 15px;
-  color: rgba(0, 0, 0, 0.6);
-  line-height: 1.5;
-  margin: 0;
-}
-
-/* 2-Column Grid */
-.favorites-grid {
+/* 2-column grid */
+.fav-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 12px;
-  max-width: 600px;
-  margin: 0 auto;
-  padding: 0 16px;
 }
 
-/* Favorite Card */
-.favorite-card {
-  background: #ffffff;
+/* ── Card base ─────────────────────────────────── */
+.fav-card {
+  position: relative;
   border-radius: 16px;
-  border: 1.5px solid rgba(0, 0, 0, 0.1);
-  padding: 16px;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
   cursor: pointer;
-  position: relative;
+  min-height: 140px;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  text-align: center;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  justify-content: space-between;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  background: #0f1923;
 }
 
-.favorite-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-  border-color: rgba(0, 0, 0, 0.2);
+.fav-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.5);
 }
 
-.favorite-card:active {
-  transform: translateY(-2px);
-  transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+/* Green tint for price going up */
+.fav-card--up {
+  background: linear-gradient(160deg, #061b0f 0%, #0c2318 100%);
+  border-color: rgba(16, 185, 129, 0.40);
+  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.15) inset, 0 4px 20px rgba(16, 185, 129, 0.08);
 }
 
-/* Remove Button */
-.favorite-remove-btn {
+/* Red tint for price going down */
+.fav-card--down {
+  background: linear-gradient(160deg, #1c0505 0%, #220909 100%);
+  border-color: rgba(239, 68, 68, 0.40);
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.15) inset, 0 4px 20px rgba(239, 68, 68, 0.08);
+}
+
+/* Neutral (no price data) */
+.fav-card--neutral {
+  background: #0f1923;
+  border-color: rgba(255, 255, 255, 0.10);
+}
+
+/* Blurred banner background */
+.fav-card-bg {
   position: absolute;
-  top: 8px;
-  right: 8px;
-  background: rgba(240, 240, 240, 0.95);
-  color: rgba(0, 0, 0, 0.6);
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(6px) saturate(1.8);
+  transform: scale(1.1);
+  opacity: 0.82;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* Semi-transparent overlay so text stays readable */
+.fav-card-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+.fav-card--up .fav-card-overlay {
+  background: linear-gradient(180deg, rgba(4, 16, 9, 0.42) 0%, rgba(6, 22, 13, 0.70) 100%);
+}
+
+.fav-card--down .fav-card-overlay {
+  background: linear-gradient(180deg, rgba(18, 3, 3, 0.42) 0%, rgba(24, 6, 6, 0.70) 100%);
+}
+
+.fav-card--neutral .fav-card-overlay {
+  background: linear-gradient(180deg, rgba(4, 8, 18, 0.38) 0%, rgba(6, 10, 22, 0.65) 100%);
+}
+
+/* ── Top row: avatar + remove button ───────────── */
+.fav-card-top {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 12px 10px 0 12px;
+}
+
+.fav-card-avatar-wrap {
+  position: relative;
+}
+
+.fav-card-avatar {
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
-  width: 28px;
-  height: 28px;
-  font-size: 18px;
-  font-weight: bold;
-  cursor: pointer;
-  z-index: 10;
+  object-fit: cover;
+  border: 2px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  display: block;
+  flex-shrink: 0;
+}
+
+.fav-card-avatar--placeholder {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s;
-}
-
-.favorite-remove-btn:hover {
-  background: rgba(226, 85, 123, 1);
-  color: #fff;
-  transform: scale(1.1);
-  border-color: rgba(226, 85, 123, 1);
-}
-
-.favorite-remove-btn:active {
-  transform: scale(0.95);
-}
-
-/* Profile Image */
-.favorite-profile-container {
-  width: 80px;
-  height: 80px;
-  margin-bottom: 12px;
-}
-
-.favorite-profile-image {
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 3px solid rgba(0, 0, 0, 0.1);
-  background: rgba(240, 240, 240, 0.5);
-  transition: all 0.2s ease;
-}
-
-.favorite-card:hover .favorite-profile-image {
-  border-color: rgba(0, 0, 0, 0.2);
-  transform: scale(1.05);
-}
-
-/* Coin Info */
-.favorite-coin-info {
-  margin-bottom: 16px;
-  width: 100%;
-}
-
-.favorite-symbol {
-  color: #000000;
-  font-size: 18px;
+  font-size: 14px;
   font-weight: 700;
-  margin-bottom: 4px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  color: #4FC3F7;
+  background: rgba(79, 195, 247, 0.18);
+  border-color: rgba(79, 195, 247, 0.3);
 }
 
-.favorite-name {
-  color: rgba(0, 0, 0, 0.5);
-  font-size: 12px;
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  padding: 0 8px;
+.fav-card-remove {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+  padding: 0;
 }
 
-/* Stats */
-.favorite-stats {
-  width: 100%;
+.fav-card-remove:hover {
+  background: rgba(239, 68, 68, 0.25);
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+/* ── Coin name area ─────────────────────────────── */
+.fav-card-info {
+  position: relative;
+  z-index: 2;
+  padding: 8px 12px 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding-top: 12px;
-  border-top: 1px solid rgba(0, 0, 0, 0.1);
-}
-
-.favorite-stat {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  width: 100%;
-}
-
-.favorite-stat-label {
-  color: rgba(0, 0, 0, 0.5);
-  font-size: 11px;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.favorite-stat-value {
-  color: #000000;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.favorite-stat-value.positive {
-  color: #10b981;
-}
-
-.favorite-stat-value.negative {
-  color: #ef4444;
-}
-
-/* Responsive Design */
-@media (max-width: 400px) {
-  .favorites-grid {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-  
-  .favorite-card {
-    max-width: 100%;
-  }
-}
-
-@media (min-width: 600px) {
-  .favorites-grid {
-    gap: 16px;
-  }
-  
-  .favorite-profile-container {
-    width: 90px;
-    height: 90px;
-  }
-  
-  .favorite-symbol {
-    font-size: 20px;
-  }
-}
-
-/* ===== OLD STYLES BELOW - TO BE DEPRECATED ===== */
-
-/* Banner Header - Coin info and remove button */
-.banner-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-  position: relative;
-}
-
-/* When there's no banner, add more top margin */
-.favorite-banner:not(:has(.banner-image-container)) .banner-header {
-  margin-top: 8px;
-}
-
-.coin-avatar {
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  transition: all 0.2s ease;
-  background: rgba(255, 255, 255, 0.05); /* Fallback background */
-}
-
-.coin-avatar:hover {
-  border-color: rgba(255, 255, 255, 0.4);
-  transform: scale(1.05);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-}
-
-.coin-info {
+  gap: 2px;
   flex: 1;
 }
 
-.coin-symbol {
-  color: #fff;
-  font-size: 18px;
+.fav-card-symbol {
+  font-size: 15px;
   font-weight: 700;
-  margin-bottom: 2px;
-}
-
-.coin-name {
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 14px;
-}
-
-/* Remove button in banner header */
-.remove-favorite-btn {
-  background: rgba(0, 0, 0, 0.6);
-  color: rgba(255, 255, 255, 0.8);
-  border: none;
-  border-radius: 50%;
-  width: 32px;
-  height: 32px;
-  font-size: 20px;
-  font-weight: bold;
-  cursor: pointer;
-  z-index: 10;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-  backdrop-filter: blur(10px);
-  position: relative;
-  flex-shrink: 0; /* Prevent button from shrinking */
-  pointer-events: auto; /* Ensure button is clickable */
-}
-
-.remove-favorite-btn:hover {
-  background: rgba(226, 85, 123, 0.8);
   color: #fff;
-  transform: scale(1.1);
-}
-
-.remove-favorite-btn:active {
-  transform: scale(0.95);
-  background: rgba(226, 85, 123, 1);
-}
-
-/* Banner Stats - Horizontal layout */
-.banner-stats {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-}
-
-.stat-group {
-  display: flex;
-  gap: 20px;
-  flex: 1;
-}
-
-/* Banner Image Container */
-.banner-image-container {
-  width: 100%;
-  height: 120px;
-  border-radius: 12px;
+  white-space: nowrap;
   overflow: hidden;
-  margin-bottom: 16px;
-  position: relative;
-}
-
-.banner-image {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transition: transform 0.3s ease;
-}
-
-.banner-image:hover {
-  transform: scale(1.02);
-}
-
-/* Old card styles - keep for compatibility until fully replaced */
-.card-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.coin-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 2px solid rgba(255, 255, 255, 0.1);
-}
-
-.coin-info {
-  flex: 1;
-  min-width: 0; /* Prevents overflow */
-}
-
-.coin-symbol {
-  color: #fff;
-  font-weight: 700;
-  font-size: 16px;
+  text-overflow: ellipsis;
   line-height: 1.2;
 }
 
-.coin-name {
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 12px;
-  line-height: 1.2;
+.fav-card-name {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.chart-container {
-  width: 100%;
-  height: 140px;
-  border-radius: 12px;
-  overflow: hidden;
-  margin-bottom: 16px;
-  background: rgba(30, 32, 40, 0.95);
+/* ── Price change pill ──────────────────────────── */
+.fav-card-change {
   position: relative;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.chart-container:hover {
-  transform: scale(1.02);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-}
-
-.mini-chart {
-  width: calc(100% + 60px);
-  height: calc(100% + 30px);
-  border: none;
-  transform: translateX(-30px) translateY(-30px);
-  pointer-events: none; /* Prevent iframe interactions, let parent handle clicks */
-}
-
-.chart-placeholder {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(30, 32, 40, 0.95);
-}
-
-.chart-loading {
-  text-align: center;
-  color: rgba(255, 255, 255, 0.5);
-}
-
-.chart-loading span {
-  font-size: 24px;
-  display: block;
-  margin-bottom: 8px;
-}
-
-.chart-loading p {
+  z-index: 2;
+  align-self: flex-start;
+  margin: 8px 12px 12px;
   font-size: 12px;
-  margin: 0;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 20px;
+  letter-spacing: 0.3px;
 }
 
-.stat {
-  text-align: left;
+.fav-card-change--up {
+  background: rgba(16, 185, 129, 0.18);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.3);
 }
 
-.stat-label {
-  display: block;
+.fav-card-change--down {
+  background: rgba(239, 68, 68, 0.18);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.fav-card-change--neutral {
+  background: rgba(255, 255, 255, 0.08);
   color: rgba(255, 255, 255, 0.5);
-  font-size: 11px;
-  font-weight: 500;
-  margin-bottom: 2px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
-.stat-value {
-  display: block;
-  color: #fff;
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.2;
-}
-
-.stat-value.positive {
-  color: #4be37a;
-}
-
-.stat-value.negative {
-  color: #e2557b;
-}
-
-.graduation-badge {
-  background: rgba(255, 255, 255, 0.15);
-  color: #fff;
-  font-size: 10px;
-  font-weight: 600;
-  padding: 4px 8px;
-  border-radius: 8px;
-  backdrop-filter: blur(10px);
-  white-space: nowrap;
-}
-
-/* Mobile responsive adjustments */
-@media (max-width: 768px) {
-  .favorites-list-container {
-    padding: 60px 0 80px 0;
-  }
-  
-  .favorites-list {
-    padding: 0 16px;
-    gap: 12px;
-  }
-  
-  .favorite-banner {
-    padding: 16px;
-    min-height: 180px;
-  }
-  
-  .favorites-header h1 {
-    font-size: 24px;
-  }
-  
-  .banner-chart {
-    height: 100px;
-  }
-  
-  .stat-group {
-    gap: 16px;
-  }
-  
-  .coin-avatar {
-    width: 45px;
-    height: 45px;
-  }
-  
-  .banner-image-container {
-    height: 100px;
-    margin-bottom: 12px;
-  }
-}
+/* ── Empty / wallet states ──────────────────────── */
 
 /* Empty state */
 .favorites-empty {
@@ -516,7 +225,7 @@
   align-items: center;
   justify-content: center;
   min-height: 80vh;
-  background: #ffffff;
+  background: #0c0f18;
 }
 
 .empty-state {
@@ -532,14 +241,14 @@
 }
 
 .empty-state h2 {
-  color: #000000;
+  color: #fff;
   font-size: 24px;
   font-weight: 700;
   margin: 0 0 12px 0;
 }
 
 .empty-state p {
-  color: rgba(0, 0, 0, 0.6);
+  color: rgba(255, 255, 255, 0.5);
   font-size: 16px;
   line-height: 1.5;
   margin: 0;
