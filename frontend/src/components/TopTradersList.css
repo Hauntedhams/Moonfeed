@@ -238,17 +238,17 @@
   color: rgba(0, 0, 0, 0.6);
 }
 
-.loading-spinner {
+.traders-loader {
   width: 24px;
   height: 24px;
   border: 2px solid rgba(0, 0, 0, 0.2);
   border-top: 2px solid #667eea;
   border-radius: 50%;
-  animation: spin 1s linear infinite;
+  animation: traders-rotate 1s linear infinite;
   margin-bottom: 16px;
 }
 
-@keyframes spin {
+@keyframes traders-rotate {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
@@ -535,7 +535,7 @@
   color: var(--text-secondary);
 }
 
-.dark-mode .loading-spinner {
+.dark-mode .traders-loader {
   border-color: var(--border-color);
   border-top-color: #8b9bff;
 }

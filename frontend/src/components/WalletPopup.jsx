@@ -175,7 +175,7 @@ const WalletPopup = ({ walletAddress, traderData, onClose }) => {
         <div className="wallet-popup-content">
           {loading && (
             <div className="wallet-popup-loading">
-              <div className="loading-spinner-small"></div>
+              <div className="wallet-loader"></div>
               <p>Loading wallet data...</p>
             </div>
           )}

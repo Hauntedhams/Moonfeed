@@ -163,7 +163,7 @@ const TopTradersList = ({ coinAddress, isExpanded }) => {
   if (loading) {
     return (
       <div className="traders-loading">
-        <div className="loading-spinner" />
+        <div className="traders-loader" />
         <p>Loading top traders...</p>
       </div>
     );
