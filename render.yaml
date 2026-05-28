@@ -12,6 +12,8 @@ services:
         value: 10000
       - key: HELIUS_API_KEY
         sync: false
+      - key: MONGODB_URI
+        sync: false
     healthCheckPath: /api/health
     autoDeploy: true
     # Health check configuration - increased for slow cold starts

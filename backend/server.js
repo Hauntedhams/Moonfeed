@@ -33,6 +33,7 @@ const triggerRoutes = require('./routes/trigger');
 const searchRoutes = require('./routes/search');
 const affiliateRoutes = require('./routes/affiliates');
 const commentsRoutes = require('./routes/comments');
+const usersRoutes = require('./routes/users');
 const onDemandEnrichment = require('./services/OnDemandEnrichmentService');
 const geckoTerminalService = require('./geckoTerminalService');
 const chartDataService = require('./chartDataService');
@@ -102,6 +103,9 @@ app.use('/api/affiliates', affiliateRoutes);
 
 // Mount Comments routes
 app.use('/api/comments', commentsRoutes);
+
+// Mount User profile routes
+app.use('/api/users', usersRoutes);
 
 // ═══════════════════════════════════════════════════════════════
 // 🪐 JUPITER REFERRAL API ENDPOINTS

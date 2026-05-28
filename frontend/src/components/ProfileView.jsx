@@ -4,6 +4,7 @@ import { Connection, PublicKey } from '@solana/web3.js';
 import { getFullApiUrl } from '../config/api';
 import { useTrackedWallets } from '../contexts/TrackedWalletsContext';
 import { useDarkMode } from '../contexts/DarkModeContext';
+import { useUserProfile } from '../contexts/UserProfileContext';
 import WalletPopup from './WalletPopup';
 import JupiterWalletButton from './JupiterWalletButton';
 import './ProfileView.css';
@@ -15,6 +16,9 @@ const ProfileView = () => {
   const connected = jupiterWallet.connected;
   const disconnect = jupiterWallet.disconnect;
   const signTransaction = jupiterWallet.signTransaction;
+
+  // Universal profile sync from MongoDB
+  const { profile, saving, saveProfile } = useUserProfile();
   
   // Create Solana connection (memoized to prevent recreation)
   const connectionRef = useRef(new Connection('https://api.mainnet-beta.solana.com', 'confirmed'));
@@ -23,7 +27,6 @@ const ProfileView = () => {
   const { isDarkMode, toggleDarkMode } = useDarkMode();
   const [balance, setBalance] = useState(null);
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
-  const [profilePicture, setProfilePicture] = useState(null);
   const [orders, setOrders] = useState([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [ordersError, setOrdersError] = useState(null);
@@ -33,13 +36,28 @@ const ProfileView = () => {
   const { trackedWallets, untrackWallet } = useTrackedWallets();
   const [selectedWallet, setSelectedWallet] = useState(null);
 
+  // Editing state for display name and bio
+  const [editingName, setEditingName] = useState(false);
+  const [editingBio, setEditingBio] = useState(false);
+  const [nameInput, setNameInput] = useState('');
+  const [bioInput, setBioInput] = useState('');
+  const [profileSaveError, setProfileSaveError] = useState(null);
+
+  // Keep local editing inputs in sync with remote profile
+  useEffect(() => {
+    setNameInput(profile.displayName || '');
+    setBioInput(profile.bio || '');
+  }, [profile.displayName, profile.bio]);
+
+  // Convenience alias used throughout
+  const profilePicture = profile.profilePicture;
+
   // Fetch SOL balance when wallet connects
   useEffect(() => {
     const setupWallet = async () => {
       if (connected && publicKey) {
         fetchBalance();
         fetchOrders();
-        loadProfilePicture();
       } else {
         setBalance(null);
         setOrders([]);
@@ -386,47 +404,58 @@ const ProfileView = () => {
     }
   };
 
-  // Profile picture management
-  const loadProfilePicture = () => {
-    if (!publicKey) return;
-    const saved = localStorage.getItem(`profilePic_${publicKey.toString()}`);
-    if (saved) {
-      setProfilePicture(saved);
-    }
-  };
-
+  // Profile picture management — syncs to MongoDB via context
   const handleProfilePictureChange = (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
     if (!file.type.startsWith('image/')) {
       alert('Please select an image file');
       return;
     }
 
-    // Validate file size (max 2MB)
-    if (file.size > 2 * 1024 * 1024) {
-      alert('Image size must be less than 2MB');
+    if (file.size > 500 * 1024) {
+      alert('Image size must be less than 500KB');
       return;
     }
 
     const reader = new FileReader();
-    reader.onloadend = () => {
+    reader.onloadend = async () => {
       const base64String = reader.result;
-      setProfilePicture(base64String);
-      // Save to localStorage
-      if (publicKey) {
-        localStorage.setItem(`profilePic_${publicKey.toString()}`, base64String);
+      setProfileSaveError(null);
+      const result = await saveProfile({ profilePicture: base64String });
+      if (!result.success) {
+        setProfileSaveError(result.error || 'Failed to save profile picture');
       }
     };
     reader.readAsDataURL(file);
   };
 
-  const removeProfilePicture = () => {
-    setProfilePicture(null);
-    if (publicKey) {
-      localStorage.removeItem(`profilePic_${publicKey.toString()}`);
+  const removeProfilePicture = async () => {
+    setProfileSaveError(null);
+    const result = await saveProfile({ profilePicture: null });
+    if (!result.success) {
+      setProfileSaveError(result.error || 'Failed to remove profile picture');
+    }
+  };
+
+  const handleSaveName = async () => {
+    setProfileSaveError(null);
+    const result = await saveProfile({ displayName: nameInput });
+    if (result.success) {
+      setEditingName(false);
+    } else {
+      setProfileSaveError(result.error || 'Failed to save display name');
+    }
+  };
+
+  const handleSaveBio = async () => {
+    setProfileSaveError(null);
+    const result = await saveProfile({ bio: bioInput });
+    if (result.success) {
+      setEditingBio(false);
+    } else {
+      setProfileSaveError(result.error || 'Failed to save bio');
     }
   };
 
@@ -648,6 +677,70 @@ const ProfileView = () => {
           )}
           
           <p className="profile-address">{formatAddress(publicKey)}</p>
+
+          {/* Display Name */}
+          <div className="profile-display-name">
+            {editingName ? (
+              <div className="profile-field-edit">
+                <input
+                  type="text"
+                  value={nameInput}
+                  onChange={e => setNameInput(e.target.value)}
+                  maxLength={32}
+                  placeholder="Display name"
+                  className="profile-field-input"
+                  autoFocus
+                />
+                <div className="profile-field-actions">
+                  <button onClick={handleSaveName} disabled={saving} className="profile-save-btn">
+                    {saving ? 'Saving…' : 'Save'}
+                  </button>
+                  <button onClick={() => { setEditingName(false); setNameInput(profile.displayName || ''); }} className="profile-cancel-btn">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="profile-field-display" onClick={() => setEditingName(true)} title="Click to edit">
+                <span className="profile-name-text">{profile.displayName || <em className="profile-field-hint">Add display name</em>}</span>
+                <span className="profile-edit-icon">✏️</span>
+              </div>
+            )}
+          </div>
+
+          {/* Bio */}
+          <div className="profile-bio">
+            {editingBio ? (
+              <div className="profile-field-edit">
+                <textarea
+                  value={bioInput}
+                  onChange={e => setBioInput(e.target.value)}
+                  maxLength={160}
+                  placeholder="Short bio (160 chars)"
+                  className="profile-field-input profile-bio-input"
+                  rows={3}
+                  autoFocus
+                />
+                <div className="profile-field-actions">
+                  <button onClick={handleSaveBio} disabled={saving} className="profile-save-btn">
+                    {saving ? 'Saving…' : 'Save'}
+                  </button>
+                  <button onClick={() => { setEditingBio(false); setBioInput(profile.bio || ''); }} className="profile-cancel-btn">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="profile-field-display" onClick={() => setEditingBio(true)} title="Click to edit">
+                <span className="profile-bio-text">{profile.bio || <em className="profile-field-hint">Add a bio</em>}</span>
+                <span className="profile-edit-icon">✏️</span>
+              </div>
+            )}
+          </div>
+
+          {profileSaveError && (
+            <p className="profile-save-error">⚠️ {profileSaveError}</p>
+          )}
           
           {/* Hidden file input for profile picture upload */}
           <input

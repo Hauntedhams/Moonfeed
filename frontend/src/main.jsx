@@ -18,6 +18,9 @@ import {
 // WebSocket context for singleton connection
 import { LiveDataProvider } from './hooks/useLiveDataContext.jsx';
 
+// Universal wallet profile sync
+import { UserProfileProvider } from './contexts/UserProfileContext.jsx';
+
 // Wallet notification handler
 import { WalletNotification } from './components/WalletNotification.jsx';
 
@@ -56,7 +59,9 @@ function RootApp() {
       }}
     >
       <LiveDataProvider>
-        <App />
+        <UserProfileProvider>
+          <App />
+        </UserProfileProvider>
       </LiveDataProvider>
     </UnifiedWalletProvider>
   );
