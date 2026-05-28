@@ -2567,15 +2567,14 @@ const CoinCard = memo(({
                         <span className="tiktok-tx-side" style={{ color: sideColor }}>
                           {isBuy ? '● BUY' : '● SELL'}
                         </span>
-                        <a
+                        <span
                           className="tiktok-tx-wallet"
-                          href={`https://solscan.io/account/${wallet}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
+                          onClick={(e) => { e.stopPropagation(); wallet !== 'Unknown' && setSelectedWallet(wallet); }}
+                          style={{ cursor: wallet !== 'Unknown' ? 'pointer' : 'default' }}
+                          title={wallet !== 'Unknown' ? 'Click to view wallet stats' : undefined}
                         >
                           {wallet.substring(0, 4)}...{wallet.slice(-4)}
-                        </a>
+                        </span>
                         {dexShort && <span className="tiktok-tx-dex">{dexShort}</span>}
                       </div>
 

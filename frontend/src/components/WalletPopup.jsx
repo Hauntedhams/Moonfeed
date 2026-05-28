@@ -43,9 +43,13 @@ const WalletPopup = ({ walletAddress, traderData, onClose }) => {
       if (result.success) {
         console.log(`✅ Wallet data loaded from Helius`);
         
-        // Calculate win rate from token data
-        const winRate = calculateWinRate(result.tokens || []);
-        const totalProfit = calculateTotalProfit(result.solActivity);
+        // Prefer server-provided values; fall back to client calculation
+        const winRate = result.winRate !== undefined
+          ? result.winRate
+          : calculateWinRate(result.tokens || []);
+        const totalProfit = result.totalProfit !== undefined
+          ? result.totalProfit
+          : calculateTotalProfit(result.solActivity);
         
         setWalletData({ 
           ...result, 
@@ -68,26 +72,27 @@ const WalletPopup = ({ walletAddress, traderData, onClose }) => {
     }
   };
 
-  // Calculate win rate from closed positions
+  // Calculate win rate from closed positions (fallback when server doesn't provide it)
   const calculateWinRate = (tokens) => {
     if (!tokens || tokens.length === 0) return 0;
-    
     const closedPositions = tokens.filter(t => Math.abs(t.netAmount) < 0.001 && t.sells > 0);
-    
     if (closedPositions.length === 0) return 0;
-    
     const wins = closedPositions.filter(t => t.sells >= t.buys).length;
-    
     return Math.round((wins / closedPositions.length) * 100);
   };
 
-  // Calculate total profit from SOL activity
+  // Calculate total profit from SOL activity (fallback)
   const calculateTotalProfit = (solActivity) => {
     if (!solActivity) return 0;
     const netChange = parseFloat(solActivity.netChange);
-    // Assume SOL price of $150 for rough USD estimate
-    const solPrice = 150;
-    return Math.round(netChange * solPrice);
+    return Math.round(netChange * 150);
+  };
+
+  const formatHoldTime = (secs) => {
+    if (!secs) return '-';
+    if (secs < 3600) return `${Math.round(secs / 60)}m`;
+    if (secs < 86400) return `${(secs / 3600).toFixed(1)}h`;
+    return `${Math.round(secs / 86400)}d`;
   };
 
   const formatWallet = (wallet) => {
@@ -201,10 +206,37 @@ const WalletPopup = ({ walletAddress, traderData, onClose }) => {
                 </a>
               </div>
 
-              {/* Trading Overview & Performance - Side by Side */}
+              {/* Trading Overview & Performance */}
               {walletData.isHeliusData && walletData.trading && (
                 <>
-                  {/* Top Section: Trading Activity + Performance */}
+                  {/* Identity (KOL / known wallet) */}
+                  {walletData.identity && (walletData.identity.name || walletData.identity.type) && (
+                    <div className="wallet-popup-section">
+                      <div className="wallet-popup-label">Identity</div>
+                      <div className="wallet-popup-stats">
+                        {walletData.identity.name && (
+                          <div className="wallet-stat-item">
+                            <span className="stat-label">Name</span>
+                            <span className="stat-value">{walletData.identity.name}</span>
+                          </div>
+                        )}
+                        {walletData.identity.twitter && (
+                          <div className="wallet-stat-item">
+                            <span className="stat-label">Twitter</span>
+                            <span className="stat-value">{walletData.identity.twitter}</span>
+                          </div>
+                        )}
+                        {walletData.identity.type && (
+                          <div className="wallet-stat-item">
+                            <span className="stat-label">Type</span>
+                            <span className="stat-value" style={{textTransform:'uppercase'}}>{walletData.identity.type}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Trading Activity */}
                   <div className="wallet-popup-section">
                     <div className="wallet-popup-label">Trading Activity</div>
                     <div className="wallet-popup-stats">
@@ -213,35 +245,79 @@ const WalletPopup = ({ walletAddress, traderData, onClose }) => {
                         <span className="stat-value">{formatNumber(walletData.trading.totalTrades)}</span>
                       </div>
                       <div className="wallet-stat-item">
-                        <span className="stat-label">Unique Tokens</span>
+                        <span className="stat-label">Tokens Traded</span>
                         <span className="stat-value">{formatNumber(walletData.trading.uniqueTokens)}</span>
                       </div>
                       <div className="wallet-stat-item">
-                        <span className="stat-label">Active Positions</span>
+                        <span className="stat-label">Open Positions</span>
                         <span className="stat-value">{formatNumber(walletData.trading.activePositions)}</span>
                       </div>
+                      {walletData.trading.winningPositions !== undefined && (
+                        <div className="wallet-stat-item">
+                          <span className="stat-label">Winners / Losers</span>
+                          <span className="stat-value">
+                            <span className="positive">{formatNumber(walletData.trading.winningPositions)}</span>
+                            {' / '}
+                            <span className="negative">{formatNumber(walletData.trading.losingPositions)}</span>
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
-                  {/* Performance Metrics - Right next to Trading Activity */}
+                  {/* Performance */}
                   <div className="wallet-popup-section">
                     <div className="wallet-popup-label">Performance</div>
                     <div className="wallet-popup-stats">
                       <div className="wallet-stat-item">
-                        <span className="stat-label">Est. Profit</span>
+                        <span className="stat-label">Realized PnL</span>
                         <span className={`stat-value ${walletData.totalProfit >= 0 ? 'positive' : 'negative'}`}>
                           {formatCurrency(walletData.totalProfit)}
                         </span>
                       </div>
                       <div className="wallet-stat-item">
                         <span className="stat-label">Win Rate</span>
-                        <span className="stat-value">{walletData.winRate}%</span>
+                        <span className="stat-value">{Number(walletData.winRate).toFixed(1)}%</span>
                       </div>
+                      {walletData.roi !== undefined && walletData.roi !== 0 && (
+                        <div className="wallet-stat-item">
+                          <span className="stat-label">ROI</span>
+                          <span className={`stat-value ${walletData.roi >= 0 ? 'positive' : 'negative'}`}>
+                            {walletData.roi >= 0 ? '+' : ''}{Number(walletData.roi).toFixed(1)}%
+                          </span>
+                        </div>
+                      )}
+                      {walletData.avgHoldTimeSecs > 0 && (
+                        <div className="wallet-stat-item">
+                          <span className="stat-label">Avg Hold</span>
+                          <span className="stat-value">{formatHoldTime(walletData.avgHoldTimeSecs)}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
-                  {/* SOL Activity */}
-                  {walletData.solActivity && (
+                  {/* PnL Overview (Solana Tracker) or SOL Activity (legacy) */}
+                  {walletData.pnl && walletData.pnl.invested > 0 ? (
+                    <div className="wallet-popup-section">
+                      <div className="wallet-popup-label">PnL Overview</div>
+                      <div className="wallet-popup-stats">
+                        <div className="wallet-stat-item">
+                          <span className="stat-label">Invested</span>
+                          <span className="stat-value">{formatCurrency(walletData.pnl.invested)}</span>
+                        </div>
+                        <div className="wallet-stat-item">
+                          <span className="stat-label">Proceeds</span>
+                          <span className="stat-value">{formatCurrency(walletData.pnl.proceeds)}</span>
+                        </div>
+                        <div className="wallet-stat-item">
+                          <span className="stat-label">Unrealized</span>
+                          <span className={`stat-value ${walletData.pnl.unrealized >= 0 ? 'positive' : 'negative'}`}>
+                            {formatCurrency(walletData.pnl.unrealized)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : walletData.solActivity && (
                     <div className="wallet-popup-section">
                       <div className="wallet-popup-label">SOL Activity</div>
                       <div className="wallet-popup-stats">
@@ -420,7 +496,7 @@ const WalletPopup = ({ walletAddress, traderData, onClose }) => {
                   {/* Data Source Info */}
                   <div className="wallet-popup-footer">
                     <span className="data-source">
-                      📊 Data from Helius & DexCheck APIs
+                      📊 Data from Solana Tracker PnL V2
                       {walletData.dexcheck && (
                         <span className="dexcheck-badge">⚡ Enhanced with DexCheck</span>
                       )}

@@ -87,81 +87,97 @@ const callSolanaTrackerAPI = async (endpoint, cacheKey) => {
 
 /**
  * GET /api/wallet/:owner
- * Fetch comprehensive wallet analytics using Helius (FREE)
- * Returns: Trading history, token trades, transaction stats
+ * Fetch wallet analytics using Solana Tracker PnL V2 API (single HTTP call, all-time accurate data)
  */
 router.get('/:owner', async (req, res) => {
   try {
     const { owner } = req.params;
-    
+
     if (!owner) {
-      return res.status(400).json({
-        success: false,
-        error: 'Wallet address is required'
-      });
+      return res.status(400).json({ success: false, error: 'Wallet address is required' });
     }
 
-    // Validate that it looks like a Solana address (base58, typically 32-44 chars)
-    if (owner.length < 32 || owner.length > 44) {
-      console.warn(`⚠️ Suspicious wallet address length: ${owner.length}`);
+    const SOLANA_TRACKER_API_KEY = process.env.SOLANA_TRACKER_API_KEY;
+    if (!SOLANA_TRACKER_API_KEY) {
+      return res.status(500).json({ success: false, error: 'SOLANA_TRACKER_API_KEY not configured' });
     }
 
-    console.log(`🔍 Fetching comprehensive wallet analytics for: ${owner.slice(0, 4)}...${owner.slice(-4)}`);
+    console.log(`🔍 Fetching wallet analytics for: ${owner.slice(0, 4)}...${owner.slice(-4)}`);
 
-    // Fetch from both Helius and DexCheck in parallel
-    const [heliusData, dexcheckData] = await Promise.all([
-      heliusService.getWalletAnalytics(owner),
-      dexcheckService.getComprehensiveAnalytics(owner)
+    const cacheKey = `wallet-pnlv2-${owner}`;
+    const cached = walletCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp) < WALLET_CACHE_TTL) {
+      console.log(`💾 Returning cached wallet data`);
+      return res.json(cached.data);
+    }
+
+    // Fetch Solana Tracker PnL V2 and DexCheck in parallel (DexCheck with 6s timeout)
+    const stPnlPromise = fetch(`https://data.solanatracker.io/v2/pnl/wallets/${owner}`, {
+      headers: { 'x-api-key': SOLANA_TRACKER_API_KEY, 'Content-Type': 'application/json' }
+    }).then(r => r.ok ? r.json() : null).catch(() => null);
+
+    const dexcheckWithTimeout = Promise.race([
+      dexcheckService.getComprehensiveAnalytics(owner),
+      new Promise(resolve => setTimeout(() => resolve({ success: false, error: 'timeout' }), 6000))
     ]);
-    
-    if (!heliusData.success && !dexcheckData.success) {
-      return res.status(500).json({
-        success: false,
-        error: 'Failed to fetch wallet analytics from all sources',
-        details: {
-          helius: heliusData.error,
-          dexcheck: dexcheckData.error
-        }
-      });
+
+    const [stData, dexcheckData] = await Promise.all([stPnlPromise, dexcheckWithTimeout]);
+
+    if (!stData) {
+      return res.status(502).json({ success: false, error: 'Failed to fetch wallet data from Solana Tracker' });
     }
 
-    // Combine data from both sources
+    const summary = stData.summary || {};
+    const analysis = stData.analysis || {};
+    const stats = stData.stats || {};
+
     const combinedData = {
       success: true,
       wallet: owner,
       timestamp: new Date().toISOString(),
-      
-      // Helius data (transaction history, token trades)
-      ...heliusData,
-      
-      // DexCheck data (whale status, top trader rankings, recent activity)
+      isSolanaTrackerData: true,
+      isHeliusData: true, // kept for WalletPopup backward compat
+      hasData: true,
+      identity: stData.identity || null,
+      winRate: analysis.winRate ?? 0,
+      totalProfit: summary.pnl?.realized ?? 0,
+      roi: summary.roi ?? 0,
+      avgHoldTimeSecs: summary.timing?.avgHoldTimeSecs ?? null,
+      trading: {
+        totalTrades: summary.counts?.trades ?? 0,
+        uniqueTokens: summary.counts?.tokensTraded ?? 0,
+        activePositions: stats.holding ?? 0,
+        closedPositions: stats.sold ?? 0,
+        winningPositions: analysis.tokens?.winning ?? 0,
+        losingPositions: analysis.tokens?.losing ?? 0,
+      },
+      pnl: {
+        realized: summary.pnl?.realized ?? 0,
+        unrealized: summary.pnl?.unrealized ?? 0,
+        total: summary.pnl?.total ?? 0,
+        invested: summary.invested ?? 0,
+        proceeds: summary.proceeds ?? 0,
+      },
       dexcheck: dexcheckData.success ? {
         trading: dexcheckData.trading,
         whale: dexcheckData.whale,
         topTrader: dexcheckData.topTrader,
         recentActivity: dexcheckData.recentActivity
       } : null,
-      
-      // Data source metadata
       dataSources: {
-        helius: heliusData.success,
+        solanaTracker: true,
         dexcheck: dexcheckData.success
       }
     };
 
-    console.log(`✅ Successfully fetched wallet analytics for ${owner.slice(0, 4)}...${owner.slice(-4)}`);
-    console.log(`   📊 Helius: ${heliusData.success ? 'OK' : 'FAILED'}`);
-    console.log(`   📊 DexCheck: ${dexcheckData.success ? 'OK' : 'FAILED'}`);
+    walletCache.set(cacheKey, { data: combinedData, timestamp: Date.now() });
 
+    console.log(`✅ Wallet analytics ready — winRate: ${combinedData.winRate}%, trades: ${combinedData.trading.totalTrades}`);
     res.json(combinedData);
 
   } catch (error) {
     console.error('❌ Error fetching wallet data:', error.message);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch wallet data',
-      details: error.message
-    });
+    res.status(500).json({ success: false, error: 'Failed to fetch wallet data', details: error.message });
   }
 });
 
