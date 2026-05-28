@@ -1732,9 +1732,8 @@ app.get('/api/top-traders/:coinAddress', async (req, res) => {
 
     console.log(`🔍 Fetching top traders for: ${coinAddress}`);
 
-    // Call Solana Tracker API for top traders
-    // Use the correct /top-traders/{token} endpoint
-    const apiUrl = `${SOLANA_TRACKER_BASE_URL}/top-traders/${coinAddress}`;
+    // PnL V2 endpoint (replaces deprecated /top-traders/{token})
+    const apiUrl = `${SOLANA_TRACKER_BASE_URL}/v2/pnl/tokens/${coinAddress}/traders?sort=realized&limit=100`;
     console.log(`📡 API URL: ${apiUrl}`);
 
     const response = await fetch(apiUrl, {
@@ -1748,7 +1747,7 @@ app.get('/api/top-traders/:coinAddress', async (req, res) => {
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`❌ Solana Tracker API error: ${response.status} ${response.statusText}`);
-      console.error(`❌ Response body: ${errorText}`);
+      console.error(`❌ Response body: ${errorText.substring(0, 200)}`);
       
       // If we have stale cached data, return it rather than failing
       if (cached) {
@@ -1762,25 +1761,41 @@ app.get('/api/top-traders/:coinAddress', async (req, res) => {
           timestamp: new Date(cached.timestamp).toISOString()
         });
       }
+
+      // User-friendly messages for common status codes
+      if (response.status === 522 || response.status === 524) {
+        throw new Error('Trader data service timed out. Please try again in a moment.');
+      } else if (response.status === 429) {
+        throw new Error('Rate limit reached. Please try again shortly.');
+      } else if (response.status === 401 || response.status === 403) {
+        throw new Error('Trader data service authentication error.');
+      } else if (response.status >= 500) {
+        throw new Error('Trader data service is temporarily unavailable.');
+      }
       
-      throw new Error(`API error: ${response.status} - ${errorText}`);
+      throw new Error(`Trader data error (${response.status})`);
     }
 
     const data = await response.json();
     
     console.log(`✅ Raw API response:`, JSON.stringify(data).substring(0, 200));
     
-    // Handle different response formats
-    let traders = data;
-    if (data.data) {
-      traders = data.data;
-    }
+    // PnL V2 response shape: { traders: [...], meta: {...}, pagination: {...} }
+    // Normalize to the shape the frontend expects
+    const rawTraders = Array.isArray(data.traders) ? data.traders : (Array.isArray(data) ? data : []);
+    const tradersArray = rawTraders.map(t => ({
+      wallet:          t.wallet,
+      total_invested:  t.buyUsd    ?? t.invested ?? 0,
+      realized:        t.sellUsd   ?? t.proceeds ?? 0,
+      total:           t.pnl?.token?.realized ?? t.pnl?.realized ?? 0,
+      unrealized:      t.pnl?.token?.unrealized ?? 0,
+      roi:             t.roi ?? 0,
+      counts:          t.counts ?? { buys: 0, sells: 0, total: 0 },
+    }));
     
-    const traderCount = Array.isArray(traders) ? traders.length : 0;
+    const traderCount = tradersArray.length;
     console.log(`✅ Fetched ${traderCount} top traders for ${coinAddress}`);
 
-    // Cache the result
-    const tradersArray = Array.isArray(traders) ? traders : [];
     topTradersCache.set(coinAddress, {
       data: tradersArray,
       timestamp: Date.now()

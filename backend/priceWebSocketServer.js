@@ -216,7 +216,7 @@ class PriceWebSocketServer {
   async subscribeTxs(ws, tokenAddress) {
     try {
       // 1. Send recent history immediately
-      const history = await solanaTransactionService.getRecentTransactions(tokenAddress, 50);
+      const history = await solanaTransactionService.getRecentTransactions(tokenAddress, 100);
       this.sendMessage(ws, {
         type: 'tx-history',
         token: tokenAddress,

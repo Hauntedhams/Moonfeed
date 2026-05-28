@@ -1,19 +1,14 @@
 const axios = require('axios');
 
 /**
- * Solana Transaction Service (Simplified)
- * 
- * Uses Helius enhanced transaction API for parsed swap history.
- * Falls back to Solana RPC if Helius is unavailable.
- * 
- * Simple strategy:
- *   1. getRecentTransactions() → Helius parsed history (fast, pre-parsed)
- *   2. Cache for 15s to avoid repeated hits
- *   3. No live subscriptions (frontend polls every 10s instead)
+ * Solana Transaction Service
+ *
+ * Uses public Solana RPC as the primary source for swap history.
+ * Falls back to Helius enhanced API if configured and RPC returns nothing.
  */
 
-const HELIUS_API_KEY = process.env.HELIUS_API_KEY || process.env.HELIUS_KEY || '26240c3d-8cce-414e-95f7-5c0c75c1a2cb';
-const HELIUS_RPC = HELIUS_API_KEY 
+const HELIUS_API_KEY = process.env.HELIUS_API_KEY || process.env.HELIUS_KEY || null;
+const HELIUS_RPC = HELIUS_API_KEY
   ? `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`
   : null;
 
@@ -41,14 +36,14 @@ class SolanaTransactionService {
     this.txCache = new Map(); // mintAddress -> { transactions, timestamp }
     this.CACHE_TTL = 15_000; // 15 seconds
     
-    console.log('[TxService] Initialized. Helius:', HELIUS_RPC ? 'YES' : 'NO (will use fallback)');
+    console.log('[TxService] Initialized. Helius:', HELIUS_API_KEY ? 'available (secondary)' : 'not configured');
   }
 
   /**
    * Fetch the most recent swap transactions for a token.
    * Uses Helius enhanced API (fast, pre-parsed) with Solana RPC fallback.
    */
-  async getRecentTransactions(mintAddress, limit = 50) {
+  async getRecentTransactions(mintAddress, limit = 100) {
     // Check cache first
     const cached = this.txCache.get(mintAddress);
     if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
@@ -57,12 +52,14 @@ class SolanaTransactionService {
 
     let transactions = [];
 
-    // Strategy 1: Helius parsed transaction history (fast & reliable)
+    // Strategy 1: Helius enhanced API — indexes all DEX pools by mint address,
+    // giving real swap history across Raydium, Jupiter, Pump.fun, etc.
     if (HELIUS_API_KEY) {
       transactions = await this.fetchViaHelius(mintAddress, limit);
     }
 
-    // Strategy 2: Solana RPC fallback (slower, less reliable on public endpoint)
+    // Strategy 2: Public Solana RPC — only queries mint account directly,
+    // so it misses pool-level swaps for many tokens. Use as last resort.
     if (transactions.length === 0) {
       transactions = await this.fetchViaSolanaRpc(mintAddress, limit);
     }
@@ -225,16 +222,15 @@ class SolanaTransactionService {
 
   /**
    * Fallback: Fetch via raw Solana RPC.
-   * Uses the public endpoint or HELIUS_RPC — slower but works as backup.
+   * Uses the public endpoint — free, no API key required.
    */
   async fetchViaSolanaRpc(mintAddress, limit) {
-    // Always use public Solana RPC for this fallback — NOT Helius RPC,
-    // since Helius RPC uses the same API key that may be rate-limited.
     const rpcUrl = 'https://api.mainnet-beta.solana.com';
     
     try {
-      // Fetch more signatures than needed because many won't be swaps
-      const fetchCount = Math.min(limit * 3, 100);
+      // Fetch a large pool of signatures — we filter failed ones out next,
+      // so we need more raw sigs than the final limit.
+      const fetchCount = Math.min(limit * 6, 300);
 
       // Get recent signatures
       const sigResponse = await axios.post(rpcUrl, {
@@ -244,15 +240,21 @@ class SolanaTransactionService {
         params: [mintAddress, { limit: fetchCount }],
       }, { timeout: 8000 });
 
-      const signatures = sigResponse.data?.result;
-      if (!signatures || signatures.length === 0) return [];
+      const allSigs = sigResponse.data?.result;
+      if (!allSigs || allSigs.length === 0) return [];
 
-      // Fetch transactions in small batches to avoid rate limits
+      // Pre-filter: skip on-chain failed transactions — no point fetching them
+      const validSigs = allSigs.filter(s => !s.err);
+      console.log(`[TxService] RPC sigs for ${mintAddress.substring(0, 8)}: ${allSigs.length} total, ${validSigs.length} successful`);
+
+      if (validSigs.length === 0) return [];
+
+      // Fetch full transaction data in batches of 5
       const BATCH = 5;
       const parsed = [];
 
-      for (let i = 0; i < signatures.length && parsed.length < limit; i += BATCH) {
-        const batch = signatures.slice(i, i + BATCH);
+      for (let i = 0; i < validSigs.length && parsed.length < limit; i += BATCH) {
+        const batch = validSigs.slice(i, i + BATCH);
         
         const results = await Promise.allSettled(
           batch.map(sig => 
@@ -261,7 +263,7 @@ class SolanaTransactionService {
               id: 1,
               method: 'getTransaction',
               params: [sig.signature, { maxSupportedTransactionVersion: 0, encoding: 'jsonParsed' }],
-            }, { timeout: 5000 })
+            }, { timeout: 6000 })
           )
         );
 
@@ -273,13 +275,13 @@ class SolanaTransactionService {
           const tx = result.value?.data?.result;
           if (!tx || !tx.meta || tx.meta.err) continue;
 
-          const swap = this.extractSwapFromRpc(tx, signatures[i + j].signature, mintAddress);
+          const swap = this.extractSwapFromRpc(tx, validSigs[i + j].signature, mintAddress);
           if (swap) parsed.push(swap);
         }
 
-        // Small delay between batches on public RPC to avoid rate limits
-        if (i + BATCH < signatures.length) {
-          await new Promise(r => setTimeout(r, 200));
+        // 150ms between batches — public RPC allows ~10 req/s, this is conservative
+        if (i + BATCH < validSigs.length && parsed.length < limit) {
+          await new Promise(r => setTimeout(r, 150));
         }
       }
 
@@ -287,7 +289,7 @@ class SolanaTransactionService {
       return parsed;
 
     } catch (error) {
-      console.error(`[TxService] RPC fallback failed for ${mintAddress.substring(0, 8)}:`, error.message);
+      console.error(`[TxService] RPC fetch failed for ${mintAddress.substring(0, 8)}:`, error.message);
       return [];
     }
   }

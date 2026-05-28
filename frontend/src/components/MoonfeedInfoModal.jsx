@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import './MoonfeedInfoModal.css';
 
@@ -344,39 +344,109 @@ const MoonfeedInfoModal = ({ isVisible, onClose, onBuyMoo, onStartTutorial }) =>
   );
 };
 
-// Main button component
-const MoonfeedInfoButton = ({ className = '', showNudge = false, onBuyMoo, onStartTutorial }) => {
+// Hamburger menu button + dropdown
+const MoonfeedInfoButton = ({
+  className = '',
+  showNudge = false,
+  onBuyMoo,
+  onStartTutorial,
+  onTrackedWallets,
+  onOptions,
+}) => {
   const [showModal, setShowModal] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const wrapperRef = useRef(null);
 
-  const handleOpenModal = () => {
-    console.log('🌙 Opening Moonfeed info modal...');
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handleOutside = (e) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    document.addEventListener('touchstart', handleOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+      document.removeEventListener('touchstart', handleOutside);
+    };
+  }, [menuOpen]);
+
+  const openAbout = () => {
+    setMenuOpen(false);
     setShowModal(true);
   };
 
-  const handleCloseModal = () => {
-    console.log('🌙 Closing Moonfeed info modal...');
-    setShowModal(false);
-  };
+  const MENU_ITEMS = [
+    {
+      label: 'Tracked Wallets',
+      onClick: () => { setMenuOpen(false); onTrackedWallets?.(); },
+    },
+    {
+      label: 'Options',
+      onClick: () => { setMenuOpen(false); onOptions?.(); },
+    },
+    { divider: true },
+    {
+      label: 'About',
+      onClick: openAbout,
+    },
+    {
+      label: 'Help',
+      onClick: openAbout,
+    },
+  ];
 
   return (
-    <>
+    <div ref={wrapperRef} className={`moonfeed-hamburger-wrapper ${className}`}>
       <button
-        className={`moonfeed-info-button ${className} ${showNudge ? 'nudge-active' : ''}`}
-        onClick={handleOpenModal}
-        title="How to use Moonfeed"
-        aria-label="How to use Moonfeed"
+        className={`moonfeed-info-button ${showNudge ? 'nudge-active' : ''}`}
+        onClick={() => setMenuOpen((o) => !o)}
+        title="Menu"
+        aria-label="Open menu"
+        aria-expanded={menuOpen}
       >
-        <span className="moonfeed-question-mark">?</span>
+        <svg
+          className="hamburger-icon"
+          width="22"
+          height="16"
+          viewBox="0 0 22 16"
+          fill="none"
+          aria-hidden="true"
+        >
+          <rect x="0" y="0" width="22" height="2.5" rx="1.25" fill="currentColor" />
+          <rect x="0" y="6.75" width="22" height="2.5" rx="1.25" fill="currentColor" />
+          <rect x="0" y="13.5" width="22" height="2.5" rx="1.25" fill="currentColor" />
+        </svg>
         {showNudge && <span className="nudge-dot" aria-hidden="true" />}
       </button>
-      
-      <MoonfeedInfoModal 
-        isVisible={showModal} 
-        onClose={handleCloseModal}
+
+      {menuOpen && (
+        <nav className="hamburger-dropdown" role="menu">
+          {MENU_ITEMS.map((item, i) =>
+            item.divider ? (
+              <div key={i} className="hamburger-menu-divider" role="separator" />
+            ) : (
+              <button
+                key={item.label}
+                className="hamburger-menu-item"
+                role="menuitem"
+                onClick={item.onClick}
+              >
+                {item.label}
+              </button>
+            )
+          )}
+        </nav>
+      )}
+
+      <MoonfeedInfoModal
+        isVisible={showModal}
+        onClose={() => setShowModal(false)}
         onBuyMoo={onBuyMoo}
         onStartTutorial={onStartTutorial}
       />
-    </>
+    </div>
   );
 };
 

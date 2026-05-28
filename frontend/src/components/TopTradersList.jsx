@@ -110,7 +110,8 @@ const TopTradersList = ({ coinAddress, isExpanded }) => {
       // Better error messages for users
       if (err.name === 'AbortError') {
         setError('Request timed out. Please try again.');
-      } else if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+      } else if (err.message === 'Failed to fetch' || err.message === 'Load failed' || err.name === 'TypeError') {
+        // Exact browser network-level errors (not backend error messages)
         setError('Network error. Please check your connection.');
       } else {
         setError(err.message || 'Failed to load top traders');

@@ -20,6 +20,10 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError }
   const [limitError, setLimitError] = useState(null);
   const [limitSuccess, setLimitSuccess] = useState(false);
   const [limitPriceInput, setLimitPriceInput] = useState('');
+  const [stopLossEnabled, setStopLossEnabled] = useState(false);
+  const [stopLossPct, setStopLossPct] = useState(20);
+  const [stopLossPctInput, setStopLossPctInput] = useState('20');
+  const [stopLossPriceInput, setStopLossPriceInput] = useState('');
   const { walletAddress, signTransaction } = useWallet();
   
   // Get the full Jupiter wallet adapter for passthrough to Terminal
@@ -211,6 +215,10 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError }
     setLimitError(null);
     setLimitSuccess(false);
     setLimitPriceInput('');
+    setStopLossEnabled(false);
+    setStopLossPct(20);
+    setStopLossPctInput('20');
+    setStopLossPriceInput('');
     onClose();
   };
 
@@ -241,6 +249,26 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError }
       if (newPct > 0) {
         setLimitPct(newPct);
         setLimitPctInput(newPct.toFixed(newPct % 1 === 0 ? 0 : 2));
+      }
+    }
+  };
+
+  const handleStopLossPctChange = (newPct) => {
+    setStopLossPct(newPct);
+    setStopLossPctInput(String(newPct));
+    if (basePrice > 0) {
+      setStopLossPriceInput(formatTargetPrice(basePrice * (1 - newPct / 100)));
+    }
+  };
+
+  const handleStopLossPriceInputChange = (value) => {
+    setStopLossPriceInput(value);
+    const tp = parseFloat(value);
+    if (!isNaN(tp) && tp > 0 && basePrice > 0) {
+      const newPct = parseFloat((((basePrice - tp) / basePrice) * 100).toFixed(2));
+      if (newPct > 0) {
+        setStopLossPct(newPct);
+        setStopLossPctInput(newPct.toFixed(newPct % 1 === 0 ? 0 : 2));
       }
     }
   };
@@ -294,6 +322,55 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError }
 
       const executeResult = await executeResponse.json();
       if (!executeResult.success) throw new Error(executeResult.error || 'Failed to execute order');
+
+      // Place stop-loss order if enabled
+      if (stopLossEnabled && stopLossPct > 0) {
+        try {
+          const slTakingAmount = String(Math.floor(parseFloat(swapResult.inputAmount) * (1 - stopLossPct / 100)));
+
+          const slResponse = await fetch(getFullApiUrl('/api/trigger/create-order'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              maker: walletAddress,
+              payer: walletAddress,
+              inputMint: coin.mintAddress,
+              outputMint: SOL_MINT,
+              makingAmount,
+              takingAmount: slTakingAmount,
+              expiredAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+              orderType: 'stop',
+            }),
+          });
+
+          const slResult = await slResponse.json();
+          if (!slResult.success) throw new Error(slResult.error || 'Failed to create stop-loss order');
+
+          const slSignedTx = await signTransaction(slResult.data.transaction);
+
+          const slExecuteResponse = await fetch(getFullApiUrl('/api/trigger/execute'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              signedTransaction: slSignedTx,
+              requestId: slResult.data.requestId,
+              orderMetadata: {
+                maker: walletAddress,
+                inputMint: coin.mintAddress,
+                outputMint: SOL_MINT,
+                side: 'sell',
+                orderType: 'stop',
+              },
+            }),
+          });
+
+          const slExecuteResult = await slExecuteResponse.json();
+          if (!slExecuteResult.success) throw new Error(slExecuteResult.error || 'Failed to execute stop-loss order');
+        } catch (slErr) {
+          console.warn('⚠️ Stop-loss order failed (take-profit succeeded):', slErr.message);
+          // Don't fail the whole operation if stop-loss fails
+        }
+      }
 
       setLimitSuccess(true);
     } catch (err) {
@@ -428,6 +505,7 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError }
                         setShowLimitPanel(true);
                         if (basePrice > 0) {
                           setLimitPriceInput(formatTargetPrice(basePrice * 1.05));
+                          setStopLossPriceInput(formatTargetPrice(basePrice * 0.80));
                         }
                       }}
                     >
@@ -441,7 +519,10 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError }
 
                   {showLimitPanel && !limitSuccess && (
                     <div className="limit-order-panel">
-                      <p className="limit-panel-heading">Auto-sell {coin?.symbol} at target</p>
+                      <p className="limit-panel-heading">Auto-sell {coin?.symbol}</p>
+
+                      {/* ── Take Profit ── */}
+                      <div className="limit-section-label limit-section-label--profit">Take Profit</div>
 
                       <div className="limit-pct-display">
                         +{limitPct}% above purchase price
@@ -507,6 +588,95 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError }
                         </div>
                       </div>
 
+                      {/* ── Stop Loss ── */}
+                      <div className="limit-sl-divider" />
+
+                      <div className="limit-sl-header">
+                        <div className="limit-sl-title-group">
+                          <span className="limit-section-label limit-section-label--loss">Stop Loss</span>
+                          <span className="limit-sl-subtitle">Sell if price drops</span>
+                        </div>
+                        <label className="limit-sl-toggle">
+                          <input
+                            type="checkbox"
+                            checked={stopLossEnabled}
+                            onChange={(e) => setStopLossEnabled(e.target.checked)}
+                          />
+                          <span className="limit-sl-toggle-track">
+                            <span className="limit-sl-toggle-thumb" />
+                          </span>
+                        </label>
+                      </div>
+
+                      {stopLossEnabled && (
+                        <>
+                          <div className="limit-pct-display limit-pct-display--loss">
+                            -{stopLossPct}% below purchase price
+                            {basePrice > 0 && (
+                              <span className="limit-price-inline">
+                                (${formatTargetPrice(basePrice * (1 - stopLossPct / 100))})
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="limit-slider-row">
+                            <span className="limit-slider-min">1%</span>
+                            <input
+                              type="range"
+                              min="1"
+                              max="80"
+                              step="1"
+                              value={Math.min(stopLossPct, 80)}
+                              onChange={(e) => handleStopLossPctChange(parseInt(e.target.value))}
+                              className="limit-slider limit-slider--loss"
+                            />
+                            <span className="limit-slider-max">80%</span>
+                          </div>
+
+                          <div className="limit-inputs-grid">
+                            <div className="limit-input-cell">
+                              <span className="limit-input-label">% loss</span>
+                              <div className="limit-custom-input-wrap">
+                                <input
+                                  type="number"
+                                  min="0.01"
+                                  max="99"
+                                  step="0.1"
+                                  value={stopLossPctInput}
+                                  onChange={(e) => {
+                                    setStopLossPctInput(e.target.value);
+                                    const v = parseFloat(e.target.value);
+                                    if (!isNaN(v) && v > 0) {
+                                      setStopLossPct(v);
+                                      if (basePrice > 0) {
+                                        setStopLossPriceInput(formatTargetPrice(basePrice * (1 - v / 100)));
+                                      }
+                                    }
+                                  }}
+                                  className="limit-pct-input"
+                                />
+                                <span className="limit-pct-symbol">%</span>
+                              </div>
+                            </div>
+                            <div className="limit-input-cell">
+                              <span className="limit-input-label">Stop price</span>
+                              <div className="limit-custom-input-wrap">
+                                <span className="limit-pct-symbol">$</span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="any"
+                                  value={stopLossPriceInput}
+                                  onChange={(e) => handleStopLossPriceInputChange(e.target.value)}
+                                  className="limit-pct-input limit-price-field"
+                                  placeholder="0.00"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        </>
+                      )}
+
                       {limitError && (
                         <p className="limit-error-text">{limitError}</p>
                       )}
@@ -517,7 +687,11 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError }
                           onClick={handleCreateLimitOrder}
                           disabled={limitLoading}
                         >
-                          {limitLoading ? 'Creating...' : `Sell at +${limitPct}%`}
+                          {limitLoading
+                            ? 'Creating...'
+                            : stopLossEnabled
+                              ? `Set +${limitPct}% / -${stopLossPct}%`
+                              : `Sell at +${limitPct}%`}
                         </button>
                         <button
                           className="limit-cancel-btn"
