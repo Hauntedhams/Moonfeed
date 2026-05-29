@@ -173,6 +173,11 @@ const ModernTokenScroller = ({
           // Preserve original banner if enriched doesn't have one
           banner: enrichedData.banner || coin.banner,
           // Ensure these critical fields are present
+          // Preserve image fields - never let enrichment overwrite with undefined/null
+          profileImage: enrichedData.profileImage || coin.profileImage,
+          image: enrichedData.image || coin.image,
+          logo: enrichedData.logo || coin.logo,
+          icon: enrichedData.icon || coin.icon,
           enriched: enrichedData.enriched || true,
           cleanChartData: enrichedData.cleanChartData,
           priceChange: enrichedData.priceChange || enrichedData.priceChanges,
@@ -307,11 +312,15 @@ const ModernTokenScroller = ({
     // Otherwise check the enrichment cache
     const enriched = enrichedCoins.get(coin.mintAddress);
     if (enriched) {
-      // Merge enriched data with original, preserving original banner if enriched doesn't have one
+      // Merge enriched data with original, preserving image fields if enrichment didn't supply them
       return {
         ...coin,
         ...enriched,
-        banner: enriched.banner || coin.banner // Preserve original banner if enriched doesn't have one
+        banner: enriched.banner || coin.banner,
+        profileImage: enriched.profileImage || coin.profileImage,
+        image: enriched.image || coin.image,
+        logo: enriched.logo || coin.logo,
+        icon: enriched.icon || coin.icon,
       };
     }
     return coin;

@@ -905,10 +905,10 @@ class OnDemandEnrichmentService {
     }
 
     return {
-      // Visual assets
-      banner,
-      profileImage: info.imageUrl || baseToken.image,
-      logo: baseToken.image,
+      // Visual assets — only include if non-null so spread doesn't overwrite original coin images
+      ...(banner ? { banner } : {}),
+      ...(info.imageUrl || baseToken.image ? { profileImage: info.imageUrl || baseToken.image } : {}),
+      ...(baseToken.image ? { logo: baseToken.image } : {}),
       
       // Metadata (NO generic description - will be replaced by Pump.fun or left blank)
       dexscreenerUrl: pair.url || `https://dexscreener.com/solana/${coin.mintAddress}`,

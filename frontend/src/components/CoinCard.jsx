@@ -19,6 +19,17 @@ import {
 import debug from '../utils/debug.js';
 import { rafManager, eventListenerManager, cleanupManager } from '../utils/mobileOptimizations.js';
 
+// Deterministic gradient color from a coin symbol/name string
+function getCoinGradient(seed) {
+  let hash = 0;
+  const str = seed || 'default';
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash * 31 + str.charCodeAt(i)) & 0xffffff;
+  }
+  const hue = hash % 360;
+  return `hsl(${hue}, 70%, 40%)`;
+}
+
 // Simple time-ago formatter for transaction timestamps
 function getTimeAgo(timestamp) {
   const seconds = Math.floor((Date.now() - timestamp) / 1000);
@@ -71,6 +82,9 @@ const CoinCard = memo(({
   const [hasToggledActions, setHasToggledActions] = useState(false); // Track if user has toggled (avoids mount animation)
   const [selectedWallet, setSelectedWallet] = useState(null);
   const [showDescriptionModal, setShowDescriptionModal] = useState(false);
+  const [bannerError, setBannerError] = useState(false); // Track banner image load failure
+  const [profileSrcIndex, setProfileSrcIndex] = useState(0); // Index into ordered list of profile image URLs to try
+  const [profileLoaded, setProfileLoaded] = useState(false); // True once the winning profile img fires onLoad
   const [chartHoveredPrice, setChartHoveredPrice] = useState(null); // Track hovered price from chart
   const [chartHoveredData, setChartHoveredData] = useState(null); // Track full crosshair data (price + time)
   const [chartFirstPrice, setChartFirstPrice] = useState(null); // Track first visible price for % calculation
@@ -165,6 +179,14 @@ const CoinCard = memo(({
       setEnrichmentCompleted(true);
     }
   }, [isEnriched, enrichmentCompleted, coin.symbol]);
+
+  // Reset banner/profile error state when the coin changes
+  const coinAddress = coin.mintAddress || coin.address;
+  useEffect(() => {
+    setBannerError(false);
+    setProfileSrcIndex(0);
+    setProfileLoaded(false);
+  }, [coinAddress]);
   
   useEffect(() => {
     // Only enrich if:
@@ -994,7 +1016,7 @@ const CoinCard = memo(({
   const handleProfileClick = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (coin.profileImage) {
+    if (coin.profileImage || coin.image || coin.logo || coin.icon) {
       setShowProfileModal(true);
     }
   };
@@ -1235,24 +1257,23 @@ const CoinCard = memo(({
             ? '/assets/moonfeed banner.png' 
             : (coin.banner || coin.bannerImage || coin.header || coin.bannerUrl);
           
-          return bannerUrl ? (
+          return (bannerUrl && !bannerError) ? (
             <img 
               src={bannerUrl}
               alt={coin.name || 'Token banner'}
-              loading="lazy"
               decoding="async"
-              onError={(e) => { 
-                // Image error logging (dev only)
-                debug.log(`Banner image failed to load for ${coin.symbol}:`, e.currentTarget.src);
-                e.currentTarget.style.display = 'none'; 
+              onError={() => { 
+                debug.log(`Banner image failed to load for ${coin.symbol}:`, bannerUrl);
+                setBannerError(true);
               }}
               onLoad={() => {
-                // Image load logging (dev only)
                 debug.log(`✅ Banner loaded successfully for ${coin.symbol}${isMooToken ? ' (custom $MOO banner)' : ''}`);
               }}
             />
           ) : (
-            <div className="banner-placeholder">
+            <div className="banner-placeholder" style={{
+              background: `linear-gradient(135deg, ${getCoinGradient(coin.symbol || coin.name)} 0%, ${getCoinGradient((coin.name || coin.symbol) + '2')} 100%)`
+            }}>
               <div className="banner-placeholder-text">
                 {coin.name || 'Meme coin discovery'}
               </div>
@@ -1339,23 +1360,37 @@ const CoinCard = memo(({
           {/* Top row: Profile, Price with Social Links, Expand Arrow */}
           <div className="header-top-row">
             <div className="header-left">
-              <div 
-                className="info-layer-profile-image" 
-                onClick={handleProfileClick}
-                style={{ cursor: coin.profileImage ? 'pointer' : 'default' }}
-              >
-                {coin.profileImage ? (
-                  <img
-                    src={coin.profileImage}
-                    alt={coin.name || 'Token logo'}
-                    loading="lazy"
-                    decoding="async"
-                    onError={(e) => { e.currentTarget.src = '/profile-placeholder.png'; }}
-                  />
-                ) : (
-                  <div className="info-layer-profile-placeholder">{coin.name?.charAt(0) || 'M'}</div>
-                )}
-              </div>
+              {(() => {
+                const profileSrcs = [...new Set([coin.profileImage, coin.image, coin.logo, coin.icon].filter(Boolean))];
+                const profileSrc = profileSrcs[profileSrcIndex] || null;
+                return (
+                  <div 
+                    className="info-layer-profile-image" 
+                    onClick={profileSrc ? handleProfileClick : undefined}
+                    style={{ cursor: profileSrc ? 'pointer' : 'default' }}
+                  >
+                    {/* Placeholder: visible until the real image loads */}
+                    <div
+                      className="info-layer-profile-placeholder"
+                      style={{ opacity: profileLoaded ? 0 : 1 }}
+                    >
+                      {coin.symbol?.charAt(0) || coin.name?.charAt(0) || 'M'}
+                    </div>
+                    {/* Image: hidden until onLoad fires, then fades in */}
+                    {profileSrc && (
+                      <img
+                        key={profileSrc}
+                        src={profileSrc}
+                        alt={coin.name || 'Token logo'}
+                        decoding="async"
+                        style={{ opacity: profileLoaded ? 1 : 0 }}
+                        onLoad={() => setProfileLoaded(true)}
+                        onError={() => { setProfileSrcIndex(i => i + 1); setProfileLoaded(false); }}
+                      />
+                    )}
+                  </div>
+                );
+              })()}
               
               <div className="price-and-social-section">
                 <div className="price-section">
@@ -2336,7 +2371,7 @@ const CoinCard = memo(({
               ×
             </button>
             <img
-              src={coin.profileImage}
+              src={coin.profileImage || coin.image || coin.logo || coin.icon}
               alt={coin.name || 'Token profile'}
               className="profile-modal-image"
             />

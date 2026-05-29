@@ -1310,9 +1310,9 @@ async function fetchFreshCoinBatch() {
     mintAddress: token.mint,
     name: token.name || 'Unknown',
     symbol: token.symbol || 'UNKNOWN',
-    image: token.image || `https://via.placeholder.com/64/00d4ff/ffffff?text=${(token.symbol || 'T').charAt(0)}`,
-    profileImage: token.image || `https://via.placeholder.com/64/00d4ff/ffffff?text=${(token.symbol || 'T').charAt(0)}`,
-    logo: token.image || `https://via.placeholder.com/64/00d4ff/ffffff?text=${(token.symbol || 'T').charAt(0)}`,
+    image: token.image || null,
+    profileImage: token.image || null,
+    logo: token.image || null,
     price_usd: token.priceUsd || 0,
     market_cap_usd: token.marketCapUsd || 0,
     volume_24h_usd: token.volume_24h || 0,
@@ -1406,9 +1406,9 @@ async function fetchNewCoinBatch() {
       mintAddress: token.mint,
       name: token.name || 'Unknown',
       symbol: token.symbol || 'UNKNOWN',
-      image: token.image || `https://via.placeholder.com/64/00d4ff/ffffff?text=${(token.symbol || 'T').charAt(0)}`,
-      profileImage: token.image || `https://via.placeholder.com/64/00d4ff/ffffff?text=${(token.symbol || 'T').charAt(0)}`,
-      logo: token.image || `https://via.placeholder.com/64/00d4ff/ffffff?text=${(token.symbol || 'T').charAt(0)}`,
+      image: token.image || null,
+      profileImage: token.image || null,
+      logo: token.image || null,
       price_usd: token.priceUsd || 0,
       market_cap_usd: token.marketCapUsd || 0,
       volume_1h: token.volume_1h || 0,
@@ -1531,18 +1531,22 @@ async function fetchDexscreenerTrendingBatch() {
       const baseToken = pair.baseToken || {};
       
       // Parse icon hash to full URL if needed
-      let iconUrl = boost.icon;
-      if (iconUrl && !iconUrl.startsWith('http')) {
-        iconUrl = `https://dd.dexscreener.com/ds-data/tokens/solana/${boost.tokenAddress}.png`;
+      let iconUrl = null;
+      if (boost.icon) {
+        iconUrl = boost.icon.startsWith('http')
+          ? boost.icon
+          : `https://dd.dexscreener.com/ds-data/tokens/solana/${boost.tokenAddress}.png`;
       }
+      // Fall back to DexScreener pair info image if boost icon is absent
+      iconUrl = iconUrl || pair.info?.imageUrl || null;
       
       return {
         mintAddress: boost.tokenAddress,
         name: baseToken.name || 'Unknown',
         symbol: baseToken.symbol || 'UNKNOWN',
-        image: iconUrl || `https://via.placeholder.com/64/00d4ff/ffffff?text=${(baseToken.symbol || 'T').charAt(0)}`,
-        profileImage: iconUrl || `https://via.placeholder.com/64/00d4ff/ffffff?text=${(baseToken.symbol || 'T').charAt(0)}`,
-        logo: iconUrl || `https://via.placeholder.com/64/00d4ff/ffffff?text=${(baseToken.symbol || 'T').charAt(0)}`,
+        image: iconUrl || null,
+        profileImage: iconUrl || null,
+        logo: iconUrl || null,
         price_usd: parseFloat(pair.priceUsd) || 0,
         market_cap_usd: parseFloat(pair.marketCap) || 0,
         volume_24h_usd: parseFloat(pair.volume?.h24) || 0,
@@ -2196,9 +2200,9 @@ app.get('/api/coins/custom', async (req, res) => {
       mintAddress: token.mint,
       name: token.name || 'Unknown',
       symbol: token.symbol || 'UNKNOWN',
-      image: token.image || `https://via.placeholder.com/64/00d4ff/ffffff?text=${(token.symbol || 'T').charAt(0)}`,
-      profileImage: token.image || `https://via.placeholder.com/64/00d4ff/ffffff?text=${(token.symbol || 'T').charAt(0)}`,
-      logo: token.image || `https://via.placeholder.com/64/00d4ff/ffffff?text=${(token.symbol || 'T').charAt(0)}`,
+      image: token.image || null,
+      profileImage: token.image || null,
+      logo: token.image || null,
       price_usd: token.priceUsd || 0,
       market_cap_usd: token.marketCapUsd || 0,
       volume_24h_usd: token.volume_24h || 0,
