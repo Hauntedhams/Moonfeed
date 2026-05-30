@@ -45,6 +45,11 @@ const ModernTokenScroller = ({
   const [isTutorialActive, setIsTutorialActive] = useState(false); // Interactive tutorial mode
   const [isFirstVisit, setIsFirstVisit] = useState(() => !InteractiveTutorial.hasCompleted()); // Show nudge for new users
   
+  // Chart preload: activate the next card's chart 1.5 s after landing so it's
+  // ready before the user scrolls. Only 1 card ahead — avoids simultaneous
+  // WebSocket connections that cause DexScreener rate-limiting.
+  const [preloadIndex, setPreloadIndex] = useState(null);
+
   // Virtual scrolling DISABLED - was causing blank UI issues
   // Render distance optimized: Mobile ±2, Desktop ±3
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -814,6 +819,7 @@ const ModernTokenScroller = ({
   // Get DexScreener chart for current and nearby coins
   const renderCoinWithChart = (coin, index) => {
     const isCurrentCoin = index === currentIndex;
+    const isPreloadCoin = index === preloadIndex;
     
     // 🔥 OPTIMIZED: Only render charts for visible coins (current ± 2)
     // This prevents performance issues while keeping all coin cards rendered
@@ -841,7 +847,7 @@ const ModernTokenScroller = ({
           isTrending={coin.source?.includes('trending')}
           isVisible={isVisible}
           onExpandChange={(isExpanded) => handleCoinExpandChange(isExpanded, coin.mintAddress || coin.tokenAddress)}
-          isCurrentCard={isCurrentCoin}
+          isCurrentCard={isCurrentCoin || isPreloadCoin}
           onEnrichmentComplete={handleEnrichmentComplete} // Pass handler to CoinCard
         />
       </div>
@@ -858,7 +864,17 @@ const ModernTokenScroller = ({
       onCurrentCoinChange?.(enrichedCoin, currentIndex);
     }
   }, [currentIndex, coins.length]); // Remove getEnrichedCoin and enrichedCoins dependencies
-  
+
+  // Preload the next card's chart ~1.5 s after landing so it's ready before scroll
+  useEffect(() => {
+    setPreloadIndex(null); // reset immediately on index change
+    const t = setTimeout(() => {
+      const nextIdx = currentIndex + 1;
+      if (nextIdx < coins.length) setPreloadIndex(nextIdx);
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [currentIndex, coins.length]);
+
   // Enrich current coin when currentIndex changes
   useEffect(() => {
     if (coins.length > 0 && currentIndex >= 0 && currentIndex < coins.length) {
