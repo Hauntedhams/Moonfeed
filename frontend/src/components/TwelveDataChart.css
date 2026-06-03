@@ -1560,3 +1560,233 @@ html:not(.dark-mode) .chart-error-overlay {
 }
 
 /* ============================================ */
+
+/* ============================================
+   FULLSCREEN CHART FEATURE
+   ============================================ */
+
+/* Trigger button — overlaid on the chart, bottom-right */
+.chart-fullscreen-btn {
+  position: absolute;
+  bottom: 14px;
+  right: 14px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 13px;
+  background: rgba(10, 10, 20, 0.78);
+  color: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 22px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  /* no transform on hover — prevents layout shift */
+  transition: background 0.18s ease, border-color 0.18s ease;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+.chart-fullscreen-btn:hover {
+  background: rgba(10, 10, 20, 0.92);
+  border-color: rgba(255, 255, 255, 0.42);
+}
+
+/* ── Backdrop: always covers the full screen ── */
+.chart-fs-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 99990;
+  background: #000;
+  /* No overflow:hidden — the inner div is position:fixed so it is never
+     clipped by the parent anyway. overflow:hidden on a fixed parent also
+     triggers an iOS Safari bug where position:absolute children inside a
+     position:fixed+overflow:hidden container are positioned relative to the
+     scrolled page instead of the fixed box, which pins the chart to the
+     wrong quadrant of the screen. */
+  pointer-events: none;
+}
+
+/* Hidden state — portal stays mounted so the iframe is never destroyed */
+.chart-fs-backdrop.chart-fs-hidden {
+  display: none;
+}
+
+/* ── Inner frame: single iframe, rotates via CSS ── */
+/* PORTRAIT uses inset:0 — no transform needed, no transition glitch.
+   When display:none is removed from the backdrop, a CSS transition on
+   transform would animate FROM transform:none (the initial value) TO
+   translate(-50%,-50%), meaning the element starts at top:50%/left:50%
+   and slides into place.  That produces the "chart stuck in bottom-right"
+   glitch.  Anchoring with top:0/left:0 instead means there is nothing
+   to animate and the element fills the viewport immediately.
+
+   LANDSCAPE still uses translate+rotate for the 90° rotation trick.
+   top/left/width/height are in the transition so portrait↔landscape
+   animates smoothly. */
+.chart-fs-inner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100dvh;
+  z-index: 99991;
+  transition: transform 0.42s cubic-bezier(0.4, 0, 0.2, 1),
+              top    0.42s cubic-bezier(0.4, 0, 0.2, 1),
+              left   0.42s cubic-bezier(0.4, 0, 0.2, 1),
+              width  0.42s cubic-bezier(0.4, 0, 0.2, 1),
+              height 0.42s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
+  overflow: hidden;
+  pointer-events: auto;
+}
+
+/* Portrait: base styles are already correct (top:0 left:0 full viewport) */
+.chart-fs-inner.portrait {
+  transform: none;
+}
+
+/* Landscape: rotated 90° — width/height swapped so visual area fills viewport */
+.chart-fs-inner.landscape {
+  top: 50%;
+  left: 50%;
+  width: max(100vw, 100dvh);
+  height: min(100vw, 100dvh);
+  transform: translate(-50%, -50%) rotate(90deg);
+}
+
+/* Fallback for browsers without dvh support */
+@supports not (height: 100dvh) {
+  .chart-fs-inner           { height: 100vh; }
+  .chart-fs-inner.landscape { width: max(100vw, 100vh); height: min(100vw, 100vh); }
+}
+
+/* ── Controls pill: fixed to screen, never rotates, never shifts ── */
+.chart-fs-controls-overlay {
+  position: fixed;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
+  /* Stable centering: left:0/right:0 + margin:auto avoids the
+     translateX(-50%) approach whose offset recalculates on every
+     fractional-pixel width change, causing the pill to visibly jump. */
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  width: max-content;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: rgba(10, 10, 22, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 32px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.65), 0 1px 0 rgba(255,255,255,0.06) inset;
+  animation: chartFsControlsFadeIn 0.22s ease;
+  will-change: auto;
+}
+
+@keyframes chartFsControlsFadeIn {
+  from { opacity: 0; translate: 0 10px; }
+  to   { opacity: 1; translate: 0 0; }
+}
+
+/* Shared reset: prevent global button{} rule from leaking in */
+.chart-fs-mode-btn,
+.chart-fs-close-btn {
+  appearance: none;
+  -webkit-appearance: none;
+  box-sizing: border-box;
+  line-height: 1;
+  outline: none;
+}
+.chart-fs-mode-btn:focus,
+.chart-fs-mode-btn:focus-visible,
+.chart-fs-close-btn:focus,
+.chart-fs-close-btn:focus-visible {
+  outline: none;
+}
+
+.chart-fs-mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 14px;
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 22px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  /* background/color/border-color transitions only — never size/transform */
+  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  white-space: nowrap;
+  /* Fixed width: prevents the pill from shifting when sub-pixel font
+     rendering changes slightly between inactive and hover/active states */
+  width: 95px;
+  justify-content: center;
+}
+
+.chart-fs-mode-btn.active {
+  background: linear-gradient(135deg, #22c55e 0%, #7b61ff 100%);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 2px 10px rgba(123, 97, 255, 0.35);
+}
+
+.chart-fs-mode-btn:not(.active):hover {
+  background: rgba(255, 255, 255, 0.13);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* Prevent global button:hover{border-color:#646cff} from tinting active btn */
+.chart-fs-mode-btn.active:hover {
+  border-color: transparent;
+}
+
+.chart-fs-divider {
+  width: 1px;
+  height: 22px;
+  background: rgba(255, 255, 255, 0.14);
+  flex-shrink: 0;
+  margin: 0 2px;
+}
+
+.chart-fs-close-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 14px;
+  background: rgba(239, 68, 68, 0.12);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.22);
+  border-radius: 22px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  /* background/color/border-color only — no size/transform changes */
+  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  white-space: nowrap;
+  width: 85px;
+  justify-content: center;
+}
+
+/* Explicit hover keeps the global button:hover{border-color:#646cff} from
+   suddenly painting the close button with a purple border on hover */
+.chart-fs-close-btn:hover {
+  background: rgba(239, 68, 68, 0.22);
+  border-color: rgba(239, 68, 68, 0.45);
+  color: #fecaca;
+}

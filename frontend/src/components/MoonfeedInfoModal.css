@@ -611,36 +611,22 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background: rgba(139, 105, 20, 0.1);
-  border: 1.5px solid rgba(139, 105, 20, 0.35);
+  width: 28px;
+  height: 28px;
+  border-radius: 0;
+  background: transparent;
+  border: none;
   text-decoration: none;
   color: #6b4f10;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
   cursor: pointer;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   backdrop-filter: none;
 }
 
 .header-social-icon::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 0;
-  height: 0;
-  border-radius: 50%;
-  background: rgba(139, 105, 20, 0.15);
-  transform: translate(-50%, -50%);
-  transition: width 0.3s, height 0.3s;
-}
-
-.header-social-icon:hover::before {
-  width: 120%;
-  height: 120%;
+  content: none;
 }
 
 .header-social-icon svg {
@@ -653,11 +639,11 @@
 }
 
 .header-social-icon:hover {
-  transform: translateY(-3px) scale(1.08);
-  background: rgba(139, 105, 20, 0.2);
-  border-color: #8B6914;
+  transform: translateY(-2px);
+  background: transparent;
+  border-color: transparent;
   color: #4a2c0a;
-  box-shadow: 0 4px 12px rgba(101, 67, 33, 0.3);
+  box-shadow: none;
 }
 
 .header-social-icon:active {
@@ -665,26 +651,26 @@
 }
 
 .header-social-icon.discord:hover {
-  background: rgba(88, 101, 242, 0.15);
-  border-color: rgba(88, 101, 242, 0.5);
+  background: transparent;
+  border-color: transparent;
   color: #5865f2;
 }
 
 .header-social-icon.twitter:hover {
-  background: rgba(29, 155, 240, 0.15);
-  border-color: rgba(29, 155, 240, 0.5);
+  background: transparent;
+  border-color: transparent;
   color: #1d9bf0;
 }
 
 .header-social-icon.tiktok:hover {
-  background: rgba(255, 0, 80, 0.15);
-  border-color: rgba(255, 0, 80, 0.5);
+  background: transparent;
+  border-color: transparent;
   color: #ff0050;
 }
 
 .header-social-icon.telegram:hover {
-  background: rgba(36, 161, 222, 0.15);
-  border-color: rgba(36, 161, 222, 0.5);
+  background: transparent;
+  border-color: transparent;
   color: #24a1de;
 }
 
@@ -1568,8 +1554,8 @@
   }
 
   .header-social-icon {
-    width: 28px;
-    height: 28px;
+    width: 24px;
+    height: 24px;
   }
 
   .header-social-links {
@@ -1638,8 +1624,8 @@
   }
 
   .header-social-icon {
-    width: 34px;
-    height: 34px;
+    width: 28px;
+    height: 28px;
   }
 
   .feature-list {

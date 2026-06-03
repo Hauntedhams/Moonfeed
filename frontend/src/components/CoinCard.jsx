@@ -2320,10 +2320,11 @@ const CoinCard = memo(({
         {/* Desktop: Chart renders here */}
         {isDesktopMode && (
           <TwelveDataChart 
-            key={`chart-desktop-${mintAddress}`}
+            key={`chart-${mintAddress}`}
             coin={coin}
             isActive={isCurrentCard}
             isDesktopMode={true}
+            isExpanded={true}
             showActionButtons={showActionButtons}
             onCrosshairMove={handleChartCrosshairMove}
             onFirstPriceUpdate={handleFirstPriceUpdate}
@@ -2334,10 +2335,11 @@ const CoinCard = memo(({
       {/* Mobile Chart - Rendered via portal into mobile-chart-target */}
       {!isDesktopMode && mobileTargetMounted && mobileChartTargetRef.current && createPortal(
         <TwelveDataChart 
-          key={`chart-mobile-${mintAddress}`}
+          key={`chart-${mintAddress}`}
           coin={coin}
           isActive={isCurrentCard} // Only the current card — prevents multiple simultaneous DexScreener WebSocket connections which cause rate-limiting ("Loading pair…" forever)
           isDesktopMode={false}
+          isExpanded={isExpanded}
           showPriceScale={isExpanded}
           showActionButtons={showActionButtons}
           onCrosshairMove={handleChartCrosshairMove}
