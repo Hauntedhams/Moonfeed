@@ -2315,32 +2315,22 @@ const CoinCard = memo(({
         </button>
       </div>
 
-      {/* Right Panel - Desktop only chart container */}
-      <div className="coin-card-right-panel" ref={rightPanelRef}>
-        {/* Desktop: Chart renders here */}
-        {isDesktopMode && (
-          <TwelveDataChart 
-            key={`chart-${mintAddress}`}
-            coin={coin}
-            isActive={isCurrentCard}
-            isDesktopMode={true}
-            isExpanded={true}
-            showActionButtons={showActionButtons}
-            onCrosshairMove={handleChartCrosshairMove}
-            onFirstPriceUpdate={handleFirstPriceUpdate}
-          />
-        )}
-      </div>
+      {/* Right Panel - Desktop chart container (chart portals here on desktop) */}
+      <div className="coin-card-right-panel" ref={rightPanelRef} />
 
-      {/* Mobile Chart - Rendered via portal into mobile-chart-target */}
-      {!isDesktopMode && mobileTargetMounted && mobileChartTargetRef.current && createPortal(
+      {/* Single chart instance — portaled to desktop right-panel or mobile target.
+          React 18 preserves component state when the portal container changes, so
+          the DexScreener iframe is never destroyed/reloaded when toggling between
+          desktop and mobile mode (or going fullscreen). */}
+      {mobileTargetMounted && mobileChartTargetRef.current && createPortal(
         <TwelveDataChart 
           key={`chart-${mintAddress}`}
           coin={coin}
           isActive={isCurrentCard} // Only the current card — prevents multiple simultaneous DexScreener WebSocket connections which cause rate-limiting ("Loading pair…" forever)
-          isDesktopMode={false}
-          isExpanded={isExpanded}
-          showPriceScale={isExpanded}
+          isDesktopMode={isDesktopMode}
+          desktopSlotRef={rightPanelRef}
+          isExpanded={isDesktopMode ? true : isExpanded}
+          showPriceScale={isDesktopMode ? false : isExpanded}
           showActionButtons={showActionButtons}
           onCrosshairMove={handleChartCrosshairMove}
           onFirstPriceUpdate={handleFirstPriceUpdate}

@@ -3,29 +3,43 @@ import { createPortal } from 'react-dom';
 import { useDarkMode } from '../contexts/DarkModeContext';
 import './TwelveDataChart.css';
 
-const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, showPriceScale, showActionButtons = true, isExpanded = false, onCrosshairMove, onFirstPriceUpdate }) => {
+const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, desktopSlotRef = null, showPriceScale, showActionButtons = true, isExpanded = false, onCrosshairMove, onFirstPriceUpdate }) => {
   const { isDarkMode: contextDarkMode } = useDarkMode();
   const [srcReady, setSrcReady] = useState(false);
   const [fullscreenMode, setFullscreenMode] = useState(null); // null | 'portrait' | 'landscape'
 
-  // Single imperative iframe node — moved between slots instead of remounted
+  // Single imperative iframe node — always lives in fsSlotRef (document.body portal).
+  // NEVER moved in the DOM after creation. Instead, fsSlotRef's position/size is updated
+  // with CSS via getBoundingClientRect(), the same way portrait→landscape works in
+  // fullscreen: only dimensions change, the iframe never reloads.
   const iframeRef = useRef(null);
-  // Slot in the card view (empty div, iframe lives here when not in fullscreen)
+  // Placeholder div in the card — used to measure card chart area coordinates only.
+  // The iframe is never appended here; this just gives us getBoundingClientRect().
   const cardSlotRef = useRef(null);
-  // Slot inside the fullscreen portal (iframe moves here when fullscreen is open)
+  // The iframe's permanent home — always in document.body portal, never moved.
   const fsSlotRef = useRef(null);
+  // Wrapper in the body portal that mirrors fsSlotRef's position at a higher z-index.
+  // pointer-events:none on the wrapper, auto on the button, so clicks reach the button
+  // but the wrapper itself doesn't block the iframe beneath it.
+  const fullscreenBtnRef = useRef(null);
 
   const containerRef = useRef(null);
   const observerRef = useRef(null);
   const fallbackTimerRef = useRef(null);
-  // WebSocket kick timers — nudge early (invisible to user) + fallback reload
+  // WebSocket kick timers — nudge early (invisible to user)
   const nudge1Ref = useRef(null);
   const nudge2Ref = useRef(null);
   const nudge3Ref = useRef(null);
-  const reloadTimerRef = useRef(null);
   // Mirror isActive in a ref so stale-recovery timers can read current value
   const isActiveRef = useRef(isActive);
   useEffect(() => { isActiveRef.current = isActive; }, [isActive]);
+
+  // Synchronous mirrors — updated during render so they're always current when effects run.
+  // Used by updateSlotPosition() to read current mode without stale closures.
+  const isDesktopModeRef = useRef(isDesktopMode);
+  isDesktopModeRef.current = isDesktopMode;
+  const fullscreenModeRef = useRef(fullscreenMode);
+  fullscreenModeRef.current = fullscreenMode;
 
   const pairAddress = coin?.pairAddress ||
                       coin?.poolAddress ||
@@ -50,7 +64,11 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, showPr
     };
 
     const tryObserve = () => {
-      const el = containerRef.current;
+      // In desktop mode observe the actual target slot (right panel, always visible).
+      // In mobile mode observe containerRef (inside the mobile chart section).
+      const el = (isDesktopModeRef.current && desktopSlotRef?.current)
+        ? desktopSlotRef.current
+        : containerRef.current;
       if (!el) {
         const raf = requestAnimationFrame(tryObserve);
         return () => cancelAnimationFrame(raf);
@@ -73,7 +91,10 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, showPr
       // Fallback: only activate if the container actually has dimensions by then;
       // if still 0×0 (e.g. hidden by a parent), wait another 2 s before forcing.
       fallbackTimerRef.current = setTimeout(() => {
-        const rect = containerRef.current?.getBoundingClientRect();
+        const checkEl = (isDesktopModeRef.current && desktopSlotRef?.current)
+          ? desktopSlotRef.current
+          : containerRef.current;
+        const rect = checkEl?.getBoundingClientRect();
         if (!rect || rect.width > 0) {
           activate();
         } else {
@@ -96,29 +117,79 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, showPr
     ? `https://dexscreener.com/solana/${pairAddress}?embed=1&theme=${contextDarkMode ? 'dark' : 'light'}&trades=0&info=0`
     : null;
 
-  // ── Single-iframe lifecycle ─────────────────────────────────────────────────
-  // Create ONE imperative <iframe> when the chart becomes ready; destroy it when
-  // the card goes inactive. We never create a second iframe for the fullscreen
-  // overlay — instead we physically move this same node between cardSlotRef and
-  // fsSlotRef. That keeps the DexScreener WebSocket alive across portrait /
-  // landscape switches and open/close cycles.
+  // ── CSS-only slot positioning ────────────────────────────────────────────────
+  // The iframe lives in fsSlotRef permanently (document.body portal, no DOM moves).
+  // Instead of reparenting the iframe, we only change fsSlotRef's position/size via
+  // CSS — the same mechanism portrait→landscape uses inside fullscreen mode.
+  // getBoundingClientRect() returns real viewport coords even inside CSS transforms.
+
+  const updateSlotPosition = () => {
+    const slot = fsSlotRef.current;
+    const btnWrapper = fullscreenBtnRef.current;
+    if (!slot || !iframeRef.current) {
+      // No iframe yet — reset slot to invisible
+      if (slot) slot.style.cssText = '';
+      if (btnWrapper) btnWrapper.style.cssText = '';
+      return;
+    }
+    const fm = fullscreenModeRef.current;
+    if (fm === 'landscape') {
+      slot.style.cssText = [
+        'position:fixed',
+        'top:50%', 'left:50%',
+        'width:max(100vw,100dvh)', 'height:min(100vw,100dvh)',
+        'transform:translate(-50%,-50%) rotate(90deg)',
+        'z-index:99991',
+        'border-radius:0',
+      ].join(';') + ';';
+      // fullscreen controls overlay handles the UX in these modes
+      if (btnWrapper) btnWrapper.style.cssText = '';
+    } else if (fm === 'portrait') {
+      slot.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100dvh;transform:none;z-index:99991;border-radius:0;';
+      if (btnWrapper) btnWrapper.style.cssText = '';
+    } else if (isDesktopModeRef.current && desktopSlotRef?.current) {
+      const { top, left, width, height } = desktopSlotRef.current.getBoundingClientRect();
+      if (width > 0 && height > 0) {
+        slot.style.cssText = `position:fixed;top:${top}px;left:${left}px;width:${width}px;height:${height}px;transform:none;z-index:1;border-radius:0;`;
+        if (btnWrapper) {
+          btnWrapper.style.cssText = `position:fixed;top:${top}px;left:${left}px;width:${width}px;height:${height}px;transform:none;z-index:2;pointer-events:none;`;
+        }
+      }
+    } else {
+      // Mobile card view — position to exactly overlay containerRef in the viewport.
+      // z-index:60 puts the chart above the info-layer (z-index:50) but below
+      // the bottom nav (z-index:100), so nav buttons stay visible.
+      // The button wrapper mirrors this area at z-index:70 so the Full Chart button
+      // is always above the iframe.
+      const el = containerRef.current;
+      if (!el) return;
+      const { top, left, width, height } = el.getBoundingClientRect();
+      if (width > 0 && height > 0) {
+        slot.style.cssText = `position:fixed;top:${top}px;left:${left}px;width:${width}px;height:${height}px;transform:none;z-index:60;border-radius:12px;overflow:hidden;`;
+        if (btnWrapper) {
+          btnWrapper.style.cssText = `position:fixed;top:${top}px;left:${left}px;width:${width}px;height:${height}px;transform:none;z-index:70;pointer-events:none;border-radius:12px;overflow:hidden;`;
+        }
+      }
+    }
+  };
 
   const clearKickTimers = () => {
     if (nudge1Ref.current)   { clearTimeout(nudge1Ref.current);   nudge1Ref.current   = null; }
     if (nudge2Ref.current)   { clearTimeout(nudge2Ref.current);   nudge2Ref.current   = null; }
     if (nudge3Ref.current)   { clearTimeout(nudge3Ref.current);   nudge3Ref.current   = null; }
-    if (reloadTimerRef.current) { clearTimeout(reloadTimerRef.current); reloadTimerRef.current = null; }
   };
 
   useEffect(() => {
     clearKickTimers();
 
     if (!iframeSrc) {
-      // Not ready or coin changed — destroy any existing iframe
+      // Not ready or coin changed — destroy iframe and hide slot
       if (iframeRef.current) {
         iframeRef.current.remove();
         iframeRef.current = null;
       }
+      if (fsSlotRef.current) fsSlotRef.current.style.cssText = '';
+      if (fullscreenBtnRef.current) fullscreenBtnRef.current.style.cssText = '';
       return;
     }
 
@@ -136,8 +207,14 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, showPr
       iframeRef.current = iframe;
     }
 
-    // Place in card slot on creation
-    const slot = cardSlotRef.current;
+    // Position the slot BEFORE appending the iframe so that DexScreener's embed
+    // initialises with non-zero viewport dimensions.  If the slot is 0×0 when
+    // the iframe first loads, DexScreener reads window.innerWidth/Height as 0,
+    // fails to open its WebSocket, and gets permanently stuck on "Loading pair…".
+    updateSlotPosition();
+
+    // Place iframe in fsSlotRef — its permanent home, never moved again.
+    const slot = fsSlotRef.current;
     if (slot && iframeRef.current.parentNode !== slot) {
       slot.appendChild(iframeRef.current);
     }
@@ -146,9 +223,6 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, showPr
     // DexScreener's WebSocket silently fails to connect ~50% of the time.
     // Triggering a micro-resize (1 px height flip) immediately after load
     // fires DexScreener's internal ResizeObserver which restarts the connection.
-    // We do it at 300 ms / 800 ms / 1500 ms so the chart never visibly stalls.
-    // A 1-px nudge on an already-loaded chart is completely invisible.
-    // Only if all three nudges fail (extremely rare) do we do a full src reload at 5 s.
     const nudge = (iframe) => {
       if (!iframe || !isActiveRef.current) return;
       iframe.style.height = 'calc(100% - 1px)';
@@ -161,40 +235,58 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, showPr
     nudge2Ref.current = setTimeout(() => nudge(iframeRef.current), 800);
     nudge3Ref.current = setTimeout(() => nudge(iframeRef.current), 1500);
 
-    reloadTimerRef.current = setTimeout(() => {
-      const iframe = iframeRef.current;
-      if (!isActiveRef.current || !iframe) return;
-      const src = iframe.src;
-      iframe.src = '';
-      setTimeout(() => { if (iframeRef.current === iframe) iframe.src = src; }, 250);
-    }, 5000);
-
     return () => {
       clearKickTimers();
-      // Component unmounting — clean up
       if (iframeRef.current) {
         iframeRef.current.remove();
         iframeRef.current = null;
       }
+      if (fsSlotRef.current) fsSlotRef.current.style.cssText = '';
+      if (fullscreenBtnRef.current) fullscreenBtnRef.current.style.cssText = '';
     };
   }, [iframeSrc]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Move iframe between card slot and fullscreen slot ───────────────────────
-  // useLayoutEffect (not useEffect) so the move happens synchronously before the
-  // browser paints.  With useEffect the backdrop becomes visible one frame before
-  // the iframe arrives, causing a blank-then-chart double-flash.
+  // ── Reposition when active card changes or mode changes ──────────────────
+  // useLayoutEffect so the move happens synchronously before paint.
   useLayoutEffect(() => {
-    const iframe = iframeRef.current;
-    if (!iframe) return;
+    updateSlotPosition();
+  }, [fullscreenMode, isDesktopMode, isActive]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // When fullscreen opens, move iframe into the portal slot (it is always
-    // mounted so fsSlotRef is always set when pairAddress is truthy).
-    // When fullscreen closes, move it back to the card slot.
-    const target = fullscreenMode ? fsSlotRef.current : cardSlotRef.current;
-    if (target && iframe.parentNode !== target) {
-      target.appendChild(iframe);
-    }
-  }, [fullscreenMode]);
+  // isExpanded animation tracking: the info-layer expands/collapses over 500ms via
+  // a CSS height transition. The chart section moves with it. We run a rAF loop for
+  // 600ms so the fixed slot tracks the animation every frame — same as following a
+  // scroll but driven by CSS transition instead.
+  const expandRafRef = useRef(null);
+  useEffect(() => {
+    if (expandRafRef.current) cancelAnimationFrame(expandRafRef.current);
+    const startTime = performance.now();
+    const DURATION = 600; // slightly longer than the 500ms CSS transition
+    const tick = (now) => {
+      updateSlotPosition();
+      if (now - startTime < DURATION) {
+        expandRafRef.current = requestAnimationFrame(tick);
+      } else {
+        expandRafRef.current = null;
+      }
+    };
+    expandRafRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (expandRafRef.current) cancelAnimationFrame(expandRafRef.current);
+    };
+  }, [isExpanded]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Window resize + scroller scroll: keep the slot aligned with its reference element.
+  // The scroller scroll listener handles snap-scroll animations so the fixed slot
+  // stays in sync while the card is animating into position.
+  useEffect(() => {
+    const scroller = document.querySelector('.modern-scroller-container');
+    window.addEventListener('resize', updateSlotPosition);
+    if (scroller) scroller.addEventListener('scroll', updateSlotPosition, { passive: true });
+    return () => {
+      window.removeEventListener('resize', updateSlotPosition);
+      if (scroller) scroller.removeEventListener('scroll', updateSlotPosition);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const showFullscreenBtn = pairAddress && (isExpanded || isDesktopMode);
 
@@ -225,51 +317,58 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, showPr
           position: 'relative',
         }}
       >
-        {/* Empty slot — the single iframe lives here imperatively when not fullscreen.
-            React never renders children into this div so it won't remove the iframe. */}
+        {/* Invisible placeholder — keeps the chart area in the card layout so
+            containerRef.getBoundingClientRect() returns the correct coordinates.
+            The actual iframe lives in fsSlotRef (body portal) and is positioned
+            via inline CSS to overlay this exact area. */}
         <div
           ref={cardSlotRef}
           style={{
             position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
-            borderRadius: isDesktopMode ? '0' : '12px',
-            overflow: 'hidden',
           }}
         />
 
-        {showFullscreenBtn && (
-          <button
-            className="chart-fullscreen-btn"
-            onClick={(e) => { e.stopPropagation(); setFullscreenMode('portrait'); }}
-            title="View chart fullscreen"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="15 3 21 3 21 9"/>
-              <polyline points="9 21 3 21 3 15"/>
-              <line x1="21" y1="3" x2="14" y2="10"/>
-              <line x1="3" y1="21" x2="10" y2="14"/>
-            </svg>
-            <span>Full Chart</span>
-          </button>
-        )}
+        {/* Button is rendered in the body portal (fullscreenBtnRef) at z-index 70,
+            above the iframe. Nothing here — avoids being buried by the iframe. */}
       </div>
 
-      {/* Fullscreen portal — always mounted when pairAddress exists.
-          Using display:none (via chart-fs-hidden) instead of conditional rendering
-          keeps the portal (and fsSlotRef) in the DOM at all times, which lets us
-          safely move the single iframe in and out without a reload. */}
+      {/* fsSlotRef portal — always mounted so the ref is always available.
+          The iframe lives here permanently and is positioned via inline CSS.
+          No DOM moves: we only change fsSlotRef's style (same as portrait↔landscape). */}
       {pairAddress && createPortal(
         <>
-          <div className={`chart-fs-backdrop${fullscreenMode ? '' : ' chart-fs-hidden'}`}>
-            {/* Inner frame: position:fixed so it is positioned relative to the
-                viewport, never clipped by the backdrop's box. The iframe lives
-                here imperatively while fullscreen is active. */}
+          {/* Dark backdrop — only visible in fullscreen modes */}
+          {fullscreenMode && (
             <div
-              ref={fsSlotRef}
-              className={`chart-fs-inner ${fullscreenMode || 'portrait'}`}
+              className="chart-fs-backdrop"
+              onClick={() => setFullscreenMode(null)}
             />
+          )}
+
+          {/* iframe's permanent home — position/size set imperatively by updateSlotPosition() */}
+          <div ref={fsSlotRef} />
+
+          {/* "Full Chart" button wrapper — mirrors fsSlotRef position at z-index 70 so the
+              button floats above the cross-origin iframe. pointer-events:none on the wrapper,
+              auto on the button itself, so clicks reach it without blocking the iframe. */}
+          <div ref={fullscreenBtnRef}>
+            {showFullscreenBtn && !fullscreenMode && (
+              <button
+                className="chart-fullscreen-btn"
+                onClick={(e) => { e.stopPropagation(); setFullscreenMode('portrait'); }}
+                title="View chart fullscreen"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="15 3 21 3 21 9"/>
+                  <polyline points="9 21 3 21 3 15"/>
+                  <line x1="21" y1="3" x2="14" y2="10"/>
+                  <line x1="3" y1="21" x2="10" y2="14"/>
+                </svg>
+                <span>Full Chart</span>
+              </button>
+            )}
           </div>
 
-          {/* Controls pill — only shown while fullscreen is active */}
           {fullscreenMode && (
             <div className="chart-fs-controls-overlay">
               <button
