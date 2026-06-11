@@ -22,17 +22,13 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
   // pointer-events:none on the wrapper, auto on the button, so clicks reach the button
   // but the wrapper itself doesn't block the iframe beneath it.
   const fullscreenBtnRef = useRef(null);
+  // Gradient mask div — sits above the iframe (z-index 65) and behind the action buttons
+  // (z-index 100). Fades the right edge of the chart so buttons are readable over the chart.
+  const maskRef = useRef(null);
 
   const containerRef = useRef(null);
   const observerRef = useRef(null);
   const fallbackTimerRef = useRef(null);
-  // WebSocket kick timers — nudge early (invisible to user)
-  const nudge1Ref = useRef(null);
-  const nudge2Ref = useRef(null);
-  const nudge3Ref = useRef(null);
-  // Mirror isActive in a ref so stale-recovery timers can read current value
-  const isActiveRef = useRef(isActive);
-  useEffect(() => { isActiveRef.current = isActive; }, [isActive]);
 
   // Synchronous mirrors — updated during render so they're always current when effects run.
   // Used by updateSlotPosition() to read current mode without stale closures.
@@ -40,6 +36,8 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
   isDesktopModeRef.current = isDesktopMode;
   const fullscreenModeRef = useRef(fullscreenMode);
   fullscreenModeRef.current = fullscreenMode;
+  const showActionButtonsRef = useRef(showActionButtons);
+  showActionButtonsRef.current = showActionButtons;
 
   const pairAddress = coin?.pairAddress ||
                       coin?.poolAddress ||
@@ -55,8 +53,7 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
     setSrcReady(false);
 
     // Wait until the container div has real non-zero dimensions before injecting
-    // the iframe src. DexScreener's embed reads the container size on init —
-    // if it gets 0×0 it stalls on "Loading pair…" forever.
+    // the iframe src so the chart initialises at the correct viewport size.
     const activate = () => {
       if (observerRef.current) { observerRef.current.disconnect(); observerRef.current = null; }
       if (fallbackTimerRef.current) { clearTimeout(fallbackTimerRef.current); fallbackTimerRef.current = null; }
@@ -114,7 +111,7 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
 
   // Build the iframe src (null when not ready)
   const iframeSrc = srcReady && pairAddress
-    ? `https://dexscreener.com/solana/${pairAddress}?embed=1&theme=${contextDarkMode ? 'dark' : 'light'}&trades=0&info=0`
+    ? `https://www.geckoterminal.com/solana/pools/${pairAddress}?embed=1&bg_color=${contextDarkMode ? '111827' : 'f4f6fb'}&chart_type=price&info=0&light_chart=${contextDarkMode ? '0' : '1'}&resolution=15m&swaps=0`
     : null;
 
   // ── CSS-only slot positioning ────────────────────────────────────────────────
@@ -126,13 +123,16 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
   const updateSlotPosition = () => {
     const slot = fsSlotRef.current;
     const btnWrapper = fullscreenBtnRef.current;
+    const mask = maskRef.current;
     if (!slot || !iframeRef.current) {
       // No iframe yet — reset slot to invisible
       if (slot) slot.style.cssText = '';
       if (btnWrapper) btnWrapper.style.cssText = '';
+      if (mask) mask.style.cssText = '';
       return;
     }
     const fm = fullscreenModeRef.current;
+    const showMask = showActionButtonsRef.current;
     if (fm === 'landscape') {
       slot.style.cssText = [
         'position:fixed',
@@ -144,9 +144,11 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
       ].join(';') + ';';
       // fullscreen controls overlay handles the UX in these modes
       if (btnWrapper) btnWrapper.style.cssText = '';
+      if (mask) mask.style.cssText = '';
     } else if (fm === 'portrait') {
       slot.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100dvh;transform:none;z-index:99991;border-radius:0;';
       if (btnWrapper) btnWrapper.style.cssText = '';
+      if (mask) mask.style.cssText = '';
     } else if (isDesktopModeRef.current && desktopSlotRef?.current) {
       const { top, left, width, height } = desktopSlotRef.current.getBoundingClientRect();
       if (width > 0 && height > 0) {
@@ -154,6 +156,7 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
         if (btnWrapper) {
           btnWrapper.style.cssText = `position:fixed;top:${top}px;left:${left}px;width:${width}px;height:${height}px;transform:none;z-index:2;pointer-events:none;`;
         }
+        if (mask) mask.style.cssText = '';
       }
     } else {
       // Mobile card view — position to exactly overlay containerRef in the viewport.
@@ -169,19 +172,17 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
         if (btnWrapper) {
           btnWrapper.style.cssText = `position:fixed;top:${top}px;left:${left}px;width:${width}px;height:${height}px;transform:none;z-index:70;pointer-events:none;border-radius:12px;overflow:hidden;`;
         }
+        if (mask) {
+          // Gradient mask: right-side fade that makes action buttons readable over the chart.
+          // z-index 65 = above iframe (60), below Full Chart btn (70) and action buttons (100).
+          const opacity = showMask ? '1' : '0';
+          mask.style.cssText = `position:fixed;top:${top}px;right:0px;left:${left + width - 140}px;width:140px;height:${height}px;transform:none;z-index:65;pointer-events:none;border-radius:0 12px 12px 0;background:linear-gradient(to right,transparent,rgba(11,18,32,1) 50%);opacity:${opacity};transition:opacity 0.35s ease;`;
+        }
       }
     }
   };
 
-  const clearKickTimers = () => {
-    if (nudge1Ref.current)   { clearTimeout(nudge1Ref.current);   nudge1Ref.current   = null; }
-    if (nudge2Ref.current)   { clearTimeout(nudge2Ref.current);   nudge2Ref.current   = null; }
-    if (nudge3Ref.current)   { clearTimeout(nudge3Ref.current);   nudge3Ref.current   = null; }
-  };
-
   useEffect(() => {
-    clearKickTimers();
-
     if (!iframeSrc) {
       // Not ready or coin changed — destroy iframe and hide slot
       if (iframeRef.current) {
@@ -190,13 +191,14 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
       }
       if (fsSlotRef.current) fsSlotRef.current.style.cssText = '';
       if (fullscreenBtnRef.current) fullscreenBtnRef.current.style.cssText = '';
+      if (maskRef.current) maskRef.current.style.cssText = '';
       return;
     }
 
     if (!iframeRef.current) {
       const iframe = document.createElement('iframe');
       iframe.src = iframeSrc;
-      iframe.title = 'DexScreener Chart';
+      iframe.title = 'GeckoTerminal Chart';
       iframe.setAttribute('frameborder', '0');
       Object.assign(iframe.style, {
         position: 'absolute',
@@ -207,10 +209,7 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
       iframeRef.current = iframe;
     }
 
-    // Position the slot BEFORE appending the iframe so that DexScreener's embed
-    // initialises with non-zero viewport dimensions.  If the slot is 0×0 when
-    // the iframe first loads, DexScreener reads window.innerWidth/Height as 0,
-    // fails to open its WebSocket, and gets permanently stuck on "Loading pair…".
+    // Position the slot before appending so the chart initialises at the correct size.
     updateSlotPosition();
 
     // Place iframe in fsSlotRef — its permanent home, never moved again.
@@ -219,30 +218,14 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
       slot.appendChild(iframeRef.current);
     }
 
-    // ── Proactive WebSocket kick ─────────────────────────────────────────────
-    // DexScreener's WebSocket silently fails to connect ~50% of the time.
-    // Triggering a micro-resize (1 px height flip) immediately after load
-    // fires DexScreener's internal ResizeObserver which restarts the connection.
-    const nudge = (iframe) => {
-      if (!iframe || !isActiveRef.current) return;
-      iframe.style.height = 'calc(100% - 1px)';
-      requestAnimationFrame(() => {
-        if (iframeRef.current === iframe) iframe.style.height = '100%';
-      });
-    };
-
-    nudge1Ref.current = setTimeout(() => nudge(iframeRef.current), 300);
-    nudge2Ref.current = setTimeout(() => nudge(iframeRef.current), 800);
-    nudge3Ref.current = setTimeout(() => nudge(iframeRef.current), 1500);
-
     return () => {
-      clearKickTimers();
       if (iframeRef.current) {
         iframeRef.current.remove();
         iframeRef.current = null;
       }
       if (fsSlotRef.current) fsSlotRef.current.style.cssText = '';
       if (fullscreenBtnRef.current) fullscreenBtnRef.current.style.cssText = '';
+      if (maskRef.current) maskRef.current.style.cssText = '';
     };
   }, [iframeSrc]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -250,7 +233,7 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
   // useLayoutEffect so the move happens synchronously before paint.
   useLayoutEffect(() => {
     updateSlotPosition();
-  }, [fullscreenMode, isDesktopMode, isActive]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fullscreenMode, isDesktopMode, isActive, showActionButtons]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // isExpanded animation tracking: the info-layer expands/collapses over 500ms via
   // a CSS height transition. The chart section moves with it. We run a rAF loop for
@@ -347,6 +330,11 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
 
           {/* iframe's permanent home — position/size set imperatively by updateSlotPosition() */}
           <div ref={fsSlotRef} />
+
+          {/* Gradient mask — sits above the iframe (z-index 65) and behind the action buttons
+              (z-index 100). Fades the right edge so buttons are readable against the chart.
+              Position/opacity are set imperatively by updateSlotPosition(). */}
+          <div ref={maskRef} />
 
           {/* "Full Chart" button wrapper — mirrors fsSlotRef position at z-index 70 so the
               button floats above the cross-origin iframe. pointer-events:none on the wrapper,
