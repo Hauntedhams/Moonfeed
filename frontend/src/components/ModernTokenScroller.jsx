@@ -766,7 +766,8 @@ const ModernTokenScroller = ({
         mintAddress: MOO_ADDRESS,
         symbol: 'MOO',
         name: 'Moonfeed',
-        address: MOO_ADDRESS
+        address: MOO_ADDRESS,
+        isPumpFun: true  // Show bonding curve progress bar
       };
       
       console.log('🔄 Enriching $MOO coin...');
@@ -786,16 +787,19 @@ const ModernTokenScroller = ({
         if (data.success && data.coin) {
           console.log('✅ $MOO coin enriched successfully!');
           
+          // Preserve isPumpFun so bonding curve bar is always shown
+          const enrichedMoo = { isPumpFun: true, ...data.coin };
+          
           // Replace the feed with just the MOO coin
-          setCoins([data.coin]);
+          setCoins([enrichedMoo]);
           setCurrentIndex(0);
           
           // Store enriched data
-          setEnrichedCoins(prev => new Map(prev).set(MOO_ADDRESS, data.coin));
+          setEnrichedCoins(prev => new Map(prev).set(MOO_ADDRESS, enrichedMoo));
           
           // Notify parent components
           onTotalCoinsChange?.(1);
-          onCurrentCoinChange?.(data.coin, 0);
+          onCurrentCoinChange?.(enrichedMoo, 0);
         } else {
           console.error('❌ Failed to enrich $MOO coin:', data);
         }
