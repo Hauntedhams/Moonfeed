@@ -18,6 +18,7 @@ const getApiBaseUrl = () => {
 
 export const API_CONFIG = {
   BASE_URL: getApiBaseUrl(),
+  baseUrl: getApiBaseUrl(), // lowercase alias for convenience
   COINS_API: `${getApiBaseUrl()}/api/coins`,
   ENDPOINTS: {
     TRENDING: '/trending',

@@ -288,7 +288,7 @@ const CoinCard = memo(({
     if (!isVisible || !mintAddress) return;
     const fetchCommentCount = async () => {
       try {
-        const response = await fetch(`${API_CONFIG.baseUrl}/api/comments/${mintAddress}`);
+        const response = await fetch(`${API_CONFIG.BASE_URL}/api/comments/${mintAddress}`);
         if (response.ok) {
           const data = await response.json();
           setComments(data.comments || []);
@@ -2720,7 +2720,7 @@ const CoinCard = memo(({
                     const text = textarea?.value?.trim();
                     if (!text || !walletAddress) return;
                     try {
-                      const response = await fetch(`${API_CONFIG.baseUrl}/api/comments`, {
+                      const response = await fetch(`${API_CONFIG.BASE_URL}/api/comments`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -2733,7 +2733,7 @@ const CoinCard = memo(({
                       if (response.ok) {
                         textarea.value = '';
                         // Refresh comments
-                        const res = await fetch(`${API_CONFIG.baseUrl}/api/comments/${mintAddress}`);
+                        const res = await fetch(`${API_CONFIG.BASE_URL}/api/comments/${mintAddress}`);
                         if (res.ok) {
                           const data = await res.json();
                           setComments(data.comments || []);
