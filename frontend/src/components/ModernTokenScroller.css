@@ -320,6 +320,8 @@
 }
 
 .banner-overlay-buttons .moonfeed-info-button,
+.banner-overlay-buttons .moonfeed-hamburger-wrapper,
+.banner-overlay-buttons .hamburger-dropdown,
 .banner-overlay-buttons .filters-button,
 .banner-overlay-buttons .banner-search-button {
   pointer-events: auto;

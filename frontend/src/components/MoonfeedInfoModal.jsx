@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { useTrackedWallets } from '../contexts/TrackedWalletsContext';
+import { useDarkMode } from '../contexts/DarkModeContext';
 import './MoonfeedInfoModal.css';
 
 // Use the new logo from public folder
@@ -344,7 +346,152 @@ const MoonfeedInfoModal = ({ isVisible, onClose, onBuyMoo, onStartTutorial }) =>
   );
 };
 
-// Hamburger menu button + dropdown
+// ─── Tracked Wallets Panel ────────────────────────────────────────────────────
+const TrackedWalletsPanel = ({ onClose }) => {
+  const { trackedWallets, untrackWallet } = useTrackedWallets();
+  const [selectedWallet, setSelectedWallet] = useState(null);
+
+  return createPortal(
+    <div className="menu-panel-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="menu-panel" onClick={(e) => e.stopPropagation()}>
+        <div className="menu-panel-header">
+          <h3 className="menu-panel-title">Tracked Wallets</h3>
+          <button className="menu-panel-close" onClick={onClose} aria-label="Close">✕</button>
+        </div>
+        <div className="menu-panel-body">
+          {trackedWallets.length === 0 ? (
+            <div className="menu-panel-empty">
+              <span className="menu-panel-empty-icon">👛</span>
+              <p>No tracked wallets yet.</p>
+              <p className="menu-panel-empty-hint">Tap "Track" on any wallet in the feed to add it here.</p>
+            </div>
+          ) : (
+            <ul className="tracked-wallet-list">
+              {trackedWallets.map((w) => (
+                <li key={w.address} className="tracked-wallet-row">
+                  <div className="tracked-wallet-row-info">
+                    <span className="tracked-wallet-row-addr">
+                      {w.address.slice(0, 5)}…{w.address.slice(-5)}
+                    </span>
+                    <span className="tracked-wallet-row-label">{w.label}</span>
+                  </div>
+                  <div className="tracked-wallet-row-actions">
+                    <button
+                      className="twallet-view-btn"
+                      onClick={() => setSelectedWallet(w.address)}
+                      title="View on Solscan"
+                    >
+                      ↗
+                    </button>
+                    <button
+                      className="twallet-remove-btn"
+                      onClick={() => untrackWallet(w.address)}
+                      title="Untrack"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+      {selectedWallet && (
+        <div className="twallet-solscan-notice">
+          <a
+            href={`https://solscan.io/account/${selectedWallet}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="twallet-solscan-link"
+          >
+            Open {selectedWallet.slice(0, 5)}…{selectedWallet.slice(-5)} on Solscan ↗
+          </a>
+          <button className="twallet-solscan-dismiss" onClick={() => setSelectedWallet(null)}>Dismiss</button>
+        </div>
+      )}
+    </div>,
+    document.body
+  );
+};
+
+// ─── Options Panel ────────────────────────────────────────────────────────────
+const OptionsPanel = ({ onClose }) => {
+  const { isDarkMode, toggleDarkMode } = useDarkMode();
+
+  return createPortal(
+    <div className="menu-panel-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="menu-panel" onClick={(e) => e.stopPropagation()}>
+        <div className="menu-panel-header">
+          <h3 className="menu-panel-title">Options</h3>
+          <button className="menu-panel-close" onClick={onClose} aria-label="Close">✕</button>
+        </div>
+        <div className="menu-panel-body">
+          <div className="options-row">
+            <span className="options-row-label">Dark Mode</span>
+            <button
+              className={`options-toggle ${isDarkMode ? 'on' : 'off'}`}
+              onClick={toggleDarkMode}
+              aria-label={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              <span className="options-toggle-thumb" />
+            </button>
+          </div>
+          <div className="options-row options-row-static">
+            <span className="options-row-label">Network</span>
+            <span className="options-row-value">Solana Mainnet</span>
+          </div>
+          <div className="options-row options-row-static">
+            <span className="options-row-label">Currency</span>
+            <span className="options-row-value">USD</span>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+};
+
+// ─── Help Panel ───────────────────────────────────────────────────────────────
+const HelpPanel = ({ onClose }) => {
+  const items = [
+    { icon: '↕️', title: 'Browse tokens', desc: 'Scroll up/down to navigate the feed.' },
+    { icon: '📈', title: 'View chart', desc: 'Tap a card to expand its price chart.' },
+    { icon: '⭐', title: 'Follow tokens', desc: 'Tap "Follow" to save tokens to your Favorites tab.' },
+    { icon: '🔍', title: 'Search', desc: 'Use the search button (top-right) to find any token.' },
+    { icon: '👛', title: 'Track wallets', desc: 'Tap "Track" on any trader to monitor their activity.' },
+    { icon: '💱', title: 'Trade', desc: 'Use the Trade tab to swap tokens via Jupiter.' },
+    { icon: '🔔', title: 'Live prices', desc: 'A green dot means the price is updating in real-time.' },
+  ];
+
+  return createPortal(
+    <div className="menu-panel-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="menu-panel" onClick={(e) => e.stopPropagation()}>
+        <div className="menu-panel-header">
+          <h3 className="menu-panel-title">Help</h3>
+          <button className="menu-panel-close" onClick={onClose} aria-label="Close">✕</button>
+        </div>
+        <div className="menu-panel-body">
+          <ul className="help-item-list">
+            {items.map((item) => (
+              <li key={item.title} className="help-item-row">
+                <span className="help-item-icon">{item.icon}</span>
+                <div className="help-item-text">
+                  <strong>{item.title}</strong>
+                  <p>{item.desc}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+          <p className="help-panel-tip">💡 Tip: Tokens are ranked by market activity and momentum!</p>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+};
+
+// ─── Hamburger menu button + dropdown ─────────────────────────────────────────
 const MoonfeedInfoButton = ({
   className = '',
   showNudge = false,
@@ -355,6 +502,9 @@ const MoonfeedInfoButton = ({
 }) => {
   const [showModal, setShowModal] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [showTrackedWallets, setShowTrackedWallets] = useState(false);
+  const [showOptions, setShowOptions] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const wrapperRef = useRef(null);
 
   useEffect(() => {
@@ -380,11 +530,19 @@ const MoonfeedInfoButton = ({
   const MENU_ITEMS = [
     {
       label: 'Tracked Wallets',
-      onClick: () => { setMenuOpen(false); onTrackedWallets?.(); },
+      onClick: () => {
+        setMenuOpen(false);
+        if (onTrackedWallets) onTrackedWallets();
+        else setShowTrackedWallets(true);
+      },
     },
     {
       label: 'Options',
-      onClick: () => { setMenuOpen(false); onOptions?.(); },
+      onClick: () => {
+        setMenuOpen(false);
+        if (onOptions) onOptions();
+        else setShowOptions(true);
+      },
     },
     { divider: true },
     {
@@ -393,12 +551,17 @@ const MoonfeedInfoButton = ({
     },
     {
       label: 'Help',
-      onClick: openAbout,
+      onClick: () => { setMenuOpen(false); setShowHelp(true); },
     },
   ];
 
   return (
-    <div ref={wrapperRef} className={`moonfeed-hamburger-wrapper ${className}`}>
+    <div
+      ref={wrapperRef}
+      className={`moonfeed-hamburger-wrapper ${className}`}
+      onClick={(e) => e.stopPropagation()}
+      onTouchEnd={(e) => e.stopPropagation()}
+    >
       <button
         className={`moonfeed-info-button ${showNudge ? 'nudge-active' : ''}`}
         onClick={() => setMenuOpen((o) => !o)}
@@ -422,7 +585,12 @@ const MoonfeedInfoButton = ({
       </button>
 
       {menuOpen && (
-        <nav className="hamburger-dropdown" role="menu">
+        <nav
+          className="hamburger-dropdown"
+          role="menu"
+          onClick={(e) => e.stopPropagation()}
+          onTouchEnd={(e) => e.stopPropagation()}
+        >
           {MENU_ITEMS.map((item, i) =>
             item.divider ? (
               <div key={i} className="hamburger-menu-divider" role="separator" />
@@ -431,7 +599,7 @@ const MoonfeedInfoButton = ({
                 key={item.label}
                 className="hamburger-menu-item"
                 role="menuitem"
-                onClick={item.onClick}
+                onClick={(e) => { e.stopPropagation(); item.onClick(); }}
               >
                 {item.label}
               </button>
@@ -446,6 +614,10 @@ const MoonfeedInfoButton = ({
         onBuyMoo={onBuyMoo}
         onStartTutorial={onStartTutorial}
       />
+
+      {showTrackedWallets && <TrackedWalletsPanel onClose={() => setShowTrackedWallets(false)} />}
+      {showOptions && <OptionsPanel onClose={() => setShowOptions(false)} />}
+      {showHelp && <HelpPanel onClose={() => setShowHelp(false)} />}
     </div>
   );
 };
