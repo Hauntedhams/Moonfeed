@@ -267,10 +267,25 @@ class OnDemandEnrichmentService {
         console.log(`✅ Phase 1: Moonshot metadata applied (${Date.now() - startTime}ms)`);
       }
 
-      // ✅ Apply Jupiter Ultra data for holderCount
+      // ✅ Apply Jupiter Ultra data for holderCount, icon, and supply
       if (jupiterResult.status === 'fulfilled' && jupiterResult.value) {
-        enrichedData.holderCount = jupiterResult.value.holderCount;
-        enrichedData.holders = jupiterResult.value.holderCount;
+        const jupData = jupiterResult.value;
+        enrichedData.holderCount = jupData.holderCount;
+        enrichedData.holders = jupData.holderCount;
+
+        // Use Jupiter icon as profile image if none set yet
+        if (jupData.icon && !enrichedData.profileImage) {
+          enrichedData.profileImage = jupData.icon;
+          enrichedData.image = enrichedData.image || jupData.icon;
+          enrichedData.logo = enrichedData.logo || jupData.icon;
+        }
+
+        // Store supply info for market cap computation
+        if (jupData.circSupply || jupData.totalSupply) {
+          enrichedData.circulatingSupply = enrichedData.circulatingSupply || jupData.circSupply || jupData.totalSupply;
+          enrichedData.totalSupply = enrichedData.totalSupply || jupData.totalSupply || jupData.circSupply;
+        }
+
         console.log(`✅ Phase 1: Jupiter holders applied (${Date.now() - startTime}ms)`);
       } else {
         console.warn(`⚠️ Jupiter Ultra data not available for ${coin.symbol}:`,
@@ -474,6 +489,17 @@ class OnDemandEnrichmentService {
         // instead of incorrectly showing "UNLOCKED" for coins that ARE locked
         enrichedData.riskLevel = 'unknown';
         enrichedData.rugcheckUnavailable = true;
+      }
+
+      // 📊 Derive market cap from price × supply when APIs don't provide it
+      if ((!enrichedData.marketCap || enrichedData.marketCap === 0)) {
+        const priceForMcap = enrichedData.price_usd || coin.price_usd || coin.priceUsd || coin.price || 0;
+        const supplyForMcap = enrichedData.circulatingSupply || enrichedData.totalSupply || coin.circulatingSupply || coin.totalSupply || 0;
+        if (priceForMcap > 0 && supplyForMcap > 0) {
+          enrichedData.marketCap = priceForMcap * supplyForMcap;
+          enrichedData.market_cap_usd = enrichedData.marketCap;
+          console.log(`📊 Computed market cap for ${coin.symbol}: $${enrichedData.marketCap.toLocaleString()}`);
+        }
       }
 
       // Update enrichment time to include rugcheck attempt

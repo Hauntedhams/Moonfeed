@@ -106,13 +106,16 @@ class MoonshotMetadataService {
       if (mintAddress === this.MOO_TOKEN_ADDRESS) {
         console.log(`🐮 Creating fallback metadata for $MOO with custom banner`);
         const mooMetadata = {
-          profileImage: null, // Will be set from enrichment
-          banner: this.MOO_CUSTOM_BANNER, // Custom banner!
-          logo: null,
-          image: null,
+          profileImage: 'https://cdn.moonshot.com/x4z4md4HRWVx10x8AezA7jdk.jpg',
+          banner: this.MOO_CUSTOM_BANNER,
+          logo: 'https://cdn.moonshot.com/x4z4md4HRWVx10x8AezA7jdk.jpg',
+          image: 'https://cdn.moonshot.com/x4z4md4HRWVx10x8AezA7jdk.jpg',
           description: 'We created TikTok for meme coins! MoonFeed shows curated lists of solana coins about to go to the moon',
           name: 'MoonFeed',
           symbol: 'MOO',
+          socials: {
+            twitter: 'https://x.com/moonfeedapp'
+          },
           source: 'moonfeed-custom'
         };
         
