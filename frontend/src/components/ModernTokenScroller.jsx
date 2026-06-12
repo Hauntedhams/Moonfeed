@@ -685,50 +685,48 @@ const ModernTokenScroller = ({
     }
   }, []);
 
-  // 🎯 SIMPLE SCROLL HANDLER: CSS handles snapping, JS just tracks index
+  // 🎯 INDEX TRACKER: IntersectionObserver — never blocks the scroll thread
   useEffect(() => {
     const container = scrollerRef.current;
-    if (!container) return;
-    
-    let scrollTimer = null;
-    
-    const handleScroll = () => {
-      if (isScrollLocked.current || expandedCoin) return;
-      
-      // Clear previous timer
-      if (scrollTimer) clearTimeout(scrollTimer);
-      
-      // Short delay to let CSS snap settle, then update index
-      scrollTimer = setTimeout(() => {
-        const scrollTop = container.scrollTop;
-        const viewportHeight = container.clientHeight;
-        
-        // Calculate which card is currently showing (simple math based on scroll position)
-        const newIndex = Math.round(scrollTop / viewportHeight);
-        const clampedIndex = Math.max(0, Math.min(newIndex, coins.length - 1));
-        
-        // Update index if changed
-        if (clampedIndex !== currentIndex) {
-          setCurrentIndex(clampedIndex);
-          
-          const coin = coins[clampedIndex];
-          if (coin) {
-            const enriched = enrichedCoins.get(coin.mintAddress);
-            const enrichedCoin = enriched ? { ...coin, ...enriched } : coin;
-            onCurrentCoinChange?.(enrichedCoin, clampedIndex);
+    if (!container || coins.length === 0) return;
+
+    const slides = container.querySelectorAll('.modern-coin-slide');
+    if (slides.length === 0) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (isScrollLocked.current || expandedCoin) return;
+
+        // Find the slide with the highest intersection ratio (most visible)
+        let best = null;
+        for (const entry of entries) {
+          if (!best || entry.intersectionRatio > best.intersectionRatio) {
+            best = entry;
           }
-          
-          console.log(`📱 Coin ${clampedIndex + 1}/${coins.length}`);
         }
-      }, 100); // Small delay to let CSS snap complete
-    };
-    
-    container.addEventListener('scroll', handleScroll, { passive: true });
-    
-    return () => {
-      if (scrollTimer) clearTimeout(scrollTimer);
-      container.removeEventListener('scroll', handleScroll);
-    };
+
+        if (best && best.intersectionRatio > 0.5) {
+          const idx = parseInt(best.target.dataset.index, 10);
+          if (!isNaN(idx) && idx !== currentIndex) {
+            setCurrentIndex(idx);
+
+            const coin = coins[idx];
+            if (coin) {
+              const enriched = enrichedCoins.get(coin.mintAddress);
+              const enrichedCoin = enriched ? { ...coin, ...enriched } : coin;
+              onCurrentCoinChange?.(enrichedCoin, idx);
+            }
+
+            console.log(`📱 Coin ${idx + 1}/${coins.length}`);
+          }
+        }
+      },
+      { root: container, threshold: 0.5 }
+    );
+
+    slides.forEach((slide) => observer.observe(slide));
+
+    return () => observer.disconnect();
   }, [expandedCoin, currentIndex, coins, enrichedCoins, onCurrentCoinChange]);
   
   // Handle favorite toggle

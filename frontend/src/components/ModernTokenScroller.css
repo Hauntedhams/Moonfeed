@@ -26,6 +26,13 @@
   -ms-overflow-style: none;
   /* iOS smooth scroll */
   -webkit-overflow-scrolling: touch;
+  /* Mobile scroll smoothness */
+  touch-action: pan-y;
+  overscroll-behavior-y: contain;
+  will-change: scroll-position;
+  /* GPU compositing layer */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
 }
 
 .modern-scroller-container::-webkit-scrollbar {
@@ -63,6 +70,16 @@
   position: relative;
   flex-shrink: 0;
   background: linear-gradient(135deg, #0b1220 0%, #0e1426 50%, #0b1220 100%);
+  /* Isolate each slide's repaints from the rest */
+  contain: layout style paint;
+  /* Prevent unnecessary compositing on all slides */
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* Only promote the active + adjacent slides to GPU layers */
+.modern-coin-slide.active {
+  will-change: transform;
 }
 
 .modern-coin-slide.active {
