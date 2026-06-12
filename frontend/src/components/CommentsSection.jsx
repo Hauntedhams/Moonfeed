@@ -14,7 +14,7 @@ const WalletSvg = () => (
   </svg>
 );
 
-const CommentsSection = ({ coinAddress, coinSymbol }) => {
+const CommentsSection = ({ coinAddress, coinSymbol, onWalletClick }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
@@ -261,7 +261,12 @@ const CommentsSection = ({ coinAddress, coinSymbol }) => {
                 comments.map((comment) => (
                   <div key={comment._id || comment.id} className="comment-item">
                     <div className="comment-header-row">
-                      <div className="comment-wallet">
+                      <div
+                        className="comment-wallet"
+                        onClick={(e) => { e.stopPropagation(); comment.walletAddress && onWalletClick && onWalletClick(comment.walletAddress); }}
+                        style={{ cursor: comment.walletAddress && onWalletClick ? 'pointer' : 'default' }}
+                        title={comment.walletAddress && onWalletClick ? 'Click to view wallet stats' : comment.walletAddress}
+                      >
                         <span className="wallet-avatar">
                           {comment.walletAddress ? comment.walletAddress[0].toUpperCase() : '?'}
                         </span>

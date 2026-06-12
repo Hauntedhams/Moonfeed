@@ -2785,7 +2785,12 @@ const CoinCard = memo(({
                 comments.map((comment) => (
                   <div key={comment._id || comment.id} className="tiktok-comment-row">
                     <div className="tiktok-comment-header">
-                      <span className="tiktok-comment-wallet">
+                      <span
+                        className="tiktok-comment-wallet"
+                        onClick={(e) => { e.stopPropagation(); comment.walletAddress && setSelectedWallet(comment.walletAddress); }}
+                        style={{ cursor: comment.walletAddress ? 'pointer' : 'default' }}
+                        title={comment.walletAddress ? 'Click to view wallet stats' : undefined}
+                      >
                         👛 {comment.walletAddress ? 
                           `${comment.walletAddress.substring(0, 4)}..${comment.walletAddress.slice(-4)}` 
                           : 'Anon'}
