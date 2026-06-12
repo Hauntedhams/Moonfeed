@@ -489,9 +489,12 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError }
                   transition: 'opacity 0.3s'
                 }}
               />
+            </div>
+          )}
 
-              {/* Success popup overlay after a swap */}
-              {swapSuccessInfo && (
+          {/* Success popup overlay after a swap - fixed position so it's always visible */}
+          {swapSuccessInfo && (
+            <div className="swap-success-fixed-overlay" onClick={(e) => e.stopPropagation()}>
                 <div className="swap-success-banner">
                   <div className="success-banner-top">
                     <span className="success-banner-check">✓</span>
@@ -704,7 +707,6 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError }
                     </div>
                   )}
                 </div>
-              )}
             </div>
           )}
 

@@ -465,18 +465,35 @@
 }
 
 /* ── Post-swap success banner ─────────────────────────────────── */
-.swap-success-banner {
-  position: absolute;
-  bottom: 0;
+.swap-success-fixed-overlay {
+  position: fixed;
+  top: 0;
   left: 0;
   right: 0;
-  background: linear-gradient(180deg, rgba(10, 18, 30, 0) 0%, rgba(10, 18, 30, 0.97) 18px);
-  padding: 20px 20px 16px;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 10020;
+  pointer-events: none;
+}
+
+.swap-success-banner {
+  position: relative;
+  width: 100%;
+  max-width: 400px;
+  background: rgba(10, 18, 30, 0.98);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  border-radius: 20px;
+  padding: 22px 20px 20px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   animation: slideUpBanner 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  z-index: 50;
+  z-index: 10021;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(16, 185, 129, 0.15);
+  pointer-events: all;
 }
 
 .success-banner-top {
@@ -509,22 +526,25 @@
 }
 
 .setup-limit-link {
-  background: none;
-  border: none;
+  background: rgba(79, 195, 247, 0.12);
+  border: 1px solid rgba(79, 195, 247, 0.35);
+  border-radius: 12px;
   color: #4FC3F7;
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 15px;
+  font-weight: 600;
   cursor: pointer;
-  padding: 0;
-  text-align: left;
-  text-decoration: underline;
-  text-decoration-style: dotted;
-  text-underline-offset: 3px;
-  transition: color 0.15s;
+  padding: 13px 18px;
+  text-align: center;
+  text-decoration: none;
+  transition: background 0.15s, border-color 0.15s;
+  width: 100%;
+  min-height: 48px;
 }
 
-.setup-limit-link:hover {
-  color: #81d4fa;
+.setup-limit-link:hover,
+.setup-limit-link:active {
+  background: rgba(79, 195, 247, 0.22);
+  border-color: rgba(79, 195, 247, 0.6);
 }
 
 .limit-success-confirm {
