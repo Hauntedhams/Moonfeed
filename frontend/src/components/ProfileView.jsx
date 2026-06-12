@@ -756,7 +756,7 @@ const ProfileView = () => {
         <div className="profile-features">
           <div className="feature-section orders-section">
             <div className="orders-header">
-              <h3>📊 Limit Orders</h3>
+              <h3>Limit Orders</h3>
               <div className="orders-filter">
                 <button
                   className={`filter-btn ${statusFilter === 'active' ? 'active' : ''}`}
@@ -785,7 +785,7 @@ const ProfileView = () => {
               </div>
             ) : orders.length === 0 ? (
               <div className="orders-empty">
-                <div className="empty-icon">📋</div>
+                <div className="empty-icon"></div>
                 <p>No {statusFilter} orders</p>
                 <span className="empty-hint">
                   {statusFilter === 'active' 

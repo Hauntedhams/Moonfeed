@@ -1533,6 +1533,8 @@
 .dark-mode .orders-empty,
 .dark-mode .orders-loading {
   color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border-color: var(--border-color);
 }
 
 .dark-mode .empty-icon {
