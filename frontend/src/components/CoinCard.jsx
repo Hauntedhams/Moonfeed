@@ -1492,6 +1492,20 @@ const CoinCard = memo(({
                       </svg>
                     </a>
                   )}
+                  {graduationPercentage !== null && (
+                    <div className="bonding-curve-pill" title={`Bonding curve: ${graduationPercentage.toFixed(1)}% — graduates to Raydium at 100%`}>
+                      <span className="bonding-curve-pill-label">{graduationPercentage.toFixed(0)}%</span>
+                      <div className="bonding-curve-pill-track">
+                        <div
+                          className="bonding-curve-pill-fill"
+                          style={{
+                            width: `${Math.min(graduationPercentage, 100)}%`,
+                            background: graduationColor,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
                   <button 
                     className={`banner-follow-button ${isFavorite ? 'following' : ''}`}
                     onClick={(e) => {
