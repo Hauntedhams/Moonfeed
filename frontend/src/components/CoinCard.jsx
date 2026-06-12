@@ -1,5 +1,6 @@
 import React, { memo, useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
+import { UnifiedWalletButton } from '@jup-ag/wallet-adapter';
 import './CoinCard.css';
 import TwelveDataChart from './TwelveDataChart';
 import LiquidityLockIndicator from './LiquidityLockIndicator';
@@ -2757,7 +2758,15 @@ const CoinCard = memo(({
                 </form>
               ) : (
                 <div className="tiktok-comment-connect">
-                  🔒 Connect wallet to comment
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="2" y="7" width="20" height="15" rx="2"/>
+                    <path d="M16 12h.01"/>
+                    <path d="M2 10V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4"/>
+                  </svg>
+                  <span>Connect wallet to comment</span>
+                  <div className="tiktok-connect-btn-wrap">
+                    <UnifiedWalletButton />
+                  </div>
                 </div>
               )}
             </div>

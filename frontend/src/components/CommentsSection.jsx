@@ -3,6 +3,17 @@ import { useWallet } from '../contexts/WalletContext';
 import { UnifiedWalletButton } from '@jup-ag/wallet-adapter';
 import './CommentsSection.css';
 
+// Wallet icon SVG
+const WalletSvg = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M20 12V22H4V12"/>
+    <path d="M22 7H2v5h20V7z"/>
+    <path d="M12 22V7"/>
+    <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/>
+    <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>
+  </svg>
+);
+
 const CommentsSection = ({ coinAddress, coinSymbol }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [comments, setComments] = useState([]);
@@ -149,21 +160,27 @@ const CommentsSection = ({ coinAddress, coinSymbol }) => {
       {/* Comments Panel */}
       {isOpen && (
         <div className="comments-panel">
+          {/* Header */}
           <div className="comments-header">
-            <h3>
-              💬 Comments {coinSymbol && <span className="coin-symbol-badge">${coinSymbol}</span>}
-            </h3>
-            <button 
-              className="comments-close-btn" 
-              onClick={toggleComments}
-              aria-label="Close comments"
-            >
-              ×
+            <div className="comments-header-left">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              </svg>
+              <span>Comments</span>
+              {coinSymbol && <span className="coin-symbol-badge">${coinSymbol}</span>}
+              {comments.length > 0 && (
+                <span className="comments-count-pill">{comments.length}</span>
+              )}
+            </div>
+            <button className="comments-close-btn" onClick={toggleComments} aria-label="Close comments">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
             </button>
           </div>
 
           <div className="comments-content">
-            {/* Comment Form */}
+            {/* Comment Form or Connect Prompt */}
             {connected ? (
               <form onSubmit={handleSubmitComment} className="comment-form">
                 <div className="comment-input-wrapper">
@@ -171,36 +188,55 @@ const CommentsSection = ({ coinAddress, coinSymbol }) => {
                     ref={textareaRef}
                     value={newComment}
                     onChange={handleTextareaChange}
-                    placeholder="Share your thoughts..."
+                    placeholder="Share your thoughts…"
                     className="comment-textarea"
                     maxLength={500}
                     disabled={loading}
                     rows={1}
                   />
                   <div className="comment-form-footer">
-                    <span className="char-count">
+                    <span className={`char-count ${newComment.length > 450 ? 'char-count-warn' : ''}`}>
                       {newComment.length}/500
                     </span>
-                    <button 
-                      type="submit" 
+                    <button
+                      type="submit"
                       className="comment-submit-btn"
                       disabled={loading || !newComment.trim()}
                     >
-                      {loading ? 'Posting...' : 'Post'}
+                      {loading ? (
+                        <span className="btn-spinner" />
+                      ) : (
+                        <>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                          </svg>
+                          Post
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>
                 {submitError && (
                   <div className="comment-error">
-                    ⚠️ {submitError}
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                      <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                    </svg>
+                    {submitError}
                   </div>
                 )}
               </form>
             ) : (
               <div className="connect-wallet-prompt">
-                <div className="connect-wallet-icon">🔒</div>
-                <p>Connect your wallet to join the conversation</p>
-                <div className="connect-wallet-cta-container">
+                <div className="connect-wallet-icon-wrap">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="2" y="7" width="20" height="15" rx="2"/>
+                    <path d="M16 12h.01"/>
+                    <path d="M2 10V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4"/>
+                  </svg>
+                </div>
+                <p className="connect-wallet-title">Connect to comment</p>
+                <p className="connect-wallet-sub">Join the conversation for ${coinSymbol || 'this coin'}</p>
+                <div className="connect-wallet-btn-wrap">
                   <UnifiedWalletButton />
                 </div>
               </div>
@@ -210,12 +246,14 @@ const CommentsSection = ({ coinAddress, coinSymbol }) => {
             <div className="comments-list">
               {loading && comments.length === 0 ? (
                 <div className="comments-loading">
-                  <div className="loading-spinner"></div>
-                  <p>Loading comments...</p>
+                  <div className="loading-spinner" />
+                  <p>Loading comments…</p>
                 </div>
               ) : comments.length === 0 ? (
                 <div className="comments-empty">
-                  <div className="empty-icon">💭</div>
+                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{opacity: 0.3}}>
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                  </svg>
                   <p>No comments yet</p>
                   <p className="empty-subtext">Be the first to share your thoughts!</p>
                 </div>
@@ -224,50 +262,38 @@ const CommentsSection = ({ coinAddress, coinSymbol }) => {
                   <div key={comment._id || comment.id} className="comment-item">
                     <div className="comment-header-row">
                       <div className="comment-wallet">
-                        <span className="wallet-icon">👛</span>
+                        <span className="wallet-avatar">
+                          {comment.walletAddress ? comment.walletAddress[0].toUpperCase() : '?'}
+                        </span>
                         <span className="wallet-address" title={comment.walletAddress}>
                           {truncateAddress(comment.walletAddress)}
                         </span>
                       </div>
-                      <div className="comment-timestamp">
+                      <span className="comment-timestamp">
                         {formatTimestamp(comment.timestamp)}
-                      </div>
+                      </span>
                     </div>
-                    <div className="comment-text">
-                      {comment.comment}
-                    </div>
+                    <p className="comment-text">{comment.comment}</p>
                   </div>
                 ))
               )}
             </div>
           </div>
-
-          {/* Arrow pointing down to the button */}
-          <div className="comments-panel-arrow"></div>
         </div>
       )}
 
-      {/* Comments Button */}
+      {/* Floating Comments Button */}
       <button
         className={`comments-bubble-button ${isOpen ? 'active' : ''}`}
         onClick={toggleComments}
         aria-label="View comments"
-        title={`Comments${coinSymbol ? ` for ${coinSymbol}` : ''}`}
+        title={`Comments${coinSymbol ? ` for $${coinSymbol}` : ''}`}
       >
-        <svg 
-          width="24" 
-          height="24" 
-          viewBox="0 0 24 24" 
-          fill="none" 
-          stroke="currentColor" 
-          strokeWidth="2" 
-          strokeLinecap="round" 
-          strokeLinejoin="round"
-        >
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
         </svg>
         {comments.length > 0 && (
-          <span className="comment-count-badge">{comments.length}</span>
+          <span className="comment-count-badge">{comments.length > 99 ? '99+' : comments.length}</span>
         )}
       </button>
     </div>

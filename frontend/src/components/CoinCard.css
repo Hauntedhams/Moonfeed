@@ -3559,6 +3559,148 @@ html.dark-mode .description-modal-body,
   text-align: center;
 }
 
+/* ---- Comment Input Area ---- */
+.tiktok-sheet-comment-input {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+
+.tiktok-comment-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  border: 1.5px solid rgba(255, 255, 255, 0.1);
+  padding: 8px 10px;
+  transition: border-color 0.2s;
+}
+
+.tiktok-comment-form:focus-within {
+  border-color: rgba(124, 58, 237, 0.6);
+  background: rgba(124, 58, 237, 0.06);
+}
+
+.tiktok-comment-textarea {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #fff;
+  font-size: 14px;
+  font-family: inherit;
+  resize: none;
+  min-height: 22px;
+  max-height: 100px;
+  line-height: 1.5;
+}
+
+.tiktok-comment-textarea::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.tiktok-comment-send {
+  background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%);
+  border: none;
+  color: #fff;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform 0.15s, box-shadow 0.15s;
+  line-height: 1;
+}
+
+.tiktok-comment-send:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.5);
+}
+
+/* Connect wallet prompt inside comment input area */
+.tiktok-comment-connect {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 4px;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+
+.tiktok-connect-btn-wrap {
+  flex: 1;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.tiktok-connect-btn-wrap .unified-wallet-adapter-button {
+  background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%) !important;
+  border: none !important;
+  border-radius: 10px !important;
+  padding: 8px 18px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  color: white !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  box-shadow: 0 3px 10px rgba(124, 58, 237, 0.4) !important;
+  white-space: nowrap !important;
+}
+
+.tiktok-connect-btn-wrap .unified-wallet-adapter-button:hover {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 6px 16px rgba(124, 58, 237, 0.55) !important;
+}
+
+/* ---- Comment rows ---- */
+.tiktok-comment-row {
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  transition: background 0.15s;
+}
+
+.tiktok-comment-row:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.tiktok-comment-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 5px;
+}
+
+.tiktok-comment-wallet {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.07);
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.tiktok-comment-time {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.tiktok-comment-text {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1.5;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
 /* ---- Transaction row styling (inside the sheet) ---- */
 .tiktok-tx-row {
   display: flex;
