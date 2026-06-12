@@ -13,6 +13,11 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
   // with CSS via getBoundingClientRect(), the same way portrait→landscape works in
   // fullscreen: only dimensions change, the iframe never reloads.
   const iframeRef = useRef(null);
+  // Thin wrapper div that sits between the slot and the iframe.
+  // ALL rotation/positioning for landscape mode is applied to this wrapper;
+  // the iframe itself always fills the wrapper at 100% and its style is
+  // never changed after creation — eliminating accidental rotation resets.
+  const rotateWrapperRef = useRef(null);
   // Placeholder div in the card — used to measure card chart area coordinates only.
   // The iframe is never appended here; this just gives us getBoundingClientRect().
   const cardSlotRef = useRef(null);
@@ -124,8 +129,8 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
     const slot = fsSlotRef.current;
     const btnWrapper = fullscreenBtnRef.current;
     const mask = maskRef.current;
-    if (!slot || !iframeRef.current) {
-      // No iframe yet — reset slot to invisible
+    if (!slot || !rotateWrapperRef.current) {
+      // Not ready — reset slot to invisible
       if (slot) slot.style.cssText = '';
       if (btnWrapper) btnWrapper.style.cssText = '';
       if (mask) mask.style.cssText = '';
@@ -133,26 +138,41 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
     }
     const fm = fullscreenModeRef.current;
     const showMask = showActionButtonsRef.current;
+
+    // Reset iframe to default fill-parent style (all non-landscape modes).
+    // Changing CSS on an <iframe> does NOT cause it to reload — only src changes do.
+    const resetIframe = () => {
+      if (iframeRef.current) {
+        iframeRef.current.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;transform:none;border:none;display:block;';
+      }
+    };
+
     if (fm === 'landscape') {
-      slot.style.cssText = [
-        'position:fixed',
-        'top:50%', 'left:50%',
-        'width:max(100vw,100dvh)', 'height:min(100vw,100dvh)',
-        'transform:translate(-50%,-50%) rotate(90deg)',
-        'z-index:99991',
-        'border-radius:0',
-      ].join(';') + ';';
-      // fullscreen controls overlay handles the UX in these modes
+      // Slot + wrapper: identical to portrait — full-viewport, no transform.
+      // This is the key fix: by keeping the slot/wrapper layout identical to portrait,
+      // there are zero dead zones and the backdrop can never receive accidental events.
+      slot.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100dvh;transform:none;z-index:99991;border-radius:0;';
+      rotateWrapperRef.current.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;transform:none;';
+      // Only the iframe is rotated: sized landscape (dvh × dvw), centered in the wrapper,
+      // then rotated 90° so it visually fills the full viewport in landscape orientation.
+      // The slot/wrapper carry no transform so hit-testing and the backdrop work perfectly.
+      if (iframeRef.current) {
+        iframeRef.current.style.cssText = 'position:absolute;top:calc((100dvh - 100dvw)/2);left:calc((100dvw - 100dvh)/2);width:100dvh;height:100dvw;transform:rotate(90deg);transform-origin:center;border:none;display:block;';
+      }
       if (btnWrapper) btnWrapper.style.cssText = '';
       if (mask) mask.style.cssText = '';
     } else if (fm === 'portrait') {
       slot.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100dvh;transform:none;z-index:99991;border-radius:0;';
+      rotateWrapperRef.current.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;transform:none;';
+      resetIframe();
       if (btnWrapper) btnWrapper.style.cssText = '';
       if (mask) mask.style.cssText = '';
     } else if (isDesktopModeRef.current && desktopSlotRef?.current) {
       const { top, left, width, height } = desktopSlotRef.current.getBoundingClientRect();
       if (width > 0 && height > 0) {
         slot.style.cssText = `position:fixed;top:${top}px;left:${left}px;width:${width}px;height:${height}px;transform:none;z-index:1;border-radius:0;`;
+        rotateWrapperRef.current.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;transform:none;';
+        resetIframe();
         if (btnWrapper) {
           btnWrapper.style.cssText = `position:fixed;top:${top}px;left:${left}px;width:${width}px;height:${height}px;transform:none;z-index:2;pointer-events:none;`;
         }
@@ -160,15 +180,13 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
       }
     } else {
       // Mobile card view — position to exactly overlay containerRef in the viewport.
-      // z-index:60 puts the chart above the info-layer (z-index:50) but below
-      // the bottom nav (z-index:100), so nav buttons stay visible.
-      // The button wrapper mirrors this area at z-index:70 so the Full Chart button
-      // is always above the iframe.
       const el = containerRef.current;
       if (!el) return;
       const { top, left, width, height } = el.getBoundingClientRect();
       if (width > 0 && height > 0) {
         slot.style.cssText = `position:fixed;top:${top}px;left:${left}px;width:${width}px;height:${height}px;transform:none;z-index:60;border-radius:12px;overflow:hidden;`;
+        rotateWrapperRef.current.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;transform:none;border-radius:12px;';
+        resetIframe();
         if (btnWrapper) {
           btnWrapper.style.cssText = `position:fixed;top:${top}px;left:${left}px;width:${width}px;height:${height}px;transform:none;z-index:70;pointer-events:none;border-radius:12px;overflow:hidden;`;
         }
@@ -184,15 +202,23 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
 
   useEffect(() => {
     if (!iframeSrc) {
-      // Not ready or coin changed — destroy iframe and hide slot
-      if (iframeRef.current) {
-        iframeRef.current.remove();
-        iframeRef.current = null;
+      // Not ready or coin changed — destroy wrapper+iframe and hide slot
+      if (rotateWrapperRef.current) {
+        rotateWrapperRef.current.remove();
+        rotateWrapperRef.current = null;
       }
+      iframeRef.current = null; // removed with wrapper above
       if (fsSlotRef.current) fsSlotRef.current.style.cssText = '';
       if (fullscreenBtnRef.current) fullscreenBtnRef.current.style.cssText = '';
       if (maskRef.current) maskRef.current.style.cssText = '';
       return;
+    }
+
+    // Create the rotation wrapper if needed
+    if (!rotateWrapperRef.current) {
+      const wrapper = document.createElement('div');
+      Object.assign(wrapper.style, { position: 'absolute', top: '0', left: '0', width: '100%', height: '100%' });
+      rotateWrapperRef.current = wrapper;
     }
 
     if (!iframeRef.current) {
@@ -200,6 +226,8 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
       iframe.src = iframeSrc;
       iframe.title = 'GeckoTerminal Chart';
       iframe.setAttribute('frameborder', '0');
+      // Initial style — fill the wrapper. updateSlotPosition() will override this
+      // for landscape mode (rotating the iframe directly) and reset it otherwise.
       Object.assign(iframe.style, {
         position: 'absolute',
         top: '0', left: '0',
@@ -207,22 +235,24 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
         border: 'none', display: 'block',
       });
       iframeRef.current = iframe;
+      rotateWrapperRef.current.appendChild(iframe);
     }
 
-    // Position the slot before appending so the chart initialises at the correct size.
+    // Position the slot/wrapper before appending so the chart initialises at the correct size.
     updateSlotPosition();
 
-    // Place iframe in fsSlotRef — its permanent home, never moved again.
+    // Place wrapper in fsSlotRef — its permanent home, never moved again.
     const slot = fsSlotRef.current;
-    if (slot && iframeRef.current.parentNode !== slot) {
-      slot.appendChild(iframeRef.current);
+    if (slot && rotateWrapperRef.current.parentNode !== slot) {
+      slot.appendChild(rotateWrapperRef.current);
     }
 
     return () => {
-      if (iframeRef.current) {
-        iframeRef.current.remove();
-        iframeRef.current = null;
+      if (rotateWrapperRef.current) {
+        rotateWrapperRef.current.remove();
+        rotateWrapperRef.current = null;
       }
+      iframeRef.current = null;
       if (fsSlotRef.current) fsSlotRef.current.style.cssText = '';
       if (fullscreenBtnRef.current) fullscreenBtnRef.current.style.cssText = '';
       if (maskRef.current) maskRef.current.style.cssText = '';
@@ -245,7 +275,9 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
     const startTime = performance.now();
     const DURATION = 600; // slightly longer than the 500ms CSS transition
     const tick = (now) => {
-      updateSlotPosition();
+      // Skip repositioning in fullscreen — the chart is viewport-fixed and
+      // doesn't need to track card coordinates during the expand animation.
+      if (!fullscreenModeRef.current) updateSlotPosition();
       if (now - startTime < DURATION) {
         expandRafRef.current = requestAnimationFrame(tick);
       } else {
@@ -263,13 +295,34 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
   // stays in sync while the card is animating into position.
   useEffect(() => {
     const scroller = document.querySelector('.modern-scroller-container');
-    window.addEventListener('resize', updateSlotPosition);
-    if (scroller) scroller.addEventListener('scroll', updateSlotPosition, { passive: true });
+    // In fullscreen mode the slot is viewport-fixed — skip card-tracking updates.
+    // This prevents scroll events from the underlying feed from flickering the chart.
+    const handleScroll = () => { if (!fullscreenModeRef.current) updateSlotPosition(); };
+    const handleResize = () => updateSlotPosition(); // resize is always needed (mode can change dims)
+    window.addEventListener('resize', handleResize);
+    if (scroller) scroller.addEventListener('scroll', handleScroll, { passive: true });
     return () => {
-      window.removeEventListener('resize', updateSlotPosition);
-      if (scroller) scroller.removeEventListener('scroll', updateSlotPosition);
+      window.removeEventListener('resize', handleResize);
+      if (scroller) scroller.removeEventListener('scroll', handleScroll);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Lock the feed scroller while in fullscreen so scroll/touch events can't
+  // change the active card, which would remount this component and reset
+  // fullscreenMode state back to null — causing the chart to snap to the
+  // card's coordinates instead of staying in the fullscreen position.
+  useEffect(() => {
+    const scroller = document.querySelector('.modern-scroller-container');
+    if (!scroller) return;
+    if (fullscreenMode) {
+      scroller.classList.add('scroll-locked');
+    } else {
+      scroller.classList.remove('scroll-locked');
+    }
+    return () => {
+      scroller.classList.remove('scroll-locked');
+    };
+  }, [fullscreenMode]);
 
   const showFullscreenBtn = pairAddress && (isExpanded || isDesktopMode);
 
@@ -324,7 +377,14 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
           {fullscreenMode && (
             <div
               className="chart-fs-backdrop"
-              onClick={() => setFullscreenMode(null)}
+              onClick={() => {
+                // In landscape the chart fills the entire viewport via the rotated wrapper.
+                // The slot's layout box now covers the full viewport (no dead zones), but
+                // keep this guard as a safety net: dead-zone taps should never exit fullscreen.
+                if (fullscreenModeRef.current === 'landscape') return;
+                fullscreenModeRef.current = null;
+                setFullscreenMode(null);
+              }}
             />
           )}
 
@@ -343,7 +403,7 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
             {showFullscreenBtn && !fullscreenMode && (
               <button
                 className="chart-fullscreen-btn"
-                onClick={(e) => { e.stopPropagation(); setFullscreenMode('portrait'); }}
+                onClick={(e) => { e.stopPropagation(); fullscreenModeRef.current = 'portrait'; setFullscreenMode('portrait'); }}
                 title="View chart fullscreen"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -358,10 +418,10 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
           </div>
 
           {fullscreenMode && (
-            <div className="chart-fs-controls-overlay">
+            <div className={`chart-fs-controls-overlay${fullscreenMode === 'landscape' ? ' chart-fs-controls-overlay--landscape' : ''}`}>
               <button
                 className={`chart-fs-mode-btn${fullscreenMode === 'portrait' ? ' active' : ''}`}
-                onClick={() => setFullscreenMode('portrait')}
+                onClick={() => { fullscreenModeRef.current = 'portrait'; setFullscreenMode('portrait'); }}
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="7" y="2" width="10" height="20" rx="2"/>
@@ -371,7 +431,7 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
 
               <button
                 className={`chart-fs-mode-btn${fullscreenMode === 'landscape' ? ' active' : ''}`}
-                onClick={() => setFullscreenMode('landscape')}
+                onClick={() => { fullscreenModeRef.current = 'landscape'; setFullscreenMode('landscape'); }}
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="2" y="7" width="20" height="10" rx="2"/>
@@ -381,7 +441,7 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
 
               <div className="chart-fs-divider" />
 
-              <button className="chart-fs-close-btn" onClick={() => setFullscreenMode(null)}>
+              <button className="chart-fs-close-btn" onClick={() => { fullscreenModeRef.current = null; setFullscreenMode(null); }}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="4 14 10 14 10 20"/>
                   <polyline points="20 10 14 10 14 4"/>
