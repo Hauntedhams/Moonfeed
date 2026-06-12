@@ -34,6 +34,7 @@ const searchRoutes = require('./routes/search');
 const affiliateRoutes = require('./routes/affiliates');
 const commentsRoutes = require('./routes/comments');
 const usersRoutes = require('./routes/users');
+const copyTradeRoutes = require('./routes/copyTrade');
 const onDemandEnrichment = require('./services/OnDemandEnrichmentService');
 const geckoTerminalService = require('./geckoTerminalService');
 const chartDataService = require('./chartDataService');
@@ -91,6 +92,9 @@ app.get('/api/health', (req, res) => {
 
 // Mount wallet routes
 app.use('/api/wallet', walletRoutes);
+
+// Mount Copy Trade routes
+app.use('/api/copy-trade', copyTradeRoutes);
 
 // Mount Jupiter Trigger routes
 app.use('/api/trigger', triggerRoutes);

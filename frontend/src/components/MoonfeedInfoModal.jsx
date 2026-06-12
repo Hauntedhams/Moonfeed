@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useTrackedWallets } from '../contexts/TrackedWalletsContext';
 import { useDarkMode } from '../contexts/DarkModeContext';
+import { useCopyTrade } from '../contexts/CopyTradeContext';
 import './MoonfeedInfoModal.css';
 
 // Use the new logo from public folder
@@ -348,8 +349,13 @@ const MoonfeedInfoModal = ({ isVisible, onClose, onBuyMoo, onStartTutorial }) =>
 
 // ─── Tracked Wallets Panel ────────────────────────────────────────────────────
 const TrackedWalletsPanel = ({ onClose }) => {
-  const { trackedWallets, untrackWallet } = useTrackedWallets();
+  const { trackedWallets, untrackWallet, toggleCopyTrade } = useTrackedWallets();
+  const { queue } = useCopyTrade();
   const [selectedWallet, setSelectedWallet] = useState(null);
+  const [howItWorksOpen, setHowItWorksOpen] = useState(false);
+
+  const isActive = trackedWallets.length > 0;
+  const activeCount = trackedWallets.filter(w => w.copyTradeEnabled !== false).length;
 
   return createPortal(
     <div className="menu-panel-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -358,24 +364,89 @@ const TrackedWalletsPanel = ({ onClose }) => {
           <h3 className="menu-panel-title">Tracked Wallets</h3>
           <button className="menu-panel-close" onClick={onClose} aria-label="Close">✕</button>
         </div>
+
         <div className="menu-panel-body">
+
+          {/* ── Copy Trading Info Card ─────────────────────── */}
+          <div className={`ct-info-card ${activeCount > 0 ? 'ct-info-card--active' : 'ct-info-card--idle'}`}>
+            <div className="ct-info-card__header">
+              <span className="ct-info-card__icon">⚡</span>
+              <span className="ct-info-card__title">Copy Trading</span>
+              <span className={`ct-info-card__status ${activeCount > 0 ? 'ct-status--on' : 'ct-status--off'}`}>
+                <span className="ct-status__dot" />
+                {activeCount > 0 ? `${activeCount} active` : 'Off'}
+              </span>
+            </div>
+
+            <p className="ct-info-card__desc">
+              {activeCount > 0
+                ? `Monitoring ${activeCount} wallet${activeCount > 1 ? 's' : ''}. Toggle the switch on each wallet to control which ones are copied.`
+                : trackedWallets.length > 0
+                  ? 'All wallets are paused. Toggle the switch on a wallet to resume copy trading.'
+                  : 'Add wallets below to start. When they swap, you\'ll get a notification and can copy the trade instantly via Jupiter.'}
+            </p>
+
+            {/* Steps – always visible */}
+            <div className="ct-steps">
+              <div className="ct-step">
+                <span className="ct-step__num">1</span>
+                <span className="ct-step__text">Track wallets in the feed</span>
+              </div>
+              <span className="ct-step__arrow">→</span>
+              <div className="ct-step">
+                <span className="ct-step__num">2</span>
+                <span className="ct-step__text">We detect their swaps</span>
+              </div>
+              <span className="ct-step__arrow">→</span>
+              <div className="ct-step">
+                <span className="ct-step__num">3</span>
+                <span className="ct-step__text">Tap to copy via Jupiter</span>
+              </div>
+            </div>
+
+            {/* Pending notifications badge */}
+            {queue.length > 0 && (
+              <div className="ct-info-card__pending">
+                <span className="ct-pending__dot" />
+                {queue.length} pending trade{queue.length > 1 ? 's' : ''} waiting
+              </div>
+            )}
+          </div>
+
+          {/* ── Wallet List ────────────────────────────────── */}
           {trackedWallets.length === 0 ? (
             <div className="menu-panel-empty">
               <span className="menu-panel-empty-icon">👛</span>
               <p>No tracked wallets yet.</p>
-              <p className="menu-panel-empty-hint">Tap "Track" on any wallet in the feed to add it here.</p>
+              <p className="menu-panel-empty-hint">Tap any wallet address in the feed to track it.</p>
             </div>
           ) : (
             <ul className="tracked-wallet-list">
-              {trackedWallets.map((w) => (
+              {trackedWallets.map((w) => {
+                const copyOn = w.copyTradeEnabled !== false;
+                return (
                 <li key={w.address} className="tracked-wallet-row">
                   <div className="tracked-wallet-row-info">
-                    <span className="tracked-wallet-row-addr">
-                      {w.address.slice(0, 5)}…{w.address.slice(-5)}
-                    </span>
+                    <div className="twallet-addr-row">
+                      <span className="tracked-wallet-row-addr">
+                        {w.address.slice(0, 5)}…{w.address.slice(-5)}
+                      </span>
+                      {copyOn && <span className="twallet-monitoring-badge">📡 live</span>}
+                    </div>
                     <span className="tracked-wallet-row-label">{w.label}</span>
                   </div>
                   <div className="tracked-wallet-row-actions">
+                    {/* Copy trade toggle */}
+                    <button
+                      className={`twallet-ct-toggle ${copyOn ? 'twallet-ct-toggle--on' : 'twallet-ct-toggle--off'}`}
+                      onClick={() => toggleCopyTrade(w.address)}
+                      title={copyOn ? 'Copy trading on — tap to disable' : 'Copy trading off — tap to enable'}
+                      aria-pressed={copyOn}
+                    >
+                      <span className="twallet-ct-toggle__track">
+                        <span className="twallet-ct-toggle__thumb" />
+                      </span>
+                    </button>
                     <button
                       className="twallet-view-btn"
                       onClick={() => setSelectedWallet(w.address)}
@@ -392,7 +463,8 @@ const TrackedWalletsPanel = ({ onClose }) => {
                     </button>
                   </div>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           )}
         </div>

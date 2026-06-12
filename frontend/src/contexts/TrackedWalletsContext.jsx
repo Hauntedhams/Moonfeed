@@ -45,7 +45,8 @@ export const TrackedWalletsProvider = ({ children }) => {
       address: walletAddress,
       label: label || `Wallet ${trackedWallets.length + 1}`,
       addedAt: Date.now(),
-      lastViewed: Date.now()
+      lastViewed: Date.now(),
+      copyTradeEnabled: true,
     };
 
     setTrackedWallets(prev => [...prev, newWallet]);
@@ -82,13 +83,24 @@ export const TrackedWalletsProvider = ({ children }) => {
     return trackedWallets.some(w => w.address === walletAddress);
   };
 
+  const toggleCopyTrade = (walletAddress) => {
+    setTrackedWallets(prev =>
+      prev.map(w =>
+        w.address === walletAddress
+          ? { ...w, copyTradeEnabled: !(w.copyTradeEnabled ?? true) }
+          : w
+      )
+    );
+  };
+
   const value = {
     trackedWallets,
     trackWallet,
     untrackWallet,
     updateWalletLabel,
     updateLastViewed,
-    isTracked
+    isTracked,
+    toggleCopyTrade,
   };
 
   return (

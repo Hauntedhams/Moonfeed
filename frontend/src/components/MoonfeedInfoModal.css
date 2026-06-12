@@ -1875,6 +1875,246 @@
   flex-shrink: 0;
 }
 
+/* ===================================
+   COPY TRADING INFO CARD
+   =================================== */
+
+.ct-info-card {
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.ct-info-card--active {
+  background: rgba(124, 58, 237, 0.1);
+  border-color: rgba(124, 58, 237, 0.25);
+}
+
+.ct-info-card--idle {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.07);
+}
+
+/* Header row */
+.ct-info-card__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.ct-info-card__icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.ct-info-card__title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  flex: 1;
+  letter-spacing: 0.1px;
+}
+
+/* Status pill */
+.ct-info-card__status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  padding: 3px 9px;
+  border-radius: 20px;
+  text-transform: uppercase;
+}
+
+.ct-status--on {
+  background: rgba(0, 230, 118, 0.14);
+  color: #00e676;
+  border: 1px solid rgba(0, 230, 118, 0.25);
+}
+
+.ct-status--off {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.ct-status__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.ct-status--on .ct-status__dot {
+  animation: ct-dot-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes ct-dot-pulse {
+  0%, 100% { opacity: 1;   transform: scale(1);    }
+  50%       { opacity: 0.4; transform: scale(0.75); }
+}
+
+/* Description */
+.ct-info-card__desc {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.55);
+  line-height: 1.55;
+  margin: 0 0 14px 0;
+}
+
+/* How-it-works steps */
+.ct-steps {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.ct-step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 6px 10px;
+  flex: 1;
+  min-width: 80px;
+}
+
+.ct-step__num {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(124, 58, 237, 0.5);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ct-step__text {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
+  line-height: 1.3;
+}
+
+.ct-step__arrow {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.2);
+  flex-shrink: 0;
+}
+
+/* Pending trades badge */
+.ct-info-card__pending {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 12px;
+  padding: 7px 10px;
+  background: rgba(124, 58, 237, 0.15);
+  border: 1px solid rgba(124, 58, 237, 0.3);
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #c4b5fd;
+}
+
+.ct-pending__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #a855f7;
+  flex-shrink: 0;
+  animation: ct-dot-pulse 1.2s ease-in-out infinite;
+}
+
+/* Monitoring badge next to wallet address */
+.twallet-addr-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.twallet-monitoring-badge {
+  font-size: 10px;
+  font-weight: 600;
+  color: #00e676;
+  background: rgba(0, 230, 118, 0.1);
+  border: 1px solid rgba(0, 230, 118, 0.2);
+  border-radius: 5px;
+  padding: 1px 6px;
+  letter-spacing: 0.2px;
+  flex-shrink: 0;
+}
+
+/* ── Copy-trade toggle switch ── */
+.twallet-ct-toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  margin-right: 2px;
+}
+
+.twallet-ct-toggle__track {
+  display: block;
+  width: 36px;
+  height: 20px;
+  border-radius: 10px;
+  position: relative;
+  transition: background 0.2s, border-color 0.2s;
+  border: 1.5px solid transparent;
+}
+
+.twallet-ct-toggle--on .twallet-ct-toggle__track {
+  background: rgba(0, 230, 118, 0.25);
+  border-color: rgba(0, 230, 118, 0.5);
+}
+
+.twallet-ct-toggle--off .twallet-ct-toggle__track {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.twallet-ct-toggle__thumb {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  transition: left 0.2s cubic-bezier(0.4, 0, 0.2, 1), background 0.2s;
+}
+
+.twallet-ct-toggle--on .twallet-ct-toggle__thumb {
+  left: 18px;
+  background: #00e676;
+  box-shadow: 0 0 6px rgba(0, 230, 118, 0.6);
+}
+
+.twallet-ct-toggle--off .twallet-ct-toggle__thumb {
+  left: 2px;
+  background: rgba(255, 255, 255, 0.3);
+  box-shadow: none;
+}
+
+.twallet-ct-toggle:active .twallet-ct-toggle__thumb {
+  width: 16px;
+}
+
 /* Options rows */
 .options-row {
   display: flex;

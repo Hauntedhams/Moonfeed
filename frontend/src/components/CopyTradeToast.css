@@ -1,0 +1,169 @@
+/* ─────────────────────────────────────────────────────────────
+   CopyTradeToast
+   Fixed-position banner that slides in from the top of the screen.
+   ───────────────────────────────────────────────────────────── */
+
+.ctt-wrap {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  padding-top: max(env(safe-area-inset-top, 0px), 12px);
+  width: calc(100% - 32px);
+  max-width: 420px;
+  z-index: 99999;
+  pointer-events: none;
+}
+
+/* ── Toast card ─────────────────────────────────────────────── */
+.ctt-toast {
+  background: rgba(12, 17, 24, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 18px;
+  overflow: hidden;
+  padding: 14px 16px 0;
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(255, 255, 255, 0.04);
+  pointer-events: all;
+  animation: ctt-in 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+}
+
+@keyframes ctt-in {
+  from {
+    opacity: 0;
+    transform: translateY(-24px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Top accent stripe */
+.ctt-buy  { border-top: 2px solid #00e676; }
+.ctt-sell { border-top: 2px solid #ff5252; }
+
+/* ── Header row ─────────────────────────────────────────────── */
+.ctt-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+/* Pulsing status dot */
+.ctt-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  animation: ctt-pulse 1.6s ease-in-out infinite;
+}
+.ctt-buy  .ctt-dot { background: #00e676; box-shadow: 0 0 6px #00e676; }
+.ctt-sell .ctt-dot { background: #ff5252; box-shadow: 0 0 6px #ff5252; }
+
+@keyframes ctt-pulse {
+  0%, 100% { opacity: 1;   transform: scale(1);    }
+  50%       { opacity: 0.4; transform: scale(0.85); }
+}
+
+.ctt-wallet-label {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: #d0d0d0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ctt-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  padding: 2px 8px;
+  border-radius: 5px;
+}
+.ctt-buy  .ctt-badge { background: rgba(0, 230, 118, 0.14); color: #00e676; }
+.ctt-sell .ctt-badge { background: rgba(255, 82,  82, 0.14); color: #ff5252; }
+
+.ctt-close {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 3px 5px;
+  line-height: 1;
+  border-radius: 6px;
+  transition: color 0.15s, background 0.15s;
+}
+.ctt-close:hover {
+  color: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* ── Body ───────────────────────────────────────────────────── */
+.ctt-body {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.ctt-verb  { font-size: 14px; color: rgba(255, 255, 255, 0.5); }
+.ctt-token { font-size: 20px; font-weight: 800; color: #fff; letter-spacing: -0.3px; }
+.ctt-sol   { font-size: 13px; color: rgba(255, 255, 255, 0.4); }
+
+/* ── Actions row ────────────────────────────────────────────── */
+.ctt-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 14px;
+}
+
+.ctt-copy-btn {
+  flex: 1;
+  padding: 10px 18px;
+  background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  border: none;
+  border-radius: 11px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(124, 58, 237, 0.45);
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+.ctt-copy-btn:hover  { box-shadow: 0 6px 20px rgba(124, 58, 237, 0.55); }
+.ctt-copy-btn:active {
+  transform: scale(0.97);
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.3);
+}
+
+.ctt-more {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.3);
+  white-space: nowrap;
+}
+
+/* ── Progress bar ───────────────────────────────────────────── */
+.ctt-progress-track {
+  height: 2px;
+  background: rgba(255, 255, 255, 0.06);
+  margin: 0 -16px; /* bleed to card edges */
+}
+
+.ctt-progress-bar {
+  height: 100%;
+  width: 100%;
+  transform-origin: left;
+}
+.ctt-buy  .ctt-progress-bar { background: #00e676; }
+.ctt-sell .ctt-progress-bar { background: #ff5252; }

@@ -8,6 +8,8 @@ import ErrorBoundary from './components/ErrorBoundary'
 import { WalletProvider } from './contexts/WalletContext'
 import { TrackedWalletsProvider } from './contexts/TrackedWalletsContext'
 import { DarkModeProvider } from './contexts/DarkModeContext'
+import { CopyTradeProvider } from './contexts/CopyTradeContext'
+import CopyTradeToast from './components/CopyTradeToast'
 import ReferralTracker from './utils/ReferralTracker'
 import MobileOptimizer from './utils/mobileOptimizer'
 import { initializePerformanceMonitoring } from './utils/mobileOptimizations'
@@ -271,6 +273,16 @@ function App() {
     setCoinToTrade(null);
   };
 
+  // Handle copy trade — builds a minimal coin object and opens Jupiter pre-filled
+  const handleCopyTrade = (notification) => {
+    const coin = {
+      mintAddress: notification.tokenMint,
+      symbol: notification.tokenSymbol || notification.tokenMint.slice(0, 6),
+      name: notification.tokenSymbol || 'Unknown Token',
+    };
+    handleTradeClick(coin);
+  };
+
   // Handle Orders button click - navigate to orders page
   const handleOrdersClick = () => {
     console.log('📋 Orders button clicked - navigating to orders page');
@@ -281,6 +293,8 @@ function App() {
     <DarkModeProvider>
       <TrackedWalletsProvider>
         <WalletProvider>
+          <CopyTradeProvider onCopyTrade={handleCopyTrade}>
+          <CopyTradeToast />
           <div style={{ height: '100dvh', position: 'relative', overflow: 'hidden' }}>
         {/* Top tabs - only show on home screen */}
         {activeTab !== 'favorites' && activeTab !== 'coin-detail' && activeTab !== 'profile' && activeTab !== 'orders' && (
@@ -446,7 +460,8 @@ function App() {
         <WalletDebug />
       </Suspense>
         </div>
-      </WalletProvider>
+          </CopyTradeProvider>
+        </WalletProvider>
     </TrackedWalletsProvider>
     </DarkModeProvider>
   )
