@@ -848,6 +848,7 @@ const ModernTokenScroller = ({
           isVisible={isVisible}
           onExpandChange={(isExpanded) => handleCoinExpandChange(isExpanded, coin.mintAddress || coin.tokenAddress)}
           isCurrentCard={isCurrentCoin || isPreloadCoin}
+          isActiveCard={isCurrentCoin}
           onEnrichmentComplete={handleEnrichmentComplete} // Pass handler to CoinCard
         />
       </div>

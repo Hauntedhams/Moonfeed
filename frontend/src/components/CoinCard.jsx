@@ -61,6 +61,7 @@ const CoinCard = memo(({
   onExpandChange,
   isVisible = true,
   isCurrentCard = false, // True only for the single card currently in view — gates DexScreener embed load
+  isActiveCard = false, // True ONLY for the single card visually in view (not preload) — used to portal action buttons
   onEnrichmentComplete = null // Callback when enrichment completes
 }) => {
   // Generate unique component ID for cleanup tracking
@@ -2227,8 +2228,19 @@ const CoinCard = memo(({
       </div>
       </div> {/* Close coin-card-left-panel */}
 
-      {/* TikTok-style Action Buttons - Right side floating */}
-      <div className={`tiktok-action-buttons ${showActionButtons ? '' : 'collapsed'}`}>
+      {/* TikTok-style Action Buttons
+           On mobile: portaled to document.body so buttons escape the iOS/Android
+           GPU compositing layer created by the scroll container. The chart iframe
+           is already on document.body at z-index 60-70; putting buttons there at
+           z-index 9999 guarantees they always paint on top.
+           On desktop: rendered in-place (no chart z-index conflict). */}
+      {(function() {
+        const _mobilePortal = !isDesktopMode && isActiveCard;
+        const _buttons = (
+      <div
+        className={`tiktok-action-buttons ${showActionButtons ? '' : 'collapsed'}`}
+        style={_mobilePortal ? { position: 'fixed', right: '18px', bottom: '90px', zIndex: 9999 } : undefined}
+      >
         {/* Favorite / Like */}
         <button 
           className={`tiktok-action-btn ${isFavorite ? 'active' : ''}`}
@@ -2314,6 +2326,8 @@ const CoinCard = memo(({
           <span className="tiktok-action-label">Copy</span>
         </button>
       </div>
+        ); return _mobilePortal ? createPortal(_buttons, document.body) : _buttons;
+      }())}
 
       {/* Right Panel - Desktop chart container (chart portals here on desktop) */}
       <div className="coin-card-right-panel" ref={rightPanelRef} />

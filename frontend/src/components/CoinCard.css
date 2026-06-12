@@ -427,21 +427,13 @@
 
 /* =============================================================================
    MOBILE Z-INDEX FIX - Action buttons above GeckoTerminal chart iframe portal
-   The chart iframe is portaled to document.body as position:fixed (z-index 60-70).
-   On mobile browsers (especially iOS Safari), the scroll container can create a
-   compositing layer that traps the buttons below the chart portal in paint order.
-   Fix: use position:fixed on the active card's buttons so they join the root
-   stacking context at z-index 9999, guaranteed above the chart portals.
-   Non-active slide buttons are hidden (they're off-screen anyway).
+   Primary fix is in CoinCard.jsx (createPortal to document.body for mobile).
+   This CSS rule hides in-place buttons on non-active slides as a fallback safety
+   (portaled buttons are on document.body, not inside the slide).
    ============================================================================= */
 @media (max-width: 768px), (hover: none) {
   .modern-coin-slide:not(.active) .tiktok-action-buttons {
     display: none !important;
-  }
-
-  .modern-coin-slide.active .tiktok-action-buttons {
-    position: fixed !important;
-    z-index: 9999 !important;
   }
 }
 
