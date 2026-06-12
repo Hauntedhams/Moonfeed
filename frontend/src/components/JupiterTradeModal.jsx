@@ -323,8 +323,8 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError }
       const executeResult = await executeResponse.json();
       if (!executeResult.success) throw new Error(executeResult.error || 'Failed to execute order');
 
-      // Place stop-loss order if enabled
-      if (stopLossEnabled && stopLossPct > 0) {
+      // Place stop-loss order
+      if (stopLossPct > 0) {
         try {
           const slTakingAmount = String(Math.floor(parseFloat(swapResult.inputAmount) * (1 - stopLossPct / 100)));
 
@@ -524,36 +524,105 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError }
                     <div className="limit-order-panel">
                       <p className="limit-panel-heading">Auto-sell {coin?.symbol}</p>
 
-                      {/* ── Take Profit ── */}
-                      <div className="limit-section-label limit-section-label--profit">Take Profit</div>
-
-                      <div className="limit-pct-display">
-                        +{limitPct}% above purchase price
-                        {basePrice > 0 && (
-                          <span className="limit-price-inline">
-                            (${formatTargetPrice(basePrice * (1 + limitPct / 100))})
-                          </span>
-                        )}
+                      {/* ── Dual Exit Targets ── */}
+                      <div className="dual-exit-display">
+                        <div className="dual-exit-side dual-exit-side--loss">
+                          <span className="dual-exit-label">Stop Loss</span>
+                          <span className="dual-exit-pct">-{stopLossPct}%</span>
+                          {basePrice > 0 && (
+                            <span className="dual-exit-price">${formatTargetPrice(basePrice * (1 - stopLossPct / 100))}</span>
+                          )}
+                        </div>
+                        <div className="dual-exit-center">
+                          <span className="dual-exit-current-label">Entry</span>
+                          {basePrice > 0 && (
+                            <span className="dual-exit-current-price">${formatTargetPrice(basePrice)}</span>
+                          )}
+                        </div>
+                        <div className="dual-exit-side dual-exit-side--profit">
+                          <span className="dual-exit-label">Take Profit</span>
+                          <span className="dual-exit-pct">+{limitPct}%</span>
+                          {basePrice > 0 && (
+                            <span className="dual-exit-price">${formatTargetPrice(basePrice * (1 + limitPct / 100))}</span>
+                          )}
+                        </div>
                       </div>
 
-                      <div className="limit-slider-row">
-                        <span className="limit-slider-min">1%</span>
+                      {/* Dual range slider */}
+                      <div className="dual-range-slider">
+                        <div className="dual-range-track-bg">
+                          <div
+                            className="dual-range-zone dual-range-zone--loss"
+                            style={{ width: `${((80 - Math.min(stopLossPct, 79)) / 180) * 100}%` }}
+                          />
+                          <div
+                            className="dual-range-zone dual-range-zone--profit"
+                            style={{ left: `${((80 + Math.min(limitPct, 100)) / 180) * 100}%`, right: 0 }}
+                          />
+                          <div className="dual-range-current" style={{ left: `${(80 / 180) * 100}%` }} />
+                        </div>
+                        {/* Stop loss handle (red, left side) */}
                         <input
                           type="range"
-                          min="1"
-                          max="50"
-                          step="1"
-                          value={Math.min(limitPct, 50)}
-                          onChange={(e) => handleLimitPctChange(parseInt(e.target.value))}
-                          className="limit-slider"
+                          min={-80}
+                          max={100}
+                          step={1}
+                          value={-Math.min(stopLossPct, 80)}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value);
+                            if (val < 0) handleStopLossPctChange(-val);
+                          }}
+                          className="dual-range-input dual-range-input--loss"
                         />
-                        <span className="limit-slider-max">50%</span>
+                        {/* Take profit handle (green, right side) */}
+                        <input
+                          type="range"
+                          min={-80}
+                          max={100}
+                          step={1}
+                          value={Math.min(limitPct, 100)}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value);
+                            if (val > 0) handleLimitPctChange(val);
+                          }}
+                          className="dual-range-input dual-range-input--profit"
+                        />
+                        <div className="dual-range-labels">
+                          <span>-80%</span>
+                          <span>▲ Entry</span>
+                          <span>+100%</span>
+                        </div>
                       </div>
 
-                      <div className="limit-inputs-grid">
+                      {/* Input fields: stop loss left, take profit right */}
+                      <div className="dual-inputs-grid">
                         <div className="limit-input-cell">
-                          <span className="limit-input-label">% gain</span>
-                          <div className="limit-custom-input-wrap">
+                          <span className="limit-input-label dual-label--loss">% loss</span>
+                          <div className="limit-custom-input-wrap dual-wrap--loss">
+                            <input
+                              type="number"
+                              min="1"
+                              max="80"
+                              step="1"
+                              value={stopLossPctInput}
+                              onChange={(e) => {
+                                setStopLossPctInput(e.target.value);
+                                const v = parseFloat(e.target.value);
+                                if (!isNaN(v) && v > 0) {
+                                  setStopLossPct(v);
+                                  if (basePrice > 0) {
+                                    setStopLossPriceInput(formatTargetPrice(basePrice * (1 - v / 100)));
+                                  }
+                                }
+                              }}
+                              className="limit-pct-input"
+                            />
+                            <span className="limit-pct-symbol">%</span>
+                          </div>
+                        </div>
+                        <div className="limit-input-cell">
+                          <span className="limit-input-label dual-label--profit">% gain</span>
+                          <div className="limit-custom-input-wrap dual-wrap--profit">
                             <input
                               type="number"
                               min="0.01"
@@ -575,8 +644,23 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError }
                           </div>
                         </div>
                         <div className="limit-input-cell">
-                          <span className="limit-input-label">Target price</span>
-                          <div className="limit-custom-input-wrap">
+                          <span className="limit-input-label dual-label--loss">Stop price</span>
+                          <div className="limit-custom-input-wrap dual-wrap--loss">
+                            <span className="limit-pct-symbol">$</span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              value={stopLossPriceInput}
+                              onChange={(e) => handleStopLossPriceInputChange(e.target.value)}
+                              className="limit-pct-input limit-price-field"
+                              placeholder="0.00"
+                            />
+                          </div>
+                        </div>
+                        <div className="limit-input-cell">
+                          <span className="limit-input-label dual-label--profit">Target price</span>
+                          <div className="limit-custom-input-wrap dual-wrap--profit">
                             <span className="limit-pct-symbol">$</span>
                             <input
                               type="number"
@@ -591,95 +675,6 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError }
                         </div>
                       </div>
 
-                      {/* ── Stop Loss ── */}
-                      <div className="limit-sl-divider" />
-
-                      <div className="limit-sl-header">
-                        <div className="limit-sl-title-group">
-                          <span className="limit-section-label limit-section-label--loss">Stop Loss</span>
-                          <span className="limit-sl-subtitle">Sell if price drops</span>
-                        </div>
-                        <label className="limit-sl-toggle">
-                          <input
-                            type="checkbox"
-                            checked={stopLossEnabled}
-                            onChange={(e) => setStopLossEnabled(e.target.checked)}
-                          />
-                          <span className="limit-sl-toggle-track">
-                            <span className="limit-sl-toggle-thumb" />
-                          </span>
-                        </label>
-                      </div>
-
-                      {stopLossEnabled && (
-                        <>
-                          <div className="limit-pct-display limit-pct-display--loss">
-                            -{stopLossPct}% below purchase price
-                            {basePrice > 0 && (
-                              <span className="limit-price-inline">
-                                (${formatTargetPrice(basePrice * (1 - stopLossPct / 100))})
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="limit-slider-row">
-                            <span className="limit-slider-min">1%</span>
-                            <input
-                              type="range"
-                              min="1"
-                              max="80"
-                              step="1"
-                              value={Math.min(stopLossPct, 80)}
-                              onChange={(e) => handleStopLossPctChange(parseInt(e.target.value))}
-                              className="limit-slider limit-slider--loss"
-                            />
-                            <span className="limit-slider-max">80%</span>
-                          </div>
-
-                          <div className="limit-inputs-grid">
-                            <div className="limit-input-cell">
-                              <span className="limit-input-label">% loss</span>
-                              <div className="limit-custom-input-wrap">
-                                <input
-                                  type="number"
-                                  min="0.01"
-                                  max="99"
-                                  step="0.1"
-                                  value={stopLossPctInput}
-                                  onChange={(e) => {
-                                    setStopLossPctInput(e.target.value);
-                                    const v = parseFloat(e.target.value);
-                                    if (!isNaN(v) && v > 0) {
-                                      setStopLossPct(v);
-                                      if (basePrice > 0) {
-                                        setStopLossPriceInput(formatTargetPrice(basePrice * (1 - v / 100)));
-                                      }
-                                    }
-                                  }}
-                                  className="limit-pct-input"
-                                />
-                                <span className="limit-pct-symbol">%</span>
-                              </div>
-                            </div>
-                            <div className="limit-input-cell">
-                              <span className="limit-input-label">Stop price</span>
-                              <div className="limit-custom-input-wrap">
-                                <span className="limit-pct-symbol">$</span>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="any"
-                                  value={stopLossPriceInput}
-                                  onChange={(e) => handleStopLossPriceInputChange(e.target.value)}
-                                  className="limit-pct-input limit-price-field"
-                                  placeholder="0.00"
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        </>
-                      )}
-
                       {limitError && (
                         <p className="limit-error-text">{limitError}</p>
                       )}
@@ -690,11 +685,7 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError }
                           onClick={handleCreateLimitOrder}
                           disabled={limitLoading}
                         >
-                          {limitLoading
-                            ? 'Creating...'
-                            : stopLossEnabled
-                              ? `Set +${limitPct}% / -${stopLossPct}%`
-                              : `Sell at +${limitPct}%`}
+                          {limitLoading ? 'Creating...' : `Set -${stopLossPct}% / +${limitPct}%`}
                         </button>
                         <button
                           className="limit-cancel-btn"
