@@ -6,7 +6,7 @@ import ReferralTracker from '../utils/ReferralTracker';
 import { getFullApiUrl } from '../config/api';
 import './JupiterTradeModal.css';
 
-const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError }) => {
+const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, initialTab, initialSolAmount }) => {
   const jupiterInitialized = useRef(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -221,6 +221,13 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError }
     setStopLossPriceInput('');
     onClose();
   };
+
+  // When opened with initialTab='limit', jump straight to TriggerOrderModal
+  useEffect(() => {
+    if (isOpen && initialTab === 'limit') {
+      setShowTriggerModal(true);
+    }
+  }, [isOpen, initialTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Base price from coin data (used for target price calculations)
   const basePrice = coin?.priceUsd || coin?.price_usd || coin?.price || coin?.priceNative || 0;
@@ -714,6 +721,7 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError }
         onClose={handleTriggerModalClose}
         coin={coin}
         onOrderCreated={handleOrderCreated}
+        initialInputAmount={initialSolAmount}
       />
     </>
   );

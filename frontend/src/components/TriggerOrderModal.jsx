@@ -7,7 +7,8 @@ const TriggerOrderModal = ({
   isOpen, 
   onClose, 
   coin,
-  onOrderCreated 
+  onOrderCreated,
+  initialInputAmount,
 }) => {
   const { walletAddress, connected, signTransaction, recheckConnection, connect } = useWallet();
   const [orderType, setOrderType] = useState('limit'); // 'limit' or 'stop'
@@ -55,8 +56,12 @@ const TriggerOrderModal = ({
         'From Window - isConnected': window.solana?.isConnected ? '✅ true' : '❌ false',
         'Button will be': (!walletAddress || !inputAmount || !triggerPrice) ? '🔒 DISABLED' : '✅ ENABLED'
       });
+      // Pre-fill SOL amount if provided (e.g. from graduation snipe)
+      if (initialInputAmount) {
+        setInputAmount(String(initialInputAmount));
+      }
     }
-  }, [isOpen, walletAddress, connected, inputAmount, triggerPrice]);
+  }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Get current price from coin data - check multiple possible field names
   const currentPrice = coin?.priceUsd || coin?.price_usd || coin?.price || coin?.priceNative || 0;

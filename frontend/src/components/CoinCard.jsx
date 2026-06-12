@@ -2374,6 +2374,7 @@ const CoinCard = memo(({
           showActionButtons={showActionButtons}
           onCrosshairMove={handleChartCrosshairMove}
           onFirstPriceUpdate={handleFirstPriceUpdate}
+          onTradeClick={onTradeClick}
         />,
         mobileChartTargetRef.current
       )}

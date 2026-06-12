@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useDarkMode } from '../contexts/DarkModeContext';
 import './TwelveDataChart.css';
 
-const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, desktopSlotRef = null, showPriceScale, showActionButtons = true, isExpanded = false, onCrosshairMove, onFirstPriceUpdate }) => {
+const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, desktopSlotRef = null, showPriceScale, showActionButtons = true, isExpanded = false, onCrosshairMove, onFirstPriceUpdate, onTradeClick }) => {
   const { isDarkMode: contextDarkMode } = useDarkMode();
   const [srcReady, setSrcReady] = useState(false);
   const [fullscreenMode, setFullscreenMode] = useState(null); // null | 'portrait' | 'landscape'
@@ -49,8 +49,48 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
                       coin?.ammAccount ||
                       null;
 
+  // For pump.fun / graduating tokens with no pair address yet, try to resolve one via Dexscreener.
+  const [resolvedPairAddress, setResolvedPairAddress] = useState(null);
+  const [poolResolutionState, setPoolResolutionState] = useState('idle'); // 'idle' | 'loading' | 'failed'
+
+  const effectivePairAddress = pairAddress || resolvedPairAddress;
+
+  const isPumpFunNoChart = isActive && !pairAddress &&
+    (coin?.isPumpFun || coin?.status === 'graduating') &&
+    (coin?.mintAddress || coin?.tokenAddress || coin?.address);
+
   useEffect(() => {
-    if (!isActive || !pairAddress) {
+    setResolvedPairAddress(null);
+    setPoolResolutionState('idle');
+  }, [coin?.mintAddress, coin?.tokenAddress, coin?.address]);
+
+  useEffect(() => {
+    if (!isPumpFunNoChart || poolResolutionState !== 'idle') return;
+    const mintAddress = coin?.mintAddress || coin?.tokenAddress || coin?.address;
+    if (!mintAddress) return;
+
+    setPoolResolutionState('loading');
+    const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+    fetch(`${apiBase}/api/resolve-pool/${mintAddress}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.poolAddress) {
+          setResolvedPairAddress(data.poolAddress);
+          setPoolResolutionState('idle');
+        } else {
+          setPoolResolutionState('failed');
+        }
+      })
+      .catch(() => setPoolResolutionState('failed'));
+  }, [isPumpFunNoChart, poolResolutionState, coin?.mintAddress, coin?.tokenAddress, coin?.address]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Graduation Snipe ──────────────────────────────────────────────────────
+  // "Buy after DEX listing" — immediately opens the Limit Order modal.
+  // The limit order itself handles execution timing once the token is tradeable.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!isActive || !effectivePairAddress) {
       setSrcReady(false);
       return;
     }
@@ -112,11 +152,12 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
       if (fallbackTimerRef.current) { clearTimeout(fallbackTimerRef.current); fallbackTimerRef.current = null; }
       setSrcReady(false);
     };
-  }, [isActive, pairAddress]);
+  }, [isActive, effectivePairAddress]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Build the iframe src (null when not ready)
-  const iframeSrc = srcReady && pairAddress
-    ? `https://www.geckoterminal.com/solana/pools/${pairAddress}?embed=1&bg_color=${contextDarkMode ? '111827' : 'f4f6fb'}&chart_type=price&info=0&light_chart=${contextDarkMode ? '0' : '1'}&resolution=15m&swaps=0`
+  const gcParams = `embed=1&bg_color=${contextDarkMode ? '111827' : 'f4f6fb'}&chart_type=price&info=0&light_chart=${contextDarkMode ? '0' : '1'}&resolution=15m&swaps=0`;
+  const iframeSrc = srcReady && effectivePairAddress
+    ? `https://www.geckoterminal.com/solana/pools/${effectivePairAddress}?${gcParams}`
     : null;
 
   // ── CSS-only slot positioning ────────────────────────────────────────────────
@@ -324,7 +365,7 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
     };
   }, [fullscreenMode]);
 
-  const showFullscreenBtn = pairAddress && (isExpanded || isDesktopMode);
+  const showFullscreenBtn = effectivePairAddress && (isExpanded || isDesktopMode);
 
   return (
     <div
@@ -366,12 +407,62 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
 
         {/* Button is rendered in the body portal (fullscreenBtnRef) at z-index 70,
             above the iframe. Nothing here — avoids being buried by the iframe. */}
+
+        {/* Bonding curve fallback — shown only while resolution is in progress or truly unavailable */}
+        {isActive && !effectivePairAddress && isPumpFunNoChart && (
+          <div className="chart-bonding-curve-fallback">
+            {poolResolutionState === 'loading' ? (
+              <>
+                <div className="chart-bc-spinner" />
+                <div className="chart-bc-label">Looking up chart…</div>
+              </>
+            ) : (
+              <>
+                <div className="chart-bc-icon">🚀</div>
+                <div className="chart-bc-title">Bonding Curve</div>
+                {(coin?.bondingCurveProgress || coin?.bondingProgress) > 0 && (
+                  <div className="chart-bc-progress-wrap">
+                    <div className="chart-bc-progress-bar">
+                      <div
+                        className="chart-bc-progress-fill"
+                        style={{ width: `${Math.min(100, coin.bondingCurveProgress || coin.bondingProgress || 0)}%` }}
+                      />
+                    </div>
+                    <div className="chart-bc-progress-label">
+                      {(coin.bondingCurveProgress || coin.bondingProgress || 0).toFixed(1)}% to graduation
+                    </div>
+                  </div>
+                )}
+                <div className="chart-bc-sublabel">Chart available after DEX listing</div>
+
+                {onTradeClick && (
+                  <button
+                    className="chart-bc-snipe-btn"
+                    onClick={e => { e.stopPropagation(); onTradeClick(coin, { tab: 'limit' }); }}
+                  >
+                    ⚡ Buy after DEX listing
+                  </button>
+                )}
+
+                <a
+                  href={`https://pump.fun/${coin?.mintAddress || coin?.tokenAddress || coin?.address}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="chart-bc-link"
+                  onClick={e => e.stopPropagation()}
+                >
+                  View on Pump.fun
+                </a>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* fsSlotRef portal — always mounted so the ref is always available.
           The iframe lives here permanently and is positioned via inline CSS.
           No DOM moves: we only change fsSlotRef's style (same as portrait↔landscape). */}
-      {pairAddress && createPortal(
+      {effectivePairAddress && createPortal(
         <>
           {/* Dark backdrop — only visible in fullscreen modes */}
           {fullscreenMode && (

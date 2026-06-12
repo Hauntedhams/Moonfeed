@@ -2317,7 +2317,21 @@ app.get('/api/coins/graduating', async (req, res) => {
     
     // Apply live prices from Jupiter before serving
     const coinsWithPrices = applyLivePrices(limitedCoins);
-    
+
+    // 🔗 Resolve pool addresses for graduating coins missing pairAddress
+    // Critical for chart loading — pump.fun tokens start with no pairAddress
+    const EAGER_RESOLVE_GRADUATING = 10;
+    const graduatingNeedingPools = coinsWithPrices.filter(c => !c.pairAddress && !c.poolAddress && c.mintAddress);
+    if (graduatingNeedingPools.length > 0) {
+      console.log(`🔗 Resolving pool addresses for ${graduatingNeedingPools.length} graduating coins (${EAGER_RESOLVE_GRADUATING} eagerly)...`);
+      await resolvePoolAddressesForCoins(graduatingNeedingPools.slice(0, EAGER_RESOLVE_GRADUATING));
+      if (graduatingNeedingPools.length > EAGER_RESOLVE_GRADUATING) {
+        resolvePoolAddressesForCoins(graduatingNeedingPools.slice(EAGER_RESOLVE_GRADUATING)).catch(err =>
+          console.warn('⚠️ Background graduating pool resolution error:', err.message)
+        );
+      }
+    }
+
     console.log(`✅ Returning ${limitedCoins.length}/${graduatingTokens.length} graduating coins (limit: ${limit}, on-demand enrichment only)`);
     
     res.json({
@@ -2335,6 +2349,40 @@ app.get('/api/coins/graduating', async (req, res) => {
       error: 'Failed to fetch graduating coins',
       details: error.message
     });
+  }
+});
+
+// Resolve pool address for a single mint address (used by frontend chart fallback)
+app.get('/api/resolve-pool/:mintAddress', async (req, res) => {
+  try {
+    const { mintAddress } = req.params;
+    if (!mintAddress || mintAddress.length < 32) {
+      return res.status(400).json({ success: false, error: 'Invalid mint address' });
+    }
+    const poolAddress = await resolvePoolAddress(mintAddress);
+    res.json({ success: true, poolAddress: poolAddress || null });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Derive the Pump.fun bonding curve PDA address for a mint (used by the frontend chart)
+app.get('/api/bonding-curve/:mintAddress', async (req, res) => {
+  try {
+    const { mintAddress } = req.params;
+    if (!mintAddress || mintAddress.length < 32) {
+      return res.status(400).json({ success: false, error: 'Invalid mint address' });
+    }
+    const { PublicKey } = require('@solana/web3.js');
+    const PUMPFUN_PROGRAM = '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P';
+    const mintPubkey = new PublicKey(mintAddress);
+    const [bondingCurvePDA] = PublicKey.findProgramAddressSync(
+      [Buffer.from('bonding-curve'), mintPubkey.toBuffer()],
+      new PublicKey(PUMPFUN_PROGRAM)
+    );
+    res.json({ success: true, bondingCurveAddress: bondingCurvePDA.toBase58() });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 

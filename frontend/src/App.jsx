@@ -56,6 +56,7 @@ function App() {
   const [visibleCoins, setVisibleCoins] = useState([]); // Track currently visible coins
   const [tradeModalOpen, setTradeModalOpen] = useState(false); // Jupiter trade modal
   const [coinToTrade, setCoinToTrade] = useState(null); // Coin selected for trading
+  const [tradeModalOptions, setTradeModalOptions] = useState({}); // Extra options (initialTab, initialSolAmount)
   const [coinListModalOpen, setCoinListModalOpen] = useState(false); // Coin list modal
   const [coinListModalFilter, setCoinListModalFilter] = useState(null); // Filter type for coin list modal
   const [currentCoinIndex, setCurrentCoinIndex] = useState(0); // Current coin index in scroller
@@ -100,10 +101,11 @@ function App() {
   };
 
   // Handle trade button click - open Jupiter modal with the coin
-  const handleTradeClick = (coin) => {
+  const handleTradeClick = (coin, options = {}) => {
     console.log('🚀 Trade button clicked for:', coin?.symbol);
     if (coin) {
       setCoinToTrade(coin);
+      setTradeModalOptions(options);
       setTradeModalOpen(true);
     }
   };
@@ -271,6 +273,7 @@ function App() {
   const handleTradeModalClose = () => {
     setTradeModalOpen(false);
     setCoinToTrade(null);
+    setTradeModalOptions({});
   };
 
   // Handle copy trade — builds a minimal coin object and opens Jupiter pre-filled
@@ -441,6 +444,8 @@ function App() {
           coin={coinToTrade}
           onSwapSuccess={handleSwapSuccess}
           onSwapError={handleSwapError}
+          initialTab={tradeModalOptions?.tab}
+          initialSolAmount={tradeModalOptions?.solAmount}
         />
       </Suspense>
       

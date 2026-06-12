@@ -1605,12 +1605,27 @@ html:not(.dark-mode) .chart-error-overlay {
   background: #000;
   pointer-events: auto;
   cursor: pointer;
+  /* Prevent touch scroll from bleeding through to the underlying feed scroller,
+     which would trigger updateSlotPosition and make the chart flicker/jump. */
+  touch-action: none;
+  overscroll-behavior: none;
 }
 
 /* ── Controls pill: fixed to screen, never rotates, never shifts ── */
 .chart-fs-controls-overlay {
   position: fixed;
   bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
+}
+
+/* In landscape mode the chart's GeckoTerminal toolbar appears at the physical
+   bottom — move our controls to the top so they don't overlap and cause
+   accidental taps on Vertical when the user interacts with the chart bottom. */
+.chart-fs-controls-overlay--landscape {
+  bottom: auto;
+  top: calc(env(safe-area-inset-top, 0px) + 16px);
+}
+
+.chart-fs-controls-overlay {
   /* Stable centering: left:0/right:0 + margin:auto avoids the
      translateX(-50%) approach whose offset recalculates on every
      fractional-pixel width change, causing the pill to visibly jump. */
@@ -1728,4 +1743,223 @@ html:not(.dark-mode) .chart-error-overlay {
   background: rgba(239, 68, 68, 0.22);
   border-color: rgba(239, 68, 68, 0.45);
   color: #fecaca;
+}
+
+/* ── Bonding Curve Fallback (pump.fun tokens with no DEX pair yet) ── */
+.chart-bonding-curve-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: linear-gradient(160deg, rgba(17,24,39,0.97) 0%, rgba(10,14,23,0.97) 100%);
+  border-radius: 12px;
+  padding: 24px 20px;
+  z-index: 2;
+}
+
+.chart-bc-icon {
+  font-size: 32px;
+  line-height: 1;
+  margin-bottom: 2px;
+}
+
+.chart-bc-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #e2e8f0;
+  letter-spacing: 0.02em;
+}
+
+.chart-bc-progress-wrap {
+  width: 100%;
+  max-width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 4px;
+}
+
+.chart-bc-progress-bar {
+  width: 100%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.chart-bc-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #22c55e, #86efac);
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+
+.chart-bc-progress-label {
+  font-size: 12px;
+  color: #86efac;
+  font-weight: 600;
+  text-align: center;
+}
+
+.chart-bc-sublabel {
+  font-size: 11px;
+  color: rgba(148, 163, 184, 0.7);
+  text-align: center;
+}
+
+.chart-bc-link {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #7b61ff;
+  text-decoration: none;
+  border: 1px solid rgba(123, 97, 255, 0.3);
+  border-radius: 20px;
+  padding: 5px 14px;
+  transition: background 0.18s, color 0.18s;
+}
+
+.chart-bc-link:hover {
+  background: rgba(123, 97, 255, 0.15);
+  color: #a78bfa;
+}
+
+.chart-bc-spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid rgba(255,255,255,0.1);
+  border-top-color: #7b61ff;
+  border-radius: 50%;
+  animation: chart-bc-spin 0.8s linear infinite;
+}
+
+@keyframes chart-bc-spin {
+  to { transform: rotate(360deg); }
+}
+
+.chart-bc-label {
+  font-size: 13px;
+  color: rgba(148, 163, 184, 0.8);
+}
+
+/* ── Graduation Snipe UI ── */
+.chart-bc-snipe-btn {
+  margin-top: 2px;
+  padding: 8px 18px;
+  background: linear-gradient(135deg, rgba(123,97,255,0.18) 0%, rgba(34,197,94,0.12) 100%);
+  border: 1px solid rgba(123, 97, 255, 0.45);
+  border-radius: 22px;
+  color: #c4b5fd;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.18s, border-color 0.18s, color 0.18s;
+  letter-spacing: 0.01em;
+}
+.chart-bc-snipe-btn:hover {
+  background: linear-gradient(135deg, rgba(123,97,255,0.3) 0%, rgba(34,197,94,0.2) 100%);
+  border-color: rgba(123, 97, 255, 0.7);
+  color: #ddd6fe;
+}
+
+.chart-bc-snipe-input-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 220px;
+  margin-top: 2px;
+}
+.chart-bc-snipe-input-label {
+  font-size: 11px;
+  color: rgba(148, 163, 184, 0.75);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.chart-bc-snipe-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(123,97,255,0.35);
+  border-radius: 10px;
+  padding: 6px 12px;
+  width: 100%;
+}
+.chart-bc-snipe-input {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #e2e8f0;
+  font-size: 15px;
+  font-weight: 700;
+  width: 100%;
+  min-width: 0;
+}
+.chart-bc-snipe-input::-webkit-outer-spin-button,
+.chart-bc-snipe-input::-webkit-inner-spin-button { -webkit-appearance: none; }
+.chart-bc-snipe-unit {
+  font-size: 12px;
+  font-weight: 700;
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+.chart-bc-snipe-actions {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+.chart-bc-snipe-cancel {
+  flex: 1;
+  padding: 7px 0;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 20px;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.chart-bc-snipe-cancel:hover { background: rgba(255,255,255,0.1); }
+
+.chart-bc-snipe-confirm {
+  flex: 1;
+  padding: 7px 0;
+  background: linear-gradient(135deg, #7b61ff, #22c55e);
+  border: none;
+  border-radius: 20px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.chart-bc-snipe-confirm:disabled { opacity: 0.4; cursor: not-allowed; }
+.chart-bc-snipe-confirm:not(:disabled):hover { opacity: 0.88; }
+
+.chart-bc-snipe-watching {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+.chart-bc-snipe-watch-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #86efac;
+  font-weight: 600;
+}
+.chart-bc-spinner--sm {
+  width: 14px;
+  height: 14px;
+  border-width: 2px;
+  flex-shrink: 0;
 }
