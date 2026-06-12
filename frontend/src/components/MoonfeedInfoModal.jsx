@@ -616,6 +616,13 @@ const MoonfeedInfoButton = ({
         else setShowOptions(true);
       },
     },
+    {
+      label: '$MOO Coin',
+      onClick: () => {
+        setMenuOpen(false);
+        onBuyMoo?.();
+      },
+    },
     { divider: true },
     {
       label: 'About',
