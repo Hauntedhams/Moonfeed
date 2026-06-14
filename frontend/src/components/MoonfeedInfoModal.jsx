@@ -370,7 +370,6 @@ const TrackedWalletsPanel = ({ onClose }) => {
           {/* ── Copy Trading Info Card ─────────────────────── */}
           <div className={`ct-info-card ${activeCount > 0 ? 'ct-info-card--active' : 'ct-info-card--idle'}`}>
             <div className="ct-info-card__header">
-              <span className="ct-info-card__icon">⚡</span>
               <span className="ct-info-card__title">Copy Trading</span>
               <span className={`ct-info-card__status ${activeCount > 0 ? 'ct-status--on' : 'ct-status--off'}`}>
                 <span className="ct-status__dot" />
@@ -416,7 +415,6 @@ const TrackedWalletsPanel = ({ onClose }) => {
           {/* ── Wallet List ────────────────────────────────── */}
           {trackedWallets.length === 0 ? (
             <div className="menu-panel-empty">
-              <span className="menu-panel-empty-icon">👛</span>
               <p>No tracked wallets yet.</p>
               <p className="menu-panel-empty-hint">Tap any wallet address in the feed to track it.</p>
             </div>

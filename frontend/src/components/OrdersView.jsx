@@ -587,7 +587,6 @@ const OrdersView = ({ onCoinClick }) => {
             </div>
           ) : orders.length === 0 ? (
             <div className="orders-empty">
-              <div className="empty-icon">📋</div>
               <p>No {statusFilter} orders</p>
               <span className="empty-hint">
                 {statusFilter === 'active' 
@@ -840,22 +839,69 @@ const OrdersView = ({ onCoinClick }) => {
                 }
                 // ── End visual card ─────────────────────────────────────────
 
+                // ── History visual card ────────────────────────────────────
+                const histDexBanner = coinBanners.get(order.tokenMint);
+                const histBannerSrc = histDexBanner?.banner || order.tokenBannerImage || order.tokenImage || null;
+                const histTxLink = order.cancelTxSignature || order.createTxSignature || null;
+
                 return (
-                  <div key={orderId} className={`order-card ${status === 'active' ? 'active-order' : ''}`}>
-                    {/* Order Header */}
-                    <div className="order-header">
-                      <div className="order-token">
-                        <span className="token-symbol" title={tokenName}>{tokenSymbol}</span>
-                        <span className={`order-type ${orderType}`}>
-                          {orderType === 'buy' ? '🟢 Buy' : '🔴 Sell'}
-                        </span>
+                  <div
+                    key={orderId}
+                    className={`order-card-visual order-hist-card order-hist-${status}`}
+                    onClick={() => onCoinClick?.({
+                      mintAddress: order.tokenMint,
+                      address: order.tokenMint,
+                      symbol: order.tokenSymbol,
+                      name: order.tokenName,
+                      image: order.tokenImage,
+                      banner: histDexBanner?.banner || order.tokenBannerImage || null,
+                      pairAddress: histDexBanner?.pairAddress || order.tokenPairAddress || null,
+                    })}
+                  >
+                    {histBannerSrc && (
+                      <img
+                        src={histBannerSrc}
+                        alt=""
+                        className="order-card-bg"
+                        onError={(e) => { e.target.style.display = 'none'; }}
+                      />
+                    )}
+                    <div className="order-card-bg-overlay" />
+
+                    <div className="order-card-top-row">
+                      <div className="order-card-left">
+                        <img
+                          src={order.tokenImage || ''}
+                          alt={tokenSymbol}
+                          className="order-card-coin-avatar"
+                          style={{ display: order.tokenImage ? 'block' : 'none' }}
+                          onError={(e) => {
+                            e.target.style.display = 'none';
+                            e.target.nextElementSibling.style.display = 'flex';
+                          }}
+                        />
+                        <div
+                          className="order-card-coin-avatar order-card-coin-avatar-placeholder"
+                          style={{ display: order.tokenImage ? 'none' : 'flex' }}
+                        >
+                          {tokenSymbol.slice(0, 2)}
+                        </div>
+                        <div className="order-card-token-info">
+                          <span className="order-card-symbol">{tokenSymbol}</span>
+                          <span className="order-card-name">{tokenName}</span>
+                        </div>
                       </div>
-                      <div className={`order-status ${status}`}>
-                        {status}
+                      <div className="order-card-right">
+                        <span className={`order-card-type-badge order-card-type-${orderType}`}>
+                          {orderType === 'sell' ? '↑ SELL' : '↓ BUY'}
+                        </span>
+                        <span className={`order-hist-status-pill order-hist-status-${status}`}>
+                          {status === 'executed' ? 'FILLED' : status.toUpperCase()}
+                        </span>
                       </div>
                     </div>
 
-                    {/* Detailed Active Order Info */}
+                    {/* (dead code — active orders return early above) */}
                     {status === 'active' && (
                       <>
                         {/* EXPIRED ORDER WARNING */}
@@ -1150,86 +1196,55 @@ const OrdersView = ({ onCoinClick }) => {
                       </>
                     )}
 
-                    {/* Simplified History Order Info */}
-                    {status !== 'active' && (
-                      <div className="order-details">
-                        {/* EXPIRED BADGE for history orders with action buttons */}
-                        {isExpired && order.status !== 'cancelled' && order.status !== 'executed' && (
-                          <div className="expired-badge-history">
-                            <div className="expired-badge-header">
-                              <span>⚠️</span>
-                              <span>This order expired - Retrieve your funds now!</span>
-                            </div>
-                            <div className="expired-badge-note">
-                              Your funds are held in Jupiter's escrow. You must cancel this order to get them back.
-                            </div>
-                            <div className="expired-badge-actions">
-                              <button
-                                onClick={() => handleCancelOrder(orderId)}
-                                disabled={cancellingOrder === orderId}
-                                className="retrieve-btn-primary"
-                              >
-                                {cancellingOrder === orderId ? '⏳ Cancelling...' : '💰 Cancel & Retrieve'}
-                              </button>
-                              <a
-                                href={`https://jup.ag/limit/${publicKey?.toString() || ''}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="retrieve-btn-secondary"
-                              >
-                                <span>Or use Jupiter</span>
-                                <span>↗</span>
-                              </a>
-                            </div>
-                          </div>
-                        )}
-                        <div className="order-detail-row">
-                          <span className="detail-label">Trigger Price:</span>
-                          <span className="detail-value">${formatPrice(triggerPrice)}</span>
+                    {/* Price history */}
+                    <div className="order-hist-price-section">
+                      <div className="order-hist-divider" />
+                      <div className="order-hist-row">
+                        <span className="order-hist-label">{orderType === 'sell' ? 'SELL PRICE' : 'BUY PRICE'}</span>
+                        <span className="order-hist-val order-hist-price">${formatPrice(triggerPrice)}</span>
+                      </div>
+                      {amount > 0 && (
+                        <div className="order-hist-row">
+                          <span className="order-hist-label">AMOUNT</span>
+                          <span className="order-hist-val">{amount.toFixed(2)} {tokenSymbol}</span>
                         </div>
-                        <div className="order-detail-row">
-                          <span className="detail-label">Amount:</span>
-                          <span className="detail-value">{amount.toFixed(2)} {tokenSymbol}</span>
+                      )}
+                      <div className="order-hist-row">
+                        <span className="order-hist-label">CREATED</span>
+                        <span className="order-hist-val order-hist-date">{formatDate(createdAt)}</span>
+                      </div>
+                      {status === 'executed' && order.executedAt && (
+                        <div className="order-hist-row">
+                          <span className="order-hist-label">EXECUTED</span>
+                          <span className="order-hist-val order-hist-date">{formatDate(order.executedAt)}</span>
                         </div>
-                        <div className="order-detail-row">
-                          <span className="detail-label">Created:</span>
-                          <span className="detail-value">{formatDate(createdAt)}</span>
+                      )}
+                      {histTxLink && (
+                        <div className="order-hist-row">
+                          <span className="order-hist-label">TX</span>
+                          <a
+                            href={`https://solscan.io/tx/${histTxLink}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="order-hist-tx-link"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {histTxLink.slice(0, 6)}...{histTxLink.slice(-4)} ↗
+                          </a>
                         </div>
-                        {status === 'executed' && order.executedAt && (
-                          <div className="order-executed-info">
-                            <span className="executed-label">✓ Executed:</span>
-                            <span className="executed-date">{formatDate(order.executedAt)}</span>
-                          </div>
-                        )}
-                        {status === 'cancelled' && order.cancelTxSignature && (
-                          <div className="order-cancelled-info">
-                            <span className="cancelled-label">✓ Cancelled:</span>
-                            <a 
-                              href={`https://solscan.io/tx/${order.cancelTxSignature}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="tx-link"
-                            >
-                              View TX ↗
-                            </a>
-                          </div>
-                        )}
-                        {/* Transaction Signatures */}
-                        <div className="order-tx-signatures">
-                          {order.createTxSignature && (
-                            <div className="tx-sig-row">
-                              <span className="tx-label">Create:</span>
-                              <a 
-                                href={`https://solscan.io/tx/${order.createTxSignature}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="tx-link"
-                              >
-                                {order.createTxSignature.slice(0, 8)}...{order.createTxSignature.slice(-6)} ↗
-                              </a>
-                            </div>
-                          )}
-                        </div>
+                      )}
+                    </div>
+
+                    {isExpired && status !== 'cancelled' && status !== 'executed' && (
+                      <div className="order-hist-recover" onClick={(e) => e.stopPropagation()}>
+                        <span>Funds in escrow</span>
+                        <button
+                          className="order-hist-recover-btn"
+                          onClick={() => handleCancelOrder(orderId)}
+                          disabled={cancellingOrder === orderId}
+                        >
+                          {cancellingOrder === orderId ? 'Cancelling…' : 'Retrieve funds'}
+                        </button>
                       </div>
                     )}
                   </div>
