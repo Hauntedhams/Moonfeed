@@ -454,7 +454,6 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
               {!jupiterWallet.connected && (
                 <div className="jupiter-connect-prompt">
                   <div className="connect-prompt-content">
-                    <div className="connect-icon">👛</div>
                     <h3>Connect Your Wallet</h3>
                     <p>Connect your Solana wallet to start trading {coin?.symbol || 'tokens'}</p>
                     <div className="connect-button-container">
