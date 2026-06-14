@@ -334,17 +334,24 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
   // Window resize + scroller scroll: keep the slot aligned with its reference element.
   // The scroller scroll listener handles snap-scroll animations so the fixed slot
   // stays in sync while the card is animating into position.
+  // Also listen to info-layer-content scroll so the chart stays in sync when the
+  // user scrolls through the expanded card's inner content (transactions, etc.).
   useEffect(() => {
     const scroller = document.querySelector('.modern-scroller-container');
+    // Use containerRef to find the specific info-layer-content for this card instance.
+    const infoContent = containerRef.current?.closest('.info-layer-content')
+      ?? document.querySelector('.info-layer-content');
     // In fullscreen mode the slot is viewport-fixed — skip card-tracking updates.
     // This prevents scroll events from the underlying feed from flickering the chart.
     const handleScroll = () => { if (!fullscreenModeRef.current) updateSlotPosition(); };
     const handleResize = () => updateSlotPosition(); // resize is always needed (mode can change dims)
     window.addEventListener('resize', handleResize);
     if (scroller) scroller.addEventListener('scroll', handleScroll, { passive: true });
+    if (infoContent) infoContent.addEventListener('scroll', handleScroll, { passive: true });
     return () => {
       window.removeEventListener('resize', handleResize);
       if (scroller) scroller.removeEventListener('scroll', handleScroll);
+      if (infoContent) infoContent.removeEventListener('scroll', handleScroll);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

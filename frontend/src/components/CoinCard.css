@@ -1912,13 +1912,22 @@
   margin: 0 0 12px 0; /* Reduced bottom margin from 16px to 12px */
   margin-top: 0; /* Reset margin - keep nav area in normal position */
   position: relative;
-  min-height: 450px; /* Add minimum height for chart rendering */
+  min-height: 380px; /* Match chart height to avoid empty gap below chart */
   /* Break out of parent padding to allow full-width charts */
   margin-left: -20px;
   margin-right: -20px;
   width: calc(100% + 40px);
   /* 🔥 FIX: Inherit pointer-events from parent (pass through when collapsed) */
   pointer-events: inherit;
+}
+
+/* When expanded, pin the chart section to the top of the scrollable content area
+   so the chart stays visible while the user scrolls through transactions below. */
+.coin-info-layer.expanded .charts-section {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  pointer-events: auto;
 }
 
 /* Twelve Chart Section - Ensure dimensions for chart rendering */
