@@ -224,19 +224,41 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
       const el = containerRef.current;
       if (!el) return;
       const { top, left, width, height } = el.getBoundingClientRect();
-      if (width > 0 && height > 0) {
-        slot.style.cssText = `position:fixed;top:${top}px;left:${left}px;width:${width}px;height:${height}px;transform:none;z-index:60;border-radius:12px;overflow:hidden;`;
-        rotateWrapperRef.current.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;transform:none;border-radius:12px;';
-        resetIframe();
-        if (btnWrapper) {
-          btnWrapper.style.cssText = `position:fixed;top:${top}px;left:${left}px;width:${width}px;height:${height}px;transform:none;z-index:70;pointer-events:none;border-radius:12px;overflow:hidden;`;
-        }
-        if (mask) {
-          // Gradient mask: right-side fade that makes action buttons readable over the chart.
-          // z-index 65 = above iframe (60), below Full Chart btn (70) and action buttons (100).
-          const opacity = showMask ? '1' : '0';
-          mask.style.cssText = `position:fixed;top:${top}px;right:0px;left:${left + width - 140}px;width:140px;height:${height}px;transform:none;z-index:65;pointer-events:none;border-radius:0 12px 12px 0;background:linear-gradient(to right,transparent,rgba(11,18,32,1) 50%);opacity:${opacity};transition:opacity 0.35s ease;`;
-        }
+      if (width <= 0 || height <= 0) return;
+
+      // Clip the fixed iframe slot to the coin-info-layer's visible bounds so the
+      // chart never bleeds outside the card when the expanded card is scrolled.
+      const layerEl = el.closest('.coin-info-layer');
+      const layerRect = layerEl?.getBoundingClientRect();
+      const clipTop = layerRect ? Math.max(top, layerRect.top) : top;
+      const clipBottom = layerRect ? Math.min(top + height, layerRect.bottom) : (top + height);
+      const clippedH = Math.max(0, clipBottom - clipTop);
+      // How many px from the chart's natural top are hidden above the layer boundary.
+      const offsetY = clipTop - top;
+
+      if (clippedH <= 0) {
+        // Chart has fully scrolled out of the card — hide everything.
+        slot.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:0;height:0;';
+        if (btnWrapper) btnWrapper.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:0;height:0;overflow:hidden;';
+        if (mask) mask.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:0;height:0;';
+        return;
+      }
+
+      slot.style.cssText = `position:fixed;top:${clipTop}px;left:${left}px;width:${width}px;height:${clippedH}px;transform:none;z-index:60;border-radius:12px;overflow:hidden;`;
+      rotateWrapperRef.current.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;transform:none;border-radius:12px;';
+      // Offset the iframe upward within the slot so the visible portion of the chart
+      // content aligns correctly with the slot window (mirrors CSS overflow:hidden clipping).
+      if (iframeRef.current) {
+        iframeRef.current.style.cssText = `position:absolute;top:${-offsetY}px;left:0;width:100%;height:${height}px;transform:none;border:none;display:block;`;
+      }
+      if (btnWrapper) {
+        btnWrapper.style.cssText = `position:fixed;top:${clipTop}px;left:${left}px;width:${width}px;height:${clippedH}px;transform:none;z-index:70;pointer-events:none;border-radius:12px;overflow:hidden;`;
+      }
+      if (mask) {
+        // Gradient mask: right-side fade that makes action buttons readable over the chart.
+        // z-index 65 = above iframe (60), below Full Chart btn (70) and action buttons (100).
+        const opacity = showMask ? '1' : '0';
+        mask.style.cssText = `position:fixed;top:${clipTop}px;right:0px;left:${left + width - 140}px;width:140px;height:${clippedH}px;transform:none;z-index:65;pointer-events:none;border-radius:0 12px 12px 0;background:linear-gradient(to right,transparent,rgba(11,18,32,1) 50%);opacity:${opacity};transition:opacity 0.35s ease;`;
       }
     }
   };
@@ -338,9 +360,9 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
   // user scrolls through the expanded card's inner content (transactions, etc.).
   useEffect(() => {
     const scroller = document.querySelector('.modern-scroller-container');
-    // Use containerRef to find the specific info-layer-content for this card instance.
-    const infoContent = containerRef.current?.closest('.info-layer-content')
-      ?? document.querySelector('.info-layer-content');
+    // Use containerRef to find the coin-info-layer — the scroll container when expanded.
+    const infoContent = containerRef.current?.closest('.coin-info-layer')
+      ?? document.querySelector('.coin-info-layer');
     // In fullscreen mode the slot is viewport-fixed — skip card-tracking updates.
     // This prevents scroll events from the underlying feed from flickering the chart.
     const handleScroll = () => { if (!fullscreenModeRef.current) updateSlotPosition(); };
