@@ -199,8 +199,8 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(10, 5, 0, 0.88);
-  backdrop-filter: blur(8px);
+  background: rgba(10, 5, 0, 0.45);
+  backdrop-filter: blur(4px);
   z-index: 99999;
   display: flex;
   align-items: stretch;
@@ -212,7 +212,8 @@
 
 @keyframes fadeIn {
   from { opacity: 0; backdrop-filter: blur(0px); }
-  to { opacity: 1; backdrop-filter: blur(8px); }
+  to { opacity: 1; backdrop-filter: blur(4px); }
+}
 }
 
 .moonfeed-info-overlay.closing {
@@ -220,7 +221,7 @@
 }
 
 @keyframes fadeOut {
-  from { opacity: 1; backdrop-filter: blur(8px); }
+  from { opacity: 1; backdrop-filter: blur(4px); }
   to { opacity: 0; backdrop-filter: blur(0px); }
 }
 
@@ -265,113 +266,136 @@
   filter: drop-shadow(0 0 30px rgba(40, 20, 5, 0.3));
 }
 
-/* ===== SCROLL ROLLS (top & bottom wooden rods) ===== */
+/* ===== FULL-SCROLL BACKGROUND IMAGE ===== */
+.scroll-bg-image {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+  z-index: 0;
+  display: block;
+}
+
+/* ===== SCROLL ROLLS (top & bottom — transparent, just reserve height) ===== */
 .scroll-roll {
   flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 4px;
   z-index: 10;
   position: relative;
-  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.5));
+  background: transparent;
 }
 
 .scroll-roll-top {
-  padding-top: 8px;
-  padding-bottom: 0;
+  height: 82px;
 }
 
 .scroll-roll-bottom {
-  padding-bottom: 8px;
-  padding-top: 0;
+  height: 90px;
 }
 
+/* Hide CSS-drawn rod & knobs — image handles the visuals */
 .scroll-roll-inner {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  position: relative;
+  display: none;
 }
 
 .scroll-rod {
   flex: 1;
-  height: 28px;
+  height: 32px;
   background: 
-    /* Wood grain lines */
+    /* Fine metal grain lines */
     repeating-linear-gradient(
       90deg,
       transparent,
-      transparent 8px,
-      rgba(90, 50, 10, 0.08) 8px,
-      rgba(90, 50, 10, 0.08) 9px
+      transparent 12px,
+      rgba(8, 4, 1, 0.07) 12px,
+      rgba(8, 4, 1, 0.07) 13px
     ),
-    /* Main wood gradient */
+    /* Dark bronze / aged iron gradient */
     linear-gradient(180deg,
-      #5a3210 0%,
-      #7a4a1a 8%,
-      #a06828 20%,
-      #c48a3c 35%,
-      #d4a050 45%,
-      #c48a3c 55%,
-      #a06828 70%,
-      #7a4a1a 88%,
-      #5a3210 100%
+      #110803 0%,
+      #1f1005 6%,
+      #3a200a 18%,
+      #5a3210 30%,
+      #6e3e12 42%,
+      #7a4618 50%,
+      #6e3e12 58%,
+      #5a3210 70%,
+      #3a200a 82%,
+      #1f1005 94%,
+      #110803 100%
     );
-  border-radius: 14px;
+  border-radius: 16px;
   box-shadow:
-    0 4px 12px rgba(0, 0, 0, 0.6),
-    0 1px 3px rgba(0, 0, 0, 0.4),
-    inset 0 3px 6px rgba(255, 220, 150, 0.35),
-    inset 0 -3px 6px rgba(40, 20, 5, 0.4);
-  border-top: 1px solid rgba(255, 220, 150, 0.25);
-  border-bottom: 1px solid rgba(40, 20, 5, 0.5);
+    0 6px 16px rgba(0, 0, 0, 0.75),
+    0 2px 5px rgba(0, 0, 0, 0.55),
+    inset 0 3px 7px rgba(180, 110, 50, 0.25),
+    inset 0 -4px 7px rgba(0, 0, 0, 0.6);
+  border-top: 1px solid rgba(180, 110, 50, 0.18);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.7);
 }
 
 .scroll-knob {
-  width: 40px;
-  height: 40px;
+  width: 46px;
+  height: 46px;
   border-radius: 50%;
   background: 
-    radial-gradient(circle at 30% 30%,
-      #d4a050 0%,
-      #c48a3c 25%,
-      #a06828 50%,
-      #7a4a1a 75%,
-      #5a3210 100%
+    radial-gradient(circle at 33% 28%,
+      #8a5020 0%,
+      #6b3c10 22%,
+      #4a280a 48%,
+      #2d1606 72%,
+      #160b03 100%
     );
   box-shadow:
-    0 3px 12px rgba(0, 0, 0, 0.7),
-    0 1px 4px rgba(0, 0, 0, 0.5),
-    inset 0 3px 8px rgba(255, 220, 150, 0.4),
-    inset 0 -2px 6px rgba(40, 20, 5, 0.5),
-    inset 0 0 0 3px rgba(90, 50, 16, 0.3);
+    0 5px 16px rgba(0, 0, 0, 0.85),
+    0 2px 5px rgba(0, 0, 0, 0.6),
+    inset 0 3px 10px rgba(180, 110, 50, 0.28),
+    inset 0 -4px 8px rgba(0, 0, 0, 0.65),
+    0 0 0 2px rgba(80, 45, 10, 0.75),
+    0 0 0 4px rgba(18, 9, 2, 0.5);
   flex-shrink: 0;
   z-index: 2;
-  border: 2px solid rgba(90, 50, 16, 0.6);
+  border: none;
   position: relative;
 }
 
-/* Wood ring detail on knobs */
+/* Ornate centre detail on knobs */
+.scroll-knob::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  border: 1.5px solid rgba(130, 80, 25, 0.45);
+  box-shadow:
+    inset 0 1px 4px rgba(180, 110, 50, 0.2),
+    inset 0 -1px 3px rgba(0, 0, 0, 0.4);
+}
+
 .scroll-knob::after {
   content: '';
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   transform: translate(-50%, -50%);
-  background: radial-gradient(circle at 35% 35%,
-    #c48a3c 0%,
-    #a06828 40%,
-    #7a4a1a 100%
+  background: radial-gradient(circle at 38% 35%,
+    #7a4a18 0%,
+    #4a2a08 45%,
+    #2a1404 100%
   );
   box-shadow:
-    inset 0 1px 3px rgba(255, 220, 150, 0.3),
-    inset 0 -1px 2px rgba(40, 20, 5, 0.3),
-    0 1px 3px rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(90, 50, 16, 0.4);
+    inset 0 2px 4px rgba(180, 110, 50, 0.25),
+    inset 0 -1px 3px rgba(0, 0, 0, 0.5),
+    0 1px 3px rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(60, 30, 5, 0.6);
 }
 
 .scroll-knob-left {
@@ -389,78 +413,23 @@
   flex-direction: column;
   overflow: hidden;
   position: relative;
-  /* Rich parchment background */
-  background:
-    /* Fiber / grain texture */
-    repeating-linear-gradient(
-      0deg,
-      transparent,
-      transparent 1px,
-      rgba(120, 80, 20, 0.025) 1px,
-      rgba(120, 80, 20, 0.025) 2px
-    ),
-    repeating-linear-gradient(
-      90deg,
-      transparent,
-      transparent 2px,
-      rgba(120, 80, 20, 0.018) 2px,
-      rgba(120, 80, 20, 0.018) 4px
-    ),
-    /* Main parchment gradient — warm, aged paper */
-    linear-gradient(180deg,
-      #c4a05c 0%,
-      #d8c08a 2%,
-      #e6d4a8 5%,
-      #f0e4c4 10%,
-      #f5edd6 18%,
-      #faf4e4 35%,
-      #f8f0dc 65%,
-      #f5edd6 82%,
-      #f0e4c4 90%,
-      #e6d4a8 95%,
-      #d8c08a 98%,
-      #c4a05c 100%
-    );
-  /* Curled / rolled edges shadow for realism */
-  box-shadow:
-    /* Left curled edge */
-    inset 12px 0 18px -6px rgba(80, 50, 15, 0.35),
-    /* Right curled edge */
-    inset -12px 0 18px -6px rgba(80, 50, 15, 0.35),
-    /* Top rolled shadow */
-    inset 0 14px 16px -8px rgba(80, 50, 15, 0.3),
-    /* Bottom rolled shadow */
-    inset 0 -14px 16px -8px rgba(80, 50, 15, 0.3),
-    /* Outer drop shadow */
-    5px 0 25px rgba(0, 0, 0, 0.5),
-    -2px 0 15px rgba(0, 0, 0, 0.2);
-  /* Slight border for definition */
-  border-left: 1px solid rgba(160, 120, 50, 0.3);
-  border-right: 1px solid rgba(160, 120, 50, 0.3);
+  background: transparent;
+  /* Thin side borders to visually frame the content against the image edge */
+  border-left: 1px solid rgba(80, 45, 8, 0.15);
+  border-right: 1px solid rgba(80, 45, 8, 0.15);
 }
 
-/* Aged stain overlay */
+/* Subtle vignette to help text readability over image */
 .scroll-parchment::before {
   content: '';
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background:
-    /* Coffee-ring stains */
-    radial-gradient(ellipse at 12% 20%, rgba(130, 85, 35, 0.14) 0%, transparent 45%),
-    radial-gradient(ellipse at 88% 70%, rgba(130, 85, 35, 0.12) 0%, transparent 40%),
-    radial-gradient(ellipse at 50% 8%, rgba(110, 70, 25, 0.1) 0%, transparent 35%),
-    radial-gradient(ellipse at 25% 85%, rgba(100, 60, 20, 0.08) 0%, transparent 30%),
-    radial-gradient(ellipse at 70% 40%, rgba(120, 75, 30, 0.06) 0%, transparent 50%),
-    /* Subtle vignette */
-    radial-gradient(ellipse at center, transparent 40%, rgba(100, 65, 20, 0.12) 100%);
+  inset: 0;
+  background: radial-gradient(ellipse 80% 90% at center, transparent 45%, rgba(40, 20, 4, 0.22) 100%);
   pointer-events: none;
   z-index: 0;
 }
 
-/* Background image overlay on parchment */
+/* Moocow watermark — faint branding layer */
 .scroll-parchment::after {
   content: '';
   position: absolute;
@@ -472,11 +441,26 @@
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-  opacity: 0.10;
+  opacity: 0.06;
   pointer-events: none;
   z-index: 0;
   mix-blend-mode: multiply;
 }
+
+/* ===== BAROQUE CORNER ORNAMENTS ===== */
+.parchment-corner {
+  position: absolute;
+  width: 90px;
+  height: 90px;
+  pointer-events: none;
+  z-index: 2;
+  overflow: visible;
+}
+
+.parchment-corner-tl { top: 0; left: 0; }
+.parchment-corner-tr { top: 0; right: 0; }
+.parchment-corner-bl { bottom: 0; left: 0; }
+.parchment-corner-br { bottom: 0; right: 0; }
 
 /* ===== SCROLL ORNAMENTAL DIVIDERS ===== */
 .scroll-divider {
@@ -484,13 +468,13 @@
   align-items: center;
   justify-content: center;
   gap: 12px;
-  padding: 18px 36px;
+  padding: 18px 16%;
   position: relative;
   z-index: 1;
 }
 
 .scroll-divider.small {
-  padding: 10px 36px;
+  padding: 10px 16%;
   gap: 10px;
 }
 
@@ -528,7 +512,7 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  padding: 28px 32px 16px 32px;
+  padding: 28px 16% 16px 16%;
   flex-shrink: 0;
   position: relative;
   z-index: 1;
@@ -780,7 +764,7 @@
 
 /* ===== MODAL CONTENT (Scrollable parchment body) ===== */
 .moonfeed-info-content {
-  padding: 24px 32px 32px 32px;
+  padding: 24px 16% 32px 16%;
   overflow-y: auto;
   flex: 1;
   pointer-events: auto;
@@ -1238,7 +1222,7 @@
 
 /* ===== MODAL FOOTER ===== */
 .moonfeed-info-footer {
-  padding: 20px 32px 24px 32px;
+  padding: 20px 16% 28px 16%;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -1536,13 +1520,13 @@
   .moonfeed-info-header,
   .moonfeed-info-content,
   .moonfeed-info-footer {
-    padding-left: 18px;
-    padding-right: 18px;
+    padding-left: 16%;
+    padding-right: 16%;
   }
 
   .scroll-divider {
-    padding-left: 18px;
-    padding-right: 18px;
+    padding-left: 16%;
+    padding-right: 16%;
   }
 
   .moonfeed-info-header h2 {
@@ -1574,13 +1558,12 @@
     left: 15px;
   }
 
-  .scroll-knob {
-    width: 32px;
-    height: 32px;
+  .scroll-roll-top {
+    height: 70px;
   }
 
-  .scroll-rod {
-    height: 22px;
+  .scroll-roll-bottom {
+    height: 76px;
   }
 }
 

@@ -64,17 +64,15 @@ const MoonfeedInfoModal = ({ isVisible, onClose, onBuyMoo, onStartTutorial }) =>
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
       >
-        {/* Scroll Top Roll */}
-        <div className="scroll-roll scroll-roll-top">
-          <div className="scroll-roll-inner">
-            <div className="scroll-knob scroll-knob-left"></div>
-            <div className="scroll-rod"></div>
-            <div className="scroll-knob scroll-knob-right"></div>
-          </div>
-        </div>
+        {/* Full-scroll background image — stretched to fill the entire modal */}
+        <img src="/new scroll.png" className="scroll-bg-image" alt="" aria-hidden="true" />
+
+        {/* Scroll Top Roll — transparent, height reserves space for image roller */}
+        <div className="scroll-roll scroll-roll-top"></div>
 
         {/* Parchment Body */}
         <div className="scroll-parchment">
+
           {/* Header */}
           <div className="moonfeed-info-header">
             <div className="moonfeed-header-wrapper">
@@ -333,14 +331,8 @@ const MoonfeedInfoModal = ({ isVisible, onClose, onBuyMoo, onStartTutorial }) =>
           </div>
         </div>
 
-        {/* Scroll Bottom Roll */}
-        <div className="scroll-roll scroll-roll-bottom">
-          <div className="scroll-roll-inner">
-            <div className="scroll-knob scroll-knob-left"></div>
-            <div className="scroll-rod"></div>
-            <div className="scroll-knob scroll-knob-right"></div>
-          </div>
-        </div>
+        {/* Scroll Bottom Roll — transparent, height reserves space for image roller */}
+        <div className="scroll-roll scroll-roll-bottom"></div>
       </div>
     </div>,
     document.body
