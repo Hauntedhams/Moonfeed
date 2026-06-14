@@ -1047,28 +1047,29 @@
 }
 
 .banner-follow-button.following {
-  background: rgba(0, 0, 0, 0.85); /* Dark background when following */
+  background: rgba(0, 0, 0, 0.85);
   border-color: rgba(0, 0, 0, 0.85);
-  color: rgba(255, 255, 255, 0.95); /* White text when following */
+  color: rgba(255, 255, 255, 0.95);
+  position: relative;
+  overflow: hidden;
 }
 
 .banner-follow-button.following:hover {
-  background: rgba(255, 80, 80, 0.9);
-  border-color: rgba(255, 80, 80, 0.9);
-  color: white;
+  background: rgba(239, 68, 68, 0.85);
+  border-color: rgba(239, 68, 68, 0.85);
+  color: transparent;
 }
 
 .banner-follow-button.following:hover::after {
   content: 'Unfollow';
   position: absolute;
-}
-
-.banner-follow-button.following:hover {
-  color: transparent;
-}
-
-.banner-follow-button.following:hover::after {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   color: white;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 /* Inline description styling - single line with ellipsis */
