@@ -83,6 +83,13 @@ const TopTabs = ({ activeFilter, onFilterChange, showFilterButton = false, onFil
             <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26 12,2"/>
           </svg>
         );
+      case 'clock':
+        return (
+          <svg {...iconProps}>
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="12,6 12,12 16,14"/>
+          </svg>
+        );
       case 'filter':
         return (
           <svg {...iconProps}>

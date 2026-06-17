@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import CoinCard from './CoinCard';
 import MoonfeedInfoButton from './MoonfeedInfoModal';
 import InteractiveTutorial from './InteractiveTutorial';
-import { API_CONFIG, getApiUrl, getFullApiUrl } from '../config/api';
+import { API_CONFIG, getApiUrl } from '../config/api';
 import './ModernTokenScroller.css';
 
 // Debounce utility for performance

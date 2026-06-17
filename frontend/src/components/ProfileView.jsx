@@ -8,6 +8,8 @@ import { useUserProfile } from '../contexts/UserProfileContext';
 import WalletPopup from './WalletPopup';
 import JupiterWalletButton from './JupiterWalletButton';
 import './ProfileView.css';
+import './OrdersView.css';
+import { getTransactions } from '../utils/transactionStorage';
 
 const ProfileView = () => {
   // Use Jupiter Wallet Kit adapter
@@ -32,9 +34,12 @@ const ProfileView = () => {
   const [ordersError, setOrdersError] = useState(null);
   const [statusFilter, setStatusFilter] = useState('active');
   const [cancellingOrder, setCancellingOrder] = useState(null);
+  const [coinBanners, setCoinBanners] = useState(new Map());
   const fileInputRef = useRef(null);
   const { trackedWallets, untrackWallet } = useTrackedWallets();
   const [selectedWallet, setSelectedWallet] = useState(null);
+  const [profileTab, setProfileTab] = useState('history');
+  const [transactions, setTransactions] = useState([]);
 
   // Editing state for display name and bio
   const [editingName, setEditingName] = useState(false);
@@ -78,6 +83,17 @@ const ProfileView = () => {
       fetchOrders();
     }
   }, [statusFilter]);
+
+  // Load transaction history and fetch their banners
+  useEffect(() => {
+    if (publicKey) {
+      const txs = getTransactions(publicKey.toString());
+      setTransactions(txs);
+      if (txs.length) fetchCoinBanners(txs);
+    } else {
+      setTransactions([]);
+    }
+  }, [publicKey]);
 
   const fetchBalance = async () => {
     if (!publicKey || !connection) return;
@@ -126,6 +142,26 @@ const ProfileView = () => {
   };
 
   // Fetch active orders
+  // Fetch banner images from Dexscreener for order cards
+  const fetchCoinBanners = async (orderList) => {
+    const uniqueMints = [...new Set(orderList.map(o => o.tokenMint).filter(Boolean))];
+    if (!uniqueMints.length) return;
+    const updates = new Map();
+    await Promise.all(uniqueMints.map(async (mint) => {
+      try {
+        const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
+        const data = await res.json();
+        const pair = data?.pairs?.[0];
+        if (pair) {
+          const banner = pair.info?.header || pair.info?.imageUrl || null;
+          const pairAddress = pair.pairAddress || null;
+          if (banner || pairAddress) updates.set(mint, { banner, pairAddress });
+        }
+      } catch (_) { /* silent */ }
+    }));
+    if (updates.size) setCoinBanners(prev => new Map([...prev, ...updates]));
+  };
+
   const fetchOrders = async () => {
     if (!publicKey) return;
     
@@ -154,12 +190,14 @@ const ProfileView = () => {
         }
         
         setOrders(activeOrders);
+        fetchCoinBanners(activeOrders);
       } else {
         const enrichedCached = cachedOrders.map(order => ({
           ...order,
           isExpired: isOrderExpired(order)
         }));
         setOrders(enrichedCached);
+        fetchCoinBanners(enrichedCached);
       }
       
       setLoadingOrders(false);
@@ -213,6 +251,7 @@ const ProfileView = () => {
           
           // Only show non-expired orders in active tab
           setOrders(activeOrders);
+          fetchCoinBanners(activeOrders);
         } else {
           // For history tab, mark expired orders with a flag
           fetchedOrders = fetchedOrders.map(order => ({
@@ -221,6 +260,7 @@ const ProfileView = () => {
           }));
           
           setOrders(fetchedOrders);
+          fetchCoinBanners(fetchedOrders);
         }
       } else {
         throw new Error(result.error || 'Unknown error');
@@ -459,6 +499,18 @@ const ProfileView = () => {
     }
   };
 
+  const formatTimeAgo = (timestamp) => {
+    if (!timestamp) return '';
+    const diff = Date.now() - new Date(timestamp).getTime();
+    const mins = Math.floor(diff / 60000);
+    const hrs = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
+    if (days > 0) return `${days}d ago`;
+    if (hrs > 0) return `${hrs}h ago`;
+    if (mins > 0) return `${mins}m ago`;
+    return 'just now';
+  };
+
   const formatPrice = (price) => {
     if (!price) return '0';
     const num = parseFloat(price);
@@ -594,183 +646,193 @@ const ProfileView = () => {
   }
 
   return (
-    <div className="profile-view">
-      <div className="profile-container">
-        {/* Dark Mode Toggle Switch - Top Left */}
-        <div className="dark-mode-toggle-container" title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}>
-          <div className="toggle-switch">
-            <input 
-              type="checkbox" 
-              id="darkModeToggleConnected" 
-              checked={isDarkMode}
-              onChange={toggleDarkMode}
-            />
-            <label htmlFor="darkModeToggleConnected" className="toggle-slider">
-              <span className="toggle-icon sun">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                  <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                </svg>
-              </span>
-              <span className="toggle-icon moon">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </span>
-            </label>
-          </div>
-        </div>
+    <div className="profile-view pv-social">
+      <input ref={fileInputRef} type="file" accept="image/*" onChange={handleProfilePictureChange} style={{ display: 'none' }} />
 
-        {/* Profile Picture at Top Center */}
-        <div className="profile-picture-section">
-          <div 
-            className="profile-picture-wrapper"
-            onClick={() => fileInputRef.current?.click()}
-            title="Click to upload profile picture"
-          >
+      {/* ─── INSTAGRAM-STYLE HEADER ─── */}
+      <div className="pv-ig-header">
+        <div className="pv-ig-top-row">
+          <div className="pv-ig-avatar-wrap" onClick={() => fileInputRef.current?.click()} title="Update photo">
             {profilePicture ? (
-              <>
-                <img 
-                  src={profilePicture} 
-                  alt="Profile" 
-                  className="profile-picture"
-                />
-                <div className="profile-picture-overlay">
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    <circle cx="12" cy="13" r="4" stroke="currentColor" strokeWidth="2"/>
-                  </svg>
-                  <span className="upload-text">Change</span>
-                </div>
-              </>
+              <img src={profilePicture} alt="Profile" className="pv-ig-avatar" />
             ) : (
-              <div className="profile-picture-placeholder">
-                <svg width="60" height="60" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <div className="pv-ig-avatar-ph">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <circle cx="12" cy="8" r="4" stroke="currentColor" strokeWidth="2"/>
                   <path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2" stroke="currentColor" strokeWidth="2"/>
                 </svg>
-                <div className="upload-hint">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    <circle cx="12" cy="13" r="4" stroke="currentColor" strokeWidth="2"/>
-                  </svg>
-                  <span>Upload Photo</span>
-                </div>
               </div>
             )}
-            <div className="connected-badge" title="Wallet Connected">
-              ✓
+            <div className="pv-ig-avatar-edit">📷</div>
+          </div>
+          <div className="pv-ig-stats">
+            <div className="pv-ig-stat">
+              <span className="pv-ig-stat-num">{transactions.length}</span>
+              <span className="pv-ig-stat-label">Trades</span>
+            </div>
+            <div className="pv-ig-stat">
+              <span className="pv-ig-stat-num">{orders.filter(o => o.status === 'active').length}</span>
+              <span className="pv-ig-stat-label">Orders</span>
+            </div>
+            <div className="pv-ig-stat">
+              <span className="pv-ig-stat-num">{trackedWallets.length}</span>
+              <span className="pv-ig-stat-label">Tracked</span>
             </div>
           </div>
-          
-          {profilePicture && (
-            <button 
-              className="remove-picture-btn"
-              onClick={(e) => {
-                e.stopPropagation();
-                removeProfilePicture();
-              }}
-              title="Remove profile picture"
-            >
-              Remove Photo
-            </button>
-          )}
-          
-          <p className="profile-address">{formatAddress(publicKey)}</p>
-
-          {/* Display Name */}
-          <div className="profile-display-name">
-            {editingName ? (
-              <div className="profile-field-edit">
-                <input
-                  type="text"
-                  value={nameInput}
-                  onChange={e => setNameInput(e.target.value)}
-                  maxLength={32}
-                  placeholder="Display name"
-                  className="profile-field-input"
-                  autoFocus
-                />
-                <div className="profile-field-actions">
-                  <button onClick={handleSaveName} disabled={saving} className="profile-save-btn">
-                    {saving ? 'Saving…' : 'Save'}
-                  </button>
-                  <button onClick={() => { setEditingName(false); setNameInput(profile.displayName || ''); }} className="profile-cancel-btn">
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="profile-field-display" onClick={() => setEditingName(true)} title="Click to edit">
-                <span className="profile-name-text">{profile.displayName || <em className="profile-field-hint">Add display name</em>}</span>
-                <span className="profile-edit-icon">✏️</span>
-              </div>
-            )}
-          </div>
-
-          {/* Bio */}
-          <div className="profile-bio">
-            {editingBio ? (
-              <div className="profile-field-edit">
-                <textarea
-                  value={bioInput}
-                  onChange={e => setBioInput(e.target.value)}
-                  maxLength={160}
-                  placeholder="Short bio (160 chars)"
-                  className="profile-field-input profile-bio-input"
-                  rows={3}
-                  autoFocus
-                />
-                <div className="profile-field-actions">
-                  <button onClick={handleSaveBio} disabled={saving} className="profile-save-btn">
-                    {saving ? 'Saving…' : 'Save'}
-                  </button>
-                  <button onClick={() => { setEditingBio(false); setBioInput(profile.bio || ''); }} className="profile-cancel-btn">
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="profile-field-display" onClick={() => setEditingBio(true)} title="Click to edit">
-                <span className="profile-bio-text">{profile.bio || <em className="profile-field-hint">Add a bio</em>}</span>
-                <span className="profile-edit-icon">✏️</span>
-              </div>
-            )}
-          </div>
-
-          {profileSaveError && (
-            <p className="profile-save-error">⚠️ {profileSaveError}</p>
-          )}
-          
-          {/* Hidden file input for profile picture upload */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handleProfilePictureChange}
-            style={{ display: 'none' }}
-          />
         </div>
 
-        {/* Active Limit Orders Section - DIRECTLY BELOW PROFILE PICTURE */}
-        <div className="profile-features">
-          <div className="feature-section orders-section">
-            <div className="orders-header">
-              <h3>Limit Orders</h3>
-              <div className="orders-filter">
-                <button
-                  className={`filter-btn ${statusFilter === 'active' ? 'active' : ''}`}
-                  onClick={() => setStatusFilter('active')}
-                >
-                  Active
-                </button>
-                <button
-                  className={`filter-btn ${statusFilter === 'history' ? 'active' : ''}`}
-                  onClick={() => setStatusFilter('history')}
-                >
-                  History
-                </button>
+        <button className="pv-ig-addr-chip" onClick={() => copyToClipboard(publicKey?.toString())} title="Copy full address">
+          {formatAddress(publicKey)} 📋
+        </button>
+
+        {editingName ? (
+          <div className="pv-ig-field-edit">
+            <input value={nameInput} onChange={e => setNameInput(e.target.value)} maxLength={32} placeholder="Display name" className="pv-ig-field-input" autoFocus />
+            <button onClick={handleSaveName} disabled={saving} className="pv-ig-save-btn">{saving ? '…' : '✓'}</button>
+            <button onClick={() => { setEditingName(false); setNameInput(profile.displayName || ''); }} className="pv-ig-cancel-btn">✕</button>
+          </div>
+        ) : (
+          <h2 className="pv-ig-display-name" onClick={() => setEditingName(true)}>
+            {profile.displayName || <span className="pv-ig-ph">Add name</span>}
+            <span className="pv-ig-pencil"> ✏️</span>
+          </h2>
+        )}
+
+        {editingBio ? (
+          <div className="pv-ig-field-edit pv-ig-field-edit--bio">
+            <textarea value={bioInput} onChange={e => setBioInput(e.target.value)} maxLength={160} placeholder="Add a bio" className="pv-ig-field-input" rows={2} autoFocus />
+            <div className="pv-ig-bio-btns">
+              <button onClick={handleSaveBio} disabled={saving} className="pv-ig-save-btn">{saving ? '…' : 'Save'}</button>
+              <button onClick={() => { setEditingBio(false); setBioInput(profile.bio || ''); }} className="pv-ig-cancel-btn">Cancel</button>
+            </div>
+          </div>
+        ) : (
+          <p className="pv-ig-bio" onClick={() => setEditingBio(true)}>
+            {profile.bio || <span className="pv-ig-ph">Add a bio</span>}
+            <span className="pv-ig-pencil"> ✏️</span>
+          </p>
+        )}
+
+        {profileSaveError && <p className="pv-ig-save-error">⚠️ {profileSaveError}</p>}
+
+        <div className="pv-ig-actions">
+          <button className="pv-ig-btn pv-ig-btn--edit" onClick={() => setEditingName(true)}>Edit Profile</button>
+          <button className="pv-ig-btn pv-ig-btn--out" onClick={disconnect}>Disconnect</button>
+          <button className="pv-ig-btn pv-ig-btn--icon" onClick={toggleDarkMode} title={isDarkMode ? 'Light mode' : 'Dark mode'}>
+            {isDarkMode ? (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+              </svg>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* ─── TAB BAR ─── */}
+      <div className="pv-ig-tabbar">
+        <button className={`pv-ig-tab${profileTab === 'history' ? ' pv-ig-tab--active' : ''}`} onClick={() => setProfileTab('history')} title="Trade History">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+            <rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>
+          </svg>
+        </button>
+        <button className={`pv-ig-tab${profileTab === 'orders' ? ' pv-ig-tab--active' : ''}`} onClick={() => setProfileTab('orders')} title="Limit Orders">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/>
+            <rect x="9" y="3" width="6" height="4" rx="1"/>
+            <line x1="9" y1="12" x2="15" y2="12"/>
+            <line x1="9" y1="16" x2="13" y2="16"/>
+          </svg>
+        </button>
+        <button className={`pv-ig-tab${profileTab === 'wallet' ? ' pv-ig-tab--active' : ''}`} onClick={() => setProfileTab('wallet')} title="Wallet">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20 12V8H6a2 2 0 01-2-2c0-1.1.9-2 2-2h12v4"/>
+            <path d="M4 6v12a2 2 0 002 2h14v-4"/>
+            <path d="M18 12a2 2 0 000 4h4v-4h-4z"/>
+          </svg>
+        </button>
+        <button className={`pv-ig-tab${profileTab === 'tracked' ? ' pv-ig-tab--active' : ''}`} onClick={() => setProfileTab('tracked')} title="Tracked Wallets">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M23 21v-2a4 4 0 00-3-3.87"/>
+            <path d="M16 3.13a4 4 0 010 7.75"/>
+          </svg>
+        </button>
+        <button className={`pv-ig-tab${profileTab === 'portfolio' ? ' pv-ig-tab--active' : ''}`} onClick={() => setProfileTab('portfolio')} title="Portfolio">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="18" y1="20" x2="18" y2="10"/>
+            <line x1="12" y1="20" x2="12" y2="4"/>
+            <line x1="6" y1="20" x2="6" y2="14"/>
+            <path d="M2 20h20"/>
+          </svg>
+        </button>
+      </div>
+
+      {/* ─── CONTENT ─── */}
+      <div className="pv-ig-content">
+
+        {/* ── HISTORY TAB ── */}
+        {profileTab === 'history' && (
+          <div className="pv-ig-history">
+            {transactions.length === 0 ? (
+              <div className="pv-ig-empty">
+                <span className="pv-ig-empty-icon">📋</span>
+                <p>No trade history yet</p>
+                <span>Coins you buy through Moonfeed will appear here</span>
               </div>
+            ) : (
+              <div className="pv-ig-hist-grid">
+                {transactions.map((tx) => (
+                  <div key={tx.signature} className={`pv-ig-hist-card pv-ig-hist-card--${tx.type || 'buy'}`}>
+                    {(coinBanners.get(tx.tokenMint)?.banner || tx.tokenImage) && (
+                      <img
+                        src={coinBanners.get(tx.tokenMint)?.banner || tx.tokenImage}
+                        alt=""
+                        className="pv-ig-hist-bg"
+                        onError={(e) => { e.target.style.display = 'none'; }}
+                      />
+                    )}
+                    <div className="pv-ig-hist-overlay" />
+                    <div className="pv-ig-hist-body">
+                      <div className="pv-ig-hist-top">
+                        {tx.tokenImage ? (
+                          <img src={tx.tokenImage} alt={tx.tokenSymbol} className="pv-ig-hist-avatar" onError={(e) => { e.target.style.display = 'none'; }} />
+                        ) : (
+                          <div className="pv-ig-hist-avatar pv-ig-hist-avatar--ph">{(tx.tokenSymbol || '?').slice(0, 2)}</div>
+                        )}
+                        <span className={`pv-ig-hist-badge pv-ig-hist-badge--${tx.type || 'buy'}`}>
+                          {tx.type === 'sell' ? 'SELL' : 'BUY'}
+                        </span>
+                      </div>
+                      <div className="pv-ig-hist-info">
+                        <span className="pv-ig-hist-symbol">{tx.tokenSymbol || 'Unknown'}</span>
+                        <span className="pv-ig-hist-amount">
+                          {tx.type === 'sell'
+                            ? `+${Number(tx.outputAmount || 0).toFixed(3)} SOL`
+                            : `-${Number(tx.inputAmount || 0).toFixed(3)} SOL`}
+                        </span>
+                        <span className="pv-ig-hist-time">{formatTimeAgo(tx.timestamp)}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── ORDERS TAB ── */}
+        {profileTab === 'orders' && (
+          <div className="pv-ig-orders">
+            <div className="orders-filter">
+              <button className={`filter-btn ${statusFilter === 'active' ? 'active' : ''}`} onClick={() => setStatusFilter('active')}>Active</button>
+              <button className={`filter-btn ${statusFilter === 'history' ? 'active' : ''}`} onClick={() => setStatusFilter('history')}>History</button>
             </div>
 
             {loadingOrders ? (
@@ -959,6 +1021,114 @@ const ProfileView = () => {
                     expiryWarning = true;
                   }
                   // else: expiryText stays as 'No expiry' (genuinely no expiry set)
+
+                  // ── History visual card (matches OrdersView style) ──────
+                  if (status !== 'active') {
+                    const histDexBanner = coinBanners.get(order.tokenMint);
+                    const histBannerSrc = histDexBanner?.banner || order.tokenBannerImage || order.tokenImage || null;
+                    const histTxLink = order.cancelTxSignature || order.createTxSignature || null;
+                    return (
+                      <div
+                        key={orderId}
+                        className={`order-card-visual order-hist-card order-hist-${status}`}
+                      >
+                        {histBannerSrc && (
+                          <img
+                            src={histBannerSrc}
+                            alt=""
+                            className="order-card-bg"
+                            onError={(e) => { e.target.style.display = 'none'; }}
+                          />
+                        )}
+                        <div className="order-card-bg-overlay" />
+
+                        <div className="order-card-top-row">
+                          <div className="order-card-left">
+                            <img
+                              src={order.tokenImage || ''}
+                              alt={tokenSymbol}
+                              className="order-card-coin-avatar"
+                              style={{ display: order.tokenImage ? 'block' : 'none' }}
+                              onError={(e) => {
+                                e.target.style.display = 'none';
+                                e.target.nextElementSibling.style.display = 'flex';
+                              }}
+                            />
+                            <div
+                              className="order-card-coin-avatar order-card-coin-avatar-placeholder"
+                              style={{ display: order.tokenImage ? 'none' : 'flex' }}
+                            >
+                              {tokenSymbol.slice(0, 2)}
+                            </div>
+                            <div className="order-card-token-info">
+                              <span className="order-card-symbol">{tokenSymbol}</span>
+                              <span className="order-card-name">{tokenName}</span>
+                            </div>
+                          </div>
+                          <div className="order-card-right">
+                            <span className={`order-card-type-badge order-card-type-${orderType}`}>
+                              {orderType === 'sell' ? '↑ SELL' : '↓ BUY'}
+                            </span>
+                            <span className={`order-hist-status-pill order-hist-status-${status}`}>
+                              {status === 'executed' ? 'FILLED' : status.toUpperCase()}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="order-hist-price-section">
+                          <div className="order-hist-divider" />
+                          <div className="order-hist-row">
+                            <span className="order-hist-label">{orderType === 'sell' ? 'SELL PRICE' : 'BUY PRICE'}</span>
+                            <span className="order-hist-val order-hist-price">${formatPrice(triggerPrice)}</span>
+                          </div>
+                          {amount > 0 && (
+                            <div className="order-hist-row">
+                              <span className="order-hist-label">AMOUNT</span>
+                              <span className="order-hist-val">{amount.toFixed(2)} {tokenSymbol}</span>
+                            </div>
+                          )}
+                          <div className="order-hist-row">
+                            <span className="order-hist-label">CREATED</span>
+                            <span className="order-hist-val order-hist-date">{formatDate(createdAt)}</span>
+                          </div>
+                          {status === 'executed' && order.executedAt && (
+                            <div className="order-hist-row">
+                              <span className="order-hist-label">EXECUTED</span>
+                              <span className="order-hist-val order-hist-date">{formatDate(order.executedAt)}</span>
+                            </div>
+                          )}
+                          {histTxLink && (
+                            <div className="order-hist-row">
+                              <span className="order-hist-label">TX</span>
+                              <a
+                                href={`https://solscan.io/tx/${histTxLink}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="order-hist-tx-link"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {histTxLink.slice(0, 6)}...{histTxLink.slice(-4)} ↗
+                              </a>
+                            </div>
+                          )}
+                        </div>
+
+                        {isExpired && status !== 'cancelled' && status !== 'executed' && (
+                          <div className="order-hist-recover" onClick={(e) => e.stopPropagation()}>
+                            <span>Funds in escrow</span>
+                            <button
+                              className="order-hist-recover-btn"
+                              onClick={() => handleCancelOrder(orderId)}
+                              disabled={cancellingOrder === orderId}
+                            >
+                              {cancellingOrder === orderId ? 'Cancelling…' : 'Retrieve funds'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+                  // ── End history visual card ─────────────────────────────
                   
                   return (
                     <div key={orderId} className={`order-card ${status === 'active' ? 'active-order' : ''}`}>
@@ -1011,7 +1181,7 @@ const ProfileView = () => {
                                     href="https://solscan.io/account/jupoNjAxXgZ4rjzxzPMP4oxduvQsQtZzyknqvzYNrNu"
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    style={{ color: '#4FC3F7', textDecoration: 'underline' }}
+                                    style={{ color: '#0284c7', textDecoration: 'underline' }}
                                   >
                                     jupoNjAx...Nrnu ↗
                                   </a>
@@ -1024,7 +1194,7 @@ const ProfileView = () => {
                                       href={`https://solscan.io/account/${orderId}`}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      style={{ color: '#4FC3F7', textDecoration: 'underline' }}
+                                      style={{ color: '#0284c7', textDecoration: 'underline' }}
                                     >
                                       {orderId.slice(0, 8)}...{orderId.slice(-6)} ↗
                                     </a>
@@ -1094,14 +1264,14 @@ const ProfileView = () => {
                                   fontSize: '14px', 
                                   fontWeight: '600', 
                                   marginBottom: '8px',
-                                  color: '#2D3748'
+                                  color: 'var(--text-primary)'
                                 }}>
                                   Funds Held in Jupiter Escrow
                                 </div>
                                 <div style={{ 
                                   fontSize: '13px', 
                                   lineHeight: '1.5',
-                                  color: '#4A5568',
+                                  color: 'var(--text-secondary)',
                                   marginBottom: '8px'
                                 }}>
                                   Your <strong>{estimatedValue > 0 ? `${estimatedValue.toFixed(4)} SOL` : 'funds'}</strong> are securely held in a Program Derived Address (PDA) until the order executes or you cancel it.
@@ -1117,10 +1287,10 @@ const ProfileView = () => {
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     style={{ 
-                                      color: '#4FC3F7', 
+                                      color: '#0284c7', 
                                       textDecoration: 'none',
                                       padding: '4px 8px',
-                                      background: 'rgba(79, 195, 247, 0.1)',
+                                      background: 'rgba(2, 132, 199, 0.1)',
                                       borderRadius: '6px',
                                       fontWeight: '500'
                                     }}
@@ -1133,10 +1303,10 @@ const ProfileView = () => {
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       style={{ 
-                                        color: '#4FC3F7', 
+                                        color: '#0284c7', 
                                         textDecoration: 'none',
                                         padding: '4px 8px',
-                                        background: 'rgba(79, 195, 247, 0.1)',
+                                        background: 'rgba(2, 132, 199, 0.1)',
                                         borderRadius: '6px',
                                         fontWeight: '500'
                                       }}
@@ -1148,10 +1318,10 @@ const ProfileView = () => {
                                 <div style={{
                                   marginTop: '10px',
                                   padding: '10px',
-                                  background: 'rgba(237, 242, 247, 0.8)',
+                                  background: 'var(--bg-tertiary)',
                                   borderRadius: '6px',
                                   fontSize: '12px',
-                                  color: '#2D3748',
+                                  color: 'var(--text-primary)',
                                   lineHeight: '1.6'
                                 }}>
                                   <div style={{ marginBottom: '6px' }}>
@@ -1163,7 +1333,7 @@ const ProfileView = () => {
                                     alignItems: 'center',
                                     marginTop: '8px'
                                   }}>
-                                    <span style={{ fontSize: '11px', color: '#718096' }}>
+                                    <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
                                       Cancel below or via
                                     </span>
                                     <a 
@@ -1319,7 +1489,7 @@ const ProfileView = () => {
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="tx-link"
-                                    style={{ color: '#4FC3F7', textDecoration: 'underline' }}
+                                    style={{ color: '#0284c7', textDecoration: 'underline' }}
                                   >
                                     {order.createTxSignature.slice(0, 8)}...{order.createTxSignature.slice(-6)} ↗
                                   </a>
@@ -1336,7 +1506,7 @@ const ProfileView = () => {
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="tx-link"
-                                    style={{ color: '#4FC3F7', textDecoration: 'underline' }}
+                                    style={{ color: '#0284c7', textDecoration: 'underline' }}
                                   >
                                     {order.updateTxSignature.slice(0, 8)}...{order.updateTxSignature.slice(-6)} ↗
                                   </a>
@@ -1373,7 +1543,7 @@ const ProfileView = () => {
                             <p style={{
                               margin: '8px 0 0 0',
                               fontSize: '12px',
-                              color: isExpired ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.5)',
+                              color: 'var(--text-secondary)',
                               textAlign: 'center'
                             }}>
                               {isExpired ? (
@@ -1389,7 +1559,7 @@ const ProfileView = () => {
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 style={{
-                                  color: '#4FC3F7',
+                                  color: '#0284c7',
                                   textDecoration: 'underline',
                                   fontWeight: '600'
                                 }}
@@ -1523,14 +1693,14 @@ const ProfileView = () => {
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="tx-link"
-                                style={{ color: '#4FC3F7', textDecoration: 'underline', marginLeft: '8px' }}
+                                style={{ color: '#0284c7', textDecoration: 'underline', marginLeft: '8px' }}
                               >
                                 View TX ↗
                               </a>
                             </div>
                           )}
                           {/* Transaction Signatures */}
-                          <div className="order-tx-signatures" style={{ marginTop: '12px', fontSize: '0.85rem', color: 'rgba(0,0,0,0.6)' }}>
+                          <div className="order-tx-signatures" style={{ marginTop: '12px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
                             {order.createTxSignature && (
                               <div style={{ marginBottom: '4px' }}>
                                 <span style={{ fontWeight: 600 }}>Create:</span>{' '}
@@ -1539,7 +1709,7 @@ const ProfileView = () => {
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="tx-link"
-                                  style={{ color: '#4FC3F7', textDecoration: 'underline' }}
+                                  style={{ color: '#0284c7', textDecoration: 'underline' }}
                                 >
                                   {order.createTxSignature.slice(0, 8)}...{order.createTxSignature.slice(-6)} ↗
                                 </a>
@@ -1553,7 +1723,7 @@ const ProfileView = () => {
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="tx-link"
-                                  style={{ color: '#4FC3F7', textDecoration: 'underline' }}
+                                  style={{ color: '#0284c7', textDecoration: 'underline' }}
                                 >
                                   {order.executeTxSignature.slice(0, 8)}...{order.executeTxSignature.slice(-6)} ↗
                                 </a>
@@ -1567,7 +1737,7 @@ const ProfileView = () => {
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="tx-link"
-                                  style={{ color: '#4FC3F7', textDecoration: 'underline' }}
+                                  style={{ color: '#0284c7', textDecoration: 'underline' }}
                                 >
                                   {order.cancelTxSignature.slice(0, 8)}...{order.cancelTxSignature.slice(-6)} ↗
                                 </a>
@@ -1582,31 +1752,21 @@ const ProfileView = () => {
               </div>
             )}
           </div>
+        )}
 
-          {/* Wallet Info */}
-          <div className="wallet-info-section">
+        {/* ── WALLET TAB ── */}
+        {profileTab === 'wallet' && (
+          <div className="pv-ig-wallet">
             <div className="wallet-info-card">
               <div className="wallet-header">
-                <h3>Wallet Information</h3>
-                <button 
-                  className="disconnect-btn"
-                  onClick={disconnect}
-                  title="Disconnect wallet"
-                >
-                  Disconnect
-                </button>
+                <h3>Wallet</h3>
               </div>
-              
               <div className="wallet-details">
                 <div className="wallet-address-row">
-                  <span className="label">Address:</span>
+                  <span className="label">Address</span>
                   <div className="address-container">
                     <span className="address">{formatAddress(publicKey)}</span>
-                    <button 
-                      className="copy-btn"
-                      onClick={() => copyToClipboard(publicKey?.toString())}
-                      title="Copy full address"
-                    >
+                    <button className="copy-btn" onClick={() => copyToClipboard(publicKey?.toString())} title="Copy full address">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" strokeWidth="2"/>
                         <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" strokeWidth="2"/>
@@ -1614,9 +1774,8 @@ const ProfileView = () => {
                     </button>
                   </div>
                 </div>
-                
                 <div className="balance-row">
-                  <span className="label">SOL Balance:</span>
+                  <span className="label">SOL Balance</span>
                   <div className="balance-container">
                     {isLoadingBalance ? (
                       <span className="loading">Loading...</span>
@@ -1625,12 +1784,7 @@ const ProfileView = () => {
                     ) : (
                       <span className="error">Unable to load</span>
                     )}
-                    <button 
-                      className="refresh-btn"
-                      onClick={fetchBalance}
-                      disabled={isLoadingBalance}
-                      title="Refresh balance"
-                    >
+                    <button className="refresh-btn" onClick={fetchBalance} disabled={isLoadingBalance} title="Refresh balance">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M1 4v6h6M23 20v-6h-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                         <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -1640,26 +1794,25 @@ const ProfileView = () => {
                 </div>
               </div>
             </div>
+            <button className="disconnect-btn pv-ig-disconnect" onClick={disconnect}>Disconnect Wallet</button>
           </div>
+        )}
 
-          {/* Tracked Wallets Section */}
-          <div className="feature-section">
-            <h3>Tracked Wallets ({trackedWallets.length})</h3>
+        {/* ── TRACKED TAB ── */}
+        {profileTab === 'tracked' && (
+          <div className="pv-ig-tracked">
             {trackedWallets.length === 0 ? (
-              <div className="empty-state">
-                <p>No tracked wallets yet</p>
-                <p className="empty-state-hint">Click "Track" on any wallet to add it here</p>
+              <div className="pv-ig-empty">
+                <span className="pv-ig-empty-icon">👁</span>
+                <p>No tracked wallets</p>
+                <span>Click "Track" on any wallet to monitor it here</span>
               </div>
             ) : (
               <div className="tracked-wallets-list">
                 {trackedWallets.map((wallet) => (
                   <div key={wallet.address} className="tracked-wallet-item">
                     <div className="tracked-wallet-info">
-                      <div 
-                        className="tracked-wallet-address"
-                        onClick={() => setSelectedWallet(wallet.address)}
-                        title="Click to view analytics"
-                      >
+                      <div className="tracked-wallet-address" onClick={() => setSelectedWallet(wallet.address)} title="Click to view analytics">
                         <span className="wallet-icon">
                           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <path d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h7" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
@@ -1675,59 +1828,37 @@ const ProfileView = () => {
                       </div>
                     </div>
                     <div className="tracked-wallet-actions">
-                      <button
-                        className="view-wallet-btn"
-                        onClick={() => setSelectedWallet(wallet.address)}
-                        title="View analytics"
-                      >
+                      <button className="view-wallet-btn" onClick={() => setSelectedWallet(wallet.address)} title="View analytics">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                           <path d="M3 3v18h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                           <path d="m19 9-5 5-4-4-5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                         </svg>
                       </button>
-                      <button
-                        className="untrack-wallet-btn"
-                        onClick={() => untrackWallet(wallet.address)}
-                        title="Untrack wallet"
-                      >
-                        ✕
-                      </button>
+                      <button className="untrack-wallet-btn" onClick={() => untrackWallet(wallet.address)} title="Untrack wallet">✕</button>
                     </div>
                   </div>
                 ))}
               </div>
             )}
           </div>
+        )}
 
-          <div className="feature-section">
-            <h3>Portfolio Tracking</h3>
-            <div className="coming-soon-feature">
-              <p>Track your meme coin portfolio performance and P&L.</p>
-              <span className="coming-soon-badge">Coming Soon</span>
+        {/* ── PORTFOLIO TAB ── */}
+        {profileTab === 'portfolio' && (
+          <div className="pv-ig-portfolio">
+            <div className="pv-ig-empty">
+              <span className="pv-ig-empty-icon">📊</span>
+              <p>Your Portfolio</p>
+              <span>Analyze your wallet's trading activity</span>
+              <button className="pv-ig-portfolio-btn" onClick={() => setSelectedWallet(publicKey?.toString())}>
+                Open Portfolio
+              </button>
             </div>
           </div>
+        )}
 
-          <div className="feature-section">
-            <h3>Settings</h3>
-            <div className="settings-grid">
-              <div className="setting-item">
-                <span>Network:</span>
-                <span className="setting-value">Solana Mainnet</span>
-              </div>
-              <div className="setting-item">
-                <span>Theme:</span>
-                <span className="setting-value">Dark Mode</span>
-              </div>
-              <div className="setting-item">
-                <span>Currency:</span>
-                <span className="setting-value">USD</span>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
 
-      {/* WalletPopup for viewing tracked wallet analytics */}
       {selectedWallet && (
         <WalletPopup
           walletAddress={selectedWallet}

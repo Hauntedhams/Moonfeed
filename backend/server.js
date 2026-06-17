@@ -15,8 +15,6 @@ const WebSocketRouter = require('./websocketRouter');
 const JupiterLivePriceService = require('./jupiterLivePriceService');
 const SolanaNativePriceService = require('./solanaNativePriceService'); // ACCURATE real-time prices from DexScreener
 const dexscreenerService = require('./dexscreenerService');
-const dexpaprikaService = require('./dexpaprikaService');
-const heliusService = require('./heliusService');
 const rugcheckService = require('./rugcheckService');
 const RugcheckAutoProcessor = require('./rugcheckAutoProcessor');
 const rugcheckBatchProcessor = require('./services/RugcheckBatchProcessor'); // New batch processor
@@ -24,9 +22,6 @@ const dexscreenerAutoEnricher = require('./dexscreenerAutoEnricher');
 const trendingAutoRefresher = require('./trendingAutoRefresher');
 const newFeedAutoRefresher = require('./newFeedAutoRefresher');
 const dextrendingAutoRefresher = require('./dextrendingAutoRefresher');
-const JupiterTokenService = require('./jupiterTokenService');
-const JupiterDataService = require('./jupiterDataService');
-const TokenMetadataService = require('./tokenMetadataService');
 const solanaTransactionService = require('./solanaTransactionService');
 const walletRoutes = require('./routes/walletRoutes');
 const triggerRoutes = require('./routes/trigger');
@@ -965,9 +960,6 @@ const TOP_TRADERS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 // Initialize Rugcheck auto-processor
 const rugcheckAutoProcessor = new RugcheckAutoProcessor();
 
-// Initialize Jupiter Token Service
-const jupiterTokenService = new JupiterTokenService();
-
 // Initialize Jupiter Live Price Service (LEGACY - keeping for backwards compatibility)
 const jupiterLivePriceService = new JupiterLivePriceService();
 
@@ -977,12 +969,6 @@ const solanaNativePriceService = new SolanaNativePriceService();
 // Make price services globally available for WebSocket integration
 global.jupiterLivePriceService = jupiterLivePriceService;
 global.solanaNativePriceService = solanaNativePriceService;
-
-// Initialize Jupiter Data Service for market data
-const jupiterDataService = new JupiterDataService();
-
-// Initialize Token Metadata Service for metadata enrichment
-const tokenMetadataService = new TokenMetadataService();
 
 // Initialize with latest batch
 function initializeWithLatestBatch() {

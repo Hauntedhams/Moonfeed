@@ -812,7 +812,7 @@
 
 /* Orders Section */
 .orders-section {
-  background: #ffffff;
+  background: var(--card-bg);
 }
 
 .orders-header {
@@ -828,9 +828,9 @@
 }
 
 .filter-btn {
-  background: #f3f4f6;
-  color: #6b7280;
-  border: 1px solid #e5e7eb;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
   padding: 6px 14px;
   font-size: 13px;
@@ -840,8 +840,8 @@
 }
 
 .filter-btn:hover {
-  background: #e5e7eb;
-  color: #374151;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
 }
 
 .filter-btn.active {
@@ -855,15 +855,15 @@
 .orders-empty {
   padding: 40px 20px;
   text-align: center;
-  background: #f9fafb;
+  background: var(--bg-secondary);
   border-radius: 12px;
-  border: 1px dashed #e5e7eb;
+  border: 1px dashed var(--border-color);
 }
 
 .orders-loading p,
 .orders-error p,
 .orders-empty p {
-  color: #6b7280;
+  color: var(--text-secondary);
   margin: 10px 0 0 0;
   font-size: 14px;
 }
@@ -875,7 +875,7 @@
 }
 
 .empty-hint {
-  color: #9ca3af;
+  color: var(--text-tertiary);
   font-size: 13px;
   display: block;
   margin-top: 8px;
@@ -907,8 +907,8 @@
 }
 
 .order-card {
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
   border-radius: 12px;
   padding: 16px;
   transition: all 0.2s ease;
@@ -920,7 +920,7 @@
 }
 
 .order-card.active-order {
-  background: linear-gradient(135deg, #f9fafb 0%, #ffffff 100%);
+  background: var(--bg-secondary);
   border: 2px solid #667eea;
   box-shadow: 0 4px 16px rgba(102, 126, 234, 0.15);
 }
@@ -937,7 +937,7 @@
   align-items: center;
   margin-bottom: 12px;
   padding-bottom: 12px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .order-token {
@@ -947,7 +947,7 @@
 }
 
 .token-symbol {
-  color: #111827;
+  color: var(--text-primary);
   font-size: 16px;
   font-weight: 600;
 }
@@ -988,8 +988,8 @@
 }
 
 .order-status.cancelled {
-  background: #f3f4f6;
-  color: #6b7280;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
 }
 
 .order-details {
@@ -1006,12 +1006,12 @@
 }
 
 .detail-label {
-  color: #6b7280;
+  color: var(--text-secondary);
   font-size: 13px;
 }
 
 .detail-value {
-  color: #111827;
+  color: var(--text-primary);
   font-size: 13px;
   font-weight: 600;
 }
@@ -1019,7 +1019,7 @@
 .order-actions {
   margin-top: 12px;
   padding-top: 12px;
-  border-top: 1px solid #e5e7eb;
+  border-top: 1px solid var(--border-color);
 }
 
 .cancel-order-btn {
@@ -1048,9 +1048,9 @@
 .order-price-progress {
   margin: 16px 0;
   padding: 16px;
-  background: linear-gradient(135deg, #f8f9ff 0%, #f3f4ff 100%);
+  background: var(--bg-secondary);
   border-radius: 12px;
-  border: 2px solid #e0e4ff;
+  border: 2px solid var(--border-color);
 }
 
 .price-comparison {
@@ -1064,34 +1064,34 @@
 .price-box {
   text-align: center;
   padding: 14px;
-  background: #ffffff;
+  background: var(--card-bg);
   border-radius: 12px;
-  border: 2px solid #e5e7eb;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  border: 2px solid var(--border-color);
+  box-shadow: 0 2px 8px var(--shadow-sm);
   transition: all 0.2s ease;
 }
 
 .price-box:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 12px var(--shadow-md);
 }
 
 .price-box.current-price {
   border-color: #818cf8;
-  background: linear-gradient(135deg, #ffffff 0%, #f5f7ff 100%);
+  background: var(--card-bg);
   box-shadow: 0 2px 12px rgba(129, 140, 248, 0.2);
 }
 
 .price-box.trigger-price {
   border-color: #34d399;
-  background: linear-gradient(135deg, #ffffff 0%, #f0fdf8 100%);
+  background: var(--card-bg);
   box-shadow: 0 2px 12px rgba(52, 211, 153, 0.2);
 }
 
 .price-label {
   font-size: 10px;
   font-weight: 700;
-  color: #6b7280;
+  color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.8px;
   margin-bottom: 6px;
@@ -1100,7 +1100,7 @@
 .price-amount {
   font-size: 20px;
   font-weight: 800;
-  color: #111827;
+  color: var(--text-primary);
   font-family: 'SF Mono', 'Monaco', Consolas, monospace;
   letter-spacing: -0.5px;
 }
@@ -1115,9 +1115,9 @@
   justify-content: center;
   width: 40px;
   height: 40px;
-  background: #ffffff;
+  background: var(--card-bg);
   border-radius: 50%;
-  border: 2px solid #e0e4ff;
+  border: 2px solid var(--border-color);
   box-shadow: 0 2px 8px rgba(102, 126, 234, 0.15);
 }
 
@@ -1156,15 +1156,15 @@
   align-items: center;
   gap: 10px;
   padding: 12px;
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
   border-radius: 10px;
   transition: all 0.2s ease;
 }
 
 .detail-card:hover {
-  background: #f9fafb;
-  border-color: #d1d5db;
+  background: var(--bg-secondary);
+  border-color: var(--border-hover);
   transform: translateY(-1px);
 }
 
@@ -1181,7 +1181,7 @@
 .detail-value-large {
   font-size: 15px;
   font-weight: 700;
-  color: #111827;
+  color: var(--text-primary);
   margin-top: 2px;
   white-space: nowrap;
   overflow: hidden;
@@ -1192,9 +1192,9 @@
 .order-additional-info {
   margin: 12px 0;
   padding: 12px;
-  background: #f9fafb;
+  background: var(--bg-secondary);
   border-radius: 8px;
-  border: 1px dashed #e5e7eb;
+  border: 1px dashed var(--border-color);
 }
 
 .info-row {
@@ -1203,7 +1203,7 @@
   gap: 8px;
   margin: 6px 0;
   font-size: 12px;
-  color: #6b7280;
+  color: var(--text-secondary);
 }
 
 .info-icon {
@@ -1244,7 +1244,7 @@
 .order-tx-signatures {
   margin-top: 12px;
   font-size: 0.85rem;
-  color: rgba(0, 0, 0, 0.6);
+  color: var(--text-secondary);
 }
 
 .order-tx-signatures > div {
@@ -1600,4 +1600,564 @@
   color: rgba(0, 0, 0, 0.5);
   margin-top: 12px;
   font-style: italic;
+}
+
+/* ═══════════════════════════════════════════════
+   INSTAGRAM-STYLE PROFILE REDESIGN (pv-social)
+   ═══════════════════════════════════════════════ */
+
+.profile-view.pv-social {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--bg-primary);
+  padding: 0;
+}
+
+/* ── HEADER ── */
+.pv-ig-header {
+  padding: 20px 16px 14px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.pv-ig-top-row {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 14px;
+}
+
+/* Avatar */
+.pv-ig-avatar-wrap {
+  position: relative;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.pv-ig-avatar {
+  width: 82px;
+  height: 82px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid var(--border-color);
+  display: block;
+}
+
+.pv-ig-avatar-ph {
+  width: 82px;
+  height: 82px;
+  border-radius: 50%;
+  background: var(--bg-tertiary);
+  border: 3px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+}
+
+.pv-ig-avatar-edit {
+  position: absolute;
+  bottom: 1px;
+  right: 1px;
+  width: 22px;
+  height: 22px;
+  background: var(--bg-tertiary);
+  border: 2px solid var(--bg-secondary);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  line-height: 1;
+}
+
+/* Stats */
+.pv-ig-stats {
+  display: flex;
+  flex: 1;
+  justify-content: space-around;
+}
+
+.pv-ig-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.pv-ig-stat-num {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.pv-ig-stat-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Display name */
+.pv-ig-display-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 4px 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pv-ig-ph {
+  color: var(--text-secondary);
+  font-style: italic;
+  font-weight: 400;
+}
+
+.pv-ig-pencil {
+  font-size: 12px;
+  opacity: 0.55;
+}
+
+/* Address chip */
+.pv-ig-addr-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #0284c7;
+  background: rgba(2, 132, 199, 0.1);
+  border: 1px solid rgba(2, 132, 199, 0.25);
+  border-radius: 20px;
+  padding: 3px 10px;
+  cursor: pointer;
+  margin: 4px 0;
+  font-family: 'Courier New', monospace;
+  transition: background 0.15s;
+}
+
+.pv-ig-addr-chip:hover {
+  background: rgba(2, 132, 199, 0.18);
+}
+
+/* Bio */
+.pv-ig-bio {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 4px 0 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  line-height: 1.5;
+}
+
+/* Inline edit */
+.pv-ig-field-edit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0;
+}
+
+.pv-ig-field-edit--bio {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.pv-ig-field-input {
+  flex: 1;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 7px 10px;
+  color: var(--text-primary);
+  font-size: 14px;
+  width: 100%;
+  resize: none;
+}
+
+.pv-ig-field-input:focus {
+  outline: none;
+  border-color: #0284c7;
+}
+
+.pv-ig-bio-btns {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.pv-ig-save-btn {
+  background: #0284c7;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pv-ig-save-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.pv-ig-cancel-btn {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.pv-ig-save-error {
+  font-size: 12px;
+  color: #ef4444;
+  margin: 4px 0 0;
+}
+
+/* Actions row */
+.pv-ig-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  align-items: center;
+}
+
+.pv-ig-btn {
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: opacity 0.15s;
+}
+
+.pv-ig-btn:hover { opacity: 0.82; }
+
+.pv-ig-btn--edit {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  flex: 1;
+}
+
+.pv-ig-btn--out {
+  background: var(--bg-tertiary);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  flex: 1;
+}
+
+.pv-ig-btn--icon {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── TAB BAR ── */
+.pv-ig-tabbar {
+  display: flex;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+}
+
+.pv-ig-tab {
+  flex: 1;
+  padding: 13px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  position: relative;
+  transition: color 0.15s;
+  border-top: 2px solid transparent;
+}
+
+.pv-ig-tab:hover { color: var(--text-primary); }
+
+.pv-ig-tab--active {
+  color: var(--text-primary);
+  border-top-color: var(--text-primary);
+}
+
+/* ── CONTENT AREA ── */
+.pv-ig-content {
+  flex: 1;
+  min-height: 0; /* critical: allows flex child to scroll instead of overflow */
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 80px;
+}
+
+/* ── EMPTY STATE ── */
+.pv-ig-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 24px;
+  gap: 8px;
+  text-align: center;
+}
+
+.pv-ig-empty-icon {
+  font-size: 42px;
+  margin-bottom: 4px;
+}
+
+.pv-ig-empty p {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.pv-ig-empty span {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* ── HISTORY GRID ── */
+.pv-ig-history {
+  padding: 3px;
+}
+
+.pv-ig-hist-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+}
+
+.pv-ig-hist-card {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  border-radius: 4px;
+  overflow: hidden;
+  cursor: pointer;
+  background: var(--bg-secondary);
+  transition: transform 0.15s;
+}
+
+.pv-ig-hist-card:active { transform: scale(0.97); }
+
+.pv-ig-hist-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(18px) brightness(0.35) scale(1.2);
+}
+
+.pv-ig-hist-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.05) 0%,
+    rgba(0, 0, 0, 0.65) 100%
+  );
+}
+
+.pv-ig-hist-body {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 10px;
+}
+
+.pv-ig-hist-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.pv-ig-hist-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+}
+
+.pv-ig-hist-avatar--ph {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: white;
+}
+
+.pv-ig-hist-badge {
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.pv-ig-hist-badge--buy {
+  background: rgba(16, 185, 129, 0.9);
+  color: white;
+}
+
+.pv-ig-hist-badge--sell {
+  background: rgba(239, 68, 68, 0.9);
+  color: white;
+}
+
+.pv-ig-hist-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.pv-ig-hist-symbol {
+  font-size: 13px;
+  font-weight: 700;
+  color: white;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pv-ig-hist-amount {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.pv-ig-hist-time {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* ── ORDERS TAB ── */
+.pv-ig-orders {
+  padding: 0;
+}
+
+.pv-ig-orders .orders-filter {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+}
+
+.pv-ig-orders .orders-list {
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pv-ig-orders .orders-empty,
+.pv-ig-orders .orders-loading,
+.pv-ig-orders .orders-error {
+  padding: 40px 24px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+/* ── WALLET TAB ── */
+.pv-ig-wallet {
+  padding: 16px;
+}
+
+.pv-ig-wallet .wallet-info-card {
+  margin-bottom: 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.pv-ig-wallet .wallet-header h3 {
+  margin: 0 0 14px 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.pv-ig-disconnect {
+  width: 100%;
+  margin-top: 8px;
+  background: rgba(239, 68, 68, 0.08);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  padding: 11px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.pv-ig-disconnect:hover {
+  background: rgba(239, 68, 68, 0.16);
+}
+
+/* ── TRACKED TAB ── */
+.pv-ig-tracked {
+  padding: 0;
+}
+
+.pv-ig-tracked .tracked-wallets-list {
+  padding: 8px 16px;
+}
+
+/* ── PORTFOLIO TAB ── */
+.pv-ig-portfolio {
+  padding: 0;
+}
+
+.pv-ig-portfolio-btn {
+  margin-top: 20px;
+  background: #0284c7;
+  color: white;
+  border: none;
+  border-radius: 12px;
+  padding: 13px 36px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  display: block;
+}
+
+.pv-ig-portfolio-btn:hover {
+  opacity: 0.87;
 }

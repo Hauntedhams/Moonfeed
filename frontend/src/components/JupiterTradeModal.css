@@ -591,7 +591,118 @@
   margin-top: 2px;
 }
 
-/* ── Dual Exit Display ── */
+/* ── Take Profit display ── */
+.tp-display {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.tp-display-side {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+}
+
+.tp-display-side--profit {
+  text-align: right;
+}
+
+.tp-display-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.tp-display-side--profit .tp-display-label {
+  color: #10b981;
+}
+
+.tp-display-pct {
+  font-size: 22px;
+  font-weight: 700;
+  color: #10b981;
+  line-height: 1.1;
+}
+
+.tp-display-price {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.tp-display-arrow {
+  font-size: 20px;
+  color: rgba(255, 255, 255, 0.25);
+  flex-shrink: 0;
+}
+
+/* ── Single TP slider ── */
+.tp-slider-wrap {
+  position: relative;
+  margin: 4px 0 26px;
+}
+
+.tp-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+
+.tp-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #10b981;
+  border: 2.5px solid #fff;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.55);
+  cursor: pointer;
+  transition: transform 0.15s;
+  margin-top: -8px;
+}
+
+.tp-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+
+.tp-slider::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #10b981;
+  border: 2.5px solid #fff;
+  cursor: pointer;
+}
+
+.tp-slider-labels {
+  position: absolute;
+  bottom: -18px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+/* ── TP inputs row ── */
+.tp-inputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+/* ── Dual Exit Display (kept for reference, no longer used) ── */
 .dual-exit-display {
   display: flex;
   align-items: flex-start;

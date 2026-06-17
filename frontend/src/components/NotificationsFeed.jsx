@@ -23,7 +23,7 @@ function NotificationsFeed({ favorites = [] }) {
             message: changePct > 0 
               ? `is up ${Math.abs(changePct).toFixed(1)}% in the last 24h`
               : `is down ${Math.abs(changePct).toFixed(1)}% in the last 24h`,
-            icon: changePct > 0 ? '📈' : '📉',
+            icon: changePct > 0 ? '↑' : '↓',
             color: changePct > 0 ? '#22c55e' : '#ef4444',
             timestamp: now - Math.random() * 3600000, // Random time in last hour
             value: changePct
@@ -38,7 +38,7 @@ function NotificationsFeed({ favorites = [] }) {
             type: 'volume_spike',
             coin: coin,
             message: `24h volume reached $${formatCompact(volume)}`,
-            icon: '💧',
+            icon: '◈',
             color: '#3b82f6',
             timestamp: now - Math.random() * 7200000,
             value: volume
@@ -53,7 +53,7 @@ function NotificationsFeed({ favorites = [] }) {
             type: 'liquidity',
             coin: coin,
             message: `liquidity pool now at $${formatCompact(liquidity)}`,
-            icon: '💎',
+            icon: '◆',
             color: '#8b5cf6',
             timestamp: now - Math.random() * 10800000,
             value: liquidity
@@ -68,7 +68,7 @@ function NotificationsFeed({ favorites = [] }) {
             type: 'holders',
             coin: coin,
             message: `reached ${formatCompact(holders)} holders`,
-            icon: '👥',
+            icon: '⊕',
             color: '#f59e0b',
             timestamp: now - Math.random() * 14400000,
             value: holders
@@ -83,7 +83,7 @@ function NotificationsFeed({ favorites = [] }) {
             type: 'market_cap',
             coin: coin,
             message: `market cap reached $${formatCompact(marketCap)}`,
-            icon: '🎯',
+            icon: '◎',
             color: '#ec4899',
             timestamp: now - Math.random() * 18000000,
             value: marketCap
@@ -101,7 +101,7 @@ function NotificationsFeed({ favorites = [] }) {
                 type: 'graduation',
                 coin: coin,
                 message: `graduation progress: ${graduationPct.toFixed(1)}%`,
-                icon: '🎓',
+                icon: '★',
                 color: '#10b981',
                 timestamp: now - Math.random() * 21600000,
                 value: graduationPct
@@ -140,7 +140,7 @@ function NotificationsFeed({ favorites = [] }) {
     return (
       <div className="notifications-feed">
         <div className="notifications-empty-state">
-          <div className="empty-icon">🔔</div>
+          <div className="empty-icon">○</div>
           <h3>No notifications yet</h3>
           <p>Follow more coins to see updates here</p>
         </div>
