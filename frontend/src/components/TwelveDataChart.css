@@ -309,6 +309,10 @@ html.dark-mode .timeframe-button.active {
   transition: opacity 0.35s ease;
 }
 
+html:not(.dark-mode) .dexscreener-advanced-container::after {
+  background: linear-gradient(to right, transparent, #ffffff 15%);
+}
+
 .dexscreener-advanced-container.no-mask::after {
   opacity: 0;
   pointer-events: none;

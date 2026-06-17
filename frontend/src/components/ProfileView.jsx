@@ -11,7 +11,7 @@ import './ProfileView.css';
 import './OrdersView.css';
 import { getTransactions } from '../utils/transactionStorage';
 
-const ProfileView = () => {
+const ProfileView = ({ onTradeClick }) => {
   // Use Jupiter Wallet Kit adapter
   const jupiterWallet = useJupiterWallet();
   const publicKey = jupiterWallet.publicKey;
@@ -40,6 +40,11 @@ const ProfileView = () => {
   const [selectedWallet, setSelectedWallet] = useState(null);
   const [profileTab, setProfileTab] = useState('history');
   const [transactions, setTransactions] = useState([]);
+
+  // Coin history detail sheet
+  const [historyDetailCoin, setHistoryDetailCoin] = useState(null);
+  const [historyCurrentPrice, setHistoryCurrentPrice] = useState(null);
+  const [historyPriceLoading, setHistoryPriceLoading] = useState(false);
 
   // Editing state for display name and bio
   const [editingName, setEditingName] = useState(false);
@@ -519,6 +524,24 @@ const ProfileView = () => {
     return num.toFixed(2);
   };
 
+  const handleHistoryCardClick = async (tx) => {
+    setHistoryDetailCoin(tx);
+    setHistoryCurrentPrice(null);
+    setHistoryPriceLoading(true);
+    try {
+      const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tx.tokenMint}`);
+      const data = await res.json();
+      const pair = data?.pairs?.[0];
+      if (pair?.priceNative) {
+        setHistoryCurrentPrice(parseFloat(pair.priceNative));
+      }
+    } catch (e) {
+      console.error('[ProfileView] Error fetching current price:', e);
+    } finally {
+      setHistoryPriceLoading(false);
+    }
+  };
+
   const formatDate = (timestamp) => {
     if (!timestamp) return 'N/A';
     
@@ -789,7 +812,7 @@ const ProfileView = () => {
             ) : (
               <div className="pv-ig-hist-grid">
                 {transactions.map((tx) => (
-                  <div key={tx.signature} className={`pv-ig-hist-card pv-ig-hist-card--${tx.type || 'buy'}`}>
+                  <div key={tx.signature} className={`pv-ig-hist-card pv-ig-hist-card--${tx.type || 'buy'}`} onClick={() => handleHistoryCardClick(tx)} style={{ cursor: 'pointer' }}>
                     {(coinBanners.get(tx.tokenMint)?.banner || tx.tokenImage) && (
                       <img
                         src={coinBanners.get(tx.tokenMint)?.banner || tx.tokenImage}
@@ -1865,6 +1888,153 @@ const ProfileView = () => {
           onClose={() => setSelectedWallet(null)}
         />
       )}
+
+      {/* ── COIN HISTORY DETAIL SHEET ── */}
+      {historyDetailCoin && (() => {
+        const coinTxs = transactions.filter(t => t.tokenMint === historyDetailCoin.tokenMint);
+        const buys = coinTxs.filter(t => !t.type || t.type === 'buy');
+        const sells = coinTxs.filter(t => t.type === 'sell');
+        const totalInvested = buys.reduce((sum, t) => sum + (Number(t.inputAmount) || 0), 0);
+        const totalTokensBought = buys.reduce((sum, t) => sum + (Number(t.outputAmount) || 0), 0);
+        const avgEntryPrice = totalTokensBought > 0 ? totalInvested / totalTokensBought : 0;
+        const totalSoldSOL = sells.reduce((sum, t) => sum + (Number(t.outputAmount) || 0), 0);
+
+        const wins = historyCurrentPrice
+          ? buys.filter(t => historyCurrentPrice > (Number(t.pricePerToken) || 0) && (Number(t.pricePerToken) || 0) > 0).length
+          : 0;
+        const losses = historyCurrentPrice
+          ? buys.filter(t => (Number(t.pricePerToken) || 0) > 0 && historyCurrentPrice <= (Number(t.pricePerToken) || 0)).length
+          : 0;
+        const gradedBuys = wins + losses;
+        const winRate = gradedBuys > 0 ? Math.round((wins / gradedBuys) * 100) : null;
+
+        const currentValue = historyCurrentPrice && totalTokensBought > 0
+          ? historyCurrentPrice * totalTokensBought
+          : null;
+        const unrealizedPnl = currentValue !== null ? currentValue - totalInvested : null;
+        const pnlPercent = totalInvested > 0 && unrealizedPnl !== null
+          ? ((unrealizedPnl / totalInvested) * 100).toFixed(1)
+          : null;
+
+        const fmtSol = (n) => {
+          const num = Number(n) || 0;
+          if (num === 0) return '0';
+          if (num < 0.0001) return num.toExponential(2);
+          if (num < 0.01) return num.toFixed(6);
+          if (num < 1) return num.toFixed(4);
+          return num.toFixed(3);
+        };
+
+        return (
+          <div className="chs-backdrop" onClick={() => setHistoryDetailCoin(null)}>
+            <div className="chs-sheet" onClick={e => e.stopPropagation()}>
+              <div className="chs-handle" />
+
+              {/* Header */}
+              <div className="chs-header">
+                <div className="chs-coin-info">
+                  {historyDetailCoin.tokenImage ? (
+                    <img src={historyDetailCoin.tokenImage} alt={historyDetailCoin.tokenSymbol} className="chs-coin-img" onError={e => { e.target.style.display = 'none'; }} />
+                  ) : (
+                    <div className="chs-coin-img-ph">{(historyDetailCoin.tokenSymbol || '?').slice(0, 2).toUpperCase()}</div>
+                  )}
+                  <div>
+                    <div className="chs-symbol">${historyDetailCoin.tokenSymbol || 'Unknown'}</div>
+                    <div className="chs-name">{historyDetailCoin.tokenName || historyDetailCoin.tokenSymbol}</div>
+                  </div>
+                </div>
+                <button className="chs-close-btn" onClick={() => setHistoryDetailCoin(null)}>✕</button>
+              </div>
+
+              {/* Win / Loss Ratio */}
+              <div className="chs-section">
+                <div className="chs-section-title">Win / Loss Ratio</div>
+                {gradedBuys > 0 ? (
+                  <>
+                    <div className="chs-wl-bar-wrap">
+                      <div className="chs-wl-bar-fill" style={{ width: `${winRate}%` }} />
+                    </div>
+                    <div className="chs-wl-counts">
+                      <span className="chs-win-label">✅ {wins} Win{wins !== 1 ? 's' : ''}</span>
+                      <span className="chs-wl-rate">{winRate}% Win Rate</span>
+                      <span className="chs-loss-label">{losses} Loss{losses !== 1 ? 'es' : ''} ❌</span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="chs-wl-pending">
+                    {historyPriceLoading ? 'Fetching current price...' : 'Price unavailable — win/loss ratio pending'}
+                  </div>
+                )}
+              </div>
+
+              {/* Stats Grid */}
+              <div className="chs-stats-grid">
+                <div className="chs-stat-card">
+                  <div className="chs-stat-label">Total Buys</div>
+                  <div className="chs-stat-value">{buys.length}</div>
+                </div>
+                <div className="chs-stat-card">
+                  <div className="chs-stat-label">Total Sells</div>
+                  <div className="chs-stat-value">{sells.length}</div>
+                </div>
+                <div className="chs-stat-card">
+                  <div className="chs-stat-label">Total Invested</div>
+                  <div className="chs-stat-value">{fmtSol(totalInvested)} SOL</div>
+                </div>
+                {totalSoldSOL > 0 && (
+                  <div className="chs-stat-card">
+                    <div className="chs-stat-label">Total Sold</div>
+                    <div className="chs-stat-value">{fmtSol(totalSoldSOL)} SOL</div>
+                  </div>
+                )}
+              </div>
+
+              {/* Price Comparison */}
+              <div className="chs-section">
+                <div className="chs-section-title">Price Info</div>
+                {avgEntryPrice > 0 && (
+                  <div className="chs-price-row">
+                    <span className="chs-price-label">Avg Entry Price</span>
+                    <span className="chs-price-value">{fmtSol(avgEntryPrice)} SOL</span>
+                  </div>
+                )}
+                <div className="chs-price-row">
+                  <span className="chs-price-label">Current Price</span>
+                  <span className="chs-price-value">
+                    {historyPriceLoading ? '…' : historyCurrentPrice ? `${fmtSol(historyCurrentPrice)} SOL` : 'N/A'}
+                  </span>
+                </div>
+                {pnlPercent !== null && (
+                  <div className="chs-price-row">
+                    <span className="chs-price-label">Unrealized P&L</span>
+                    <span className={`chs-price-value ${unrealizedPnl >= 0 ? 'chs-positive' : 'chs-negative'}`}>
+                      {unrealizedPnl >= 0 ? '+' : ''}{fmtSol(unrealizedPnl)} SOL ({pnlPercent}%)
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Buy More */}
+              {onTradeClick && (
+                <button
+                  className="chs-buy-btn"
+                  onClick={() => {
+                    setHistoryDetailCoin(null);
+                    onTradeClick({
+                      mintAddress: historyDetailCoin.tokenMint,
+                      symbol: historyDetailCoin.tokenSymbol,
+                      name: historyDetailCoin.tokenName,
+                      image: historyDetailCoin.tokenImage,
+                    });
+                  }}
+                >
+                  Buy More ${historyDetailCoin.tokenSymbol}
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

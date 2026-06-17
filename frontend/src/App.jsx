@@ -319,7 +319,7 @@ function App() {
         />
       ) : activeTab === 'profile' ? (
         <Suspense fallback={<div style={{ padding: '20px', textAlign: 'center' }}>Loading...</div>}>
-          <ProfileView />
+          <ProfileView onTradeClick={handleTradeClick} />
         </Suspense>
       ) : activeTab === 'orders' ? (
         <Suspense fallback={<div style={{ padding: '20px', textAlign: 'center' }}>Loading...</div>}>

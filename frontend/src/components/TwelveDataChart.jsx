@@ -258,7 +258,8 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
         // Gradient mask: right-side fade that makes action buttons readable over the chart.
         // z-index 65 = above iframe (60), below Full Chart btn (70) and action buttons (100).
         const opacity = showMask ? '1' : '0';
-        mask.style.cssText = `position:fixed;top:${clipTop}px;right:0px;left:${left + width - 140}px;width:140px;height:${clippedH}px;transform:none;z-index:65;pointer-events:none;border-radius:0 12px 12px 0;background:linear-gradient(to right,transparent,rgba(11,18,32,1) 50%);opacity:${opacity};transition:opacity 0.35s ease;`;
+        const maskColor = contextDarkMode ? 'rgba(11,18,32,1)' : 'rgba(244,246,251,1)';
+        mask.style.cssText = `position:fixed;top:${clipTop}px;right:0px;left:${left + width - 140}px;width:140px;height:${clippedH}px;transform:none;z-index:65;pointer-events:none;border-radius:0 12px 12px 0;background:linear-gradient(to right,transparent,${maskColor} 50%);opacity:${opacity};transition:opacity 0.35s ease;`;
       }
     }
   };
@@ -326,7 +327,7 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
   // useLayoutEffect so the move happens synchronously before paint.
   useLayoutEffect(() => {
     updateSlotPosition();
-  }, [fullscreenMode, isDesktopMode, isActive, showActionButtons]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fullscreenMode, isDesktopMode, isActive, showActionButtons, contextDarkMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // isExpanded animation tracking: the info-layer expands/collapses over 500ms via
   // a CSS height transition. The chart section moves with it. We run a rAF loop for

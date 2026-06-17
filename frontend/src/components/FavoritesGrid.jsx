@@ -125,10 +125,6 @@ function FavoritesGrid({ favorites = [], onCoinClick, onFavoritesChange }) {
         favorites.length === 0 ? (
           <div className="fav-grid-scroll">
             <div className="fav-empty-inline">
-              <div className="wallet-connected-badge">
-                <span className="wallet-icon-small">👛</span>
-                <span className="wallet-address">{walletAddress.substring(0, 4)}...{walletAddress.substring(walletAddress.length - 4)}</span>
-              </div>
               <div className="empty-icon">♥</div>
               <h2>No Favorites Yet</h2>
               <p>Heart coins to save them here!</p>

@@ -2161,3 +2161,242 @@
 .pv-ig-portfolio-btn:hover {
   opacity: 0.87;
 }
+
+/* ── COIN HISTORY DETAIL SHEET ── */
+.chs-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  z-index: 1100;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+  animation: fadeInBg 0.2s ease;
+}
+
+@keyframes fadeInBg {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.chs-sheet {
+  background: var(--bg-secondary, #1a1a2e);
+  border-radius: 20px 20px 0 0;
+  width: 100%;
+  max-width: 600px;
+  padding: 12px 20px 48px;
+  max-height: 88vh;
+  overflow-y: auto;
+  animation: slideUpSheet 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes slideUpSheet {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.chs-handle {
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border-color, rgba(255,255,255,0.15));
+  margin: 0 auto 20px;
+}
+
+.chs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.chs-coin-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.chs-coin-img {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.chs-coin-img-ph {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 16px;
+  color: white;
+  flex-shrink: 0;
+}
+
+.chs-symbol {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.chs-name {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.chs-close-btn {
+  background: var(--bg-tertiary, rgba(255,255,255,0.08));
+  border: none;
+  color: var(--text-secondary);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.chs-close-btn:hover {
+  background: rgba(255,255,255,0.15);
+}
+
+/* Section wrapper */
+.chs-section {
+  background: var(--bg-tertiary, rgba(255,255,255,0.04));
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.chs-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  margin-bottom: 12px;
+}
+
+/* Win/Loss bar */
+.chs-wl-bar-wrap {
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(239, 68, 68, 0.25);
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.chs-wl-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #10b981, #34d399);
+  transition: width 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+  min-width: 4px;
+}
+
+.chs-wl-counts {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+
+.chs-win-label { color: #10b981; font-weight: 600; }
+.chs-loss-label { color: #ef4444; font-weight: 600; }
+.chs-wl-rate { color: var(--text-primary); font-weight: 700; font-size: 15px; }
+
+.chs-wl-pending {
+  font-size: 13px;
+  color: var(--text-secondary);
+  text-align: center;
+  padding: 4px 0;
+}
+
+/* Stats grid */
+.chs-stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.chs-stat-card {
+  background: var(--bg-tertiary, rgba(255,255,255,0.04));
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.chs-stat-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+.chs-stat-value {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* Price rows */
+.chs-price-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 9px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.chs-price-row:last-child { border-bottom: none; }
+
+.chs-price-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.chs-price-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: monospace;
+}
+
+.chs-positive { color: #10b981; }
+.chs-negative { color: #ef4444; }
+
+/* Buy More button */
+.chs-buy-btn {
+  width: 100%;
+  padding: 16px;
+  border-radius: 14px;
+  border: none;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  font-size: 17px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  letter-spacing: 0.3px;
+  margin-top: 4px;
+}
+
+.chs-buy-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.4);
+}
+
+.chs-buy-btn:active {
+  transform: translateY(0);
+}
