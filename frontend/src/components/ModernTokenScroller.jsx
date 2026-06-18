@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, startTransition } from 'react';
 import CoinCard from './CoinCard';
 import MoonfeedInfoButton from './MoonfeedInfoModal';
 import InteractiveTutorial from './InteractiveTutorial';
@@ -708,14 +708,18 @@ const ModernTokenScroller = ({
         if (best && best.intersectionRatio > 0.5) {
           const idx = parseInt(best.target.dataset.index, 10);
           if (!isNaN(idx) && idx !== currentIndex) {
-            setCurrentIndex(idx);
+            // startTransition marks this update as non-urgent so React won't
+            // interrupt the native scroll animation to process it.
+            startTransition(() => {
+              setCurrentIndex(idx);
 
-            const coin = coins[idx];
-            if (coin) {
-              const enriched = enrichedCoins.get(coin.mintAddress);
-              const enrichedCoin = enriched ? { ...coin, ...enriched } : coin;
-              onCurrentCoinChange?.(enrichedCoin, idx);
-            }
+              const coin = coins[idx];
+              if (coin) {
+                const enriched = enrichedCoins.get(coin.mintAddress);
+                const enrichedCoin = enriched ? { ...coin, ...enriched } : coin;
+                onCurrentCoinChange?.(enrichedCoin, idx);
+              }
+            });
 
             console.log(`📱 Coin ${idx + 1}/${coins.length}`);
           }
@@ -823,12 +827,13 @@ const ModernTokenScroller = ({
     const isCurrentCoin = index === currentIndex;
     const isPreloadCoin = index === preloadIndex;
     
-    // 🔥 OPTIMIZED: Only render charts for visible coins (current ± 2)
-    // This prevents performance issues while keeping all coin cards rendered
+    // 🔥 OPTIMIZED: Only run effects for visible coins (current ± N)
+    // Mobile: ±1 (3 active cards) — reduces simultaneous effects & GPU layers
+    // Desktop: ±2 (5 active cards) — richer prefetch window on fast hardware
     const isMobileDevice = window.innerWidth < 768 || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    const chartRenderDistance = isMobileDevice ? 2 : 3; // Render charts for current ± 2 on mobile, ± 3 on desktop
-    const shouldShowChart = Math.abs(index - currentIndex) <= chartRenderDistance;
-    const isVisible = Math.abs(index - currentIndex) <= 2; // Mark as visible if within ± 2
+    const renderDistance = isMobileDevice ? 1 : 2;
+    const shouldShowChart = Math.abs(index - currentIndex) <= renderDistance;
+    const isVisible = Math.abs(index - currentIndex) <= renderDistance;
     
     
     // Use enriched coin data if available

@@ -29,8 +29,7 @@
   /* Mobile scroll smoothness */
   touch-action: pan-y;
   overscroll-behavior-y: contain;
-  will-change: scroll-position;
-  /* GPU compositing layer */
+  /* GPU compositing layer — promotes the container to its own layer */
   transform: translateZ(0);
   -webkit-transform: translateZ(0);
 }
@@ -77,12 +76,9 @@
   -webkit-backface-visibility: hidden;
 }
 
-/* Only promote the active + adjacent slides to GPU layers */
+/* Only promote the active slide to a GPU layer */
 .modern-coin-slide.active {
   will-change: transform;
-}
-
-.modern-coin-slide.active {
   box-shadow: inset 0 0 0 2px rgba(0, 212, 255, 0.3);
 }
 

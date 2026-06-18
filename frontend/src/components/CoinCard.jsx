@@ -101,6 +101,10 @@ const CoinCard = memo(({
   const [isDesktopMode, setIsDesktopMode] = useState(() => window.innerWidth >= 1200);
   // Track when mobile chart portal target ref is available (refs are null on first render)
   const [mobileTargetMounted, setMobileTargetMounted] = useState(false);
+  // Hide portaled action buttons while the snap-scroll animation is in progress so
+  // they don't float over the incoming card.
+  const [isScrolling, setIsScrolling] = useState(false);
+  const scrollEndTimerRef = useRef(null);
 
   // Track if coin is enriched (has banner, socials, rugcheck, etc.)
   const isEnriched = !!(
@@ -266,6 +270,29 @@ const CoinCard = memo(({
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, [isDesktopMode]);
+
+  // Hide portaled action buttons while the scroll snap animation is running so
+  // they don't appear to float over the incoming card.
+  // Only active when the buttons are actually portaled (mobile + isActiveCard).
+  useEffect(() => {
+    if (isDesktopMode || !isActiveCard) {
+      setIsScrolling(false);
+      return;
+    }
+    const scroller = document.querySelector('.modern-scroller-container');
+    if (!scroller) return;
+    const handleScroll = () => {
+      setIsScrolling(true);
+      clearTimeout(scrollEndTimerRef.current);
+      scrollEndTimerRef.current = setTimeout(() => setIsScrolling(false), 250);
+    };
+    scroller.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      scroller.removeEventListener('scroll', handleScroll);
+      clearTimeout(scrollEndTimerRef.current);
+      setIsScrolling(false);
+    };
+  }, [isDesktopMode, isActiveCard]);
 
 
   // Close transaction panel when coin becomes invisible
@@ -2265,7 +2292,17 @@ const CoinCard = memo(({
         const _buttons = (
       <div
         className={`tiktok-action-buttons ${showActionButtons ? '' : 'collapsed'}`}
-        style={_mobilePortal ? { position: 'fixed', right: '18px', bottom: '90px', zIndex: 9999 } : undefined}
+        style={_mobilePortal ? {
+          position: 'fixed',
+          right: '18px',
+          bottom: '90px',
+          zIndex: 9999,
+          // Fade out while the snap-scroll animation is running so the buttons
+          // don't appear to float over the incoming card.
+          opacity: isScrolling ? 0 : 1,
+          pointerEvents: isScrolling ? 'none' : 'auto',
+          transition: isScrolling ? 'none' : 'opacity 0.15s ease',
+        } : undefined}
       >
         {/* Favorite / Like */}
         <button 
