@@ -101,29 +101,25 @@ const TopTabs = ({ activeFilter, onFilterChange, showFilterButton = false, onFil
     }
   };
 
-  // Create reordered tabs array with active tab in center - now showing 4 tabs
+  // Create reordered tabs array with active tab in center - showing 3 tabs (1 before, active, 1 after)
   const getReorderedTabs = () => {
     const activeIndex = tabs.findIndex(tab => tab.id === activeFilter);
     if (activeIndex === -1) return tabs;
 
-    // Create a new array with 4 visible tabs: 2 before active, active, 1 after active
     const reordered = [];
     const totalTabs = tabs.length;
-    
-    // Two tabs before (far-left and left)
-    const farLeftIndex = (activeIndex - 2 + totalTabs) % totalTabs;
-    reordered.push({ ...tabs[farLeftIndex], position: 'far-left' });
-    
+
+    // One tab before (left)
     const leftIndex = (activeIndex - 1 + totalTabs) % totalTabs;
     reordered.push({ ...tabs[leftIndex], position: 'left' });
-    
+
     // Active tab (center)
     reordered.push({ ...tabs[activeIndex], position: 'center' });
-    
+
     // One tab after (right)
     const rightIndex = (activeIndex + 1) % totalTabs;
     reordered.push({ ...tabs[rightIndex], position: 'right' });
-    
+
     return reordered;
   };
 

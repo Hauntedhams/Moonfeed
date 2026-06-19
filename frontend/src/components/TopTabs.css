@@ -43,7 +43,7 @@
   align-items: center;
   gap: 3px; /* Reduced gap for more compact look */
   padding: 0 20px;
-  max-width: 360px; /* Reduced width for smaller tabs */
+  max-width: 270px; /* 3 tabs centered */
   margin: 0 auto;
   position: relative;
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); /* Smooth transition for reordering */
