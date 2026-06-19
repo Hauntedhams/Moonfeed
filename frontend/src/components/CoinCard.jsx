@@ -316,9 +316,13 @@ const CoinCard = memo(({
       const layerRect = layerEl?.getBoundingClientRect();
       const clipTop    = layerRect ? Math.max(rect.top,    layerRect.top)    : rect.top;
       const clipBottom = layerRect ? Math.min(rect.bottom, layerRect.bottom) : rect.bottom;
-      if (clipBottom > clipTop) {
+      // Also clamp against the bottom nav so buttons never overlap it.
+      const navEl = document.querySelector('.bottom-nav');
+      const navTop = navEl ? navEl.getBoundingClientRect().top : window.innerHeight;
+      const safeBottom = Math.min(clipBottom, navTop - 4);
+      if (safeBottom > clipTop) {
         setMobileChartTop(clipTop);
-        setMobileChartBottom(clipBottom);
+        setMobileChartBottom(safeBottom);
         // Use the card's right edge (layerRect takes precedence over chart rect).
         setMobileChartRight(layerRect ? layerRect.right : rect.right);
       }
@@ -2342,9 +2346,9 @@ const CoinCard = memo(({
           ...(mobileChartTop !== null && mobileChartBottom !== null
             ? {
                 top: `${mobileChartTop + 2}px`,
-                bottom: `${window.innerHeight - mobileChartBottom + 18}px`,
-                justifyContent: 'flex-start',
-                gap: '12px',
+                bottom: `${window.innerHeight - mobileChartBottom + 2}px`,
+                justifyContent: 'space-evenly',
+                gap: 0,
               }
             : { bottom: '90px' }),
           zIndex: 9999,
