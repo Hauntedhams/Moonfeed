@@ -1,4 +1,4 @@
-import React, { memo, useState, useRef, useEffect, useMemo } from 'react';
+import React, { memo, useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { UnifiedWalletButton } from '@jup-ag/wallet-adapter';
 import './CoinCard.css';
@@ -293,6 +293,45 @@ const CoinCard = memo(({
       setIsScrolling(false);
     };
   }, [isDesktopMode, isActiveCard]);
+
+  // Track the chart section's top and bottom offsets so portaled action buttons
+  // are anchored within the chart area (not above it in the coin-info header).
+  // Mirrors TwelveDataChart's clipTop/clipBottom logic: clamp to coin-info-layer bounds.
+  const [mobileChartTop, setMobileChartTop] = useState(null);
+  const [mobileChartBottom, setMobileChartBottom] = useState(null);
+  const [mobileChartRight, setMobileChartRight] = useState(null);
+  useLayoutEffect(() => {
+    if (isDesktopMode || !isActiveCard || !mobileChartTargetRef.current) {
+      setMobileChartTop(null);
+      setMobileChartBottom(null);
+      setMobileChartRight(null);
+      return;
+    }
+    const update = () => {
+      const el = mobileChartTargetRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      // Clamp to coin-info-layer (the scrollable card body) — same clip logic as TwelveDataChart.
+      const layerEl = el.closest('.coin-info-layer');
+      const layerRect = layerEl?.getBoundingClientRect();
+      const clipTop    = layerRect ? Math.max(rect.top,    layerRect.top)    : rect.top;
+      const clipBottom = layerRect ? Math.min(rect.bottom, layerRect.bottom) : rect.bottom;
+      if (clipBottom > clipTop) {
+        setMobileChartTop(clipTop);
+        setMobileChartBottom(clipBottom);
+        // Use the card's right edge (layerRect takes precedence over chart rect).
+        setMobileChartRight(layerRect ? layerRect.right : rect.right);
+      }
+    };
+    update();
+    const scroller = document.querySelector('.modern-scroller-container');
+    if (scroller) scroller.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    return () => {
+      if (scroller) scroller.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
+    };
+  }, [isDesktopMode, isActiveCard, mobileTargetMounted]); // eslint-disable-line react-hooks/exhaustive-deps
 
 
   // Close transaction panel when coin becomes invisible
@@ -2294,8 +2333,20 @@ const CoinCard = memo(({
         className={`tiktok-action-buttons ${showActionButtons ? '' : 'collapsed'}`}
         style={_mobilePortal ? {
           position: 'fixed',
-          right: '18px',
-          bottom: '90px',
+          // Anchor to the card's right edge, not the viewport right.
+          // window.innerWidth - mobileChartRight = distance from card right to viewport right.
+          // +15 keeps icons 15px inside the card's right edge (the faded gradient strip).
+          right: mobileChartRight !== null ? `${window.innerWidth - mobileChartRight + 15}px` : '15px',
+          // Anchor top+bottom to the chart section so buttons stay within it.
+          // Fall back to bottom-anchored position until the chart rect is measured.
+          ...(mobileChartTop !== null && mobileChartBottom !== null
+            ? {
+                top: `${mobileChartTop + 2}px`,
+                bottom: `${window.innerHeight - mobileChartBottom + 18}px`,
+                justifyContent: 'flex-start',
+                gap: '12px',
+              }
+            : { bottom: '90px' }),
           zIndex: 9999,
           // Fade out while the snap-scroll animation is running so the buttons
           // don't appear to float over the incoming card.
