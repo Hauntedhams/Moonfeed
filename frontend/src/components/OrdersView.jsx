@@ -22,6 +22,8 @@ const OrdersView = ({ onCoinClick }) => {
   const [activeSection, setActiveSection] = useState('orders'); // 'orders' or 'transactions'
   // Map of tokenMint -> banner URL fetched directly from Dexscreener
   const [coinBanners, setCoinBanners] = useState(new Map());
+  // Map of tokenMint -> { symbol, name } for client-side enrichment of address-like symbols
+  const [enrichedTokenMeta, setEnrichedTokenMeta] = useState(new Map());
 
   // Fetch orders when wallet connects or filter changes
   useEffect(() => {
@@ -200,6 +202,27 @@ const OrdersView = ({ onCoinClick }) => {
       } catch (_) { /* silent */ }
     }));
     if (updates.size) setCoinBanners(prev => new Map([...prev, ...updates]));
+
+    // Client-side enrichment: for tokens whose symbol still looks like a truncated address,
+    // try Pump.fun to get the real name
+    const addressLikeMints = orderList
+      .filter(o => o.tokenMint && /^[A-Za-z0-9]{3,6}\.\.\./.test(o.tokenSymbol || ''))
+      .map(o => o.tokenMint);
+    const uniqueAddressLike = [...new Set(addressLikeMints)];
+    if (!uniqueAddressLike.length) return;
+
+    const metaUpdates = new Map();
+    await Promise.all(uniqueAddressLike.map(async (mint) => {
+      try {
+        const res = await fetch(`https://frontend-api.pump.fun/coins/${mint}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data?.symbol) {
+          metaUpdates.set(mint, { symbol: data.symbol, name: data.name || data.symbol });
+        }
+      } catch (_) { /* silent */ }
+    }));
+    if (metaUpdates.size) setEnrichedTokenMeta(prev => new Map([...prev, ...metaUpdates]));
   };
 
   // Fetch active orders
@@ -598,8 +621,10 @@ const OrdersView = ({ onCoinClick }) => {
             <div className="orders-list">
               {orders.map((order) => {
                 // Safely extract order data with defaults and validation
-                const tokenSymbol = order.tokenSymbol || order.symbol || 'TOKEN';
-                const tokenName = order.tokenName || order.name || tokenSymbol;
+                // Use client-side enriched metadata if backend returned an address-like symbol
+                const enriched = enrichedTokenMeta.get(order.tokenMint);
+                const tokenSymbol = enriched?.symbol || order.tokenSymbol || order.symbol || 'TOKEN';
+                const tokenName = enriched?.name || order.tokenName || order.name || tokenSymbol;
                 const orderType = order.type || 'buy';
                 const status = order.status || 'active';
                 const triggerPrice = order.triggerPrice || 0;
@@ -830,8 +855,8 @@ const OrdersView = ({ onCoinClick }) => {
                       {isPriceAboveTrigger && (
                         <div className="order-card-executing-banner">
                           <span className="order-card-executing-dot" />
-                          Queued for execution
-                          <span className="order-card-executing-sub">Check History tab once filled</span>
+                          Target reached — pending fill
+                          <span className="order-card-executing-sub">Will appear in History once sold</span>
                         </div>
                       )}
                     </div>
@@ -847,7 +872,9 @@ const OrdersView = ({ onCoinClick }) => {
                 return (
                   <div
                     key={orderId}
-                    className={`order-card-visual order-hist-card order-hist-${status}`}
+                    className={`order-card-visual order-hist-card order-hist-${
+                      status === 'completed' ? 'executed' : status
+                    }`}
                     onClick={() => onCoinClick?.({
                       mintAddress: order.tokenMint,
                       address: order.tokenMint,
@@ -895,8 +922,15 @@ const OrdersView = ({ onCoinClick }) => {
                         <span className={`order-card-type-badge order-card-type-${orderType}`}>
                           {orderType === 'sell' ? '↑ SELL' : '↓ BUY'}
                         </span>
-                        <span className={`order-hist-status-pill order-hist-status-${status}`}>
-                          {status === 'executed' ? 'FILLED' : status.toUpperCase()}
+                        <span className={`order-hist-status-pill order-hist-status-${
+                          status === 'executed' || status === 'completed' ? 'executed' :
+                          status === 'cancelled' ? 'cancelled' :
+                          status === 'expired' ? 'expired' : 'executed'
+                        }`}>
+                          {status === 'executed' || status === 'completed' ? '✓ FILLED' :
+                           status === 'cancelled' ? 'CANCELLED' :
+                           status === 'expired' ? 'EXPIRED' :
+                           status.toUpperCase()}
                         </span>
                       </div>
                     </div>

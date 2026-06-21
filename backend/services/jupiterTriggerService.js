@@ -479,8 +479,9 @@ async function getTriggerOrders({
       const account = order.account || order;
       const inputMint = account.inputMint || order.inputMint;
       const outputMint = account.outputMint || order.outputMint;
-      const makingAmount = account.makingAmount || order.makingAmount || '0';
-      const takingAmount = account.takingAmount || order.takingAmount || '0';
+      // History orders may use inputAmount/outputAmount instead of makingAmount/takingAmount
+      const makingAmount = account.makingAmount || order.makingAmount || account.inputAmount || order.inputAmount || '0';
+      const takingAmount = account.takingAmount || order.takingAmount || account.outputAmount || order.outputAmount || '0';
       
       // Determine order type (buy/sell based on SOL vs token)
       const SOL_MINT = 'So11111111111111111111111111111111111111112';
@@ -576,6 +577,26 @@ async function getTriggerOrders({
             console.log(`[Jupiter Trigger] Could not fetch token metadata from Dexscreener for ${tokenMint}`);
           }
         }
+
+        // Fallback 3: Try Pump.fun API (essential for meme coins with "pump" addresses)
+        if (!tokenSymbol) {
+          try {
+            const pumpRes = await axios.get(
+              `https://frontend-api.pump.fun/coins/${tokenMint}`,
+              { timeout: 5000 }
+            );
+            if (pumpRes.data) {
+              if (pumpRes.data.symbol) tokenSymbol = pumpRes.data.symbol;
+              if (!tokenName && pumpRes.data.name) tokenName = pumpRes.data.name;
+              if (!tokenLogoUri && pumpRes.data.image_uri) tokenLogoUri = pumpRes.data.image_uri;
+              if (!tokenBannerImage && pumpRes.data.header_image) tokenBannerImage = pumpRes.data.header_image;
+              console.log(`[Jupiter Trigger] ✅ Token metadata from Pump.fun: ${tokenSymbol}`);
+              setCachedTokenMetadata(tokenMint, tokenSymbol, tokenName, tokenDecimals, tokenLogoUri);
+            }
+          } catch (pumpError) {
+            console.log(`[Jupiter Trigger] Could not fetch token metadata from Pump.fun for ${tokenMint}`);
+          }
+        }
         
         // Final fallback: Use shortened mint address as symbol
         if (!tokenSymbol) {
@@ -608,7 +629,7 @@ async function getTriggerOrders({
           }
         } catch (_) { /* silent */ }
       }
-      // Pump.fun fallback — also captures header_image banner
+      // Pump.fun fallback — also captures header_image banner and recovers address-like symbols
       if (!tokenLogoUri || !tokenBannerImage) {
         try {
           const pumpRes = await axios.get(
@@ -618,8 +639,12 @@ async function getTriggerOrders({
           if (pumpRes.data) {
             if (!tokenLogoUri && pumpRes.data.image_uri) tokenLogoUri = pumpRes.data.image_uri;
             if (!tokenBannerImage && pumpRes.data.header_image) tokenBannerImage = pumpRes.data.header_image;
-            if (!tokenSymbol && pumpRes.data.symbol) tokenSymbol = pumpRes.data.symbol;
-            if (!tokenName && pumpRes.data.name) tokenName = pumpRes.data.name;
+            // Also recover symbol/name if they still look like truncated mint addresses
+            const looksLikeAddress = !tokenSymbol || /^[A-Za-z0-9]{3,6}\.\.\./.test(tokenSymbol);
+            if (looksLikeAddress && pumpRes.data.symbol) {
+              tokenSymbol = pumpRes.data.symbol;
+              if (pumpRes.data.name) tokenName = pumpRes.data.name;
+            }
             console.log(`[Jupiter Trigger] Pump.fun — logo: ${tokenLogoUri ? 'yes' : 'no'}, banner: ${tokenBannerImage ? 'yes' : 'no'}`);
             if (tokenLogoUri) setCachedTokenMetadata(tokenMint, tokenSymbol, tokenName, tokenDecimals, tokenLogoUri);
           }
@@ -874,7 +899,15 @@ async function getTriggerOrders({
         tokenBannerImage: tokenBannerImage,
         tokenPairAddress: tokenPairAddress,
         type: isBuy ? 'buy' : 'sell',
-        status: orderStatus === 'active' ? 'active' : order.status || 'executed',
+        status: orderStatus === 'active' ? 'active' : (() => {
+          // Normalize Jupiter's capitalized status values to lowercase
+          const raw = (order.status || 'executed').toLowerCase();
+          // Jupiter returns "Completed" for filled orders — map to "executed" for frontend
+          if (raw === 'completed') return 'executed';
+          if (raw === 'cancelled') return 'cancelled';
+          if (raw === 'expired') return 'expired';
+          return raw;
+        })(),
         triggerPrice: triggerPrice,
         amount: displayAmount,
         currentPrice: currentPrice, // Now in SOL denomination (matches triggerPrice)
