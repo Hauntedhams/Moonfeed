@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useTrackedWallets } from '../contexts/TrackedWalletsContext';
 import { useDarkMode } from '../contexts/DarkModeContext';
 import { useCopyTrade } from '../contexts/CopyTradeContext';
+import PrivacyPolicyModal from './PrivacyPolicyModal';
 import './MoonfeedInfoModal.css';
 
 // Use the new logo from public folder
@@ -12,6 +13,7 @@ const MoonfeedInfoModal = ({ isVisible, onClose, onBuyMoo, onStartTutorial }) =>
   const [isClosing, setIsClosing] = useState(false);
   const [touchStart, setTouchStart] = useState(null);
   const [touchEnd, setTouchEnd] = useState(null);
+  const [privacyOpen, setPrivacyOpen] = useState(false);
 
   if (!isVisible && !isClosing) return null;
 
@@ -48,7 +50,7 @@ const MoonfeedInfoModal = ({ isVisible, onClose, onBuyMoo, onStartTutorial }) =>
     }
   };
 
-  return createPortal(
+  const portal = createPortal(
     <div 
       className={`moonfeed-info-overlay ${isClosing ? 'closing' : ''}`}
       onClick={(e) => {
@@ -305,6 +307,12 @@ const MoonfeedInfoModal = ({ isVisible, onClose, onBuyMoo, onStartTutorial }) =>
                   Only invest what you can afford to lose. Look for liquidity locks and verify token contracts.
                 </p>
               </div>
+              <button
+                className="privacy-policy-inline-btn"
+                onClick={(e) => { e.stopPropagation(); setPrivacyOpen(true); }}
+              >
+                🔒 Privacy Policy
+              </button>
             </div>
           </div>
 
@@ -337,6 +345,14 @@ const MoonfeedInfoModal = ({ isVisible, onClose, onBuyMoo, onStartTutorial }) =>
     </div>,
     document.body
   );
+
+  return (
+    <>
+      {portal}
+      <PrivacyPolicyModal isVisible={privacyOpen} onClose={() => setPrivacyOpen(false)} />
+    </>
+  );
+
 };
 
 // ─── Tracked Wallets Panel ────────────────────────────────────────────────────
