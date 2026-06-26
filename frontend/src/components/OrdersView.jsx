@@ -198,7 +198,10 @@ const OrdersView = ({ onCoinClick }) => {
         if (pair) {
           const banner = pair.info?.header || pair.info?.imageUrl || null;
           const pairAddress = pair.pairAddress || null;
-          if (banner || pairAddress) updates.set(mint, { banner, pairAddress });
+          const symbol = pair.baseToken?.symbol || null;
+          const name = pair.baseToken?.name || null;
+          const image = pair.info?.imageUrl || null;
+          updates.set(mint, { banner, pairAddress, symbol, name, image });
         }
       } catch (_) { /* silent */ }
     }));
@@ -644,8 +647,10 @@ const OrdersView = ({ onCoinClick }) => {
                 // Safely extract order data with defaults and validation
                 // Use client-side enriched metadata if backend returned an address-like symbol
                 const enriched = enrichedTokenMeta.get(order.tokenMint);
-                const tokenSymbol = enriched?.symbol || order.tokenSymbol || order.symbol || 'TOKEN';
-                const tokenName = enriched?.name || order.tokenName || order.name || tokenSymbol;
+                const dexMeta = coinBanners.get(order.tokenMint);
+                const tokenSymbol = enriched?.symbol || dexMeta?.symbol || order.tokenSymbol || order.symbol || 'TOKEN';
+                const tokenName = enriched?.name || dexMeta?.name || order.tokenName || order.name || tokenSymbol;
+                const resolvedImage = order.tokenImage || dexMeta?.image || null;
                 const orderType = order.type || 'buy';
                 const status = order.status || 'active';
                 const triggerPrice = order.triggerPrice || 0;
@@ -816,10 +821,10 @@ const OrdersView = ({ onCoinClick }) => {
                       <div className="order-card-top-row">
                         <div className="order-card-left">
                           <img
-                            src={order.tokenImage || ''}
+                            src={resolvedImage || ''}
                             alt={tokenSymbol}
                             className="order-card-coin-avatar"
-                            style={{ display: order.tokenImage ? 'block' : 'none' }}
+                            style={{ display: resolvedImage ? 'block' : 'none' }}
                             onError={(e) => {
                               e.target.style.display = 'none';
                               e.target.nextElementSibling.style.display = 'flex';
@@ -827,7 +832,7 @@ const OrdersView = ({ onCoinClick }) => {
                           />
                           <div
                             className="order-card-coin-avatar order-card-coin-avatar-placeholder"
-                            style={{ display: order.tokenImage ? 'none' : 'flex' }}
+                            style={{ display: resolvedImage ? 'none' : 'flex' }}
                           >
                             {tokenSymbol.slice(0, 2)}
                           </div>
