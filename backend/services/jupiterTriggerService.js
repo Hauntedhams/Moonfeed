@@ -741,8 +741,8 @@ async function getTriggerOrders({
       // Check cache first
       const cachedPrice = getCachedTokenPrice(tokenMint);
       if (cachedPrice !== null) {
-        currentPrice = cachedPrice;
-        priceSource = 'cache';
+        currentPrice = typeof cachedPrice === 'object' ? cachedPrice.price : cachedPrice;
+        priceSource = (typeof cachedPrice === 'object' ? cachedPrice.source : null) || 'cache';
         console.log(`[Jupiter Trigger] 🚀 Using cached price: ${currentPrice.toFixed(10)} SOL per token`);
       }
       // Check batched prices next (already fetched in bulk)
