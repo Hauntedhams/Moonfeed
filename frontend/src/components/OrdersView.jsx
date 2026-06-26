@@ -20,6 +20,7 @@ const OrdersView = ({ onCoinClick }) => {
   const [cancellingOrder, setCancellingOrder] = useState(null);
   const [showLimitOrderInfo, setShowLimitOrderInfo] = useState(false);
   const [activeSection, setActiveSection] = useState('orders'); // 'orders' or 'transactions'
+  const [selectedOrder, setSelectedOrder] = useState(null); // order clicked for action popup
   // Map of tokenMint -> banner URL fetched directly from Dexscreener
   const [coinBanners, setCoinBanners] = useState(new Map());
   // Map of tokenMint -> { symbol, name } for client-side enrichment of address-like symbols
@@ -762,14 +763,22 @@ const OrdersView = ({ onCoinClick }) => {
                     <div
                       key={orderId}
                       className={`order-card-visual${isExpired ? ' order-card-expired' : ''}`}
-                      onClick={() => onCoinClick?.({
-                        mintAddress: order.tokenMint,
-                        address: order.tokenMint,
-                        symbol: order.tokenSymbol,
-                        name: order.tokenName,
-                        image: order.tokenImage,
-                        banner: dexBanner?.banner || order.tokenBannerImage || null,
-                        pairAddress: resolvedPairAddress,
+                      onClick={() => setSelectedOrder({
+                        orderId,
+                        tokenSymbol,
+                        tokenName,
+                        tokenImage: order.tokenImage,
+                        tokenMint: order.tokenMint,
+                        orderType,
+                        triggerPrice,
+                        currentPrice,
+                        amount,
+                        expiresAt,
+                        isExpired,
+                        bannerSrc,
+                        resolvedPairAddress,
+                        dexBanner,
+                        rawOrder: order,
                       })}
                     >
                       {/* Blurred banner background — prefer wide Dexscreener banner */}
@@ -1352,6 +1361,96 @@ const OrdersView = ({ onCoinClick }) => {
               onClick={() => setShowLimitOrderInfo(false)}
             >
               Got it!
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Order Action Popup */}
+      {selectedOrder && (
+        <div className="order-action-overlay" onClick={() => setSelectedOrder(null)}>
+          <div className="order-action-popup" onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div className="order-action-header">
+              <div className="order-action-token-row">
+                {selectedOrder.tokenImage ? (
+                  <img src={selectedOrder.tokenImage} alt={selectedOrder.tokenSymbol} className="order-action-avatar" />
+                ) : (
+                  <div className="order-action-avatar order-action-avatar-placeholder">
+                    {selectedOrder.tokenSymbol?.slice(0, 2)}
+                  </div>
+                )}
+                <div>
+                  <div className="order-action-symbol">{selectedOrder.tokenSymbol}</div>
+                  <div className="order-action-name">{selectedOrder.tokenName}</div>
+                </div>
+                <span className={`order-action-type-badge order-card-type-${selectedOrder.orderType}`}>
+                  {selectedOrder.orderType === 'sell' ? '↑ SELL' : '↓ BUY'}
+                </span>
+              </div>
+              <div className="order-action-prices">
+                <span className="order-action-price-item">
+                  <span className="order-action-price-label">Now</span>
+                  <span className="order-action-price-val">{formatPrice(selectedOrder.currentPrice)} SOL</span>
+                </span>
+                <span className="order-action-arrow">›</span>
+                <span className="order-action-price-item">
+                  <span className="order-action-price-label">Target</span>
+                  <span className="order-action-price-val order-card-price-target">{formatPrice(selectedOrder.triggerPrice)} SOL</span>
+                </span>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="order-action-buttons">
+              <button
+                className="order-action-btn order-action-btn-chart"
+                onClick={() => {
+                  setSelectedOrder(null);
+                  onCoinClick?.({
+                    mintAddress: selectedOrder.tokenMint,
+                    address: selectedOrder.tokenMint,
+                    symbol: selectedOrder.rawOrder?.tokenSymbol,
+                    name: selectedOrder.rawOrder?.tokenName,
+                    image: selectedOrder.tokenImage,
+                    banner: selectedOrder.dexBanner?.banner || selectedOrder.rawOrder?.tokenBannerImage || null,
+                    pairAddress: selectedOrder.resolvedPairAddress,
+                  });
+                }}
+              >
+                <span className="order-action-btn-icon">📈</span>
+                <span>View Chart</span>
+              </button>
+
+              <a
+                className="order-action-btn order-action-btn-jupiter"
+                href={`https://jup.ag/limit/${publicKey?.toString() || ''}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setSelectedOrder(null)}
+              >
+                <span className="order-action-btn-icon">🪐</span>
+                <span>View on Jupiter</span>
+              </a>
+
+              <button
+                className="order-action-btn order-action-btn-cancel"
+                disabled={cancellingOrder === selectedOrder.orderId}
+                onClick={() => {
+                  const id = selectedOrder.orderId;
+                  setSelectedOrder(null);
+                  handleCancelOrder(id);
+                }}
+              >
+                <span className="order-action-btn-icon">
+                  {cancellingOrder === selectedOrder.orderId ? '⏳' : '🗑️'}
+                </span>
+                <span>{cancellingOrder === selectedOrder.orderId ? 'Cancelling…' : 'Cancel Order'}</span>
+              </button>
+            </div>
+
+            <button className="order-action-dismiss" onClick={() => setSelectedOrder(null)}>
+              Dismiss
             </button>
           </div>
         </div>
