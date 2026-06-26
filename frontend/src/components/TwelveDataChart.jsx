@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useDarkMode } from '../contexts/DarkModeContext';
 import './TwelveDataChart.css';
 
-const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, desktopSlotRef = null, showPriceScale, showActionButtons = true, isExpanded = false, onCrosshairMove, onFirstPriceUpdate, onTradeClick }) => {
+const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, desktopSlotRef = null, showPriceScale, showActionButtons = true, isExpanded = false, onCrosshairMove, onFirstPriceUpdate, onTradeClick, onFullscreenChange }) => {
   const { isDarkMode: contextDarkMode } = useDarkMode();
   const [srcReady, setSrcReady] = useState(false);
   const [fullscreenMode, setFullscreenMode] = useState(null); // null | 'portrait' | 'landscape'
@@ -378,22 +378,24 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Lock the feed scroller while in fullscreen so scroll/touch events can't
-  // change the active card, which would remount this component and reset
-  // fullscreenMode state back to null — causing the chart to snap to the
-  // card's coordinates instead of staying in the fullscreen position.
+  // Notify parent (via ModernTokenScroller → CoinCard → here) that chart fullscreen
+  // state changed. The parent manages the scroll-locked class through React state,
+  // which prevents React re-renders from inadvertently removing the class mid-fullscreen
+  // and prevents CSS scroll-snap from jumping to a different card on exit.
   useEffect(() => {
     const scroller = document.querySelector('.modern-scroller-container');
-    if (!scroller) return;
-    if (fullscreenMode) {
-      scroller.classList.add('scroll-locked');
-    } else {
-      scroller.classList.remove('scroll-locked');
+    onFullscreenChange?.(!!fullscreenMode);
+    if (!fullscreenMode && scroller) {
+      // Belt-and-suspenders: save and restore scrollTop so CSS scroll-snap cannot
+      // jump the feed to a different card in the frame before React re-renders.
+      const savedScrollTop = scroller.scrollTop;
+      scroller.scrollTop = savedScrollTop;
     }
     return () => {
-      scroller.classList.remove('scroll-locked');
+      // On unmount while fullscreen is active, notify parent to release the lock.
+      if (fullscreenMode) onFullscreenChange?.(false);
     };
-  }, [fullscreenMode]);
+  }, [fullscreenMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const showFullscreenBtn = effectivePairAddress && (isExpanded || isDesktopMode);
 

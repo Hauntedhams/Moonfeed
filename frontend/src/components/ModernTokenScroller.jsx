@@ -40,6 +40,8 @@ const ModernTokenScroller = ({
   const [error, setError] = useState(null);
   const [enrichedCoins, setEnrichedCoins] = useState(new Map()); // Cache for enriched coin data
   const [expandedCoin, setExpandedCoin] = useState(null); // Track which coin is expanded
+  const [chartFullscreenLock, setChartFullscreenLock] = useState(false); // True while any chart is in fullscreen
+  const isChartFullscreen = useRef(false); // Sync ref so IntersectionObserver sees it without stale closure
   const [retryCount, setRetryCount] = useState(0); // Track retry attempts
   const [isBackendLoading, setIsBackendLoading] = useState(false); // Track backend loading state
   const [isTutorialActive, setIsTutorialActive] = useState(false); // Interactive tutorial mode
@@ -695,7 +697,7 @@ const ModernTokenScroller = ({
 
     const observer = new IntersectionObserver(
       (entries) => {
-        if (isScrollLocked.current || expandedCoin) return;
+        if (isScrollLocked.current || expandedCoin || isChartFullscreen.current) return;
 
         // Find the slide with the highest intersection ratio (most visible)
         let best = null;
@@ -856,7 +858,11 @@ const ModernTokenScroller = ({
           onExpandChange={(isExpanded) => handleCoinExpandChange(isExpanded, coin.mintAddress || coin.tokenAddress)}
           isCurrentCard={isCurrentCoin || isPreloadCoin}
           isActiveCard={isCurrentCoin}
-          onEnrichmentComplete={handleEnrichmentComplete} // Pass handler to CoinCard
+          onEnrichmentComplete={handleEnrichmentComplete}
+          onChartFullscreenChange={(isFs) => {
+            isChartFullscreen.current = isFs;
+            setChartFullscreenLock(isFs);
+          }}
         />
       </div>
     );
@@ -1005,7 +1011,7 @@ const ModernTokenScroller = ({
       {/* Scrollable container */}
       <div 
         ref={scrollerRef}
-        className={`modern-scroller-container ${expandedCoin ? 'scroll-locked' : ''}`}
+        className={`modern-scroller-container ${(expandedCoin || chartFullscreenLock) ? 'scroll-locked' : ''}`}
       >
         {/* Render all coins - no virtual scrolling to prevent black screen during scroll */}
         {/* Note: Backend already limits to 20 coins on mobile, so rendering all is safe */}

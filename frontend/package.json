@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:extension": "vite build --config vite.extension.config.js",
     "lint": "eslint .",
     "preview": "vite preview",
     "generate:assets": "node scripts/generateBrandAssets.mjs"

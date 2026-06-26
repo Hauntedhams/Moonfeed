@@ -990,6 +990,20 @@
   transition: width 0.5s ease-out;
 }
 
+/* Coin name shown inline to the left of the Follow button */
+.info-layer-coin-name {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+  cursor: pointer;
+  line-height: 1.2;
+  align-self: center;
+}
+
 /* Banner Follow Button */
 .banner-follow-button {
   background: rgba(0, 0, 0, 0.05); /* Light gray for light mode */

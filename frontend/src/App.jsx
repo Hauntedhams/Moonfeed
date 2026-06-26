@@ -26,6 +26,10 @@ const AdvancedFilter = lazy(() => import('./components/AdvancedFilter'))
 
 // CommentsSection now integrated into CoinCard's TikTok action bar
 
+// In the extension build VITE_IS_EXTENSION is injected as 'true' by vite.extension.config.js
+const IS_EXTENSION = import.meta.env.VITE_IS_EXTENSION === 'true';
+const openFullSite = (path = '') => window.open(`https://moonfeed.app${path}`, '_blank');
+
 function App() {
   // Build timestamp - only log once on initial load
   if (!window.__MOONFEED_LOGGED__) {
@@ -102,6 +106,7 @@ function App() {
 
   // Handle trade button click - open Jupiter modal with the coin
   const handleTradeClick = (coin, options = {}) => {
+    if (IS_EXTENSION) { openFullSite(); return; }
     console.log('🚀 Trade button clicked for:', coin?.symbol);
     if (coin) {
       setCoinToTrade(coin);
@@ -112,6 +117,7 @@ function App() {
 
   // Handle global trade button click - trade current viewed coin
   const handleGlobalTradeClick = () => {
+    if (IS_EXTENSION) { openFullSite(); return; }
     console.log('🚀 Global trade button clicked!');
     if (currentViewedCoin) {
       setCoinToTrade(currentViewedCoin);
@@ -288,6 +294,7 @@ function App() {
 
   // Handle Orders button click - navigate to orders page
   const handleOrdersClick = () => {
+    if (IS_EXTENSION) { openFullSite(); return; }
     console.log('📋 Orders button clicked - navigating to orders page');
     setActiveTab('orders');
   };
@@ -408,6 +415,8 @@ function App() {
         setActiveTab={(tab) => {
           if (tab === 'trade') {
             handleGlobalTradeClick();
+          } else if (IS_EXTENSION && (tab === 'profile' || tab === 'orders')) {
+            openFullSite();
           } else {
             setActiveTab(tab);
           }

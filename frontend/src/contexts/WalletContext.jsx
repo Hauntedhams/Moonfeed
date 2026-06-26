@@ -8,6 +8,8 @@ import { useWallet as useJupiterWallet } from '@jup-ag/wallet-adapter';
  * Provides wallet address, connection status, and transaction signing
  */
 
+const IS_EXTENSION = import.meta.env.VITE_IS_EXTENSION === 'true';
+
 const WalletContext = createContext({});
 
 export const useWallet = () => {
@@ -18,7 +20,35 @@ export const useWallet = () => {
   return context;
 };
 
-export const WalletProvider = ({ children }) => {
+// ---------------------------------------------------------------------------
+// Extension stub — no Jupiter adapter, no remote scripts, just empty state.
+// Used when VITE_IS_EXTENSION=true so plugin.jup.ag is never loaded.
+// ---------------------------------------------------------------------------
+const ExtensionWalletStub = ({ children }) => {
+  const notAvailable = async () => { throw new Error('Wallet not available in extension — open moonfeed.app to trade.'); };
+  const value = {
+    walletAddress: null, connected: false, connecting: false,
+    error: null, walletType: null,
+    connect: async () => false,
+    connectPhantom: async () => false,
+    connectSolflare: async () => false,
+    disconnect: async () => {},
+    recheckConnection: async () => false,
+    signTransaction: notAvailable,
+    signAndSendTransaction: notAvailable,
+    getBalance: async () => null,
+    wallet: null,
+    connection: null,
+  };
+  return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
+};
+
+// ---------------------------------------------------------------------------
+// Full Jupiter wallet bridge — used on the web app only (not in extension).
+// Separated into its own component so useJupiterWallet() is never called
+// when IS_EXTENSION is true (avoids missing-provider errors).
+// ---------------------------------------------------------------------------
+const JupiterWalletBridge = ({ children }) => {
   // Use Jupiter Wallet Kit's wallet hook
   const jupiterWallet = useJupiterWallet();
   
@@ -217,6 +247,12 @@ export const WalletProvider = ({ children }) => {
       {children}
     </WalletContext.Provider>
   );
+};
+
+// Route to the right provider based on build target
+export const WalletProvider = ({ children }) => {
+  if (IS_EXTENSION) return <ExtensionWalletStub>{children}</ExtensionWalletStub>;
+  return <JupiterWalletBridge>{children}</JupiterWalletBridge>;
 };
 
 export default WalletContext;

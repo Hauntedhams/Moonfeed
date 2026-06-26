@@ -25,10 +25,13 @@ import { UserProfileProvider } from './contexts/UserProfileContext.jsx';
 import { WalletNotification } from './components/WalletNotification.jsx';
 
 // Root component that provides wallet context
+const IS_EXTENSION = import.meta.env.VITE_IS_EXTENSION === 'true';
+
 function RootApp() {
-  // Initialize wallet adapters - these provide the connection to browser wallet extensions
+  // Initialize wallet adapters — skipped in extension build to avoid loading
+  // remote scripts (plugin.jup.ag) which violate Chrome Web Store policy.
   const wallets = useMemo(
-    () => [
+    () => IS_EXTENSION ? [] : [
       new PhantomWalletAdapter(),
       new SolflareWalletAdapter(),
       new CoinbaseWalletAdapter(),
@@ -37,7 +40,19 @@ function RootApp() {
     ],
     []
   );
-  
+
+  const inner = (
+    <LiveDataProvider>
+      <UserProfileProvider>
+        <App />
+      </UserProfileProvider>
+    </LiveDataProvider>
+  );
+
+  // In extension mode: skip UnifiedWalletProvider entirely so plugin.jup.ag
+  // is never loaded (remote scripts are prohibited in Chrome extensions).
+  if (IS_EXTENSION) return inner;
+
   return (
     <UnifiedWalletProvider
       wallets={wallets}
@@ -58,17 +73,13 @@ function RootApp() {
         lang: "en",
       }}
     >
-      <LiveDataProvider>
-        <UserProfileProvider>
-          <App />
-        </UserProfileProvider>
-      </LiveDataProvider>
+      {inner}
     </UnifiedWalletProvider>
   );
 }
 
-// Register service worker for PWA and caching
-if ('serviceWorker' in navigator && import.meta.env.PROD) {
+// Register service worker for PWA and caching (skip in Chrome extension — sw.js doesn't exist there)
+if ('serviceWorker' in navigator && import.meta.env.PROD && !import.meta.env.VITE_IS_EXTENSION) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js')
       .then(registration => console.log('✅ Service Worker registered'))

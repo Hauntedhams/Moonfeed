@@ -60,6 +60,7 @@ const CoinCard = memo(({
   isTrending,
   isGraduating = false, // NEW: Is this a graduating Pump.fun token?
   onExpandChange,
+  onChartFullscreenChange,
   isVisible = true,
   isCurrentCard = false, // True only for the single card currently in view — gates DexScreener embed load
   isActiveCard = false, // True ONLY for the single card visually in view (not preload) — used to portal action buttons
@@ -105,6 +106,9 @@ const CoinCard = memo(({
   // they don't float over the incoming card.
   const [isScrolling, setIsScrolling] = useState(false);
   const scrollEndTimerRef = useRef(null);
+  const actionButtonsRef = useRef(null); // Ref for wheel-forwarding on action buttons
+  const actionWheelDebounceRef = useRef(null); // Debounce — one card advance per gesture
+  const _btnSwipeStartY = useRef(0); // track swipe start Y for portaled buttons column
 
   // Track if coin is enriched (has banner, socials, rugcheck, etc.)
   const isEnriched = !!(
@@ -293,6 +297,34 @@ const CoinCard = memo(({
       setIsScrolling(false);
     };
   }, [isDesktopMode, isActiveCard]);
+
+  // Wheel forwarding (desktop / trackpad). Touch/swipe on mobile is handled by
+  // ModernTokenScroller's document-level touch listener (it owns scrollerRef).
+  // Direct scrollTop assignment — scrollTo({smooth}) is silently cancelled by
+  // scroll-snap-type:mandatory.
+  useEffect(() => {
+    const handleWheel = (e) => {
+      const el = actionButtonsRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      if (e.clientX < rect.left || e.clientX > rect.right ||
+          e.clientY < rect.top  || e.clientY > rect.bottom) return;
+      const scroller = document.querySelector('.modern-scroller-container');
+      if (!scroller) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (actionWheelDebounceRef.current) return;
+      actionWheelDebounceRef.current = setTimeout(() => {
+        actionWheelDebounceRef.current = null;
+      }, 600);
+      const direction = e.deltaY > 0 ? 1 : -1;
+      const cardHeight = scroller.clientHeight;
+      const currentCard = Math.round(scroller.scrollTop / cardHeight);
+      scroller.scrollTop = (currentCard + direction) * cardHeight;
+    };
+    document.addEventListener('wheel', handleWheel, { passive: false, capture: true });
+    return () => document.removeEventListener('wheel', handleWheel, { capture: true });
+  }); // no deps — re-bind after every render so ref is always current
 
   // Track the chart section's top and bottom offsets so portaled action buttons
   // are anchored within the chart area (not above it in the coin-info header).
@@ -1367,13 +1399,6 @@ const CoinCard = memo(({
         {/* Banner Text Overlay */}
         <div className="banner-text-overlay">
           <div className="banner-coin-info">
-            <h2 
-              className="banner-coin-name clickable-name" 
-              onClick={handleCopyAddress}
-              title={`Click to copy address: ${coin.mintAddress || coin.mint || coin.address || coin.contract_address || coin.contractAddress || coin.tokenAddress || 'No address available'}`}
-            >
-              {coin.name || 'Unknown Token'}
-            </h2>
             <div className="banner-symbol-row">
               <p className="banner-coin-symbol">
                 ${coin.symbol || coin.ticker || 'N/A'}
@@ -1406,13 +1431,6 @@ const CoinCard = memo(({
       <div className={`coin-info-layer ${isExpanded ? 'expanded' : ''}`}>
         {/* Desktop-only: Coin name, symbol, and description at top */}
         <div className="desktop-coin-header">
-          <h2 
-            className="banner-coin-name clickable-name" 
-            onClick={handleCopyAddress}
-            title={`Click to copy address: ${coin.mintAddress || coin.mint || coin.address || coin.contract_address || coin.contractAddress || coin.tokenAddress || 'No address available'}`}
-          >
-            {coin.name || 'Unknown Token'}
-          </h2>
           <div className="desktop-symbol-row">
             <p className="banner-coin-symbol">
               ${coin.symbol || coin.ticker || 'N/A'}
@@ -2334,7 +2352,25 @@ const CoinCard = memo(({
         const _mobilePortal = !isDesktopMode && isActiveCard;
         const _buttons = (
       <div
+        ref={actionButtonsRef}
         className={`tiktok-action-buttons ${showActionButtons ? '' : 'collapsed'}`}
+        onTouchStart={_mobilePortal ? (e) => { _btnSwipeStartY.current = e.touches[0].clientY; } : undefined}
+        onTouchEnd={_mobilePortal ? (e) => {
+          const dy = _btnSwipeStartY.current - e.changedTouches[0].clientY;
+          if (Math.abs(dy) < 20) return; // tap — let onClick fire normally
+          const scroller = document.querySelector('.modern-scroller-container');
+          if (!scroller) return;
+          const direction = dy > 0 ? 1 : -1;
+          const cardHeight = scroller.clientHeight || window.innerHeight;
+          const targetIdx = Math.max(0, Math.round(scroller.scrollTop / cardHeight) + direction);
+          const slides = scroller.querySelectorAll('.modern-coin-slide');
+          if (slides[targetIdx]) {
+            // scrollIntoView is more reliable than scrollTop on iOS scroll-snap containers
+            slides[targetIdx].scrollIntoView({ block: 'start' });
+          } else {
+            scroller.scrollTop = targetIdx * cardHeight;
+          }
+        } : undefined}
         style={_mobilePortal ? {
           position: 'fixed',
           // Anchor to the card's right edge, not the viewport right.
@@ -2356,6 +2392,10 @@ const CoinCard = memo(({
           // don't appear to float over the incoming card.
           opacity: isScrolling ? 0 : 1,
           pointerEvents: isScrolling ? 'none' : 'auto',
+          // Disable pan/zoom gestures on the container so iOS doesn't hijack
+          // vertical swipes as body-scroll and confuse our ModernTokenScroller
+          // document-level touch handler.
+          touchAction: 'none',
           transition: isScrolling ? 'none' : 'opacity 0.15s ease',
         } : undefined}
       >
@@ -2444,7 +2484,8 @@ const CoinCard = memo(({
           <span className="tiktok-action-label">Copy</span>
         </button>
       </div>
-        ); return _mobilePortal ? createPortal(_buttons, document.body) : _buttons;
+        );
+        return _mobilePortal ? createPortal(_buttons, document.body) : _buttons;
       }())}
 
       {/* Right Panel - Desktop chart container (chart portals here on desktop) */}
@@ -2467,6 +2508,7 @@ const CoinCard = memo(({
           onCrosshairMove={handleChartCrosshairMove}
           onFirstPriceUpdate={handleFirstPriceUpdate}
           onTradeClick={onTradeClick}
+          onFullscreenChange={onChartFullscreenChange}
         />,
         mobileChartTargetRef.current
       )}
