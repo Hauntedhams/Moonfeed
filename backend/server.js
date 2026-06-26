@@ -53,7 +53,10 @@ app.use(cors({
     'https://moonfeed.app',
     'https://www.moonfeed.app',
     'https://api.moonfeed.app',
-    'https://moonfeed-frontend1.vercel.app'  // Vercel default domain
+    'https://moonfeed-frontend1.vercel.app',  // Vercel default domain
+    'capacitor://localhost',  // Capacitor iOS
+    'ionic://localhost',      // Capacitor Android/alt
+    'http://localhost'        // Capacitor local WebView
   ],
   credentials: true
 }));
