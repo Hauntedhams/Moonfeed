@@ -326,11 +326,16 @@ const ProfileView = ({ onTradeClick }) => {
       let transaction;
       let isVersioned = false;
       
+      // Browser-safe base64 decode (no Buffer polyfill needed)
+      const _b64 = result.transaction;
+      const _bin = atob(_b64);
+      const transactionBytes = new Uint8Array(_bin.length);
+      for (let _i = 0; _i < _bin.length; _i++) transactionBytes[_i] = _bin.charCodeAt(_i);
+
       try {
         // First, try to decode as versioned transaction (v0)
-        const transactionBuffer = Buffer.from(result.transaction, 'base64');
         console.log('[Cancel Order] Attempting versioned transaction decode...');
-        transaction = VersionedTransaction.deserialize(transactionBuffer);
+        transaction = VersionedTransaction.deserialize(transactionBytes);
         isVersioned = true;
         console.log('[Cancel Order] ✅ Decoded as versioned transaction');
       } catch (versionedError) {
@@ -339,8 +344,7 @@ const ProfileView = ({ onTradeClick }) => {
         
         // Fallback to legacy transaction
         try {
-          const transactionBuffer = Buffer.from(result.transaction, 'base64');
-          transaction = Transaction.from(transactionBuffer);
+          transaction = Transaction.from(transactionBytes);
           console.log('[Cancel Order] ✅ Decoded as legacy transaction');
         } catch (legacyError) {
           console.error('[Cancel Order] ❌ Both decode methods failed:', {
@@ -364,8 +368,11 @@ const ProfileView = ({ onTradeClick }) => {
       
       const signedTransaction = await signTransaction(transaction);
       
-      // Serialize the signed transaction
-      const signedTransactionBase64 = Buffer.from(signedTransaction.serialize()).toString('base64');
+      // Serialize the signed transaction (browser-safe base64 encode)
+      const _serialized = signedTransaction.serialize();
+      let _binaryStr = '';
+      for (let _i = 0; _i < _serialized.length; _i++) _binaryStr += String.fromCharCode(_serialized[_i]);
+      const signedTransactionBase64 = btoa(_binaryStr);
 
       console.log('[Cancel Order] Step 4: Executing signed transaction...');
 
