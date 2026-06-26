@@ -214,12 +214,25 @@ const OrdersView = ({ onCoinClick }) => {
 
     const metaUpdates = new Map();
     await Promise.all(uniqueAddressLike.map(async (mint) => {
+      // Try Pump.fun first
       try {
         const res = await fetch(`https://frontend-api.pump.fun/coins/${mint}`);
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data?.symbol) {
-          metaUpdates.set(mint, { symbol: data.symbol, name: data.name || data.symbol });
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.symbol) {
+            metaUpdates.set(mint, { symbol: data.symbol, name: data.name || data.symbol });
+            return;
+          }
+        }
+      } catch (_) { /* silent */ }
+      // Fallback: Jupiter token list
+      try {
+        const res = await fetch(`https://tokens.jup.ag/token/${mint}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.symbol) {
+            metaUpdates.set(mint, { symbol: data.symbol, name: data.name || data.symbol });
+          }
         }
       } catch (_) { /* silent */ }
     }));
@@ -859,8 +872,8 @@ const OrdersView = ({ onCoinClick }) => {
                         </div>
 
                         <div className="order-card-progress-footer">
-                          <span className={`order-card-diff${isPriceAboveTrigger ? ' above' : ''}`}>
-                            {isPriceAboveTrigger ? '✓ Target reached' : `${Math.abs(priceDiffPercent)}% to go`}
+                          <span className={`order-card-diff${(isPriceAboveTrigger || parseFloat(priceDiffPercent) === 0) ? ' above' : ''}`}>
+                            {(isPriceAboveTrigger || parseFloat(priceDiffPercent) === 0) ? '✓ Target reached' : `${Math.abs(priceDiffPercent)}% to go`}
                           </span>
                           <span className={`order-card-expiry-pill${expiryWarning ? ' warn' : ''}`}>
                             ⏱ {expiryText}
@@ -868,7 +881,7 @@ const OrdersView = ({ onCoinClick }) => {
                         </div>
                       </div>
 
-                      {isPriceAboveTrigger && (
+                      {(isPriceAboveTrigger || parseFloat(priceDiffPercent) === 0) && (
                         <div className="order-card-executing-banner">
                           <span className="order-card-executing-dot" />
                           Target reached — pending fill
