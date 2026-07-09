@@ -4,7 +4,7 @@
    =================================== */
 
 /* Import a serif/old-style font */
-@import url('https://fonts.googleapis.com/css2?family=MedievalSharp&family=Crimson+Text:ital,wght@0,400;0,600;0,700;1,400&display=swap');
+
 
 /* Moonfeed Info Button (unchanged positioning) */
 .moonfeed-info-button {
@@ -224,7 +224,7 @@
   to { opacity: 0; backdrop-filter: blur(0px); }
 }
 
-/* ===== MODAL CONTAINER (The whole scroll) ===== */
+/* ===== MODAL CONTAINER ===== */
 .moonfeed-info-modal {
   width: 100%;
   max-width: 520px;
@@ -237,7 +237,8 @@
   flex-direction: column;
   will-change: transform;
   z-index: 100000;
-  background: transparent;
+  background: #0a0a0f;
+  border-right: 1px solid #1f2937;
 }
 
 @keyframes slideInFromLeft {
@@ -260,10 +261,7 @@
   display: none;
 }
 
-/* Subtle outer glow around the whole scroll */
-.moonfeed-info-modal {
-  filter: drop-shadow(0 0 30px rgba(40, 20, 5, 0.3));
-}
+
 
 /* ===== FULL-SCROLL BACKGROUND IMAGE ===== */
 .scroll-bg-image {
@@ -405,7 +403,7 @@
   margin-left: -6px;
 }
 
-/* ===== PARCHMENT BODY ===== */
+/* ===== PARCHMENT BODY (layout wrapper) ===== */
 .scroll-parchment {
   flex: 1;
   display: flex;
@@ -413,37 +411,11 @@
   overflow: hidden;
   position: relative;
   background: transparent;
-  /* Thin side borders to visually frame the content against the image edge */
-  border-left: 1px solid rgba(80, 45, 8, 0.15);
-  border-right: 1px solid rgba(80, 45, 8, 0.15);
 }
 
-/* Subtle vignette to help text readability over image */
-.scroll-parchment::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(ellipse 80% 90% at center, transparent 45%, rgba(40, 20, 4, 0.22) 100%);
-  pointer-events: none;
-  z-index: 0;
-}
-
-/* Moocow watermark — faint branding layer */
+.scroll-parchment::before,
 .scroll-parchment::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-image: url('/moocow train.png');
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  opacity: 0.06;
-  pointer-events: none;
-  z-index: 0;
-  mix-blend-mode: multiply;
+  display: none;
 }
 
 /* ===== BAROQUE CORNER ORNAMENTS ===== */
@@ -511,12 +483,12 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  padding: 28px 16% 16px 16%;
+  padding: 18px 20px 14px 20px;
   flex-shrink: 0;
   position: relative;
   z-index: 1;
   background: transparent;
-  border-bottom: none;
+  border-bottom: 1px solid #1f2937;
 }
 
 .moonfeed-info-header::after {
@@ -543,12 +515,12 @@
 }
 
 .moonfeed-logo-header .moonfeed-logo {
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
   object-fit: cover;
-  border: 3px solid #8B6914;
-  box-shadow: 0 3px 10px rgba(101, 67, 33, 0.4);
+  border: 2px solid rgba(168, 85, 247, 0.3);
+  box-shadow: 0 2px 8px rgba(168, 85, 247, 0.15);
   transition: all 0.3s ease;
 }
 
@@ -566,16 +538,15 @@
 
 .moonfeed-info-header h2 {
   margin: 0;
-  font-family: 'MedievalSharp', cursive;
-  color: #4a2c0a;
-  font-size: 26px;
-  font-weight: 400;
-  letter-spacing: 1px;
-  text-shadow: 0 1px 2px rgba(101, 67, 33, 0.2);
-  -webkit-text-fill-color: initial;
-  background: none;
-  -webkit-background-clip: initial;
-  background-clip: initial;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-shadow: none;
+  background: linear-gradient(135deg, #a855f7, #06b6d4);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
   filter: none;
   animation: none;
 }
@@ -586,7 +557,7 @@
   align-items: center;
   gap: 8px;
   margin-left: 0;
-  padding-left: 66px;
+  padding-left: 0;
   animation: fadeInUp 0.6s ease-out 0.5s backwards;
 }
 
@@ -600,16 +571,7 @@
   background: transparent;
   border: none;
   text-decoration: none;
-  color: #6b4f10;
-  transition: all 0.2s ease;
-  cursor: pointer;
-  position: relative;
-  overflow: visible;
-  backdrop-filter: none;
-}
-
-.header-social-icon::before {
-  content: none;
+  color: #6b7280;
 }
 
 .header-social-icon svg {
@@ -662,83 +624,59 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 16px;
-  height: 34px;
-  border-radius: 17px;
-  background: linear-gradient(135deg, #6b4f10 0%, #8B6914 100%);
-  border: 1.5px solid #c9a84c;
-  color: #f5edd6;
-  font-family: 'MedievalSharp', cursive;
-  font-size: 13px;
-  font-weight: 400;
-  letter-spacing: 0.5px;
+  padding: 0 14px;
+  height: 30px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #a855f7, #06b6d4);
+  border: none;
+  color: #fff;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
   text-decoration: none;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: opacity 0.15s ease;
   position: relative;
   overflow: hidden;
   white-space: nowrap;
   margin-left: 6px;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  text-shadow: none;
 }
 
-.buy-moo-button::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 0;
-  height: 0;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.2);
-  transform: translate(-50%, -50%);
-  transition: width 0.3s, height 0.3s;
-}
-
-.buy-moo-button:hover::before {
-  width: 120%;
-  height: 120%;
-}
+.buy-moo-button::before { display: none; }
+.buy-moo-button:hover::before { display: none; }
 
 .buy-moo-button:hover {
-  transform: translateY(-3px) scale(1.05);
-  background: linear-gradient(135deg, #8B6914 0%, #c9a84c 100%);
-  box-shadow: 0 6px 20px rgba(139, 105, 20, 0.4);
+  opacity: 0.88;
+  transform: none;
+  box-shadow: none;
 }
 
 .buy-moo-button:active {
   transform: translateY(-1px) scale(1.02);
 }
 
-/* Close Button - wax seal style */
+/* Close Button */
 .close-button {
-  background: radial-gradient(circle at 35% 35%,
-    #e74c3c 0%,
-    #c0392b 30%,
-    #96281b 65%,
-    #6e1c13 100%
-  );
-  border: 3px solid #d4574a;
-  color: #f5edd6;
-  font-size: 22px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid #1f2937;
+  color: #9ca3af;
+  font-size: 20px;
   cursor: pointer;
-  padding: 8px;
-  border-radius: 50%;
-  transition: all 0.3s ease;
-  width: 42px;
-  height: 42px;
+  padding: 0;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
   line-height: 1;
-  box-shadow:
-    0 4px 14px rgba(0, 0, 0, 0.5),
-    0 2px 4px rgba(0, 0, 0, 0.3),
-    inset 0 2px 6px rgba(255, 150, 130, 0.3),
-    inset 0 -2px 6px rgba(60, 10, 5, 0.4);
+  box-shadow: none;
   flex-shrink: 0;
   backdrop-filter: none;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  text-shadow: none;
 }
 
 .close-button::before {
@@ -746,29 +684,25 @@
 }
 
 .close-button:hover {
-  background: radial-gradient(circle at 40% 40%,
-    #e74c3c 0%,
-    #c0392b 60%,
-    #96281b 100%
-  );
-  transform: scale(1.1) rotate(90deg);
-  box-shadow: 0 5px 18px rgba(192, 57, 43, 0.5);
-  color: #f5edd6;
-  border-color: #e74c3c;
+  background: rgba(255, 255, 255, 0.1);
+  transform: none;
+  box-shadow: none;
+  color: #e5e7eb;
+  border-color: #374151;
 }
 
 .close-button:active {
-  transform: scale(1.0) rotate(90deg);
+  background: rgba(255, 255, 255, 0.15);
 }
 
 /* ===== MODAL CONTENT (Scrollable parchment body) ===== */
 .moonfeed-info-content {
-  padding: 24px 16% 32px 16%;
+  padding: 20px 20px 32px 20px;
   overflow-y: auto;
   flex: 1;
   pointer-events: auto;
   scrollbar-width: thin;
-  scrollbar-color: rgba(139, 105, 20, 0.5) rgba(139, 105, 20, 0.1);
+  scrollbar-color: rgba(168, 85, 247, 0.4) rgba(255, 255, 255, 0.03);
   position: relative;
   z-index: 1;
   animation: fadeInContent 0.9s cubic-bezier(0.16, 1, 0.3, 1) 0.4s backwards;
@@ -786,19 +720,19 @@
 }
 
 .moonfeed-info-content::-webkit-scrollbar-track {
-  background: rgba(139, 105, 20, 0.08);
+  background: rgba(255, 255, 255, 0.03);
   border-radius: 8px;
   margin: 8px 0;
 }
 
 .moonfeed-info-content::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #c9a84c, #8B6914);
+  background: rgba(168, 85, 247, 0.4);
   border-radius: 8px;
-  border: 1px solid rgba(245, 237, 214, 0.5);
+  border: none;
 }
 
 .moonfeed-info-content::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, #d4b878, #c9a84c);
+  background: rgba(168, 85, 247, 0.6);
 }
 
 /* Remove forced transparent backgrounds */
@@ -810,36 +744,26 @@
 
 /* ===== INFO SECTIONS ===== */
 .info-section {
-  margin-bottom: 24px;
-  background: rgba(139, 105, 20, 0.06) !important;
-  padding: 22px 24px;
-  border: 1px solid rgba(139, 105, 20, 0.2);
-  border-radius: 4px;
-  box-shadow:
-    0 2px 8px rgba(101, 67, 33, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.3);
-  transition: all 0.3s ease;
+  margin-bottom: 12px;
+  background: rgba(255, 255, 255, 0.02) !important;
+  padding: 16px 18px;
+  border: 1px solid #1f2937;
+  border-radius: 10px;
+  box-shadow: none;
+  transition: border-color 0.2s ease;
   animation: fadeInUp 0.8s ease-out backwards;
   position: relative;
 }
 
 .info-section:nth-child(odd)::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(135deg, rgba(139, 105, 20, 0.03) 0%, transparent 100%);
-  pointer-events: none;
-  border-radius: 4px;
+  display: none;
 }
 
 .info-section:hover {
-  background: rgba(139, 105, 20, 0.1) !important;
-  border-color: rgba(139, 105, 20, 0.35);
-  box-shadow: 0 4px 16px rgba(101, 67, 33, 0.15);
-  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-color: rgba(168, 85, 247, 0.25);
+  box-shadow: none;
+  transform: none;
 }
 
 @keyframes fadeInUp {
@@ -883,12 +807,12 @@
 /* ===== WELCOME SECTION ===== */
 .info-section.welcome-section {
   text-align: center;
-  padding: 28px 24px;
-  margin-bottom: 24px;
-  border-radius: 4px;
-  background: rgba(139, 105, 20, 0.1) !important;
-  border: 2px solid rgba(139, 105, 20, 0.35);
-  box-shadow: 0 4px 16px rgba(101, 67, 33, 0.15);
+  padding: 18px 20px;
+  margin-bottom: 12px;
+  border-radius: 10px;
+  background: rgba(168, 85, 247, 0.05) !important;
+  border: 1px solid rgba(168, 85, 247, 0.2);
+  box-shadow: none;
   position: relative;
   overflow: hidden;
 }
@@ -899,26 +823,25 @@
 }
 
 .welcome-section h2 {
-  margin: 0 0 14px 0;
-  font-family: 'MedievalSharp', cursive;
-  color: #4a2c0a !important;
-  font-size: 28px;
-  font-weight: 400;
+  margin: 0 0 10px 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 18px;
+  font-weight: 700;
   position: relative;
   z-index: 1;
-  -webkit-text-fill-color: initial;
-  background: none !important;
-  -webkit-background-clip: initial;
-  background-clip: initial;
+  background: linear-gradient(135deg, #a855f7, #06b6d4) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  background-clip: text !important;
 }
 
 .welcome-section p {
   margin: 0;
-  font-family: 'Crimson Text', serif;
-  color: #5c3d1a !important;
-  font-size: 18px;
-  line-height: 1.7;
-  font-style: italic;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #d1d5db !important;
+  font-size: 13px;
+  line-height: 1.65;
+  font-style: normal;
   font-weight: 400;
   position: relative;
   z-index: 1;
@@ -927,12 +850,12 @@
 /* ===== RUG SECTION ===== */
 .info-section.rug-section {
   text-align: center;
-  padding: 24px;
-  margin-bottom: 24px;
-  border-radius: 4px;
-  background: rgba(34, 100, 34, 0.08) !important;
-  border: 2px solid rgba(34, 100, 34, 0.3);
-  box-shadow: 0 4px 16px rgba(34, 100, 34, 0.1);
+  padding: 16px 18px;
+  margin-bottom: 12px;
+  border-radius: 10px;
+  background: rgba(6, 182, 212, 0.04) !important;
+  border: 1px solid rgba(6, 182, 212, 0.2);
+  box-shadow: none;
   position: relative;
   overflow: hidden;
 }
@@ -942,37 +865,37 @@
 }
 
 .rug-section h3 {
-  font-family: 'MedievalSharp', cursive;
-  color: #2d5a1e !important;
-  font-size: 22px;
-  margin-bottom: 14px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #06b6d4 !important;
+  font-size: 14px;
+  margin-bottom: 10px;
   justify-content: center;
-  font-weight: 400;
+  font-weight: 600;
 }
 
 .rug-section p {
   margin: 0;
-  font-family: 'Crimson Text', serif;
-  color: #3a4a2a !important;
-  font-size: 16px;
-  line-height: 1.7;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #d1d5db !important;
+  font-size: 13px;
+  line-height: 1.65;
 }
 
 .rug-section strong {
-  color: #2d5a1e;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  color: #06b6d4;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 /* ===== HOW SECTION ===== */
 .info-section.how-section {
-  padding: 24px;
-  margin-bottom: 24px;
-  border-radius: 4px;
-  background: rgba(74, 60, 20, 0.08) !important;
-  border: 2px solid rgba(139, 105, 20, 0.3);
-  box-shadow: 0 4px 16px rgba(101, 67, 33, 0.1);
+  padding: 16px 18px;
+  margin-bottom: 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02) !important;
+  border: 1px solid #1f2937;
+  box-shadow: none;
 }
 
 .how-section::after {
@@ -980,31 +903,31 @@
 }
 
 .how-section h3 {
-  font-family: 'MedievalSharp', cursive;
-  color: #4a2c0a !important;
-  font-size: 22px;
-  margin-bottom: 14px;
-  font-weight: 400;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #a855f7 !important;
+  font-size: 14px;
+  margin-bottom: 10px;
+  font-weight: 600;
 }
 
 /* ===== GENERAL SECTION TYPOGRAPHY ===== */
 .info-section h3 {
-  margin: 0 0 14px 0;
-  font-family: 'MedievalSharp', cursive;
-  color: #4a2c0a !important;
-  font-size: 20px;
-  font-weight: 400;
+  margin: 0 0 10px 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #a855f7 !important;
+  font-size: 14px;
+  font-weight: 600;
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
 .info-section p {
-  margin: 0 0 12px 0;
-  font-family: 'Crimson Text', serif;
-  color: #5c3d1a !important;
-  font-size: 16px;
-  line-height: 1.75;
+  margin: 0 0 10px 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #d1d5db !important;
+  font-size: 13px;
+  line-height: 1.65;
 }
 
 .info-section:last-child {
@@ -1019,78 +942,78 @@
 }
 
 .data-sources-list li {
-  padding: 12px 0 12px 32px;
-  font-family: 'Crimson Text', serif;
-  color: #5c3d1a;
-  font-size: 15px;
-  line-height: 1.7;
+  padding: 5px 0 5px 18px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #d1d5db;
+  font-size: 13px;
+  line-height: 1.65;
   position: relative;
-  transition: all 0.3s ease;
-  border-radius: 4px;
+  transition: none;
+  border-radius: 0;
 }
 
 .data-sources-list li:hover {
-  background: rgba(139, 105, 20, 0.06);
-  padding-left: 36px;
+  background: none;
+  padding-left: 18px;
 }
 
 .data-sources-list li::before {
-  content: '❧';
+  content: '•';
   position: absolute;
-  left: 8px;
-  color: #8B6914;
+  left: 4px;
+  color: #a855f7;
   font-size: 14px;
 }
 
 .data-sources-list li strong {
-  color: #6b4f10;
-  font-weight: 700;
+  color: #f3f4f6;
+  font-weight: 600;
 }
 
 /* ===== WARNING BOX ===== */
 .warning-box {
-  padding: 18px 22px;
-  background: rgba(180, 120, 20, 0.12);
-  border: 2px solid rgba(180, 120, 20, 0.4);
-  border-radius: 4px;
-  margin-top: 12px;
-  box-shadow: 0 4px 16px rgba(101, 67, 33, 0.15);
+  padding: 12px 14px;
+  background: rgba(168, 85, 247, 0.06);
+  border: 1px solid rgba(168, 85, 247, 0.2);
+  border-radius: 8px;
+  margin-top: 10px;
+  box-shadow: none;
   position: relative;
 }
 
 .warning-box p {
   margin: 0;
-  font-family: 'Crimson Text', serif;
-  color: #5c3d1a !important;
-  font-size: 15px;
-  line-height: 1.7;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #d1d5db !important;
+  font-size: 13px;
+  line-height: 1.65;
   position: relative;
   z-index: 1;
 }
 
 .warning-box strong {
-  color: #8B6914;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  color: #f3f4f6;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 /* ===== ROADMAP SECTION ===== */
 .info-section.roadmap-section {
-  padding: 24px;
-  margin-bottom: 24px;
-  border-radius: 4px;
-  background: rgba(100, 50, 120, 0.06) !important;
-  border: 2px solid rgba(139, 105, 20, 0.3);
-  box-shadow: 0 4px 16px rgba(101, 67, 33, 0.12);
+  padding: 16px 18px;
+  margin-bottom: 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02) !important;
+  border: 1px solid #1f2937;
+  box-shadow: none;
 }
 
 .roadmap-section h3 {
-  font-family: 'MedievalSharp', cursive;
-  color: #4a2c0a !important;
-  font-size: 24px;
-  margin-bottom: 20px;
-  font-weight: 400;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #a855f7 !important;
+  font-size: 14px;
+  margin-bottom: 16px;
+  font-weight: 600;
   text-align: center;
 }
 
@@ -1105,69 +1028,70 @@
 .roadmap-timeline::before {
   content: '';
   position: absolute;
-  left: 23px;
+  left: 18px;
   top: 48px;
   bottom: 48px;
-  width: 2px;
-  background: linear-gradient(180deg, #c9a84c, #8B6914, #c9a84c);
-  opacity: 0.4;
+  width: 1px;
+  background: linear-gradient(180deg, #a855f7, #06b6d4, #a855f7);
+  opacity: 0.3;
 }
 
 .roadmap-phase {
   display: flex;
-  gap: 14px;
+  gap: 12px;
   position: relative;
-  padding: 16px;
-  border-radius: 4px;
-  background: rgba(139, 105, 20, 0.05);
-  border: 1px solid rgba(139, 105, 20, 0.15);
-  transition: all 0.3s ease;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid #1f2937;
+  transition: border-color 0.2s ease;
 }
 
 .roadmap-phase:hover {
-  background: rgba(139, 105, 20, 0.1);
-  transform: translateX(3px);
+  background: rgba(255, 255, 255, 0.04);
+  transform: none;
+  border-color: rgba(168, 85, 247, 0.25);
 }
 
 .phase-marker {
   flex-shrink: 0;
-  width: 44px;
-  height: 44px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: 'MedievalSharp', cursive;
-  font-size: 18px;
-  font-weight: 400;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
   position: relative;
   z-index: 1;
 }
 
 .roadmap-phase.completed .phase-marker {
-  background: radial-gradient(circle at 40% 40%, #4a8c3f, #2d5a1e);
-  color: #f5edd6;
-  box-shadow: 0 3px 12px rgba(45, 90, 30, 0.4);
-  border: 2px solid #6aad55;
+  background: rgba(34, 197, 94, 0.12);
+  color: #22c55e;
+  box-shadow: none;
+  border: 1px solid rgba(34, 197, 94, 0.35);
 }
 
 .roadmap-phase.in-progress .phase-marker {
-  background: radial-gradient(circle at 40% 40%, #c9a84c, #8B6914);
-  color: #f5edd6;
-  box-shadow: 0 3px 12px rgba(139, 105, 20, 0.4);
-  border: 2px solid #d4b878;
+  background: rgba(168, 85, 247, 0.12);
+  color: #a855f7;
+  box-shadow: none;
+  border: 1px solid rgba(168, 85, 247, 0.4);
   animation: pulseGlow 2s ease-in-out infinite;
 }
 
 @keyframes pulseGlow {
-  0%, 100% { box-shadow: 0 3px 12px rgba(139, 105, 20, 0.4); }
-  50% { box-shadow: 0 3px 20px rgba(201, 168, 76, 0.6); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.4); }
+  50% { box-shadow: 0 0 0 4px rgba(168, 85, 247, 0.1); }
 }
 
 .roadmap-phase.upcoming .phase-marker {
-  background: rgba(139, 105, 20, 0.15);
-  border: 2px solid rgba(139, 105, 20, 0.4);
-  color: #8B6914;
+  background: rgba(107, 114, 128, 0.1);
+  border: 1px solid rgba(107, 114, 128, 0.3);
+  color: #6b7280;
 }
 
 .phase-content {
@@ -1175,53 +1099,53 @@
 }
 
 .phase-content h4 {
-  margin: 0 0 6px 0;
-  font-family: 'MedievalSharp', cursive;
-  color: #4a2c0a;
-  font-size: 17px;
-  font-weight: 400;
+  margin: 0 0 5px 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #e5e7eb;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .phase-content p {
-  margin: 0 0 10px 0;
-  font-family: 'Crimson Text', serif;
-  color: #5c3d1a;
-  font-size: 14px;
-  line-height: 1.6;
+  margin: 0 0 8px 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #9ca3af;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .phase-status {
   display: inline-block;
-  padding: 3px 10px;
-  border-radius: 3px;
-  font-family: 'Crimson Text', serif;
-  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
 .roadmap-phase.completed .phase-status {
-  background: rgba(45, 90, 30, 0.15);
-  color: #2d5a1e;
-  border: 1px solid rgba(45, 90, 30, 0.3);
+  background: rgba(34, 197, 94, 0.1);
+  color: #22c55e;
+  border: 1px solid rgba(34, 197, 94, 0.3);
 }
 
 .roadmap-phase.in-progress .phase-status {
-  background: rgba(139, 105, 20, 0.15);
-  color: #8B6914;
-  border: 1px solid rgba(139, 105, 20, 0.3);
+  background: rgba(168, 85, 247, 0.1);
+  color: #a855f7;
+  border: 1px solid rgba(168, 85, 247, 0.3);
 }
 
 .roadmap-phase.upcoming .phase-status {
-  background: rgba(101, 67, 33, 0.1);
-  color: #6b4f10;
-  border: 1px solid rgba(101, 67, 33, 0.2);
+  background: rgba(107, 114, 128, 0.1);
+  color: #6b7280;
+  border: 1px solid rgba(107, 114, 128, 0.2);
 }
 
 /* ===== MODAL FOOTER ===== */
 .moonfeed-info-footer {
-  padding: 20px 16% 28px 16%;
+  padding: 14px 20px;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -1229,131 +1153,110 @@
   position: relative;
   flex-shrink: 0;
   z-index: 1;
-  background: transparent;
-  border-top: none;
+  background: #0a0a0f;
+  border-top: 1px solid #1f2937;
 }
 
 .moonfeed-info-footer::before {
   display: none;
 }
 
-/* "Roll Up Scroll" button */
+/* Close button */
 .got-it-button {
-  background: 
-    linear-gradient(135deg, #5a3210 0%, #7a4a1a 25%, #a06828 50%, #7a4a1a 75%, #5a3210 100%);
-  color: #f5edd6;
-  border: 2px solid #c48a3c;
-  border-radius: 6px;
-  padding: 14px 44px;
-  font-family: 'MedievalSharp', cursive;
-  font-size: 16px;
-  font-weight: 400;
-  letter-spacing: 1px;
+  background: linear-gradient(135deg, #a855f7, #06b6d4);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 11px 36px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0;
   cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow:
-    0 5px 18px rgba(60, 30, 5, 0.4),
-    0 2px 6px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 220, 150, 0.2),
-    inset 0 -1px 0 rgba(40, 20, 5, 0.3);
-  text-shadow: 0 2px 3px rgba(0, 0, 0, 0.4);
+  transition: opacity 0.15s ease;
+  box-shadow: none;
+  text-shadow: none;
   position: relative;
   overflow: hidden;
 }
 
-.got-it-button::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(245, 237, 214, 0.2), transparent);
-  transition: left 0.5s ease;
-}
-
-.got-it-button:hover::before {
-  left: 100%;
-}
+.got-it-button::before { display: none; }
+.got-it-button:hover::before { display: none; }
 
 .got-it-button:hover {
-  transform: translateY(-2px) scale(1.03);
-  box-shadow: 
-    0 8px 28px rgba(60, 30, 5, 0.5),
-    0 3px 8px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 220, 150, 0.3);
-  background: 
-    linear-gradient(135deg, #7a4a1a 0%, #a06828 25%, #c48a3c 50%, #a06828 75%, #7a4a1a 100%);
-  border-color: #d4a050;
+  opacity: 0.88;
 }
 
 .got-it-button:active {
-  transform: translateY(-1px) scale(1.01);
+  opacity: 0.75;
 }
 
 /* Retake Tutorial Footer Button */
 .restart-tutorial-footer-btn {
-  background: linear-gradient(135deg, rgba(106, 17, 203, 0.2), rgba(37, 117, 252, 0.2));
-  color: #5c3d1a;
-  border: 1.5px solid rgba(106, 17, 203, 0.4);
-  border-radius: 6px;
-  padding: 12px 20px;
-  font-family: 'Crimson Text', serif;
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 0.3px;
+  background: transparent;
+  color: #9ca3af;
+  border: 1px solid #1f2937;
+  border-radius: 10px;
+  padding: 10px 20px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.15s ease;
   white-space: nowrap;
 }
 
 .restart-tutorial-footer-btn:hover {
-  background: linear-gradient(135deg, rgba(106, 17, 203, 0.3), rgba(37, 117, 252, 0.3));
-  border-color: rgba(106, 17, 203, 0.6);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(106, 17, 203, 0.2);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: #374151;
+  transform: none;
+  box-shadow: none;
+  color: #e5e7eb;
 }
 
 .restart-tutorial-footer-btn:active {
-  transform: translateY(0);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .privacy-policy-inline-btn {
   display: block;
   width: 100%;
   margin-top: 12px;
-  background: rgba(139, 105, 20, 0.1);
-  color: #5c3d1a;
-  border: 1.5px solid rgba(139, 105, 20, 0.3);
-  border-radius: 6px;
-  padding: 10px 16px;
-  font-family: 'Crimson Text', serif;
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 0.3px;
+  background: transparent;
+  color: #6b7280;
+  border: 1px solid #1f2937;
+  border-radius: 8px;
+  padding: 9px 16px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
   text-align: center;
+  text-decoration: none;
 }
 
 .privacy-policy-inline-btn:hover {
-  background: rgba(139, 105, 20, 0.2);
-  border-color: rgba(139, 105, 20, 0.5);
+  background: rgba(255, 255, 255, 0.04);
+  border-color: #374151;
+  color: #9ca3af;
 }
 
 .privacy-policy-inline-btn:active {
-  background: rgba(139, 105, 20, 0.25);
+  background: rgba(255, 255, 255, 0.07);
 }
 
 /* ===== TEXT SELECTION ===== */
 .moonfeed-info-modal ::selection {
-  background: rgba(139, 105, 20, 0.3);
-  color: #4a2c0a;
+  background: rgba(168, 85, 247, 0.3);
+  color: #fff;
 }
 
 .moonfeed-info-modal ::-moz-selection {
-  background: rgba(139, 105, 20, 0.3);
-  color: #4a2c0a;
+  background: rgba(168, 85, 247, 0.3);
+  color: #fff;
 }
 
 /* ===== FEATURE LIST (if used) ===== */
@@ -1513,15 +1416,15 @@
 }
 
 .interactive-mode-title {
-  font-size: 15px;
-  font-weight: 700;
-  color: #5c3d1a;
-  letter-spacing: 0.01em;
+  font-size: 14px;
+  font-weight: 600;
+  color: #e5e7eb;
+  letter-spacing: 0;
 }
 
 .interactive-mode-subtitle {
   font-size: 12px;
-  color: rgba(92, 61, 26, 0.65);
+  color: #6b7280;
   line-height: 1.3;
 }
 
@@ -1546,13 +1449,8 @@
   .moonfeed-info-header,
   .moonfeed-info-content,
   .moonfeed-info-footer {
-    padding-left: 16%;
-    padding-right: 16%;
-  }
-
-  .scroll-divider {
-    padding-left: 16%;
-    padding-right: 16%;
+    padding-left: 16px;
+    padding-right: 16px;
   }
 
   .moonfeed-info-header h2 {
@@ -1560,7 +1458,7 @@
   }
 
   .info-section h3 {
-    font-size: 17px;
+    font-size: 13px;
   }
 
   .header-social-icon {

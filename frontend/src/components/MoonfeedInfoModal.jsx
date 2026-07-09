@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useTrackedWallets } from '../contexts/TrackedWalletsContext';
 import { useDarkMode } from '../contexts/DarkModeContext';
 import { useCopyTrade } from '../contexts/CopyTradeContext';
-import PrivacyPolicyModal from './PrivacyPolicyModal';
+
 import './MoonfeedInfoModal.css';
 
 // Use the new logo from public folder
@@ -13,7 +13,6 @@ const MoonfeedInfoModal = ({ isVisible, onClose, onBuyMoo, onStartTutorial }) =>
   const [isClosing, setIsClosing] = useState(false);
   const [touchStart, setTouchStart] = useState(null);
   const [touchEnd, setTouchEnd] = useState(null);
-  const [privacyOpen, setPrivacyOpen] = useState(false);
 
   if (!isVisible && !isClosing) return null;
 
@@ -66,13 +65,6 @@ const MoonfeedInfoModal = ({ isVisible, onClose, onBuyMoo, onStartTutorial }) =>
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
       >
-        {/* Full-scroll background image — stretched to fill the entire modal */}
-        <img src="/new scroll.png" className="scroll-bg-image" alt="" aria-hidden="true" />
-
-        {/* Scroll Top Roll — transparent, height reserves space for image roller */}
-        <div className="scroll-roll scroll-roll-top"></div>
-
-        {/* Parchment Body */}
         <div className="scroll-parchment">
 
           {/* Header */}
@@ -156,15 +148,6 @@ const MoonfeedInfoModal = ({ isVisible, onClose, onBuyMoo, onStartTutorial }) =>
             </button>
           </div>
 
-          {/* Scroll ornamental divider */}
-          <div className="scroll-divider">
-            <span className="scroll-ornament">✦</span>
-            <span className="scroll-ornament-line"></span>
-            <span className="scroll-ornament">☽</span>
-            <span className="scroll-ornament-line"></span>
-            <span className="scroll-ornament">✦</span>
-          </div>
-
           {/* Content */}
           <div className="moonfeed-info-content">
             {/* Interactive Mode Button - Above stock market section */}
@@ -181,7 +164,6 @@ const MoonfeedInfoModal = ({ isVisible, onClose, onBuyMoo, onStartTutorial }) =>
                   }, 300);
                 }}
               >
-                <span className="interactive-mode-icon">🎓</span>
                 <span className="interactive-mode-text">
                   <span className="interactive-mode-title">Interactive Mode</span>
                   <span className="interactive-mode-subtitle">Learn how Moonfeed works — perfect for beginners</span>
@@ -198,12 +180,6 @@ const MoonfeedInfoModal = ({ isVisible, onClose, onBuyMoo, onStartTutorial }) =>
               <p>
                 Traditional stocks take days to reflect sentiment. Meme coins on Solana move in seconds. Whether it's a trending topic, a political event, or a cultural phenomenon, the market creates tokens that let you put real money behind your read on what matters right now. Moonfeed helps you discover these opportunities the moment they emerge, giving you the tools to navigate this new frontier of live, event-driven investing.
               </p>
-            </div>
-
-            <div className="scroll-divider small">
-              <span className="scroll-ornament-line"></span>
-              <span className="scroll-ornament">⚜</span>
-              <span className="scroll-ornament-line"></span>
             </div>
 
             <div className="info-section roadmap-section">
@@ -236,30 +212,11 @@ const MoonfeedInfoModal = ({ isVisible, onClose, onBuyMoo, onStartTutorial }) =>
               </div>
             </div>
 
-            <div className="scroll-divider small">
-              <span className="scroll-ornament-line"></span>
-              <span className="scroll-ornament">☽</span>
-              <span className="scroll-ornament-line"></span>
-            </div>
-
-            <div className="info-section welcome-section">
-              <h2>Hear Ye, Hear Ye!</h2>
-              <p>
-                We hath created an app that reveals unto thee the meme coins ascending to the moon!
-              </p>
-            </div>
-
             <div className="info-section rug-section">
               <h3>Tired of Getting Rugged?</h3>
               <p>
                 We perform a personal rugcheck for <strong>EVERY</strong> coin we present to thee! Simply hover over liquidity and we shall reveal the truth.
               </p>
-            </div>
-
-            <div className="scroll-divider small">
-              <span className="scroll-ornament-line"></span>
-              <span className="scroll-ornament">✦</span>
-              <span className="scroll-ornament-line"></span>
             </div>
 
             <div className="info-section how-section">
@@ -293,12 +250,6 @@ const MoonfeedInfoModal = ({ isVisible, onClose, onBuyMoo, onStartTutorial }) =>
               </p>
             </div>
 
-            <div className="scroll-divider small">
-              <span className="scroll-ornament-line"></span>
-              <span className="scroll-ornament">⚜</span>
-              <span className="scroll-ornament-line"></span>
-            </div>
-
             <div className="info-section">
               <h3>A Word of Caution</h3>
               <div className="warning-box">
@@ -307,19 +258,21 @@ const MoonfeedInfoModal = ({ isVisible, onClose, onBuyMoo, onStartTutorial }) =>
                   Only invest what you can afford to lose. Look for liquidity locks and verify token contracts.
                 </p>
               </div>
-              <button
+              <a
                 className="privacy-policy-inline-btn"
-                onClick={(e) => { e.stopPropagation(); setPrivacyOpen(true); }}
+                href="/privacy"
+                target="_blank"
+                rel="noopener noreferrer"
               >
-                🔒 Privacy Policy
-              </button>
+                Privacy Policy
+              </a>
             </div>
           </div>
 
           {/* Footer */}
           <div className="moonfeed-info-footer">
             <button className="got-it-button" onClick={handleClose}>
-              Roll Up Scroll
+              Close
             </button>
             <button 
               className="restart-tutorial-footer-btn"
@@ -334,24 +287,17 @@ const MoonfeedInfoModal = ({ isVisible, onClose, onBuyMoo, onStartTutorial }) =>
               }}
               title="Restart the interactive guided tour"
             >
-              🎓 Retake Tour
+              Retake Tour
             </button>
           </div>
         </div>
 
-        {/* Scroll Bottom Roll — transparent, height reserves space for image roller */}
-        <div className="scroll-roll scroll-roll-bottom"></div>
       </div>
     </div>,
     document.body
   );
 
-  return (
-    <>
-      {portal}
-      <PrivacyPolicyModal isVisible={privacyOpen} onClose={() => setPrivacyOpen(false)} />
-    </>
-  );
+  return portal;
 
 };
 

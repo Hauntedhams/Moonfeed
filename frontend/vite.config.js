@@ -1,10 +1,29 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import fs from 'fs'
+import path from 'path'
 
 // BUILD VERSION: 2024-12-11-v10-FORCE-REBUILD
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    // Serve the standalone privacy page at /privacy in dev mode
+    {
+      name: 'serve-static-pages',
+      configureServer(server) {
+        server.middlewares.use((req, res, next) => {
+          if (req.url === '/privacy' || req.url === '/privacy/') {
+            const file = path.join(process.cwd(), 'public/privacy/index.html')
+            res.setHeader('Content-Type', 'text/html; charset=utf-8')
+            res.end(fs.readFileSync(file, 'utf-8'))
+            return
+          }
+          next()
+        })
+      }
+    }
+  ],
   build: {
     // Enable code splitting for better caching
     rollupOptions: {
