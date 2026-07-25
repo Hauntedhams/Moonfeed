@@ -1,0 +1,86 @@
+/*
+ * Lifts Moonfeed's "no wallet needed" actions to the TOP of Jupiter's
+ * "Connect Wallet" modal, just under the title and above the wallet list.
+ *
+ * Jupiter's UnifiedWalletProvider only exposes a `footer` attachment slot, so
+ * the actions render last in the DOM. The modal container is a flex column, so
+ * we use flex `order` to reposition:
+ *   - the title/header (first child) stays at the very top
+ *   - our actions block sits directly below it
+ *   - the wallet list + everything else follows
+ *
+ * `:has()` targets only the modal container that actually holds our block.
+ * Older browsers that lack `:has()` simply show the actions at the bottom
+ * (graceful fallback) — the review device (modern Safari) supports it.
+ */
+div:has(> .moonfeed-wallet-modal-top) > .moonfeed-wallet-modal-top {
+  order: -1;
+}
+div:has(> .moonfeed-wallet-modal-top) > *:first-child {
+  order: -2;
+}
+
+/*
+ * Remove the faint white square outline around the Connect Wallet modal.
+ * Jupiter's dark theme applies `border border-white/10` to the modal
+ * container; we clear it here since the container is the element that
+ * directly holds our actions block.
+ */
+div:has(> .moonfeed-wallet-modal-top) {
+  border: none !important;
+}
+
+.moonfeed-wallet-modal-top {
+  padding: 14px 20px 4px;
+}
+
+.moonfeed-wallet-modal-top__buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.moonfeed-wallet-modal-top__btn {
+  width: 100%;
+  min-height: 52px;
+  padding: 12px 12px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  transition: transform 0.08s ease, opacity 0.15s ease;
+}
+
+.moonfeed-wallet-modal-top__btn:active {
+  transform: scale(0.98);
+}
+
+.moonfeed-wallet-modal-top__btn--browse {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1.5px solid rgba(255, 255, 255, 0.18);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.moonfeed-wallet-modal-top__btn--demo {
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.22), rgba(255, 165, 0, 0.22));
+  border: 1.5px solid rgba(255, 215, 0, 0.6);
+  color: #ffd700;
+}
+
+.moonfeed-wallet-modal-top__hint {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
+  margin: 8px 0 0;
+  text-align: center;
+}
+
+.moonfeed-wallet-modal-top__divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 14px 0 0;
+}

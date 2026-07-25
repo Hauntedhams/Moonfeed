@@ -1,3 +1,9 @@
+/* Remove browser default border/outline on native <dialog> elements */
+dialog {
+  border: none;
+  outline: none;
+}
+
 /* Dark Mode Global Styles */
 :root {
   /* Light mode colors (default) */
@@ -120,7 +126,12 @@ button {
   transition: border-color 0.25s, background 0.25s;
 }
 button:hover { border-color: #646cff; }
-button:focus, button:focus-visible { outline: 4px auto -webkit-focus-ring-color; }
+
+/* Remove the harsh default focus ring (the big white/blue outline that
+   appeared around the wallet Connect modal in the iOS webview). Keyboard
+   users still get a subtle, accessible ring via :focus-visible. */
+:focus { outline: none; }
+:focus-visible { outline: 2px solid rgba(102, 126, 234, 0.6); outline-offset: 2px; }
 
 /* Toast Animation */
 @keyframes slideIn {
