@@ -15,6 +15,16 @@ import {
   TrustWalletAdapter,
 } from '@solana/wallet-adapter-wallets';
 
+// Solana Mobile Wallet Adapter — lets the native Android app connect to an
+// installed wallet app (Phantom, Solflare, etc.) via the MWA protocol instead
+// of relying on a browser extension that doesn't exist inside the WebView.
+import {
+  SolanaMobileWalletAdapter,
+  createDefaultAddressSelector,
+  createDefaultAuthorizationResultCache,
+  createDefaultWalletNotFoundHandler,
+} from '@solana-mobile/wallet-adapter-mobile';
+
 // WebSocket context for singleton connection
 import { LiveDataProvider } from './hooks/useLiveDataContext.jsx';
 
@@ -35,13 +45,38 @@ function RootApp() {
   // Initialize wallet adapters — skipped in extension build to avoid loading
   // remote scripts (plugin.jup.ag) which violate Chrome Web Store policy.
   const wallets = useMemo(
-    () => IS_EXTENSION ? [] : [
-      new PhantomWalletAdapter(),
-      new SolflareWalletAdapter(),
-      new CoinbaseWalletAdapter(),
-      new Coin98WalletAdapter(),
-      new TrustWalletAdapter(),
-    ],
+    () => {
+      if (IS_EXTENSION) return [];
+
+      const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
+
+      // On Android (native app / mobile web), add the Mobile Wallet Adapter so
+      // the user can connect to their installed Phantom/Solflare app natively.
+      const mobileAdapters = isAndroid
+        ? [
+            new SolanaMobileWalletAdapter({
+              addressSelector: createDefaultAddressSelector(),
+              appIdentity: {
+                name: 'Moonfeed',
+                uri: 'https://moonfeed.app',
+                icon: '/favicon.ico',
+              },
+              authorizationResultCache: createDefaultAuthorizationResultCache(),
+              cluster: 'mainnet-beta',
+              onWalletNotFound: createDefaultWalletNotFoundHandler(),
+            }),
+          ]
+        : [];
+
+      return [
+        ...mobileAdapters,
+        new PhantomWalletAdapter(),
+        new SolflareWalletAdapter(),
+        new CoinbaseWalletAdapter(),
+        new Coin98WalletAdapter(),
+        new TrustWalletAdapter(),
+      ];
+    },
     []
   );
 
