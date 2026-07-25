@@ -6,14 +6,15 @@ const getApiBaseUrl = () => {
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL;
   }
-  
-  // Check if we're in development (localhost)
-  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-    return 'http://localhost:3001';
+
+  // In production builds (including Capacitor), always use the live backend.
+  // Do NOT use window.location.hostname — Capacitor serves from localhost even
+  // in production, which would incorrectly fall through to the dev URL.
+  if (import.meta.env.PROD) {
+    return 'https://api.moonfeed.app';
   }
-  
-  // For production, use the working backend
-  return 'https://api.moonfeed.app';
+
+  return 'http://localhost:3001';
 };
 
 export const API_CONFIG = {

@@ -56,7 +56,8 @@ app.use(cors({
     'https://moonfeed-frontend1.vercel.app',  // Vercel default domain
     'capacitor://localhost',  // Capacitor iOS
     'ionic://localhost',      // Capacitor Android/alt
-    'http://localhost'        // Capacitor local WebView
+    'http://localhost',       // Capacitor local WebView (http scheme)
+    'https://localhost'       // Capacitor Android default WebView (https scheme)
   ],
   credentials: true
 }));
