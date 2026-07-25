@@ -50,26 +50,28 @@ function RootApp() {
 
       const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
 
-      // On Android (native app / mobile web), add the Mobile Wallet Adapter so
-      // the user can connect to their installed Phantom/Solflare app natively.
-      const mobileAdapters = isAndroid
-        ? [
-            new SolanaMobileWalletAdapter({
-              addressSelector: createDefaultAddressSelector(),
-              appIdentity: {
-                name: 'Moonfeed',
-                uri: 'https://moonfeed.app',
-                icon: '/favicon.ico',
-              },
-              authorizationResultCache: createDefaultAuthorizationResultCache(),
-              cluster: 'mainnet-beta',
-              onWalletNotFound: createDefaultWalletNotFoundHandler(),
-            }),
-          ]
-        : [];
+      // On Android (native app), the browser-extension adapters (Phantom,
+      // Solflare, etc.) can't work inside the WebView and dead-end at an
+      // "install" prompt. Use ONLY the Mobile Wallet Adapter, which connects
+      // natively to whichever Solana wallet app the user already has installed.
+      if (isAndroid) {
+        return [
+          new SolanaMobileWalletAdapter({
+            addressSelector: createDefaultAddressSelector(),
+            appIdentity: {
+              name: 'Moonfeed',
+              uri: 'https://moonfeed.app',
+              icon: '/favicon.ico',
+            },
+            authorizationResultCache: createDefaultAuthorizationResultCache(),
+            cluster: 'mainnet-beta',
+            onWalletNotFound: createDefaultWalletNotFoundHandler(),
+          }),
+        ];
+      }
 
+      // Desktop / web browsers: use the standard extension adapters.
       return [
-        ...mobileAdapters,
         new PhantomWalletAdapter(),
         new SolflareWalletAdapter(),
         new CoinbaseWalletAdapter(),
