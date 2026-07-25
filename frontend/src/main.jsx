@@ -24,6 +24,10 @@ import { UserProfileProvider } from './contexts/UserProfileContext.jsx';
 // Wallet notification handler
 import { WalletNotification } from './components/WalletNotification.jsx';
 
+// Demo mode (App Review access without a real wallet)
+import { DemoModeProvider } from './contexts/DemoModeContext.jsx';
+import WalletModalTopActions from './components/WalletModalTopActions.jsx';
+
 // Root component that provides wallet context
 const IS_EXTENSION = import.meta.env.VITE_IS_EXTENSION === 'true';
 
@@ -51,30 +55,39 @@ function RootApp() {
 
   // In extension mode: skip UnifiedWalletProvider entirely so plugin.jup.ag
   // is never loaded (remote scripts are prohibited in Chrome extensions).
-  if (IS_EXTENSION) return inner;
+  if (IS_EXTENSION) return <DemoModeProvider>{inner}</DemoModeProvider>;
 
   return (
-    <UnifiedWalletProvider
-      wallets={wallets}
-      config={{
-        autoConnect: false,
-        env: "mainnet-beta",
-        metadata: {
-          name: "Moonfeed",
-          description: "Discover trending meme coins on Solana",
-          url: typeof window !== 'undefined' ? window.location.origin : 'https://moonfeed.app',
-          iconUrls: ['https://moonfeed.app/favicon.ico'],
-        },
-        notificationCallback: WalletNotification,
-        walletlistExplanation: {
-          href: "https://jup.ag",
-        },
-        theme: "dark",
-        lang: "en",
-      }}
-    >
-      {inner}
-    </UnifiedWalletProvider>
+    <DemoModeProvider>
+      <UnifiedWalletProvider
+        wallets={wallets}
+        config={{
+          autoConnect: false,
+          env: "mainnet-beta",
+          metadata: {
+            name: "Moonfeed",
+            description: "Discover trending meme coins on Solana",
+            url: typeof window !== 'undefined' ? window.location.origin : 'https://moonfeed.app',
+            iconUrls: ['https://moonfeed.app/favicon.ico'],
+          },
+          notificationCallback: WalletNotification,
+          walletlistExplanation: {
+            href: "https://jup.ag",
+          },
+          // Inject "Browse without a wallet" + "Explore demo account" actions.
+          // Jupiter only exposes a footer slot; CSS lifts them to the top of the
+          // Connect Wallet modal (above the wallet list) so it's clear a wallet
+          // is optional and App Review can preview every feature.
+          walletModalAttachments: {
+            footer: <WalletModalTopActions />,
+          },
+          theme: "dark",
+          lang: "en",
+        }}
+      >
+        {inner}
+      </UnifiedWalletProvider>
+    </DemoModeProvider>
   );
 }
 
