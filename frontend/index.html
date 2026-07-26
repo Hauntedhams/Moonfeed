@@ -3,6 +3,40 @@
   <head>
     <!-- Build: 2024-12-11-v6-FORCE-REDEPLOY-1733946000 -->
     <meta charset="UTF-8" />
+    <!-- White-screen catcher: surfaces any startup error on screen instead of a
+         blank page. Runs before the module bundle so it also catches parse/load
+         failures (e.g. an old WebView that can't run the bundle). -->
+    <script>
+      (function () {
+        function show(title, detail) {
+          try {
+            var el = document.getElementById('startup-error');
+            if (!el) {
+              el = document.createElement('div');
+              el.id = 'startup-error';
+              el.style.cssText =
+                'position:fixed;inset:0;z-index:2147483647;background:#0a0a0f;color:#fff;' +
+                'font:14px/1.5 -apple-system,system-ui,sans-serif;padding:24px;overflow:auto;';
+              (document.body || document.documentElement).appendChild(el);
+            }
+            el.innerHTML =
+              '<h2 style="margin:0 0 8px;color:#ff6b6b">' + title + '</h2>' +
+              '<pre style="white-space:pre-wrap;word-break:break-word;margin:0">' +
+              String(detail || '').replace(/[<>&]/g, function (c) {
+                return { '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c];
+              }) + '</pre>' +
+              '<p style="margin-top:16px;opacity:.7">Please screenshot this and send it to the developer.</p>';
+          } catch (e) {}
+        }
+        window.addEventListener('error', function (e) {
+          show('App failed to start', (e && e.message) + '\n' + ((e && e.error && e.error.stack) || (e && e.filename + ':' + e.lineno)));
+        });
+        window.addEventListener('unhandledrejection', function (e) {
+          var r = e && e.reason;
+          show('App failed to start (promise)', (r && (r.stack || r.message)) || String(r));
+        });
+      })();
+    </script>
     <!-- Cache Control -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
