@@ -5,6 +5,7 @@ import { getFullApiUrl } from '../config/api';
 import { useTrackedWallets } from '../contexts/TrackedWalletsContext';
 import { useDarkMode } from '../contexts/DarkModeContext';
 import { useUserProfile } from '../contexts/UserProfileContext';
+import { useDemoMode } from '../contexts/DemoModeContext';
 import WalletPopup from './WalletPopup';
 import JupiterWalletButton from './JupiterWalletButton';
 import './ProfileView.css';
@@ -14,8 +15,11 @@ import { getTransactions } from '../utils/transactionStorage';
 const ProfileView = ({ onTradeClick }) => {
   // Use Jupiter Wallet Kit adapter
   const jupiterWallet = useJupiterWallet();
-  const publicKey = jupiterWallet.publicKey;
-  const connected = jupiterWallet.connected;
+  const { isDemoMode, demoPublicKey, disableDemoMode, enableDemoMode } = useDemoMode();
+
+  // When demo mode is active, override wallet state so all screens are accessible
+  const publicKey = isDemoMode ? demoPublicKey : jupiterWallet.publicKey;
+  const connected = isDemoMode ? true : (jupiterWallet.connected || false);
   const disconnect = jupiterWallet.disconnect;
   const signTransaction = jupiterWallet.signTransaction;
 
@@ -116,7 +120,7 @@ const ProfileView = ({ onTradeClick }) => {
   };
 
   const formatAddress = (address) => {
-    if (!address) return '';
+    if (!address) return isDemoMode ? 'DEMO...ACCT' : '';
     const str = address.toString();
     return `${str.slice(0, 4)}...${str.slice(-4)}`;
   };
@@ -602,6 +606,35 @@ const ProfileView = ({ onTradeClick }) => {
             </div>
           </div>
 
+          {/* Explore a demo account without connecting a wallet */}
+          <div style={{ padding: '16px 16px 0' }}>
+            <button
+              onClick={enableDemoMode}
+              style={{
+                width: '100%',
+                padding: '16px',
+                background: 'linear-gradient(135deg, rgba(255,215,0,0.2), rgba(255,165,0,0.2))',
+                border: '2px solid rgba(255,215,0,0.6)',
+                borderRadius: '14px',
+                color: '#FFD700',
+                fontSize: '16px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                minHeight: '56px',
+                boxShadow: '0 0 20px rgba(255,215,0,0.15)',
+              }}
+            >
+              Explore a demo account
+            </button>
+            <p style={{ textAlign: 'center', fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '6px', marginBottom: '0' }}>
+              Preview all features with a sample account — no wallet needed
+            </p>
+          </div>
+
           {/* Header */}
           <div className="profile-header">
             <div className="profile-icon">
@@ -611,26 +644,26 @@ const ProfileView = ({ onTradeClick }) => {
               </svg>
             </div>
             <h1>Profile</h1>
-            <p className="profile-subtitle">Connect your wallet to access your Moonfeed profile</p>
+            <p className="profile-subtitle">Browse and explore everything for free — connecting a wallet is optional and only needed when you want to trade.</p>
           </div>
 
           {/* Wallet Connection Section */}
           <div className="wallet-connection-section">
             <div className="connection-card">
-              <h3>Connect Wallet</h3>
-              <p>Connect your Solana wallet to view transaction history, manage favorites, and access advanced features.</p>
+              <h3>Connect Wallet (Optional)</h3>
+              <p>You can use the app fully without a wallet. Connecting one is optional — link a Solana wallet only when you want to trade or sync your history across devices.</p>
               <div className="wallet-button-container">
                 <JupiterWalletButton />
               </div>
               <p className="wallet-hint">
-                💡 Supports Phantom, Solflare, and all Solana wallets
+                💡 No app install required to browse — a wallet is only used to sign trades
               </p>
             </div>
           </div>
 
           {/* Features Preview */}
           <div className="features-preview">
-            <h3>What you'll get access to:</h3>
+            <h3>Extra features unlocked when you connect a wallet:</h3>
             <div className="feature-grid">
               <div className="feature-item">
                 <div className="feature-content">
@@ -678,6 +711,30 @@ const ProfileView = ({ onTradeClick }) => {
   return (
     <div className="profile-view pv-social">
       <input ref={fileInputRef} type="file" accept="image/*" onChange={handleProfilePictureChange} style={{ display: 'none' }} />
+
+      {/* Demo Mode banner */}
+      {isDemoMode && (
+        <div style={{
+          background: 'rgba(255,215,0,0.15)',
+          border: '1px solid rgba(255,215,0,0.5)',
+          borderRadius: '8px',
+          padding: '8px 14px',
+          margin: '8px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          fontSize: '13px',
+          color: '#FFD700',
+        }}>
+          <span>Demo Mode — App Review Access</span>
+          <button
+            onClick={disableDemoMode}
+            style={{ background: 'none', border: 'none', color: '#FFD700', cursor: 'pointer', fontSize: '16px' }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* ─── INSTAGRAM-STYLE HEADER ─── */}
       <div className="pv-ig-header">

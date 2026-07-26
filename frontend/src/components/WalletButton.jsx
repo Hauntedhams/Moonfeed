@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useWallet } from '../contexts/WalletContext';
+import { useDemoMode } from '../contexts/DemoModeContext';
 import { UnifiedWalletButton } from '@jup-ag/wallet-adapter';
 import './WalletButton.css';
 
@@ -16,6 +17,7 @@ const WalletButton = () => {
     connected, 
     disconnect
   } = useWallet();
+  const { isDemoMode, disableDemoMode } = useDemoMode();
 
   const [showDropdown, setShowDropdown] = useState(false);
 
@@ -55,7 +57,7 @@ const WalletButton = () => {
       {showDropdown && (
         <div className="wallet-dropdown">
           <div className="wallet-dropdown-header">
-            <span className="wallet-status">🟢 Connected</span>
+            <span className="wallet-status">{isDemoMode ? 'Demo Account' : '� Connected'}</span>
           </div>
           <div className="wallet-dropdown-address">
             {walletAddress}
@@ -87,6 +89,17 @@ const WalletButton = () => {
           >
             🚪 Disconnect
           </button>
+          {isDemoMode && (
+            <button
+              className="wallet-dropdown-action"
+              onClick={() => {
+                disableDemoMode();
+                setShowDropdown(false);
+              }}
+            >
+              ✕ Exit Demo Mode
+            </button>
+          )}
         </div>
       )}
 

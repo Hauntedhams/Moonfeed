@@ -3,13 +3,17 @@ import { useWallet as useJupiterWallet } from '@jup-ag/wallet-adapter';
 import { UnifiedWalletButton } from '@jup-ag/wallet-adapter';
 import { getFullApiUrl } from '../config/api';
 import { getTransactions, deleteTransaction, storeTransaction, clearTransactions } from '../utils/transactionStorage';
+import { useDemoMode } from '../contexts/DemoModeContext';
 import './OrdersView.css';
 
-const OrdersView = ({ onCoinClick }) => {
+const OrdersView = ({ onCoinClick, onTradeClick }) => {
   // Use Jupiter Wallet Kit adapter for universal wallet connection
   const jupiterWallet = useJupiterWallet();
-  const publicKey = jupiterWallet.publicKey;
-  const connected = jupiterWallet.connected;
+  const { isDemoMode, demoPublicKey, enableDemoMode, disableDemoMode } = useDemoMode();
+
+  // Override wallet state when demo mode is active
+  const publicKey = isDemoMode ? demoPublicKey : jupiterWallet.publicKey;
+  const connected = isDemoMode ? true : (jupiterWallet.connected || false);
   const signTransaction = jupiterWallet.signTransaction;
   const [orders, setOrders] = useState([]);
   const [transactions, setTransactions] = useState([]);
@@ -595,6 +599,24 @@ const OrdersView = ({ onCoinClick }) => {
               <div className="wallet-button-container">
                 <UnifiedWalletButton />
               </div>
+              <div style={{ marginTop: '16px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '16px' }}>
+                <button
+                  onClick={enableDemoMode}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    background: 'rgba(255,215,0,0.15)',
+                    border: '1px solid rgba(255,215,0,0.4)',
+                    borderRadius: '10px',
+                    color: '#FFD700',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Explore a demo account
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -605,6 +627,29 @@ const OrdersView = ({ onCoinClick }) => {
   return (
     <div className="orders-view">
       <div className="orders-container">
+        {/* Demo Mode banner */}
+        {isDemoMode && (
+          <div style={{
+            background: 'rgba(255,215,0,0.15)',
+            border: '1px solid rgba(255,215,0,0.5)',
+            borderRadius: '8px',
+            padding: '8px 14px',
+            marginBottom: '12px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            fontSize: '13px',
+            color: '#FFD700',
+          }}>
+            <span>Demo Mode — App Review Access</span>
+            <button
+              onClick={disableDemoMode}
+              style={{ background: 'none', border: 'none', color: '#FFD700', cursor: 'pointer', fontSize: '16px' }}
+            >
+              ✕
+            </button>
+          </div>
+        )}
         {/* Limit Orders Section */}
         <div className="orders-section">
           <div className="orders-filter">
@@ -909,14 +954,19 @@ const OrdersView = ({ onCoinClick }) => {
                     className={`order-card-visual order-hist-card order-hist-${
                       status === 'completed' ? 'executed' : status
                     }`}
-                    onClick={() => onCoinClick?.({
-                      mintAddress: order.tokenMint,
-                      address: order.tokenMint,
-                      symbol: order.tokenSymbol,
-                      name: order.tokenName,
-                      image: order.tokenImage,
+                    onClick={() => setSelectedOrder({
+                      isHistory: true,
+                      orderId,
+                      tokenSymbol: order.tokenSymbol,
+                      tokenName: order.tokenName,
+                      tokenImage: order.tokenImage,
+                      tokenMint: order.tokenMint,
+                      orderType,
+                      triggerPrice,
+                      currentPrice,
                       banner: histDexBanner?.banner || order.tokenBannerImage || null,
                       pairAddress: histDexBanner?.pairAddress || order.tokenPairAddress || null,
+                      rawOrder: order,
                     })}
                   >
                     {histBannerSrc && (
@@ -1428,50 +1478,107 @@ const OrdersView = ({ onCoinClick }) => {
 
             {/* Actions */}
             <div className="order-action-buttons">
-              <button
-                className="order-action-btn order-action-btn-chart"
-                onClick={() => {
-                  setSelectedOrder(null);
-                  onCoinClick?.({
-                    mintAddress: selectedOrder.tokenMint,
-                    address: selectedOrder.tokenMint,
-                    symbol: selectedOrder.rawOrder?.tokenSymbol,
-                    name: selectedOrder.rawOrder?.tokenName,
-                    image: selectedOrder.tokenImage,
-                    banner: selectedOrder.dexBanner?.banner || selectedOrder.rawOrder?.tokenBannerImage || null,
-                    pairAddress: selectedOrder.resolvedPairAddress,
-                  });
-                }}
-              >
-                <span className="order-action-btn-icon">📈</span>
-                <span>View Chart</span>
-              </button>
+              {selectedOrder.isHistory ? (
+                <>
+                  {/* History order actions: Trade History, Chart, Buy */}
+                  <button
+                    className="order-action-btn order-action-btn-trade-history"
+                    onClick={() => {
+                      setSelectedOrder(null);
+                      setActiveSection('transactions');
+                    }}
+                  >
+                    <span className="order-action-btn-icon">📋</span>
+                    <span>Trade History</span>
+                  </button>
 
-              <a
-                className="order-action-btn order-action-btn-jupiter"
-                href={`https://jup.ag/limit/${publicKey?.toString() || ''}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={() => setSelectedOrder(null)}
-              >
-                <span className="order-action-btn-icon">🪐</span>
-                <span>View on Jupiter</span>
-              </a>
+                  <button
+                    className="order-action-btn order-action-btn-chart"
+                    onClick={() => {
+                      setSelectedOrder(null);
+                      onCoinClick?.({
+                        mintAddress: selectedOrder.tokenMint,
+                        address: selectedOrder.tokenMint,
+                        symbol: selectedOrder.tokenSymbol,
+                        name: selectedOrder.tokenName,
+                        image: selectedOrder.tokenImage,
+                        banner: selectedOrder.banner,
+                        pairAddress: selectedOrder.pairAddress,
+                      });
+                    }}
+                  >
+                    <span className="order-action-btn-icon">📈</span>
+                    <span>Chart</span>
+                  </button>
 
-              <button
-                className="order-action-btn order-action-btn-cancel"
-                disabled={cancellingOrder === selectedOrder.orderId}
-                onClick={() => {
-                  const id = selectedOrder.orderId;
-                  setSelectedOrder(null);
-                  handleCancelOrder(id);
-                }}
-              >
-                <span className="order-action-btn-icon">
-                  {cancellingOrder === selectedOrder.orderId ? '⏳' : '🗑️'}
-                </span>
-                <span>{cancellingOrder === selectedOrder.orderId ? 'Cancelling…' : 'Cancel Order'}</span>
-              </button>
+                  <button
+                    className="order-action-btn order-action-btn-buy"
+                    onClick={() => {
+                      setSelectedOrder(null);
+                      onTradeClick?.({
+                        mintAddress: selectedOrder.tokenMint,
+                        address: selectedOrder.tokenMint,
+                        symbol: selectedOrder.tokenSymbol,
+                        name: selectedOrder.tokenName,
+                        image: selectedOrder.tokenImage,
+                        banner: selectedOrder.banner,
+                        pairAddress: selectedOrder.pairAddress,
+                      });
+                    }}
+                  >
+                    <span className="order-action-btn-icon">💰</span>
+                    <span>Buy</span>
+                  </button>
+                </>
+              ) : (
+                <>
+                  {/* Active order actions: View Chart, View on Jupiter, Cancel */}
+                  <button
+                    className="order-action-btn order-action-btn-chart"
+                    onClick={() => {
+                      setSelectedOrder(null);
+                      onCoinClick?.({
+                        mintAddress: selectedOrder.tokenMint,
+                        address: selectedOrder.tokenMint,
+                        symbol: selectedOrder.rawOrder?.tokenSymbol,
+                        name: selectedOrder.rawOrder?.tokenName,
+                        image: selectedOrder.tokenImage,
+                        banner: selectedOrder.dexBanner?.banner || selectedOrder.rawOrder?.tokenBannerImage || null,
+                        pairAddress: selectedOrder.resolvedPairAddress,
+                      });
+                    }}
+                  >
+                    <span className="order-action-btn-icon">📈</span>
+                    <span>View Chart</span>
+                  </button>
+
+                  <a
+                    className="order-action-btn order-action-btn-jupiter"
+                    href={`https://jup.ag/limit/${publicKey?.toString() || ''}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setSelectedOrder(null)}
+                  >
+                    <span className="order-action-btn-icon">🪐</span>
+                    <span>View on Jupiter</span>
+                  </a>
+
+                  <button
+                    className="order-action-btn order-action-btn-cancel"
+                    disabled={cancellingOrder === selectedOrder.orderId}
+                    onClick={() => {
+                      const id = selectedOrder.orderId;
+                      setSelectedOrder(null);
+                      handleCancelOrder(id);
+                    }}
+                  >
+                    <span className="order-action-btn-icon">
+                      {cancellingOrder === selectedOrder.orderId ? '⏳' : '🗑️'}
+                    </span>
+                    <span>{cancellingOrder === selectedOrder.orderId ? 'Cancelling…' : 'Cancel Order'}</span>
+                  </button>
+                </>
+              )}
             </div>
 
             <button className="order-action-dismiss" onClick={() => setSelectedOrder(null)}>

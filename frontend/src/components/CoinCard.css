@@ -246,8 +246,8 @@
   appearance: none;
   outline: none !important;
   box-shadow: none !important;
-  width: 26px;
-  height: 26px;
+  width: 44px;
+  height: 44px;
   cursor: pointer;
   transition: transform 0.18s ease, opacity 0.18s ease;
   position: relative;
@@ -363,8 +363,8 @@
   }
   
   .tiktok-action-btn {
-    width: 38px;
-    height: 38px;
+    width: 44px;
+    height: 44px;
   }
   
   .tiktok-action-btn .tiktok-action-icon {

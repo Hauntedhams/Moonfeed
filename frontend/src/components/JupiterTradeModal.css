@@ -298,6 +298,29 @@
   font-size: 12px;
 }
 
+.non-custodial-disclaimer {
+  margin: 0 0 8px;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.risk-disclaimer {
+  margin: 0 0 12px;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.disclaimer-link {
+  color: rgba(199, 242, 132, 0.9);
+  text-decoration: none;
+}
+
+.disclaimer-link:hover {
+  text-decoration: underline;
+}
+
 /* Wallet Connect Prompt - shown when wallet not connected */
 .jupiter-connect-prompt {
   display: flex;

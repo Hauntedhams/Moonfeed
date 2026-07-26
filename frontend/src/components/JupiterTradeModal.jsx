@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import TriggerOrderModal from './TriggerOrderModal';
 import { useWallet } from '../contexts/WalletContext';
-import { useWallet as useJupiterWallet, UnifiedWalletButton } from '@jup-ag/wallet-adapter';
+import { useWallet as useJupiterWallet, useUnifiedWalletContext } from '@jup-ag/wallet-adapter';
 import ReferralTracker from '../utils/ReferralTracker';
 import { getFullApiUrl } from '../config/api';
 import './JupiterTradeModal.css';
@@ -21,9 +21,11 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
   const [limitSuccess, setLimitSuccess] = useState(false);
   const [limitPriceInput, setLimitPriceInput] = useState('');
   const { walletAddress, signTransaction } = useWallet();
-  
+
   // Get the full Jupiter wallet adapter for passthrough to Terminal
   const jupiterWallet = useJupiterWallet();
+  // Lets us open the wallet-selection modal from inside the Jupiter Terminal
+  const { setShowModal } = useUnifiedWalletContext();
 
   // Track trade with affiliate system
   const trackTradeWithAffiliate = async (txid, swapResult) => {
@@ -84,8 +86,10 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
   }, [jupiterWallet.connected, jupiterWallet.publicKey]);
 
   useEffect(() => {
-    // Only initialize Jupiter when wallet is connected
-    if (isOpen && coin && activeTab === 'swap' && jupiterWallet.connected) {
+    // Initialize Jupiter as soon as the swap tab is open — no wallet required.
+    // The Terminal renders the full swap UI (amounts, quotes, routing) unconnected
+    // and only prompts for a wallet at the final signing step.
+    if (isOpen && coin && activeTab === 'swap') {
       // Simple check and initialize
       if (window.Jupiter && !jupiterInitialized.current) {
         initializeJupiter();
@@ -111,13 +115,13 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
       }
     }
     
-    // Clean up on close or tab change or disconnect
-    if ((!isOpen || activeTab === 'limit' || !jupiterWallet.connected) && jupiterInitialized.current) {
+    // Clean up on close or when leaving the swap tab
+    if ((!isOpen || activeTab === 'limit') && jupiterInitialized.current) {
       jupiterInitialized.current = false;
       setIsLoading(true);
       setError(null);
     }
-  }, [isOpen, coin, activeTab, jupiterWallet.connected]);
+  }, [isOpen, coin, activeTab]);
 
   const initializeJupiter = async () => {
     try {
@@ -146,9 +150,12 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
         displayMode: "integrated",
         integratedTargetId: "jupiter-container",
 
-        // Wallet passthrough — shares the app's connected wallet with the Plugin
+        // Wallet passthrough — shares the app's connected wallet with the Plugin.
+        // When no wallet is connected, the Terminal shows a "Connect Wallet"
+        // button that delegates to our unified wallet modal via onRequestConnectWallet.
         enableWalletPassthrough: true,
         passthroughWalletContextState: jupiterWallet,
+        onRequestConnectWallet: () => setShowModal(true),
 
         formProps: {
           initialInputMint: "So11111111111111111111111111111111111111112", // SOL
@@ -373,31 +380,15 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
           {/* Jupiter Container - only shown when swap tab is active */}
           {activeTab === 'swap' && (
             <div className="jupiter-widget-wrapper">
-              {/* Show connect wallet prompt if not connected */}
-              {!jupiterWallet.connected && (
-                <div className="jupiter-connect-prompt">
-                  <div className="connect-prompt-content">
-                    <h3>Connect Your Wallet</h3>
-                    <p>Connect your Solana wallet to start trading {coin?.symbol || 'tokens'}</p>
-                    <div className="connect-button-container">
-                      <UnifiedWalletButton />
-                    </div>
-                    <p className="connect-hint">
-                      Supports Phantom, Solflare, and other Solana wallets
-                    </p>
-                  </div>
-                </div>
-              )}
-              
-              {/* Show loading/error states only when connected */}
-              {jupiterWallet.connected && isLoading && (
+              {/* Loading state while the Terminal boots */}
+              {isLoading && !error && (
                 <div className="loading-state">
                   <div className="loading-spinner"></div>
                   <p>Loading...</p>
                 </div>
               )}
               
-              {jupiterWallet.connected && error && (
+              {error && (
                 <div className="error-state">
                   <p>Failed to load</p>
                   <button onClick={initializeJupiter} className="retry-button">
@@ -406,15 +397,16 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
                 </div>
               )}
               
-              {/* Jupiter container - hidden when not connected */}
+              {/* Jupiter container - the full swap UI renders with or without a
+                  connected wallet. Connecting is only required to sign a trade. */}
               <div 
                 id="jupiter-container"
                 style={{ 
                   width: '100%', 
                   height: '600px',
                   minHeight: '600px',
-                  opacity: (!jupiterWallet.connected || isLoading || error) ? 0 : 1,
-                  display: !jupiterWallet.connected ? 'none' : 'block',
+                  opacity: (isLoading || error) ? 0 : 1,
+                  display: error ? 'none' : 'block',
                   transition: 'opacity 0.3s'
                 }}
               />
@@ -557,6 +549,23 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
 
           {/* Footer */}
           <div className="jupiter-modal-footer">
+            <p className="non-custodial-disclaimer">
+              Moonfeed is a non-custodial interface. Swaps are executed on-chain by{' '}
+              <a
+                href="https://jup.ag"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="disclaimer-link"
+              >
+                Jupiter
+              </a>{' '}
+              using your own self-custody wallet. Moonfeed never holds, controls, or has
+              access to your funds.
+            </p>
+            <p className="risk-disclaimer">
+              Crypto trading involves substantial risk. You are solely responsible for your
+              transactions.
+            </p>
             <p className="powered-by">Powered by Jupiter</p>
           </div>
         </div>

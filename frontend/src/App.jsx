@@ -337,6 +337,17 @@ function App() {
               setCurrentViewedCoin(coinData);
               setActiveTab('coin-detail');
             }}
+            onTradeClick={(coinData) => {
+              handleTradeClick({
+                mintAddress: coinData.mintAddress,
+                address: coinData.address,
+                symbol: coinData.symbol,
+                name: coinData.name,
+                image: coinData.image,
+                banner: coinData.banner,
+                pairAddress: coinData.pairAddress,
+              });
+            }}
           />
         </Suspense>
       ) : activeTab === 'coin-detail' && selectedCoin ? (

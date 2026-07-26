@@ -2,13 +2,17 @@ import React, { useState, useEffect } from 'react';
 import TopTabs from './TopTabs';
 import NotificationsFeed from './NotificationsFeed';
 import { useWallet } from '../contexts/WalletContext';
+import { useDemoMode } from '../contexts/DemoModeContext';
 import { UnifiedWalletButton } from '@jup-ag/wallet-adapter';
 import { getTransactions } from '../utils/transactionStorage';
 import './FavoritesGrid.css';
 
 function FavoritesGrid({ favorites = [], onCoinClick, onFavoritesChange }) {
   const [activeTab, setActiveTab] = useState('feed');
-  const { connected, walletAddress } = useWallet();
+  const { connected: walletConnected, walletAddress: walletAddr } = useWallet();
+  const { isDemoMode, demoWalletAddress, enableDemoMode } = useDemoMode();
+  const connected = isDemoMode || walletConnected;
+  const walletAddress = isDemoMode ? demoWalletAddress : walletAddr;
   const [transactions, setTransactions] = useState([]);
   // Map of mintAddress -> { priceChange: {h1,h6,h24}, banner: string|null }
   const [liveData, setLiveData] = useState(new Map());
@@ -100,6 +104,23 @@ function FavoritesGrid({ favorites = [], onCoinClick, onFavoritesChange }) {
           <p>Connect wallet to see notifications</p>
           <div className="wallet-button-container">
             <UnifiedWalletButton />
+          </div>
+          <div style={{ marginTop: '16px' }}>
+            <button
+              onClick={enableDemoMode}
+              style={{
+                padding: '10px 20px',
+                background: 'rgba(255,215,0,0.15)',
+                border: '1px solid rgba(255,215,0,0.4)',
+                borderRadius: '10px',
+                color: '#FFD700',
+                fontSize: '14px',
+                fontWeight: '600',
+                cursor: 'pointer',
+              }}
+            >
+              Demo Mode (App Review Access)
+            </button>
           </div>
         </div>
       </div>

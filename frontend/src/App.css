@@ -28,8 +28,8 @@ html:not(.dark-mode) #root {
   background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 50%, #f8f9fa 100%);
 }
 
-/* Mobile: constrain to phone width */
-@media (max-width: 1199px) {
+/* Mobile: constrain to phone width (portrait only — landscape shows desktop view) */
+@media (max-width: 1199px) and (orientation: portrait) {
   #root {
     max-width: 430px;
   }

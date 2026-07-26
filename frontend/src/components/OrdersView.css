@@ -2086,6 +2086,27 @@
   cursor: not-allowed;
 }
 
+.order-action-btn-trade-history {
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.order-action-btn-trade-history:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.order-action-btn-buy {
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  color: #fff;
+}
+
+.order-action-btn-buy:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
 .order-action-dismiss {
   width: 100%;
   padding: 12px;
