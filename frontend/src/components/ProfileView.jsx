@@ -75,7 +75,6 @@ const ProfileView = ({ onTradeClick }) => {
       } else {
         setBalance(null);
         setOrders([]);
-        setProfilePicture(null);
         
         // Clear order caches on disconnect
         const { clearAllOrderCaches } = await import('../utils/orderCache.js');
