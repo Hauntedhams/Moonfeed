@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useTrackedWallets } from '../contexts/TrackedWalletsContext';
 import { useDarkMode } from '../contexts/DarkModeContext';
 import { useCopyTrade } from '../contexts/CopyTradeContext';
+import { ORANGIE_WALLETS, ORANGIE_PROFILE } from '../data/orangieWallets';
 
 import './MoonfeedInfoModal.css';
 
@@ -303,10 +304,11 @@ const MoonfeedInfoModal = ({ isVisible, onClose, onBuyMoo, onStartTutorial }) =>
 
 // ─── Tracked Wallets Panel ────────────────────────────────────────────────────
 const TrackedWalletsPanel = ({ onClose }) => {
-  const { trackedWallets, untrackWallet, toggleCopyTrade } = useTrackedWallets();
+  const { trackedWallets, untrackWallet, toggleCopyTrade, trackWallet, isTracked } = useTrackedWallets();
   const { queue } = useCopyTrade();
   const [selectedWallet, setSelectedWallet] = useState(null);
   const [howItWorksOpen, setHowItWorksOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('mine'); // 'mine' | 'orangie'
 
   const isActive = trackedWallets.length > 0;
   const activeCount = trackedWallets.filter(w => w.copyTradeEnabled !== false).length;
@@ -319,6 +321,76 @@ const TrackedWalletsPanel = ({ onClose }) => {
           <button className="menu-panel-close" onClick={onClose} aria-label="Close">✕</button>
         </div>
 
+        {/* ── Tab selector ─────────────────────────────────── */}
+        <div className="twallet-tabs" role="tablist">
+          <button
+            className={`twallet-tab ${activeTab === 'mine' ? 'twallet-tab--active' : ''}`}
+            role="tab"
+            aria-selected={activeTab === 'mine'}
+            onClick={() => setActiveTab('mine')}
+          >
+            My Wallets{trackedWallets.length > 0 ? ` (${trackedWallets.length})` : ''}
+          </button>
+          <button
+            className={`twallet-tab ${activeTab === 'orangie' ? 'twallet-tab--active' : ''}`}
+            role="tab"
+            aria-selected={activeTab === 'orangie'}
+            onClick={() => setActiveTab('orangie')}
+          >
+            Orangie's Wallets
+          </button>
+        </div>
+
+        {activeTab === 'orangie' ? (
+          <div className="menu-panel-body">
+            {/* ── Orangie profile card ─────────────────────── */}
+            <div className="orangie-card">
+              <div className="orangie-card__avatar">🍊</div>
+              <div className="orangie-card__info">
+                <span className="orangie-card__name">{ORANGIE_PROFILE.name}</span>
+                <span className="orangie-card__desc">{ORANGIE_PROFILE.description}</span>
+              </div>
+              <span className="orangie-card__count">{ORANGIE_WALLETS.length}</span>
+            </div>
+
+            <ul className="tracked-wallet-list">
+              {ORANGIE_WALLETS.map((w, i) => {
+                const tracked = isTracked(w.address);
+                return (
+                  <li key={`${w.address}-${i}`} className="tracked-wallet-row">
+                    <div className="tracked-wallet-row-info">
+                      <div className="twallet-addr-row">
+                        <span className="tracked-wallet-row-addr">
+                          {w.address.slice(0, 5)}…{w.address.slice(-5)}
+                        </span>
+                      </div>
+                      <span className="tracked-wallet-row-label">{w.name}</span>
+                    </div>
+                    <div className="tracked-wallet-row-actions">
+                      <button
+                        className={`twallet-track-btn ${tracked ? 'twallet-track-btn--on' : ''}`}
+                        onClick={() => {
+                          if (tracked) untrackWallet(w.address);
+                          else trackWallet(w.address, w.name);
+                        }}
+                        title={tracked ? 'Untrack this wallet' : 'Add to My Wallets'}
+                      >
+                        {tracked ? '✓ Tracked' : '+ Track'}
+                      </button>
+                      <button
+                        className="twallet-view-btn"
+                        onClick={() => setSelectedWallet(w.address)}
+                        title="View on Solscan"
+                      >
+                        ↗
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ) : (
         <div className="menu-panel-body">
 
           {/* ── Copy Trading Info Card ─────────────────────── */}
@@ -370,7 +442,7 @@ const TrackedWalletsPanel = ({ onClose }) => {
           {trackedWallets.length === 0 ? (
             <div className="menu-panel-empty">
               <p>No tracked wallets yet.</p>
-              <p className="menu-panel-empty-hint">Tap any wallet address in the feed to track it.</p>
+              <p className="menu-panel-empty-hint">Tap any wallet address in the feed to track it, or add some from Orangie's Wallets above.</p>
             </div>
           ) : (
             <ul className="tracked-wallet-list">
@@ -420,6 +492,7 @@ const TrackedWalletsPanel = ({ onClose }) => {
             </ul>
           )}
         </div>
+        )}
       </div>
       {selectedWallet && (
         <div className="twallet-solscan-notice">

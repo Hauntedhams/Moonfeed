@@ -1,6 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { Connection, Transaction, VersionedTransaction, PublicKey } from '@solana/web3.js';
 import { useWallet as useJupiterWallet } from '@jup-ag/wallet-adapter';
+import { Capacitor } from '@capacitor/core';
+import { App as CapacitorApp } from '@capacitor/app';
+import { mobileWallet } from '../services/mobileWalletDeeplink';
 
 /**
  * Wallet Context for managing wallet connection via Jupiter Wallet Kit
@@ -9,6 +12,7 @@ import { useWallet as useJupiterWallet } from '@jup-ag/wallet-adapter';
  */
 
 const IS_EXTENSION = import.meta.env.VITE_IS_EXTENSION === 'true';
+const IS_NATIVE = Capacitor?.isNativePlatform?.() === true;
 
 const WalletContext = createContext({});
 
@@ -71,6 +75,47 @@ const JupiterWalletBridge = ({ children }) => {
       console.log('🔌 Wallet disconnected');
     }
   }, [connected, walletAddress, walletType]);
+
+  // NATIVE: keep the global Jupiter wallet state in sync with the persisted
+  // Phantom/Solflare deeplink session. After returning from the wallet app
+  // (or a WebView reload), re-select the matching adapter so every screen
+  // (Profile, Orders, Trade) sees the same connected wallet.
+  useEffect(() => {
+    if (!IS_NATIVE) return;
+
+    const reconcile = () => {
+      try {
+        if (
+          mobileWallet.isConnected() &&
+          !jupiterWallet.connected &&
+          !jupiterWallet.connecting
+        ) {
+          const targetName = mobileWallet.provider === 'solflare' ? 'Solflare' : 'Phantom';
+          const match = (jupiterWallet.wallets || []).find(
+            (w) => w?.adapter?.name === targetName
+          );
+          if (match) {
+            console.log('🔄 Reconciling native wallet state ->', targetName);
+            jupiterWallet.select(match.adapter.name);
+          }
+        }
+      } catch (err) {
+        console.warn('Wallet reconcile failed:', err);
+      }
+    };
+
+    // Run once on mount and whenever connection state changes.
+    reconcile();
+
+    let resumeSub;
+    CapacitorApp.addListener('resume', reconcile).then((sub) => {
+      resumeSub = sub;
+    });
+
+    return () => {
+      if (resumeSub) resumeSub.remove();
+    };
+  }, [jupiterWallet.connected, jupiterWallet.connecting]);
 
   // Connect wallet (opens Jupiter wallet modal)
   const connect = useCallback(async () => {

@@ -1673,6 +1673,114 @@
   gap: 8px;
 }
 
+/* Tab selector (My Wallets / Orangie's Wallets) */
+.twallet-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 0 16px 12px;
+}
+
+.twallet-tab {
+  flex: 1;
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.twallet-tab:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.twallet-tab--active {
+  background: rgba(255, 145, 48, 0.15);
+  border-color: rgba(255, 145, 48, 0.45);
+  color: #ffb066;
+}
+
+/* Orangie profile card */
+.orangie-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: linear-gradient(135deg, rgba(255, 145, 48, 0.14), rgba(255, 94, 0, 0.08));
+  border: 1px solid rgba(255, 145, 48, 0.3);
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+
+.orangie-card__avatar {
+  font-size: 30px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.orangie-card__info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.orangie-card__name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.orangie-card__desc {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+  line-height: 1.35;
+}
+
+.orangie-card__count {
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffb066;
+  background: rgba(255, 145, 48, 0.16);
+  border-radius: 999px;
+  padding: 4px 12px;
+}
+
+/* Track / Tracked button (Orangie list) */
+.twallet-track-btn {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 145, 48, 0.4);
+  background: rgba(255, 145, 48, 0.12);
+  color: #ffb066;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.twallet-track-btn:hover {
+  background: rgba(255, 145, 48, 0.22);
+}
+
+.twallet-track-btn--on {
+  background: rgba(72, 187, 120, 0.16);
+  border-color: rgba(72, 187, 120, 0.4);
+  color: #68d391;
+}
+
+.twallet-track-btn--on:hover {
+  background: rgba(72, 187, 120, 0.26);
+}
+
 .tracked-wallet-row {
   display: flex;
   align-items: center;

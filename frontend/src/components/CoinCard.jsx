@@ -20,6 +20,13 @@ import {
 import debug from '../utils/debug.js';
 import { rafManager, eventListenerManager, cleanupManager } from '../utils/mobileOptimizations.js';
 
+// Shared across ALL CoinCard instances: a wheel gesture over the action buttons
+// must advance exactly one card, even though every mounted card registers its own
+// wheel listener and the active card changes mid-glide. This module-level lock is
+// held for the whole physical gesture and only released once the wheel truly stops.
+let _wheelGestureLocked = false;
+let _wheelGestureIdleTimer = null;
+
 // Deterministic gradient color from a coin symbol/name string
 function getCoinGradient(seed) {
   let hash = 0;
@@ -109,6 +116,9 @@ const CoinCard = memo(({
   const actionButtonsRef = useRef(null); // Ref for wheel-forwarding on action buttons
   const actionWheelDebounceRef = useRef(null); // Debounce — one card advance per gesture
   const _btnSwipeStartY = useRef(0); // track swipe start Y for portaled buttons column
+  const _btnSwipeStartScrollTop = useRef(0); // scroller position when a swipe over the buttons begins
+  const _btnScrollerRef = useRef(null); // cached scroller element during a button swipe
+  const _btnDraggingRef = useRef(false); // true while finger is dragging the scroller via the buttons
 
   // Track if coin is enriched (has banner, socials, rugcheck, etc.)
   const isEnriched = !!(
@@ -286,6 +296,9 @@ const CoinCard = memo(({
     const scroller = document.querySelector('.modern-scroller-container');
     if (!scroller) return;
     const handleScroll = () => {
+      // While the user is dragging the scroller via the action buttons, keep the
+      // buttons visible so the swipe visibly follows the finger over them.
+      if (_btnDraggingRef.current) return;
       setIsScrolling(true);
       clearTimeout(scrollEndTimerRef.current);
       scrollEndTimerRef.current = setTimeout(() => setIsScrolling(false), 250);
@@ -298,10 +311,12 @@ const CoinCard = memo(({
     };
   }, [isDesktopMode, isActiveCard]);
 
-  // Wheel forwarding (desktop / trackpad). Touch/swipe on mobile is handled by
-  // ModernTokenScroller's document-level touch listener (it owns scrollerRef).
-  // Direct scrollTop assignment — scrollTo({smooth}) is silently cancelled by
-  // scroll-snap-type:mandatory.
+  // Wheel forwarding (desktop / trackpad) for scrolls that start over the action
+  // buttons. The buttons are a fixed overlay above the chart iframe, so wheel
+  // events there never reach the native scroller. We glide exactly one card in the
+  // scroll direction with a single smooth animation. A module-level lock (shared by
+  // every card) guarantees one glide per physical gesture — otherwise the momentum
+  // stream would chain through several coins as the active card changes mid-glide.
   useEffect(() => {
     const handleWheel = (e) => {
       const el = actionButtonsRef.current;
@@ -313,14 +328,27 @@ const CoinCard = memo(({
       if (!scroller) return;
       e.preventDefault();
       e.stopPropagation();
-      if (actionWheelDebounceRef.current) return;
-      actionWheelDebounceRef.current = setTimeout(() => {
-        actionWheelDebounceRef.current = null;
-      }, 600);
+      // Release the shared lock only after wheel events stop for a beat, so trackpad
+      // momentum after the flick can't trigger additional glides.
+      clearTimeout(_wheelGestureIdleTimer);
+      _wheelGestureIdleTimer = setTimeout(() => { _wheelGestureLocked = false; }, 200);
+      if (_wheelGestureLocked) return; // gesture already handled — ignore momentum tail
+      _wheelGestureLocked = true;
+
+      const cardHeight = scroller.clientHeight || window.innerHeight;
       const direction = e.deltaY > 0 ? 1 : -1;
-      const cardHeight = scroller.clientHeight;
       const currentCard = Math.round(scroller.scrollTop / cardHeight);
-      scroller.scrollTop = (currentCard + direction) * cardHeight;
+      const target = Math.max(0, currentCard + direction);
+      _btnDraggingRef.current = true; // keep buttons visible/steady during the glide
+      scroller.style.scrollSnapType = 'none';   // snap-mandatory cancels smooth scroll
+      scroller.style.scrollBehavior = 'smooth';
+      scroller.scrollTop = target * cardHeight;
+      clearTimeout(actionWheelDebounceRef.current);
+      actionWheelDebounceRef.current = setTimeout(() => {
+        scroller.style.scrollSnapType = '';
+        scroller.style.scrollBehavior = '';
+        _btnDraggingRef.current = false;
+      }, 500);
     };
     document.addEventListener('wheel', handleWheel, { passive: false, capture: true });
     return () => document.removeEventListener('wheel', handleWheel, { capture: true });
@@ -2354,22 +2382,59 @@ const CoinCard = memo(({
       <div
         ref={actionButtonsRef}
         className={`tiktok-action-buttons ${showActionButtons ? '' : 'collapsed'}`}
-        onTouchStart={_mobilePortal ? (e) => { _btnSwipeStartY.current = e.touches[0].clientY; } : undefined}
-        onTouchEnd={_mobilePortal ? (e) => {
-          const dy = _btnSwipeStartY.current - e.changedTouches[0].clientY;
-          if (Math.abs(dy) < 20) return; // tap — let onClick fire normally
+        onTouchStart={_mobilePortal ? (e) => {
           const scroller = document.querySelector('.modern-scroller-container');
-          if (!scroller) return;
-          const direction = dy > 0 ? 1 : -1;
-          const cardHeight = scroller.clientHeight || window.innerHeight;
-          const targetIdx = Math.max(0, Math.round(scroller.scrollTop / cardHeight) + direction);
-          const slides = scroller.querySelectorAll('.modern-coin-slide');
-          if (slides[targetIdx]) {
-            // scrollIntoView is more reliable than scrollTop on iOS scroll-snap containers
-            slides[targetIdx].scrollIntoView({ block: 'start' });
-          } else {
-            scroller.scrollTop = targetIdx * cardHeight;
+          _btnScrollerRef.current = scroller;
+          _btnSwipeStartY.current = e.touches[0].clientY;
+          _btnSwipeStartScrollTop.current = scroller ? scroller.scrollTop : 0;
+          _btnDraggingRef.current = false;
+          if (scroller) {
+            // Disable snap AND iOS momentum scrolling so programmatic scrollTop
+            // updates apply instantly during the touch (otherwise iOS defers them
+            // until touchend, which looks like an instant jump).
+            scroller.style.scrollSnapType = 'none';
+            scroller.style.scrollBehavior = 'auto';
+            scroller.style.setProperty('-webkit-overflow-scrolling', 'auto');
           }
+        } : undefined}
+        onTouchMove={_mobilePortal ? (e) => {
+          const scroller = _btnScrollerRef.current;
+          if (!scroller) return;
+          const dy = _btnSwipeStartY.current - e.touches[0].clientY;
+          if (Math.abs(dy) > 4) _btnDraggingRef.current = true;
+          // Drive the underlying scroller 1:1 so the swipe follows the finger.
+          scroller.scrollTop = _btnSwipeStartScrollTop.current + dy;
+          // Move the (fixed) buttons with the card so they follow the swipe too.
+          if (actionButtonsRef.current) actionButtonsRef.current.style.transform = `translateY(${-dy}px)`;
+        } : undefined}
+        onTouchEnd={_mobilePortal ? (e) => {
+          const scroller = _btnScrollerRef.current;
+          if (!scroller) return;
+          const dy = _btnSwipeStartY.current - e.changedTouches[0].clientY;
+          const cardHeight = scroller.clientHeight || window.innerHeight;
+          const restoreSnap = () => {
+            scroller.style.scrollSnapType = '';
+            scroller.style.scrollBehavior = '';
+            scroller.style.removeProperty('-webkit-overflow-scrolling');
+          };
+          if (actionButtonsRef.current) actionButtonsRef.current.style.transform = '';
+          if (Math.abs(dy) < 20) {
+            // Tap (not a swipe) — return to the starting card and let onClick fire.
+            scroller.scrollTop = _btnSwipeStartScrollTop.current;
+            _btnDraggingRef.current = false;
+            restoreSnap();
+            return;
+          }
+          // Snap to the neighbouring card in the swipe direction, animating from
+          // wherever the finger left off so it feels continuous.
+          const startIdx = Math.round(_btnSwipeStartScrollTop.current / cardHeight);
+          const direction = dy > 0 ? 1 : -1;
+          const targetIdx = Math.max(0, startIdx + direction);
+          scroller.style.scrollBehavior = 'smooth';
+          scroller.scrollTop = targetIdx * cardHeight;
+          // Let the snap fade run now that the finger-follow drag is over.
+          _btnDraggingRef.current = false;
+          setTimeout(restoreSnap, 350);
         } : undefined}
         style={_mobilePortal ? {
           position: 'fixed',

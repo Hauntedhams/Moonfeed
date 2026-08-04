@@ -25,6 +25,16 @@ import {
   createDefaultWalletNotFoundHandler,
 } from '@solana-mobile/wallet-adapter-mobile';
 
+// Capacitor native detection + deeplink wallet adapters (Phantom/Solflare).
+// Inside the Capacitor WebView the MWA handshake dead-ends, so we connect via
+// the wallets' encrypted universal-link deeplink protocol instead.
+import { Capacitor } from '@capacitor/core';
+import {
+  PhantomDeeplinkWalletAdapter,
+  SolflareDeeplinkWalletAdapter,
+} from './wallets/deeplinkWalletAdapters';
+import { mobileWallet } from './services/mobileWalletDeeplink';
+
 // WebSocket context for singleton connection
 import { LiveDataProvider } from './hooks/useLiveDataContext.jsx';
 
@@ -40,6 +50,13 @@ import WalletModalTopActions from './components/WalletModalTopActions.jsx';
 
 // Root component that provides wallet context
 const IS_EXTENSION = import.meta.env.VITE_IS_EXTENSION === 'true';
+const IS_NATIVE = Capacitor?.isNativePlatform?.() === true;
+
+// Register the deeplink redirect listener up front so the wallet's response is
+// captured the moment it reopens the app.
+if (IS_NATIVE) {
+  mobileWallet.ensureListener();
+}
 
 function RootApp() {
   // Initialize wallet adapters — skipped in extension build to avoid loading
@@ -48,12 +65,19 @@ function RootApp() {
     () => {
       if (IS_EXTENSION) return [];
 
+      // Native Capacitor app: use Phantom/Solflare encrypted-deeplink adapters.
+      // These are the ONLY wallets that actually work inside the WebView.
+      if (IS_NATIVE) {
+        return [
+          new PhantomDeeplinkWalletAdapter(),
+          new SolflareDeeplinkWalletAdapter(),
+        ];
+      }
+
       const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
 
-      // On Android (native app), the browser-extension adapters (Phantom,
-      // Solflare, etc.) can't work inside the WebView and dead-end at an
-      // "install" prompt. Use ONLY the Mobile Wallet Adapter, which connects
-      // natively to whichever Solana wallet app the user already has installed.
+      // Mobile web browser (not the native app): the Mobile Wallet Adapter can
+      // broker a connection to an installed wallet app via the MWA protocol.
       if (isAndroid) {
         return [
           new SolanaMobileWalletAdapter({
@@ -99,7 +123,10 @@ function RootApp() {
       <UnifiedWalletProvider
         wallets={wallets}
         config={{
-          autoConnect: false,
+          // Native app: reconnect the persisted Phantom/Solflare deeplink
+          // session on mount so wallet state is consistent across every screen
+          // (Profile, Orders, Trade) and survives switching to the wallet app.
+          autoConnect: IS_NATIVE,
           env: "mainnet-beta",
           metadata: {
             name: "Moonfeed",

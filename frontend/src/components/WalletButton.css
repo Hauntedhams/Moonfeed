@@ -24,6 +24,23 @@
   cursor: not-allowed;
 }
 
+.wallet-connect-native-btn {
+  padding: 10px 20px;
+  background: linear-gradient(135deg, #4FC3F7, #677EEA);
+  border: none;
+  border-radius: 12px;
+  color: white;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+  box-shadow: 0 4px 12px rgba(79, 195, 247, 0.3);
+}
+
+.wallet-connect-native-btn:active {
+  transform: scale(0.98);
+}
+
 .spinner-small {
   width: 14px;
   height: 14px;

@@ -4,7 +4,7 @@
   left: 0;
   right: 0;
   width: 100%;
-  max-width: 430px; /* match container max width */
+  max-width: 430px; /* phone max width — overridden for iPad below */
   margin: 0 auto;
   display: flex;
   justify-content: center;
@@ -119,6 +119,14 @@
   font-weight: 500;
   color: inherit; /* inherit color from parent nav-btn */
   margin-top: 2px;
+}
+
+/* iPad portrait/landscape: expand nav to full screen width */
+@media (min-width: 600px) and (max-width: 1199px) {
+  .bottom-nav {
+    max-width: 100%;
+    width: 100%;
+  }
 }
 
 /* Responsive design for smaller screens */

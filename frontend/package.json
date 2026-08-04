@@ -13,6 +13,8 @@
   },
   "dependencies": {
     "@capacitor/android": "8.4.0",
+    "@capacitor/app": "^8.1.1",
+    "@capacitor/app-launcher": "^8.0.1",
     "@capacitor/cli": "8.4.0",
     "@capacitor/core": "8.4.0",
     "@capacitor/ios": "8.4.0",
@@ -36,7 +38,8 @@
     "dotenv": "^17.2.1",
     "lightweight-charts": "^5.0.8",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "tweetnacl": "^1.0.3"
   },
   "overrides": {
     "react": "^18.3.1",

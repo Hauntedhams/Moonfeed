@@ -22,6 +22,15 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- Deep link used by Phantom/Solflare to redirect back into the app
+                 after a connect / sign request (moonfeed://wallet/...). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="moonfeed" />
+            </intent-filter>
+
         </activity>
 
         <provider
@@ -47,6 +56,12 @@
             <action android:name="android.intent.action.VIEW" />
             <category android:name="android.intent.category.BROWSABLE" />
             <data android:scheme="solana-wallet" />
+        </intent>
+        <!-- Allow launching the Phantom/Solflare universal (https) deeplinks. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
         </intent>
     </queries>
 </manifest>

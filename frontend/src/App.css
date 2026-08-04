@@ -28,10 +28,17 @@ html:not(.dark-mode) #root {
   background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 50%, #f8f9fa 100%);
 }
 
-/* Mobile: constrain to phone width (portrait only — landscape shows desktop view) */
-@media (max-width: 1199px) and (orientation: portrait) {
+/* Phone only: constrain to phone width in portrait (iPad = 768px+, so exempt) */
+@media (max-width: 599px) and (orientation: portrait) {
   #root {
     max-width: 430px;
+  }
+}
+
+/* iPad portrait: use full width so the app fills the iPad screen */
+@media (min-width: 600px) and (max-width: 1199px) and (orientation: portrait) {
+  #root {
+    max-width: 100%;
   }
 }
 

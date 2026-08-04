@@ -93,7 +93,7 @@ small,
 
 #root {
   width: 100%;
-  max-width: 430px;
+  max-width: 100%; /* App.css applies phone-specific max-width via media query */
   height: 100%;
   margin: 0 auto;
   background: linear-gradient(135deg, #0b1220 0%, #0e1426 50%, #0b1220 100%);
