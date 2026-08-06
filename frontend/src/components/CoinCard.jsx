@@ -1810,6 +1810,11 @@ const CoinCard = memo(({
             <div className="twelve-chart-section mobile-chart-target" ref={mobileChartTargetRef}>
               {/* Chart portals here on mobile */}
             </div>
+            {/* Freeze the chart iframe (its own GPU layer) while the feed is
+                actively scrolling so the card moves as one cohesive unit. */}
+            {isScrolling && !isDesktopMode && (
+              <div className="chart-scroll-freeze" aria-hidden="true" />
+            )}
           </div> {/* Close charts-section */}
 
           {/* Live Transactions Section */}

@@ -1916,6 +1916,20 @@
   pointer-events: auto;
 }
 
+/* Opaque cover shown over the chart iframe while the feed is actively scrolling.
+   Matches the chart background so the card composites as one unit (the iframe is
+   its own GPU layer and otherwise visibly drifts during the swipe). */
+.chart-scroll-freeze {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background: #0a0e1a;
+  pointer-events: none;
+}
+html:not(.dark-mode) .chart-scroll-freeze {
+  background: #ffffff;
+}
+
 /* Twelve Chart Section - Ensure dimensions for chart rendering */
 .twelve-chart-section {
   width: 100%;
