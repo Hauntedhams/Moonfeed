@@ -388,7 +388,7 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
       feedScrollEndTimer = setTimeout(() => {
         updateSlotPosition();
         setChartHidden(false);
-      }, 90);
+      }, 50);
     };
 
     const handleResize = () => updateSlotPosition(); // resize is always needed (mode can change dims)

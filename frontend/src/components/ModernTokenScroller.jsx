@@ -882,7 +882,7 @@ const ModernTokenScroller = ({
     const t = setTimeout(() => {
       const nextIdx = currentIndex + 1;
       if (nextIdx < coins.length) setPreloadIndex(nextIdx);
-    }, 300);
+    }, 120);
     return () => clearTimeout(t);
   }, [currentIndex, coins.length]);
 
