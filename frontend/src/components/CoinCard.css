@@ -2100,9 +2100,10 @@ html:not(.dark-mode) .twelve-chart-section {
   -ms-overflow-style: none; /* Internet Explorer 10+ */
   overflow-y: visible; /* Allow charts to use full height without clipping */
   position: relative; /* Establish stacking context */
-  /* NOTE: no will-change/translateZ here — keeping this on the card's own
-     compositor layer so it scrolls in lockstep with the rest of the card
-     (a separate layer visibly drifts during the vertical feed swipe). */
+  /* Optimize scrolling performance on mobile */
+  will-change: scroll-position;
+  transform: translateZ(0); /* Force GPU acceleration */
+  -webkit-transform: translateZ(0);
   /* 🔥 FIX: Inherit pointer-events from parent (pass through when collapsed) */
   pointer-events: inherit;
 }
@@ -2120,8 +2121,11 @@ html:not(.dark-mode) .twelve-chart-section {
   min-height: 280px;
   overflow: visible; /* Allow chart to expand beyond container */
   position: relative; /* Establish stacking context */
-  /* NOTE: no translateZ/backface here — a separate layer per page drifts out
-     of sync with the card during the vertical swipe. */
+  /* Optimize rendering on mobile */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
   /* 🔥 FIX: Inherit pointer-events from parent (pass through when collapsed) */
   pointer-events: inherit;
 }
