@@ -364,17 +364,42 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
     // Use containerRef to find the coin-info-layer — the scroll container when expanded.
     const infoContent = containerRef.current?.closest('.coin-info-layer')
       ?? document.querySelector('.coin-info-layer');
-    // In fullscreen mode the slot is viewport-fixed — skip card-tracking updates.
-    // This prevents scroll events from the underlying feed from flickering the chart.
-    const handleScroll = () => { if (!fullscreenModeRef.current) updateSlotPosition(); };
+
+    // Inner (expanded card) content scroll: keep the chart tracking live — it's a
+    // slow, deliberate scroll where the chart should stay pinned to its section.
+    const handleInnerScroll = () => { if (!fullscreenModeRef.current) updateSlotPosition(); };
+
+    // Feed swipe between cards: the chart is a body-portaled, fixed iframe whose
+    // position is driven by JS. Repositioning it on every scroll event both
+    // thrashes layout (getBoundingClientRect + style writes) and visibly lags
+    // behind the native scroll. Instead, hide it while the feed is moving and
+    // reposition + reveal once the swipe settles, so the card scrolls as one unit.
+    let feedScrollEndTimer = null;
+    const setChartHidden = (hidden) => {
+      const v = hidden ? 'hidden' : 'visible';
+      if (fsSlotRef.current) fsSlotRef.current.style.visibility = v;
+      if (fullscreenBtnRef.current) fullscreenBtnRef.current.style.visibility = v;
+      if (maskRef.current) maskRef.current.style.visibility = v;
+    };
+    const handleFeedScroll = () => {
+      if (fullscreenModeRef.current) return;
+      setChartHidden(true);
+      clearTimeout(feedScrollEndTimer);
+      feedScrollEndTimer = setTimeout(() => {
+        updateSlotPosition();
+        setChartHidden(false);
+      }, 90);
+    };
+
     const handleResize = () => updateSlotPosition(); // resize is always needed (mode can change dims)
     window.addEventListener('resize', handleResize);
-    if (scroller) scroller.addEventListener('scroll', handleScroll, { passive: true });
-    if (infoContent) infoContent.addEventListener('scroll', handleScroll, { passive: true });
+    if (scroller) scroller.addEventListener('scroll', handleFeedScroll, { passive: true });
+    if (infoContent) infoContent.addEventListener('scroll', handleInnerScroll, { passive: true });
     return () => {
       window.removeEventListener('resize', handleResize);
-      if (scroller) scroller.removeEventListener('scroll', handleScroll);
-      if (infoContent) infoContent.removeEventListener('scroll', handleScroll);
+      clearTimeout(feedScrollEndTimer);
+      if (scroller) scroller.removeEventListener('scroll', handleFeedScroll);
+      if (infoContent) infoContent.removeEventListener('scroll', handleInnerScroll);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
