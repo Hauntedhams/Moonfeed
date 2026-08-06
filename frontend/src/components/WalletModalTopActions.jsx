@@ -30,26 +30,23 @@ const WalletModalTopActions = () => {
 
   return (
     <div className="moonfeed-wallet-modal-top">
-      <div className="moonfeed-wallet-modal-top__buttons">
+      <div className="moonfeed-wallet-modal-top__links">
         <button
           type="button"
           onClick={handleBrowse}
-          className="moonfeed-wallet-modal-top__btn moonfeed-wallet-modal-top__btn--browse"
+          className="moonfeed-wallet-modal-top__link"
         >
           Browse without a wallet
         </button>
+        <span className="moonfeed-wallet-modal-top__sep">·</span>
         <button
           type="button"
           onClick={handleDemo}
-          className="moonfeed-wallet-modal-top__btn moonfeed-wallet-modal-top__btn--demo"
+          className="moonfeed-wallet-modal-top__link"
         >
           Explore demo account
         </button>
       </div>
-      <p className="moonfeed-wallet-modal-top__hint">
-        A wallet is only needed to trade — everything else is free to explore.
-      </p>
-      <div className="moonfeed-wallet-modal-top__divider" />
     </div>
   );
 };

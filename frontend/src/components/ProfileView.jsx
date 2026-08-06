@@ -15,7 +15,7 @@ import { getTransactions } from '../utils/transactionStorage';
 const ProfileView = ({ onTradeClick }) => {
   // Use Jupiter Wallet Kit adapter
   const jupiterWallet = useJupiterWallet();
-  const { isDemoMode, demoPublicKey, disableDemoMode, enableDemoMode } = useDemoMode();
+  const { isDemoMode, demoPublicKey, disableDemoMode } = useDemoMode();
 
   // When demo mode is active, override wallet state so all screens are accessible
   const publicKey = isDemoMode ? demoPublicKey : jupiterWallet.publicKey;
@@ -605,35 +605,6 @@ const ProfileView = ({ onTradeClick }) => {
             </div>
           </div>
 
-          {/* Explore a demo account without connecting a wallet */}
-          <div style={{ padding: '16px 16px 0' }}>
-            <button
-              onClick={enableDemoMode}
-              style={{
-                width: '100%',
-                padding: '16px',
-                background: 'linear-gradient(135deg, rgba(255,215,0,0.2), rgba(255,165,0,0.2))',
-                border: '2px solid rgba(255,215,0,0.6)',
-                borderRadius: '14px',
-                color: '#FFD700',
-                fontSize: '16px',
-                fontWeight: '700',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                minHeight: '56px',
-                boxShadow: '0 0 20px rgba(255,215,0,0.15)',
-              }}
-            >
-              Explore a demo account
-            </button>
-            <p style={{ textAlign: 'center', fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '6px', marginBottom: '0' }}>
-              Preview all features with a sample account — no wallet needed
-            </p>
-          </div>
-
           {/* Header */}
           <div className="profile-header">
             <div className="profile-icon">
@@ -655,7 +626,7 @@ const ProfileView = ({ onTradeClick }) => {
                 <JupiterWalletButton />
               </div>
               <p className="wallet-hint">
-                💡 No app install required to browse — a wallet is only used to sign trades
+                No app install required to browse — a wallet is only used to sign trades
               </p>
             </div>
           </div>

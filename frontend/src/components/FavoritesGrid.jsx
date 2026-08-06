@@ -10,7 +10,7 @@ import './FavoritesGrid.css';
 function FavoritesGrid({ favorites = [], onCoinClick, onFavoritesChange }) {
   const [activeTab, setActiveTab] = useState('feed');
   const { connected: walletConnected, walletAddress: walletAddr } = useWallet();
-  const { isDemoMode, demoWalletAddress, enableDemoMode } = useDemoMode();
+  const { isDemoMode, demoWalletAddress } = useDemoMode();
   const connected = isDemoMode || walletConnected;
   const walletAddress = isDemoMode ? demoWalletAddress : walletAddr;
   const [transactions, setTransactions] = useState([]);
@@ -104,23 +104,6 @@ function FavoritesGrid({ favorites = [], onCoinClick, onFavoritesChange }) {
           <p>Connect wallet to see notifications</p>
           <div className="wallet-button-container">
             <UnifiedWalletButton />
-          </div>
-          <div style={{ marginTop: '16px' }}>
-            <button
-              onClick={enableDemoMode}
-              style={{
-                padding: '10px 20px',
-                background: 'rgba(255,215,0,0.15)',
-                border: '1px solid rgba(255,215,0,0.4)',
-                borderRadius: '10px',
-                color: '#FFD700',
-                fontSize: '14px',
-                fontWeight: '600',
-                cursor: 'pointer',
-              }}
-            >
-              Demo Mode (App Review Access)
-            </button>
           </div>
         </div>
       </div>

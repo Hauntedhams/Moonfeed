@@ -9,7 +9,7 @@ import './OrdersView.css';
 const OrdersView = ({ onCoinClick, onTradeClick }) => {
   // Use Jupiter Wallet Kit adapter for universal wallet connection
   const jupiterWallet = useJupiterWallet();
-  const { isDemoMode, demoPublicKey, enableDemoMode, disableDemoMode } = useDemoMode();
+  const { isDemoMode, demoPublicKey, disableDemoMode } = useDemoMode();
 
   // Override wallet state when demo mode is active
   const publicKey = isDemoMode ? demoPublicKey : jupiterWallet.publicKey;
@@ -598,24 +598,6 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
               <p>Connect your Solana wallet to view limit orders and your recent meme coin purchases.</p>
               <div className="wallet-button-container">
                 <UnifiedWalletButton />
-              </div>
-              <div style={{ marginTop: '16px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '16px' }}>
-                <button
-                  onClick={enableDemoMode}
-                  style={{
-                    width: '100%',
-                    padding: '12px',
-                    background: 'rgba(255,215,0,0.15)',
-                    border: '1px solid rgba(255,215,0,0.4)',
-                    borderRadius: '10px',
-                    color: '#FFD700',
-                    fontSize: '14px',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                  }}
-                >
-                  Explore a demo account
-                </button>
               </div>
             </div>
           </div>
