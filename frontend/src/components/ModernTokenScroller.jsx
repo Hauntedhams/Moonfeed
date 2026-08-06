@@ -47,7 +47,7 @@ const ModernTokenScroller = ({
   const [isTutorialActive, setIsTutorialActive] = useState(false); // Interactive tutorial mode
   const [isFirstVisit, setIsFirstVisit] = useState(() => !InteractiveTutorial.hasCompleted()); // Show nudge for new users
   
-  // Chart preload: activate the next card's chart 1.5 s after landing so it's
+  // Chart preload: activate the next card's chart shortly after landing so it's
   // ready before the user scrolls. Only 1 card ahead — avoids simultaneous
   // WebSocket connections that cause DexScreener rate-limiting.
   const [preloadIndex, setPreloadIndex] = useState(null);
@@ -722,8 +722,6 @@ const ModernTokenScroller = ({
                 onCurrentCoinChange?.(enrichedCoin, idx);
               }
             });
-
-            console.log(`📱 Coin ${idx + 1}/${coins.length}`);
           }
         }
       },
@@ -832,8 +830,7 @@ const ModernTokenScroller = ({
     // 🔥 OPTIMIZED: Only run effects for visible coins (current ± N)
     // Mobile: ±1 (3 active cards) — reduces simultaneous effects & GPU layers
     // Desktop: ±2 (5 active cards) — richer prefetch window on fast hardware
-    const isMobileDevice = window.innerWidth < 768 || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    const renderDistance = isMobileDevice ? 1 : 2;
+    const renderDistance = isMobile ? 1 : 2;
     const shouldShowChart = Math.abs(index - currentIndex) <= renderDistance;
     const isVisible = Math.abs(index - currentIndex) <= renderDistance;
     
@@ -879,13 +876,13 @@ const ModernTokenScroller = ({
     }
   }, [currentIndex, coins.length]); // Remove getEnrichedCoin and enrichedCoins dependencies
 
-  // Preload the next card's chart ~1.5 s after landing so it's ready before scroll
+  // Preload the next card's chart shortly after landing so it's ready before scroll
   useEffect(() => {
     setPreloadIndex(null); // reset immediately on index change
     const t = setTimeout(() => {
       const nextIdx = currentIndex + 1;
       if (nextIdx < coins.length) setPreloadIndex(nextIdx);
-    }, 1500);
+    }, 300);
     return () => clearTimeout(t);
   }, [currentIndex, coins.length]);
 

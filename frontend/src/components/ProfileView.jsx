@@ -768,7 +768,7 @@ const ProfileView = ({ onTradeClick }) => {
         </div>
 
         <button className="pv-ig-addr-chip" onClick={() => copyToClipboard(publicKey?.toString())} title="Copy full address">
-          {formatAddress(publicKey)} 📋
+          {formatAddress(publicKey)}
         </button>
 
         {editingName ? (
@@ -780,7 +780,6 @@ const ProfileView = ({ onTradeClick }) => {
         ) : (
           <h2 className="pv-ig-display-name" onClick={() => setEditingName(true)}>
             {profile.displayName || <span className="pv-ig-ph">Add name</span>}
-            <span className="pv-ig-pencil"> ✏️</span>
           </h2>
         )}
 
@@ -795,7 +794,6 @@ const ProfileView = ({ onTradeClick }) => {
         ) : (
           <p className="pv-ig-bio" onClick={() => setEditingBio(true)}>
             {profile.bio || <span className="pv-ig-ph">Add a bio</span>}
-            <span className="pv-ig-pencil"> ✏️</span>
           </p>
         )}
 
