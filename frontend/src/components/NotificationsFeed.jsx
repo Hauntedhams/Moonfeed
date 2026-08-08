@@ -1,8 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import './NotificationsFeed.css';
+import { useAlerts } from '../contexts/AlertsContext';
 
 function NotificationsFeed({ favorites = [] }) {
   const [notifications, setNotifications] = useState([]);
+  const { notifications: alertNotifs, markAllRead } = useAlerts();
+
+  // Viewing the Alerts tab clears the unread badge.
+  useEffect(() => {
+    markAllRead();
+  }, [markAllRead]);
 
   // Generate notifications from favorite coins
   useEffect(() => {
@@ -136,7 +143,23 @@ function NotificationsFeed({ favorites = [] }) {
     return `${Math.floor(hours / 24)}d`;
   };
 
-  if (notifications.length === 0) {
+  // Map user-configured "Notify at" alerts that fired into display items and
+  // show them above the auto-generated activity feed.
+  const triggeredItems = (alertNotifs || []).map((n) => ({
+    id: n.id,
+    type: 'price_alert',
+    coin: n.coin || {},
+    message: n.message,
+    icon: n.level > 0 ? '▲' : '▼',
+    color: n.level > 0 ? '#22c55e' : '#ef4444',
+    timestamp: n.timestamp,
+    value: n.level,
+    isAlert: true,
+  }));
+
+  const combined = [...triggeredItems, ...notifications];
+
+  if (combined.length === 0) {
     return (
       <div className="notifications-feed">
         <div className="notifications-empty-state">
@@ -150,8 +173,8 @@ function NotificationsFeed({ favorites = [] }) {
 
   return (
     <div className="notifications-feed">
-      {notifications.map((notification) => (
-        <div key={notification.id} className="notification-item">
+      {combined.map((notification) => (
+        <div key={notification.id} className={`notification-item${notification.isAlert ? ' notification-alert' : ''}`}>
           <div className="notification-icon" style={{ background: `${notification.color}15`, color: notification.color }}>
             {notification.icon}
           </div>
@@ -177,10 +200,10 @@ function NotificationsFeed({ favorites = [] }) {
               {notification.message}
             </div>
             
-            {notification.type === 'price_change' && (
+            {(notification.type === 'price_change' || notification.type === 'price_alert') && (
               <div className="notification-stats">
                 <div className="stat-badge" style={{ background: `${notification.color}10`, color: notification.color }}>
-                  {notification.value > 0 ? '+' : ''}{notification.value.toFixed(2)}%
+                  {notification.value > 0 ? '+' : ''}{notification.value.toFixed ? notification.value.toFixed(2) : notification.value}%
                 </div>
               </div>
             )}

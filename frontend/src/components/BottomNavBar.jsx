@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
 import './BottomNavBar.css';
+import { useAlerts } from '../contexts/AlertsContext';
 
-function BottomNavBar({ activeTab, setActiveTab, onSearchClick, onOrdersClick }) {
+function BottomNavBar({ activeTab, setActiveTab, onSearchClick, onOrdersClick, notificationCount }) {
+  const { unreadCount } = useAlerts();
+  const badgeCount = notificationCount ?? unreadCount ?? 0;
 
   return (
     <nav className="bottom-nav">
@@ -38,6 +41,9 @@ function BottomNavBar({ activeTab, setActiveTab, onSearchClick, onOrdersClick })
         <span className="nav-icon">
           {/* Star/Favorite icon */}
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 3L12.4721 7.94454L17.9445 8.52786L13.9722 12.0555L15.2361 17.4721L10 14.5L4.76393 17.4721L6.02778 12.0555L2.05548 8.52786L7.52786 7.94454L10 3Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>
+          {badgeCount > 0 && (
+            <span className="nav-badge">{badgeCount > 99 ? '99+' : badgeCount}</span>
+          )}
         </span>
         <span className="nav-label">Favorites</span>
       </button>

@@ -1,16 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import TopTabs from './TopTabs';
 import NotificationsFeed from './NotificationsFeed';
 import { useWallet } from '../contexts/WalletContext';
 import { useDemoMode } from '../contexts/DemoModeContext';
+import { useAlerts } from '../contexts/AlertsContext';
 import { UnifiedWalletButton } from '@jup-ag/wallet-adapter';
 import { getTransactions } from '../utils/transactionStorage';
 import './FavoritesGrid.css';
 
-function FavoritesGrid({ favorites = [], onCoinClick, onFavoritesChange }) {
-  const [activeTab, setActiveTab] = useState('feed');
+function FavoritesGrid({ favorites = [], onCoinClick, onFavoritesChange, onSetupOrder }) {
+  const [activeTab, setActiveTab] = useState('all');
   const { connected: walletConnected, walletAddress: walletAddr } = useWallet();
   const { isDemoMode, demoWalletAddress } = useDemoMode();
+  const { notifications: alertNotifs, markAllRead } = useAlerts();
   const connected = isDemoMode || walletConnected;
   const walletAddress = isDemoMode ? demoWalletAddress : walletAddr;
   const [transactions, setTransactions] = useState([]);
@@ -47,6 +49,13 @@ function FavoritesGrid({ favorites = [], onCoinClick, onFavoritesChange }) {
   }, [favorites.map(f => f.mintAddress || f.address).join(',')]);
 
   const handleTabChange = ({ type }) => setActiveTab(type);
+
+  // Clear the unread badge whenever alerts become visible (All or Alerts tab)
+  useEffect(() => {
+    if (activeTab === 'all' || activeTab === 'notifications') {
+      markAllRead();
+    }
+  }, [activeTab, markAllRead]);
 
   // Load trade history whenever wallet changes or history tab is opened
   useEffect(() => {
@@ -97,6 +106,142 @@ function FavoritesGrid({ favorites = [], onCoinClick, onFavoritesChange }) {
     return (val >= 0 ? '+' : '') + Number(val).toFixed(2) + '%';
   };
 
+  // Merged, recency-sorted activity feed combining triggered alerts, trade
+  // history and saved coins into a single Instagram-style list.
+  const feedItems = useMemo(() => {
+    const items = [];
+
+    (alertNotifs || []).forEach((n) => {
+      items.push({
+        id: n.id,
+        kind: 'alert',
+        timestamp: n.timestamp || 0,
+        coin: n.coin || {},
+        level: n.level,
+        message: n.message,
+      });
+    });
+
+    (transactions || []).forEach((tx) => {
+      items.push({
+        id: `tx-${tx.signature}`,
+        kind: 'trade',
+        timestamp: tx.timestamp || 0,
+        tx,
+      });
+    });
+
+    favorites.forEach((coin, idx) => {
+      const mint = coin.mintAddress || coin.address;
+      // Older favorites have no savedAt — fall back to array order so the most
+      // recently added still surface above them.
+      const ts = coin.savedAt || idx + 1;
+      items.push({
+        id: `saved-${mint || idx}`,
+        kind: 'saved',
+        timestamp: ts,
+        coin,
+      });
+    });
+
+    return items.sort((a, b) => b.timestamp - a.timestamp);
+  }, [alertNotifs, transactions, favorites]);
+
+  // Group feed items into Instagram-style time buckets (Today / Yesterday / Earlier)
+  const groupedFeed = useMemo(() => {
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const startOfYesterday = startOfToday - 86400000;
+    const groups = { Today: [], Yesterday: [], Earlier: [] };
+    feedItems.forEach((item) => {
+      // Fallback ordinal timestamps (small ints) count as "Earlier"
+      if (item.timestamp >= startOfToday) groups.Today.push(item);
+      else if (item.timestamp >= startOfYesterday) groups.Yesterday.push(item);
+      else groups.Earlier.push(item);
+    });
+    return groups;
+  }, [feedItems]);
+
+  const coinFromItem = (item) => {
+    if (item.kind === 'trade') {
+      return {
+        mintAddress: item.tx.tokenMint,
+        symbol: item.tx.tokenSymbol,
+        name: item.tx.tokenName,
+        image: item.tx.tokenImage,
+      };
+    }
+    return item.coin;
+  };
+
+  const renderFeedRow = (item) => {
+    const coin = coinFromItem(item);
+    const symbol = coin.symbol || '??';
+    const name = coin.name || '';
+    const image = coin.profileImage || coin.image || coin.tokenImage || null;
+
+    let icon = '★';
+    let iconColor = '#f59e0b';
+    let message = null;
+
+    if (item.kind === 'alert') {
+      const up = item.level > 0;
+      icon = up ? '▲' : '▼';
+      iconColor = up ? '#22c55e' : '#ef4444';
+      message = item.message;
+    } else if (item.kind === 'trade') {
+      const isSell = item.tx.type === 'sell';
+      icon = isSell ? '↑' : '↓';
+      iconColor = isSell ? '#ef4444' : '#22c55e';
+      message = isSell
+        ? `sold for ${Number(item.tx.outputAmount || 0).toFixed(4)} SOL`
+        : `bought for ${Number(item.tx.inputAmount || 0).toFixed(4)} SOL`;
+    } else {
+      icon = '★';
+      iconColor = '#f59e0b';
+      message = 'saved to your favorites';
+    }
+
+    return (
+      <div key={item.id} className={`feed-row feed-row--${item.kind}`} onClick={() => onCoinClick?.(coin)}>
+        <div className="feed-row-icon" style={{ background: `${iconColor}18`, color: iconColor }}>
+          {icon}
+        </div>
+        <div className="feed-row-avatar-wrap">
+          {image ? (
+            <img
+              src={image}
+              alt={symbol}
+              className="feed-row-avatar"
+              onError={(e) => { e.target.style.display = 'none'; e.target.nextElementSibling.style.display = 'flex'; }}
+            />
+          ) : null}
+          <div className="feed-row-avatar feed-row-avatar--placeholder" style={{ display: image ? 'none' : 'flex' }}>
+            {symbol.slice(0, 2)}
+          </div>
+        </div>
+        <div className="feed-row-body">
+          <div className="feed-row-title">
+            <span className="feed-row-symbol">{symbol}</span>
+            {name && <span className="feed-row-name">{name}</span>}
+          </div>
+          <div className="feed-row-message">{message}</div>
+        </div>
+        <div className="feed-row-right">
+          <span className="feed-row-time">{formatTimeAgo(item.timestamp > 100000 ? item.timestamp : null) || ''}</span>
+          {item.kind === 'alert' && onSetupOrder && (
+            <button
+              className="feed-row-order-btn"
+              onClick={(e) => { e.stopPropagation(); onSetupOrder(coin, item.level); }}
+            >
+              Set up order
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   if (!connected) {
     return (
       <div className="favorites-empty wallet-required">
@@ -119,13 +264,37 @@ function FavoritesGrid({ favorites = [], onCoinClick, onFavoritesChange }) {
         isFilterActive={false}
         hasCustomFilters={false}
         customTabs={[
+          { id: 'all', label: 'All', icon: 'sparkles' },
           { id: 'feed', label: 'Saved', icon: 'star' },
           { id: 'history', label: 'History', icon: 'clock' },
           { id: 'notifications', label: 'Alerts', icon: 'zap' },
         ]}
       />
 
-      {activeTab === 'feed' ? (
+      {activeTab === 'all' ? (
+        feedItems.length === 0 ? (
+          <div className="fav-grid-scroll">
+            <div className="fav-empty-inline">
+              <div className="empty-icon">✦</div>
+              <h2>Nothing here yet</h2>
+              <p>Follow coins and set price alerts to see activity here</p>
+            </div>
+          </div>
+        ) : (
+          <div className="fav-grid-scroll">
+            <div className="feed-list">
+              {['Today', 'Yesterday', 'Earlier'].map((section) =>
+                groupedFeed[section].length > 0 ? (
+                  <div key={section} className="feed-section">
+                    <div className="feed-section-title">{section}</div>
+                    {groupedFeed[section].map((item) => renderFeedRow(item))}
+                  </div>
+                ) : null
+              )}
+            </div>
+          </div>
+        )
+      ) : activeTab === 'feed' ? (
         favorites.length === 0 ? (
           <div className="fav-grid-scroll">
             <div className="fav-empty-inline">

@@ -10,6 +10,8 @@ import { useLiveData } from '../hooks/useLiveDataContext.jsx';
 import { useSolanaTransactions } from '../hooks/useSolanaTransactions.jsx';
 import { useOnDemandPrice } from '../hooks/useOnDemandPrice.js';
 import { useWallet } from '../contexts/WalletContext';
+import { useAlerts } from '../contexts/AlertsContext';
+import { ALERT_LEVELS } from '../utils/alertStorage';
 import { API_CONFIG } from '../config/api.js';
 import { 
   calculateGraduationPercentage, 
@@ -95,6 +97,9 @@ const CoinCard = memo(({
   const [bannerError, setBannerError] = useState(false); // Track banner image load failure
   const [profileSrcIndex, setProfileSrcIndex] = useState(0); // Index into ordered list of profile image URLs to try
   const [profileLoaded, setProfileLoaded] = useState(false); // True once the winning profile img fires onLoad
+  const [showAlertFlyout, setShowAlertFlyout] = useState(false); // "Notify at" flyout beside Follow button
+  const [alertFlyoutPos, setAlertFlyoutPos] = useState({ top: 0, left: 0 });
+  const alertArrowRef = useRef(null);
   const [chartHoveredPrice, setChartHoveredPrice] = useState(null); // Track hovered price from chart
   const [chartHoveredData, setChartHoveredData] = useState(null); // Track full crosshair data (price + time)
   const [chartFirstPrice, setChartFirstPrice] = useState(null); // Track first visible price for % calculation
@@ -142,6 +147,7 @@ const CoinCard = memo(({
   // 🔥 CRITICAL FIX: Get coins Map directly from context to force re-renders when it updates
   const { getCoin, getChart, connected, connectionStatus, coins, updateCount } = useLiveData();
   const { walletAddress, connected: walletConnected } = useWallet();
+  const { prefs: alertPrefs, toggleLevel: toggleAlertLevel } = useAlerts();
   
   // 🔥 PRICE UPDATE FIX: Directly read from coins Map and use it to trigger re-renders
   const address = coin.mintAddress || coin.address;
@@ -182,6 +188,33 @@ const CoinCard = memo(({
   const livePrice = liveData?.price;
   const fallbackPrice = coin.price_usd || coin.priceUsd || coin.price || 0;
   const displayPrice = onDemandPrice || livePrice || fallbackPrice;
+
+  // Active "Notify at" alert levels for this coin (reactive to context prefs)
+  const activeAlertLevels = useMemo(() => {
+    const entry = alertPrefs?.[address];
+    return new Set(entry?.levels || []);
+  }, [alertPrefs, address]);
+
+  // Close the alert flyout when tapping/clicking outside of it
+  const alertWrapRef = useRef(null);
+  useEffect(() => {
+    if (!showAlertFlyout) return;
+    if (alertArrowRef.current) {
+      const r = alertArrowRef.current.getBoundingClientRect();
+      setAlertFlyoutPos({ top: r.top + window.scrollY, left: r.right + 8 });
+    }
+    const handler = (e) => {
+      if (alertWrapRef.current && !alertWrapRef.current.contains(e.target)) {
+        setShowAlertFlyout(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    document.addEventListener('touchstart', handler);
+    return () => {
+      document.removeEventListener('mousedown', handler);
+      document.removeEventListener('touchstart', handler);
+    };
+  }, [showAlertFlyout]);
   const { transactions, isConnected: txConnected, historyLoaded: txHistoryLoaded, error: txError, clearTransactions } = useSolanaTransactions(
     mintAddress,
     isExpanded || showLiveTransactions || (isDesktopMode && isCurrentCard) // Auto-load when expanded, sheet open, or desktop card is active
@@ -1634,16 +1667,64 @@ const CoinCard = memo(({
                       </div>
                     </div>
                   )}
-                  <button 
-                    className={`banner-follow-button ${isFavorite ? 'following' : ''}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onFavoriteToggle?.();
-                    }}
-                    title={isFavorite ? 'Click to unfollow' : 'Click to follow'}
-                  >
-                    {isFavorite ? 'Following' : 'Follow'}
-                  </button>
+                  <div className={`follow-alert-wrap ${showAlertFlyout ? 'flyout-open' : ''}`} ref={alertWrapRef}>
+                    <button 
+                      className={`banner-follow-button ${isFavorite ? 'following' : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onFavoriteToggle?.();
+                      }}
+                      title={isFavorite ? 'Click to unfollow' : 'Click to follow'}
+                    >
+                      {isFavorite ? 'Following' : 'Follow'}
+                    </button>
+                    <button
+                      ref={alertArrowRef}
+                      className={`alert-arrow-btn ${showAlertFlyout ? 'open' : ''} ${activeAlertLevels.size > 0 ? 'has-alerts' : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowAlertFlyout((v) => !v);
+                      }}
+                      title="Set price alerts"
+                      aria-label="Set price alerts"
+                      aria-expanded={showAlertFlyout}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                        <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      {activeAlertLevels.size > 0 && <span className="alert-arrow-dot" />}
+                    </button>
+
+                    {showAlertFlyout && createPortal(
+                      <div
+                        className="alert-flyout"
+                        style={{ position: 'fixed', top: alertFlyoutPos.top, left: alertFlyoutPos.left }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <span className="alert-flyout-label">Notify at</span>
+                        <div className="alert-flyout-chips">
+                          {ALERT_LEVELS.map((level) => {
+                            const active = activeAlertLevels.has(level);
+                            const positive = level > 0;
+                            return (
+                              <button
+                                key={level}
+                                className={`alert-chip ${active ? 'active' : ''} ${positive ? 'pos' : 'neg'}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleAlertLevel(coin, level, displayPrice);
+                                }}
+                                title={`Notify me when price moves ${positive ? '+' : ''}${level}%`}
+                              >
+                                {positive ? '+' : ''}{level}%
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>,
+                      document.body
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

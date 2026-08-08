@@ -751,7 +751,7 @@ const ModernTokenScroller = ({
       );
       console.log('🔥 Removing from favorites, new count:', newFavorites.length);
     } else {
-      newFavorites = [...favorites, coin];
+      newFavorites = [...favorites, { ...coin, savedAt: Date.now() }];
       console.log('🔥 Adding to favorites, new count:', newFavorites.length);
     }
     

@@ -111,6 +111,7 @@
 
 .action-group {
   display: flex;
+  flex: 1;
   gap: 4px;
   background: rgba(255, 255, 255, 0.03);
   border-radius: 10px;
@@ -118,6 +119,7 @@
 }
 
 .action-btn {
+  flex: 1;
   padding: 8px 14px;
   background: transparent;
   border: none;
@@ -886,3 +888,337 @@
     padding: 12px;
   }
 }
+
+/* ============================================================================
+   JUPITER PLUGIN THEME
+   Retheme to match the Jupiter Plugin: near-black modules (#10171F),
+   #212A36 interactive surfaces, lime-green primary (#C7F284), #E8F9FF text.
+   Scoped under the container for specificity so it overrides the rules above.
+   ============================================================================ */
+.trigger-modal-content.compact-layout {
+  --jup-primary: #c7f284;
+  --jup-primary-rgb: 199, 242, 132;
+  --jup-bg: #10171f;        /* module */
+  --jup-surface: #212a36;   /* interactive */
+  --jup-surface-2: #1a2029;
+  --jup-text: #e8f9ff;
+  --jup-text-dim: rgba(232, 249, 255, 0.55);
+  --jup-text-mute: rgba(232, 249, 255, 0.4);
+  --jup-border: rgba(255, 255, 255, 0.08);
+  --jup-warning: #fbbf24;
+  --jup-sell: #ff5c5c;
+}
+
+.trigger-modal-overlay {
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.trigger-modal-content.compact-layout {
+  background: var(--jup-bg);
+  border: 1px solid var(--jup-border);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.7);
+}
+
+/* Header */
+.trigger-modal-content.compact-layout .compact-header {
+  background: transparent;
+  border-bottom: 1px solid var(--jup-border);
+}
+
+.trigger-modal-content.compact-layout .coin-details h3 {
+  color: var(--jup-text);
+}
+
+.trigger-modal-content.compact-layout .current-price-badge {
+  color: var(--jup-text-dim);
+}
+
+.trigger-modal-content.compact-layout .close-btn-compact {
+  background: var(--jup-surface);
+  color: var(--jup-text);
+}
+
+.trigger-modal-content.compact-layout .close-btn-compact:hover {
+  background: #2b3543;
+}
+
+/* Segmented controls (Limit/Stop, Buy/Sell) */
+.trigger-modal-content.compact-layout .action-row {
+  border-bottom: 1px solid var(--jup-border);
+}
+
+.trigger-modal-content.compact-layout .action-group {
+  background: var(--jup-surface);
+}
+
+.trigger-modal-content.compact-layout .action-btn {
+  color: var(--jup-text-dim);
+}
+
+.trigger-modal-content.compact-layout .action-btn:hover {
+  color: var(--jup-text);
+}
+
+.trigger-modal-content.compact-layout .action-btn.active {
+  background: rgba(var(--jup-primary-rgb), 0.16);
+  color: var(--jup-primary);
+}
+
+.trigger-modal-content.compact-layout .action-btn.buy-btn.active {
+  background: rgba(var(--jup-primary-rgb), 0.18);
+  color: var(--jup-primary);
+}
+
+.trigger-modal-content.compact-layout .action-btn.sell-btn.active {
+  background: rgba(255, 92, 92, 0.16);
+  color: var(--jup-sell);
+}
+
+/* Hero slider tints */
+.trigger-modal-content.compact-layout .hero-slider-section {
+  background: transparent;
+  border-bottom: 1px solid var(--jup-border);
+}
+
+.trigger-modal-content.compact-layout .hero-slider-section.buy {
+  background: linear-gradient(180deg, rgba(var(--jup-primary-rgb), 0.08) 0%, transparent 100%);
+}
+
+.trigger-modal-content.compact-layout .hero-slider-section.sell {
+  background: linear-gradient(180deg, rgba(255, 92, 92, 0.08) 0%, transparent 100%);
+}
+
+.trigger-modal-content.compact-layout .price-label,
+.trigger-modal-content.compact-layout .input-group label {
+  color: var(--jup-text-mute);
+}
+
+.trigger-modal-content.compact-layout .price-value {
+  color: var(--jup-text);
+}
+
+.trigger-modal-content.compact-layout .percentage-badge.positive {
+  color: var(--jup-primary);
+  background: rgba(var(--jup-primary-rgb), 0.15);
+}
+
+.trigger-modal-content.compact-layout .percentage-badge.negative {
+  color: var(--jup-sell);
+  background: rgba(255, 92, 92, 0.15);
+}
+
+/* Slider */
+.trigger-modal-content.compact-layout .price-slider-input {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.trigger-modal-content.compact-layout .price-slider-input::-webkit-slider-thumb {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4), 0 0 0 3px rgba(var(--jup-primary-rgb), 0.35);
+}
+
+.trigger-modal-content.compact-layout .price-slider-input::-moz-range-thumb {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4), 0 0 0 3px rgba(var(--jup-primary-rgb), 0.35);
+}
+
+.trigger-modal-content.compact-layout .buy .price-slider-input::-webkit-slider-thumb {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4), 0 0 0 3px rgba(var(--jup-primary-rgb), 0.5);
+}
+
+.trigger-modal-content.compact-layout .sell .price-slider-input::-webkit-slider-thumb {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4), 0 0 0 3px rgba(255, 92, 92, 0.5);
+}
+
+/* Neutral (limit) slider fill uses Jupiter green when not buy/sell tinted */
+.trigger-modal-content.compact-layout .hero-slider-section:not(.buy):not(.sell) .slider-track-fill {
+  background: linear-gradient(90deg, var(--jup-primary), #a6d95f) !important;
+}
+
+/* Chips */
+.trigger-modal-content.compact-layout .chip {
+  background: var(--jup-surface);
+  border: 1px solid var(--jup-border);
+  color: var(--jup-text-dim);
+}
+
+.trigger-modal-content.compact-layout .chip:hover {
+  background: #2b3543;
+  color: var(--jup-text);
+}
+
+.trigger-modal-content.compact-layout .chip.positive {
+  border-color: rgba(var(--jup-primary-rgb), 0.3);
+}
+
+.trigger-modal-content.compact-layout .chip.positive:hover,
+.trigger-modal-content.compact-layout .chip.positive.selected {
+  background: rgba(var(--jup-primary-rgb), 0.18);
+  border-color: var(--jup-primary);
+  color: var(--jup-primary);
+}
+
+.trigger-modal-content.compact-layout .chip.negative {
+  border-color: rgba(255, 92, 92, 0.3);
+}
+
+.trigger-modal-content.compact-layout .chip.negative:hover,
+.trigger-modal-content.compact-layout .chip.negative.selected {
+  background: rgba(255, 92, 92, 0.18);
+  border-color: var(--jup-sell);
+  color: var(--jup-sell);
+}
+
+/* Inputs */
+.trigger-modal-content.compact-layout .manual-price-input input,
+.trigger-modal-content.compact-layout .input-group input {
+  background: var(--jup-surface);
+  border: 1px solid var(--jup-border);
+  color: var(--jup-text);
+}
+
+.trigger-modal-content.compact-layout .manual-price-input input:focus,
+.trigger-modal-content.compact-layout .input-group input:focus {
+  border-color: var(--jup-primary);
+  background: var(--jup-surface-2);
+}
+
+.trigger-modal-content.compact-layout .manual-price-input label {
+  color: var(--jup-text-dim);
+}
+
+/* Expiry */
+.trigger-modal-content.compact-layout .input-row {
+  border-bottom: 1px solid var(--jup-border);
+}
+
+.trigger-modal-content.compact-layout .expiry-chip {
+  background: var(--jup-surface);
+  border: 1px solid var(--jup-border);
+  color: var(--jup-text-dim);
+}
+
+.trigger-modal-content.compact-layout .expiry-chip:hover {
+  background: #2b3543;
+  color: var(--jup-text);
+}
+
+.trigger-modal-content.compact-layout .expiry-chip.active {
+  background: rgba(var(--jup-primary-rgb), 0.16);
+  border-color: var(--jup-primary);
+  color: var(--jup-primary);
+}
+
+/* Summary + messages */
+.trigger-modal-content.compact-layout .mini-summary {
+  background: var(--jup-surface-2);
+}
+
+.trigger-modal-content.compact-layout .summary-text {
+  color: var(--jup-text-dim);
+}
+
+.trigger-modal-content.compact-layout .connect-wallet-link {
+  color: var(--jup-primary);
+}
+
+.trigger-modal-content.compact-layout .connect-wallet-link:hover {
+  color: #d8ffa0;
+}
+
+/* Sticky CTA */
+.trigger-modal-content.compact-layout .sticky-button-container {
+  background: var(--jup-bg);
+  border-top: 1px solid var(--jup-border);
+}
+
+.trigger-modal-content.compact-layout .create-order-btn-hero {
+  background: var(--jup-primary);
+  color: #0b1116;
+  font-weight: 700;
+}
+
+.trigger-modal-content.compact-layout .create-order-btn-hero.buy {
+  background: var(--jup-primary);
+  color: #0b1116;
+}
+
+.trigger-modal-content.compact-layout .create-order-btn-hero.sell {
+  background: var(--jup-sell);
+  color: #ffffff;
+}
+
+.trigger-modal-content.compact-layout .create-order-btn-hero:hover:not(:disabled),
+.trigger-modal-content.compact-layout .create-order-btn-hero.buy:hover:not(:disabled) {
+  box-shadow: 0 8px 20px rgba(var(--jup-primary-rgb), 0.28);
+}
+
+.trigger-modal-content.compact-layout .create-order-btn-hero.sell:hover:not(:disabled) {
+  box-shadow: 0 8px 20px rgba(255, 92, 92, 0.28);
+}
+
+.trigger-modal-content.compact-layout .jup-powered-by {
+  margin: 10px 0 0;
+  text-align: center;
+  font-size: 0.72rem;
+  color: var(--jup-text-mute);
+  letter-spacing: 0.2px;
+}
+
+/* Make the Stop Loss block visually identical to the Target Price block */
+.trigger-modal-content.compact-layout .sl-body {
+  padding: 0 20px 20px;
+}
+
+.trigger-modal-content.compact-layout .sl-display {
+  margin-bottom: 16px;
+}
+
+.trigger-modal-content.compact-layout .sl-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--jup-text-mute);
+}
+
+.trigger-modal-content.compact-layout .sl-price-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--jup-text);
+  font-family: 'SF Mono', 'JetBrains Mono', monospace;
+}
+
+.trigger-modal-content.compact-layout .sl-pct-badge {
+  font-size: 1rem;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 10px;
+  color: var(--jup-sell);
+  background: rgba(255, 92, 92, 0.15);
+}
+
+.trigger-modal-content.compact-layout .sl-chips {
+  justify-content: center;
+}
+
+@media (max-width: 480px) {
+  .trigger-modal-content.compact-layout .sl-price-value {
+    font-size: 1.5rem;
+  }
+}
+
+@media (max-height: 600px) {
+  .trigger-modal-content.compact-layout .sl-price-value {
+    font-size: 1.3rem;
+  }
+}
+
+/* Success + text */
+.trigger-modal-content.compact-layout .success-message h3 {
+  color: var(--jup-text);
+}
+
+.trigger-modal-content.compact-layout .success-message p {
+  color: var(--jup-text-dim);
+}
+

@@ -9,9 +9,10 @@ const TriggerOrderModal = ({
   coin,
   onOrderCreated,
   initialInputAmount,
+  initialPercentage,
+  initialSide,
 }) => {
   const { walletAddress, connected, signTransaction, recheckConnection, connect } = useWallet();
-  const [orderType, setOrderType] = useState('limit'); // 'limit' or 'stop'
   const [side, setSide] = useState('buy'); // 'buy' or 'sell'
   const [inputAmount, setInputAmount] = useState('');
   const [triggerPrice, setTriggerPrice] = useState('');
@@ -30,6 +31,10 @@ const TriggerOrderModal = ({
   const [stopLossPrice, setStopLossPrice] = useState('');
   const [stopLossSliderValue, setStopLossSliderValue] = useState(0);
   const [stopLossPct, setStopLossPct] = useState(-20);
+
+  // Live price fetched on-demand when the coin arrives without price data
+  // (e.g. opened from a price alert, which only carries basic coin info).
+  const [fetchedPrice, setFetchedPrice] = useState(0);
 
   // Force recheck wallet connection when modal opens
   useEffect(() => {
@@ -60,11 +65,47 @@ const TriggerOrderModal = ({
       if (initialInputAmount) {
         setInputAmount(String(initialInputAmount));
       }
+      // Pre-fill side + target percentage if provided (e.g. from an alert "Set up order")
+      if (initialSide) {
+        setSide(initialSide);
+      }
+      if (initialPercentage !== undefined && initialPercentage !== null) {
+        setPriceType('percentage');
+        setPercentage(String(initialPercentage));
+      }
     }
   }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Get current price from coin data - check multiple possible field names
-  const currentPrice = coin?.priceUsd || coin?.price_usd || coin?.price || coin?.priceNative || 0;
+  const currentPrice = coin?.priceUsd || coin?.price_usd || coin?.price || coin?.priceNative || fetchedPrice || 0;
+
+  // Fetch a live USD price when the coin has none (e.g. opened from an alert)
+  useEffect(() => {
+    if (!isOpen) return;
+    const hasPrice = coin?.priceUsd || coin?.price_usd || coin?.price || coin?.priceNative;
+    const mint = coin?.mintAddress || coin?.address;
+    if (hasPrice || !mint) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const price = Number(data?.pairs?.[0]?.priceUsd);
+        if (!cancelled && price > 0) {
+          setFetchedPrice(price);
+          setError(null);
+        }
+      } catch (_) { /* silent — user can still enter a manual price */ }
+    })();
+    return () => { cancelled = true; };
+  }, [isOpen, coin?.mintAddress, coin?.address]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reset any previously fetched price when switching coins
+  useEffect(() => {
+    setFetchedPrice(0);
+  }, [coin?.mintAddress, coin?.address]);
 
   // Calculate price range for slider (50% below to 100% above current price)
   const priceRange = useMemo(() => {
@@ -235,7 +276,6 @@ const TriggerOrderModal = ({
 
       console.log('🎯 Creating trigger order:', {
         side,
-        orderType,
         inputAmount,
         triggerPrice,
         expiredAt: expiredAt ? new Date(expiredAt).toISOString() : 'none'
@@ -253,7 +293,7 @@ const TriggerOrderModal = ({
           makingAmount,
           takingAmount,
           expiredAt,
-          orderType
+          orderType: 'limit'
         })
       });
 
@@ -276,7 +316,7 @@ const TriggerOrderModal = ({
         inputMint,
         outputMint,
         side,
-        orderType,
+        orderType: 'limit',
         expiredAt
       };
 
@@ -394,7 +434,7 @@ const TriggerOrderModal = ({
             <div className="compact-header">
               <div className="header-left">
                 <img 
-                  src={coin?.image || '/default-coin.svg'} 
+                  src={coin?.image || coin?.profileImage || coin?.logo || coin?.icon || '/default-coin.svg'} 
                   alt={coin?.symbol}
                   className="coin-image-small"
                   onError={(e) => e.target.src = '/default-coin.svg'}
@@ -407,22 +447,8 @@ const TriggerOrderModal = ({
               <button className="close-btn-compact" onClick={onClose}>✕</button>
             </div>
 
-            {/* Quick Action Row: Order Type + Buy/Sell */}
+            {/* Quick Action Row: Buy/Sell */}
             <div className="action-row">
-              <div className="action-group">
-                <button 
-                  className={`action-btn ${orderType === 'limit' ? 'active' : ''}`}
-                  onClick={() => setOrderType('limit')}
-                >
-                  Limit
-                </button>
-                <button 
-                  className={`action-btn ${orderType === 'stop' ? 'active' : ''}`}
-                  onClick={() => setOrderType('stop')}
-                >
-                  Stop
-                </button>
-              </div>
               <div className="action-group">
                 <button 
                   className={`action-btn buy-btn ${side === 'buy' ? 'active' : ''}`}
@@ -675,6 +701,7 @@ const TriggerOrderModal = ({
                   </>
                 )}
               </button>
+              <p className="jup-powered-by">Powered by Jupiter</p>
             </div>
           </>
         )}

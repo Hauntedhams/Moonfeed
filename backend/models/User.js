@@ -20,6 +20,11 @@ const userSchema = new mongoose.Schema({
   profilePicture: {
     type: String, // base64 data URL or external image URL
     default: null
+  },
+  // Per-coin "Notify at" price-alert preferences, keyed by mint address.
+  alerts: {
+    type: mongoose.Schema.Types.Mixed,
+    default: {}
   }
 }, {
   timestamps: true

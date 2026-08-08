@@ -101,4 +101,50 @@ router.put('/:walletAddress', async (req, res) => {
   }
 });
 
+// GET /api/users/:walletAddress/alerts — fetch saved price-alert preferences
+router.get('/:walletAddress/alerts', async (req, res) => {
+  try {
+    const { walletAddress } = req.params;
+    if (!walletAddress || walletAddress.length < 32) {
+      return res.status(400).json({ error: 'Invalid wallet address' });
+    }
+    const user = await User.findOne({ walletAddress });
+    res.json({ walletAddress, alerts: user?.alerts || {} });
+  } catch (err) {
+    console.error('❌ Error fetching alerts:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// PUT /api/users/:walletAddress/alerts — save price-alert preferences.
+// Low-risk preference data keyed by wallet; no signature required.
+router.put('/:walletAddress/alerts', async (req, res) => {
+  try {
+    const { walletAddress } = req.params;
+    const { alerts } = req.body;
+
+    if (!walletAddress || walletAddress.length < 32) {
+      return res.status(400).json({ error: 'Invalid wallet address' });
+    }
+    if (alerts === undefined || alerts === null || typeof alerts !== 'object' || Array.isArray(alerts)) {
+      return res.status(400).json({ error: 'alerts must be an object' });
+    }
+    // Guard against oversized payloads (map of at most a few hundred coins).
+    if (Object.keys(alerts).length > 500) {
+      return res.status(400).json({ error: 'Too many alert entries (max 500)' });
+    }
+
+    const user = await User.findOneAndUpdate(
+      { walletAddress },
+      { $set: { alerts } },
+      { upsert: true, new: true }
+    );
+
+    res.json({ walletAddress: user.walletAddress, alerts: user.alerts || {} });
+  } catch (err) {
+    console.error('❌ Error saving alerts:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 module.exports = router;

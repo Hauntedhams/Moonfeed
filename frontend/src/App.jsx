@@ -9,6 +9,7 @@ import { WalletProvider } from './contexts/WalletContext'
 import { TrackedWalletsProvider } from './contexts/TrackedWalletsContext'
 import { DarkModeProvider } from './contexts/DarkModeContext'
 import { CopyTradeProvider } from './contexts/CopyTradeContext'
+import { AlertsProvider } from './contexts/AlertsContext'
 import CopyTradeToast from './components/CopyTradeToast'
 import ReferralTracker from './utils/ReferralTracker'
 import MobileOptimizer from './utils/mobileOptimizer'
@@ -125,6 +126,17 @@ function App() {
     } else {
       console.log('⚠️ No coin currently viewed for trading');
     }
+  };
+
+  // Set up a limit order for a coin from a triggered alert, pre-filling the
+  // target percentage and a sensible side (take-profit on a rise, buy the dip).
+  const handleSetupOrder = (coin, level) => {
+    if (!coin) return;
+    handleTradeClick(coin, {
+      tab: 'limit',
+      percentage: level,
+      side: level >= 0 ? 'sell' : 'buy',
+    });
   };
 
   // Handle visible coins update from TokenScroller
@@ -303,6 +315,7 @@ function App() {
     <DarkModeProvider>
       <TrackedWalletsProvider>
         <WalletProvider>
+          <AlertsProvider>
           <CopyTradeProvider onCopyTrade={handleCopyTrade}>
           <CopyTradeToast />
           <div style={{ height: '100dvh', position: 'relative', overflow: 'hidden' }}>
@@ -323,6 +336,7 @@ function App() {
           favorites={favorites}
           onCoinClick={handleCoinClick}
           onFavoritesChange={handleFavoritesChange}
+          onSetupOrder={handleSetupOrder}
         />
       ) : activeTab === 'profile' ? (
         <Suspense fallback={<div style={{ padding: '20px', textAlign: 'center' }}>Loading...</div>}>
@@ -466,6 +480,8 @@ function App() {
           onSwapError={handleSwapError}
           initialTab={tradeModalOptions?.tab}
           initialSolAmount={tradeModalOptions?.solAmount}
+          initialPercentage={tradeModalOptions?.percentage}
+          initialSide={tradeModalOptions?.side}
         />
       </Suspense>
       
@@ -486,6 +502,7 @@ function App() {
       </Suspense>
         </div>
           </CopyTradeProvider>
+          </AlertsProvider>
         </WalletProvider>
     </TrackedWalletsProvider>
     </DarkModeProvider>
