@@ -24,6 +24,7 @@ const ProfileView = lazy(() => import('./components/ProfileView'))
 const OrdersView = lazy(() => import('./components/OrdersView'))
 const JupiterTradeModal = lazy(() => import('./components/JupiterTradeModal'))
 const AdvancedFilter = lazy(() => import('./components/AdvancedFilter'))
+const WalletProfileView = lazy(() => import('./components/WalletProfileView'))
 
 // CommentsSection now integrated into CoinCard's TikTok action bar
 
@@ -67,6 +68,7 @@ function App() {
   const [currentCoinIndex, setCurrentCoinIndex] = useState(0); // Current coin index in scroller
   const [totalCoinsInList, setTotalCoinsInList] = useState(0); // Total coins in current list
   const [previousTab, setPreviousTab] = useState('home'); // Tab to go back to from coin-detail
+  const [walletProfileAddr, setWalletProfileAddr] = useState(null); // Wallet address to show a full profile for
 
   // Initialize referral tracking, mobile optimizer, and performance monitoring on app load
   useEffect(() => {
@@ -311,6 +313,11 @@ function App() {
     setActiveTab('orders');
   };
 
+  // Open a full-screen profile view for any wallet address (from tx / PNL clicks)
+  const handleWalletClick = (address) => {
+    if (address) setWalletProfileAddr(address);
+  };
+
   return (
     <DarkModeProvider>
       <TrackedWalletsProvider>
@@ -408,6 +415,7 @@ function App() {
             filters={{}}
             onlyFavorites={true}
             onTradeClick={handleTradeClick}
+            onWalletClick={handleWalletClick}
             onCurrentCoinChange={handleCurrentCoinChange}
             advancedFilters={null}
             showFiltersButton={false} // Don't show filters in coin detail view
@@ -422,6 +430,7 @@ function App() {
             filters={filters}
             onlyFavorites={false}
             onTradeClick={handleTradeClick}
+            onWalletClick={handleWalletClick}
             onVisibleCoinsChange={handleVisibleCoinsChange}
             onCurrentCoinChange={handleCurrentCoinChange}
             onTotalCoinsChange={handleTotalCoinsChange}
@@ -457,6 +466,16 @@ function App() {
           onAdvancedFilterClick={() => setAdvancedFilterModalOpen(true)}
         />
       </Suspense>
+
+      {/* Wallet Profile overlay — shows a full profile page for any wallet */}
+      {walletProfileAddr && (
+        <Suspense fallback={null}>
+          <WalletProfileView
+            walletAddress={walletProfileAddr}
+            onBack={() => setWalletProfileAddr(null)}
+          />
+        </Suspense>
+      )}
       
       {/* Coin List Modal */}
       <Suspense fallback={null}>

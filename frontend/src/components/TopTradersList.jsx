@@ -3,7 +3,7 @@ import { getFullApiUrl } from '../config/api';
 import WalletPopup from './WalletPopup';
 import './TopTradersList.css';
 
-const TopTradersList = ({ coinAddress, isExpanded }) => {
+const TopTradersList = ({ coinAddress, isExpanded, onWalletClick = null }) => {
   const [traders, setTraders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -205,8 +205,12 @@ const TopTradersList = ({ coinAddress, isExpanded }) => {
                   <div 
                     className="col-wallet clickable"
                     onClick={() => {
-                      setSelectedWallet(trader.wallet);
-                      setSelectedTraderData(trader); // Pass full trader data
+                      if (onWalletClick) {
+                        onWalletClick(trader.wallet);
+                      } else {
+                        setSelectedWallet(trader.wallet);
+                        setSelectedTraderData(trader); // Pass full trader data
+                      }
                     }}
                     title="Click to view wallet details"
                   >

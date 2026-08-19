@@ -43,6 +43,10 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
   fullscreenModeRef.current = fullscreenMode;
   const showActionButtonsRef = useRef(showActionButtons);
   showActionButtonsRef.current = showActionButtons;
+  // The chart is only interactive once the card is expanded; collapsed, it must let
+  // touches/wheel pass through to the feed scroller so the whole card scrolls as one.
+  const isExpandedRef = useRef(isExpanded);
+  isExpandedRef.current = isExpanded;
 
   const pairAddress = coin?.pairAddress ||
                       coin?.poolAddress ||
@@ -244,7 +248,7 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
         return;
       }
 
-      slot.style.cssText = `position:fixed;top:${clipTop}px;left:${left}px;width:${width}px;height:${clippedH}px;transform:none;z-index:60;border-radius:12px;overflow:hidden;`;
+      slot.style.cssText = `position:fixed;top:${clipTop}px;left:${left}px;width:${width}px;height:${clippedH}px;transform:none;z-index:60;border-radius:12px;overflow:hidden;pointer-events:${isExpandedRef.current ? 'auto' : 'none'};`;
       rotateWrapperRef.current.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;transform:none;border-radius:12px;';
       // Offset the iframe upward within the slot so the visible portion of the chart
       // content aligns correctly with the slot window (mirrors CSS overflow:hidden clipping).

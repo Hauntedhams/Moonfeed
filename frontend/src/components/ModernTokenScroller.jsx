@@ -21,6 +21,7 @@ const ModernTokenScroller = ({
   onFavoritesChange, 
   filters = {}, 
   onTradeClick,
+  onWalletClick, // Open a full profile page for a clicked wallet address
   onCurrentCoinChange, // Add this callback to notify parent about current coin
   onTotalCoinsChange, // Add this callback to notify parent about total coins
   advancedFilters = null, // Add advanced filters prop
@@ -849,6 +850,7 @@ const ModernTokenScroller = ({
           isFavorite={isFavorite(coin)}
           onFavoriteToggle={() => handleFavoriteToggle(coin)}
           onTradeClick={onTradeClick}
+          onWalletClick={onWalletClick}
           isGraduating={coin.status === 'graduating'}
           isTrending={coin.source?.includes('trending')}
           isVisible={isVisible}

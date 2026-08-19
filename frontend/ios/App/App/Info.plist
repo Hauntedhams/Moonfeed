@@ -48,5 +48,24 @@
 	<true/>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<!-- Custom URL scheme so Phantom/Solflare can redirect back into Moonfeed
+	     after a connect / sign request (moonfeed://wallet/...). -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>app.moonfeed.mobile</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>moonfeed</string>
+			</array>
+		</dict>
+	</array>
+	<!-- Allow querying/launching the wallet apps' URL schemes on iOS. -->
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>phantom</string>
+		<string>solflare</string>
+	</array>
 </dict>
 </plist>

@@ -66,6 +66,7 @@ const CoinCard = memo(({
   isFavorite, 
   onFavoriteToggle, 
   onTradeClick, 
+  onWalletClick = null, // Open a full profile page for a clicked wallet address
   isTrending,
   isGraduating = false, // NEW: Is this a graduating Pump.fun token?
   onExpandChange,
@@ -75,6 +76,13 @@ const CoinCard = memo(({
   isActiveCard = false, // True ONLY for the single card visually in view (not preload) — used to portal action buttons
   onEnrichmentComplete = null // Callback when enrichment completes
 }) => {
+  // Route a wallet click to the full profile overlay when available, else the popup
+  const handleWalletClick = React.useCallback((address) => {
+    if (!address || address === 'Unknown') return;
+    if (onWalletClick) onWalletClick(address);
+    else setSelectedWallet(address);
+  }, [onWalletClick]);
+
   // Generate unique component ID for cleanup tracking
   const componentId = useRef(`coincard-${coin.mintAddress || coin.address || Math.random()}`).current;
   
@@ -90,7 +98,7 @@ const CoinCard = memo(({
   const [showTopTraders, setShowTopTraders] = useState(false); // Toggled via TikTok action button
   const [showComments, setShowComments] = useState(false); // TikTok-style comments bottom sheet
   const [comments, setComments] = useState([]); // Cached comments for count badge
-  const [showActionButtons, setShowActionButtons] = useState(true); // TikTok action bar visible by default
+  const [showActionButtons, setShowActionButtons] = useState(false); // Hidden in collapsed/preview state; shown only when card is expanded
   const [hasToggledActions, setHasToggledActions] = useState(false); // Track if user has toggled (avoids mount animation)
   const [selectedWallet, setSelectedWallet] = useState(null);
   const [showDescriptionModal, setShowDescriptionModal] = useState(false);
@@ -109,6 +117,7 @@ const CoinCard = memo(({
   const graduationIconRef = useRef(null);
   const rightPanelRef = useRef(null); // Ref for the right panel (desktop chart target)
   const mobileChartTargetRef = useRef(null); // Ref for mobile chart target (portal destination)
+  const txSectionRef = useRef(null); // Ref for the transactions section (outside-click close)
   
   // Track desktop mode for responsive chart positioning
   const [isDesktopMode, setIsDesktopMode] = useState(() => window.innerWidth >= 1200);
@@ -344,49 +353,6 @@ const CoinCard = memo(({
     };
   }, [isDesktopMode, isActiveCard]);
 
-  // Wheel forwarding (desktop / trackpad) for scrolls that start over the action
-  // buttons. The buttons are a fixed overlay above the chart iframe, so wheel
-  // events there never reach the native scroller. We glide exactly one card in the
-  // scroll direction with a single smooth animation. A module-level lock (shared by
-  // every card) guarantees one glide per physical gesture — otherwise the momentum
-  // stream would chain through several coins as the active card changes mid-glide.
-  useEffect(() => {
-    const handleWheel = (e) => {
-      const el = actionButtonsRef.current;
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
-      if (e.clientX < rect.left || e.clientX > rect.right ||
-          e.clientY < rect.top  || e.clientY > rect.bottom) return;
-      const scroller = document.querySelector('.modern-scroller-container');
-      if (!scroller) return;
-      e.preventDefault();
-      e.stopPropagation();
-      // Release the shared lock only after wheel events stop for a beat, so trackpad
-      // momentum after the flick can't trigger additional glides.
-      clearTimeout(_wheelGestureIdleTimer);
-      _wheelGestureIdleTimer = setTimeout(() => { _wheelGestureLocked = false; }, 200);
-      if (_wheelGestureLocked) return; // gesture already handled — ignore momentum tail
-      _wheelGestureLocked = true;
-
-      const cardHeight = scroller.clientHeight || window.innerHeight;
-      const direction = e.deltaY > 0 ? 1 : -1;
-      const currentCard = Math.round(scroller.scrollTop / cardHeight);
-      const target = Math.max(0, currentCard + direction);
-      _btnDraggingRef.current = true; // keep buttons visible/steady during the glide
-      scroller.style.scrollSnapType = 'none';   // snap-mandatory cancels smooth scroll
-      scroller.style.scrollBehavior = 'smooth';
-      scroller.scrollTop = target * cardHeight;
-      clearTimeout(actionWheelDebounceRef.current);
-      actionWheelDebounceRef.current = setTimeout(() => {
-        scroller.style.scrollSnapType = '';
-        scroller.style.scrollBehavior = '';
-        _btnDraggingRef.current = false;
-      }, 500);
-    };
-    document.addEventListener('wheel', handleWheel, { passive: false, capture: true });
-    return () => document.removeEventListener('wheel', handleWheel, { capture: true });
-  }); // no deps — re-bind after every render so ref is always current
-
   // Track the chart section's top and bottom offsets so portaled action buttons
   // are anchored within the chart area (not above it in the coin-info header).
   // Mirrors TwelveDataChart's clipTop/clipBottom logic: clamp to coin-info-layer bounds.
@@ -445,6 +411,22 @@ const CoinCard = memo(({
       setShowComments(false);
     }
   }, [isVisible, coin.symbol, coin.name]);
+
+  // Close the expanded transactions panel when tapping/clicking outside of it
+  useEffect(() => {
+    if (!showLiveTransactions) return;
+    const handleOutside = (e) => {
+      if (txSectionRef.current && !txSectionRef.current.contains(e.target)) {
+        setShowLiveTransactions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    document.addEventListener('touchstart', handleOutside, { passive: true });
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+      document.removeEventListener('touchstart', handleOutside);
+    };
+  }, [showLiveTransactions]);
 
   // Fetch comment count when card is visible (lightweight — just the count)
   useEffect(() => {
@@ -951,8 +933,8 @@ const CoinCard = memo(({
     const next = !isExpanded;
     setIsExpanded(next);
     
-    // When expanding info → collapse action buttons; when collapsing → restore them
-    setShowActionButtons(!next);
+    // When expanding info → show action buttons; when collapsing to preview → hide them
+    setShowActionButtons(next);
     setHasToggledActions(true); // Mark that user has interacted (enables animation)
     
     // Call parent's expand change handler which should lock scrolling
@@ -1148,7 +1130,7 @@ const CoinCard = memo(({
       setShowPriceChangeModal(false);
       setShowLiveTransactions(false);
       setShowTopTraders(false);
-      setShowActionButtons(true);
+      setShowActionButtons(false);
       setSelectedWallet(null);
       setShowDescriptionModal(false);
       setIsExpanded(false);
@@ -1899,9 +1881,23 @@ const CoinCard = memo(({
           </div> {/* Close charts-section */}
 
           {/* Live Transactions Section */}
-          <div className="transactions-section">
+          <div
+            ref={txSectionRef}
+            className={`transactions-section ${showLiveTransactions ? 'expanded' : ''}`}
+            onClick={() => transactions.length > 0 && !showLiveTransactions && setShowLiveTransactions(true)}
+            style={{ cursor: transactions.length > 0 && !showLiveTransactions ? 'pointer' : 'default' }}
+          >
             <div className="transactions-section-header">
-              Transactions
+              <span>Transactions</span>
+              {showLiveTransactions && (
+                <button
+                  className="transactions-close-btn"
+                  onClick={(e) => { e.stopPropagation(); setShowLiveTransactions(false); }}
+                  title="Close"
+                >
+                  ✕
+                </button>
+              )}
             </div>
             <div className="live-transactions-content">
                   {txError && (
@@ -1910,7 +1906,6 @@ const CoinCard = memo(({
                     </div>
                   )}
 
-                  {/* Transaction table header */}
                   <div className="tx-table-header" style={{
                     display: 'grid',
                     gridTemplateColumns: '42px 52px 1fr 72px 72px 38px',
@@ -1931,7 +1926,7 @@ const CoinCard = memo(({
                     <span style={{ textAlign: 'right' }}>Time</span>
                   </div>
 
-                  <div className="transactions-list" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                  <div className={showLiveTransactions ? 'transactions-full-window' : 'transactions-marquee-window'}>
                     {transactions.length === 0 ? (
                       <div className="transactions-empty">
                         <div className="empty-text">
@@ -1943,137 +1938,130 @@ const CoinCard = memo(({
                             : '⏳ Connecting...'}
                         </div>
                       </div>
-                    ) : (
-                      transactions.map((tx, index) => {
-                        const isBuy = tx.side === 'buy';
-                        const sideColor = isBuy ? '#4CAF50' : '#F44336';
-                        const sideBg = isBuy ? 'rgba(76, 175, 80, 0.1)' : 'rgba(244, 67, 54, 0.1)';
-                        const wallet = tx.wallet || tx.feePayer || 'Unknown';
-                        const solAmt = tx.solAmount || 0;
-                        const tokenAmt = tx.tokenAmount || tx.amount || 0;
-                        const age = tx.timestamp ? getTimeAgo(tx.timestamp) : '';
-                        const dexName = tx.dex || '';
-                        // Short DEX label for compact display
-                        const dexShort = dexName.replace(' V4', '').replace(' V2', '').replace(' V3', '').substring(0, 6);
+                    ) : (() => {
+                      const isOpen = showLiveTransactions;
+                      const previewTxns = isOpen ? transactions : transactions.slice(0, 8);
+                      const canRoll = !isOpen && previewTxns.length >= 3;
+                      // When rolling, duplicate the list so the vertical marquee loops seamlessly.
+                      const rows = canRoll ? [...previewTxns, ...previewTxns] : previewTxns;
+                      return (
+                        <div
+                          className={`transactions-marquee-track ${canRoll ? 'rolling' : ''}`}
+                          style={canRoll ? { animationDuration: `${previewTxns.length * 2.2}s` } : undefined}
+                        >
+                          {rows.map((tx, index) => {
+                            const isBuy = tx.side === 'buy';
+                            const sideColor = isBuy ? '#4CAF50' : '#F44336';
+                            const wallet = tx.wallet || tx.feePayer || 'Unknown';
+                            const solAmt = tx.solAmount || 0;
+                            const tokenAmt = tx.tokenAmount || tx.amount || 0;
+                            const age = tx.timestamp ? getTimeAgo(tx.timestamp) : '';
+                            const dexName = tx.dex || '';
+                            const dexShort = dexName.replace(' V4', '').replace(' V2', '').replace(' V3', '').substring(0, 6);
 
-                        return (
-                          <div 
-                            key={`${tx.signature}-${index}`} 
-                            className="transaction-item" 
-                            style={{
-                              animation: index === 0 ? 'slideIn 0.3s ease-out' : 'none',
-                              display: 'grid',
-                              gridTemplateColumns: '42px 52px 1fr 72px 72px 38px',
-                              gap: '4px',
-                              padding: '7px 10px',
-                              alignItems: 'center',
-                              borderBottom: '1px solid rgba(255,255,255,0.04)',
-                              backgroundColor: index === 0 ? sideBg : 'transparent',
-                              transition: 'background-color 0.3s',
-                            }}
-                          >
-                            {/* Buy/Sell badge */}
-                            <span style={{
-                              fontSize: '11px',
-                              fontWeight: '700',
-                              color: sideColor,
-                              textTransform: 'uppercase',
-                            }}>
-                              {isBuy ? 'Buy' : 'Sell'}
-                            </span>
+                            return (
+                              <div
+                                key={`${tx.signature}-${index}`}
+                                className="transaction-item"
+                                style={{
+                                  display: 'grid',
+                                  gridTemplateColumns: '42px 52px 1fr 72px 72px 38px',
+                                  gap: '4px',
+                                  padding: '7px 10px',
+                                  alignItems: 'center',
+                                  borderBottom: '1px solid rgba(255,255,255,0.04)',
+                                }}
+                              >
+                                <span style={{
+                                  fontSize: '11px',
+                                  fontWeight: '700',
+                                  color: sideColor,
+                                  textTransform: 'uppercase',
+                                }}>
+                                  {isBuy ? 'Buy' : 'Sell'}
+                                </span>
 
-                            {/* DEX badge */}
-                            <span style={{
-                              fontSize: '9px',
-                              fontWeight: '600',
-                              color: 'rgba(255,255,255,0.45)',
-                              background: 'rgba(255,255,255,0.06)',
-                              borderRadius: '3px',
-                              padding: '1px 4px',
-                              textAlign: 'center',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                            }} title={dexName}>
-                              {dexShort || '—'}
-                            </span>
+                                <span style={{
+                                  fontSize: '9px',
+                                  fontWeight: '600',
+                                  color: 'rgba(255,255,255,0.45)',
+                                  background: 'rgba(255,255,255,0.06)',
+                                  borderRadius: '3px',
+                                  padding: '1px 4px',
+                                  textAlign: 'center',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                }} title={dexName}>
+                                  {dexShort || '—'}
+                                </span>
 
-                            {/* Wallet address */}
-                            <span
-                              onClick={() => wallet !== 'Unknown' && setSelectedWallet(wallet)}
-                              style={{
-                                fontSize: '11px',
-                                color: '#4FC3F7',
-                                cursor: wallet !== 'Unknown' ? 'pointer' : 'default',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap',
-                              }}
-                              title={wallet}
-                            >
-                              {wallet !== 'Unknown' ? `${wallet.substring(0, 4)}...${wallet.substring(wallet.length - 4)}` : 'Unknown'}
-                            </span>
+                                <span
+                                  onClick={isOpen ? (e) => { e.stopPropagation(); wallet !== 'Unknown' && handleWalletClick(wallet); } : undefined}
+                                  style={{
+                                    fontSize: '11px',
+                                    color: '#4FC3F7',
+                                    cursor: isOpen && wallet !== 'Unknown' ? 'pointer' : 'default',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap',
+                                  }} title={wallet}>
+                                  {wallet !== 'Unknown' ? `${wallet.substring(0, 4)}...${wallet.substring(wallet.length - 4)}` : 'Unknown'}
+                                </span>
 
-                            {/* SOL amount */}
-                            <span style={{
-                              fontSize: '11px',
-                              fontWeight: '600',
-                              color: sideColor,
-                              textAlign: 'right',
-                              fontFamily: 'monospace',
-                            }}>
-                              {solAmt > 0 ? `${solAmt < 0.01 ? solAmt.toFixed(4) : solAmt.toFixed(2)}` : '—'}
-                            </span>
+                                <span style={{
+                                  fontSize: '11px',
+                                  fontWeight: '600',
+                                  color: sideColor,
+                                  textAlign: 'right',
+                                  fontFamily: 'monospace',
+                                }}>
+                                  {solAmt > 0 ? `${solAmt < 0.01 ? solAmt.toFixed(4) : solAmt.toFixed(2)}` : '—'}
+                                </span>
 
-                            {/* Token amount */}
-                            <span style={{
-                              fontSize: '11px',
-                              color: 'rgba(255,255,255,0.6)',
-                              textAlign: 'right',
-                              fontFamily: 'monospace',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                            }}>
-                              {tokenAmt > 0 ? formatCompactNumber(tokenAmt) : '—'}
-                            </span>
+                                <span style={{
+                                  fontSize: '11px',
+                                  color: 'rgba(255,255,255,0.6)',
+                                  textAlign: 'right',
+                                  fontFamily: 'monospace',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                }}>
+                                  {tokenAmt > 0 ? formatCompactNumber(tokenAmt) : '—'}
+                                </span>
 
-                            {/* Time + link */}
-                            <a
-                              href={`https://solscan.io/tx/${tx.signature}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              style={{
-                                fontSize: '10px',
-                                color: 'rgba(255,255,255,0.35)',
-                                textAlign: 'right',
-                                textDecoration: 'none',
-                              }}
-                              title="View on Solscan"
-                            >
-                              {age}
-                            </a>
-                          </div>
-                        );
-                      })
-                    )}
+                                {isOpen ? (
+                                  <a
+                                    href={`https://solscan.io/tx/${tx.signature}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    style={{
+                                      fontSize: '10px',
+                                      color: 'rgba(255,255,255,0.35)',
+                                      textAlign: 'right',
+                                      textDecoration: 'none',
+                                    }}
+                                    title="View on Solscan"
+                                  >
+                                    {age}
+                                  </a>
+                                ) : (
+                                  <span style={{
+                                    fontSize: '10px',
+                                    color: 'rgba(255,255,255,0.35)',
+                                    textAlign: 'right',
+                                  }}>
+                                    {age}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
                   </div>
-
-                  {/* Connection status footer */}
-                  {txConnected && (
-                    <div style={{
-                      padding: '4px 10px',
-                      fontSize: '10px',
-                      color: 'rgba(255,255,255,0.3)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      borderTop: '1px solid rgba(255,255,255,0.06)',
-                    }}>
-                      <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', backgroundColor: '#4CAF50' }}></span>
-                      Live · {transactions.length} transactions
-                      {transactions[0]?.dex && ` · via ${transactions[0].dex}`}
-                    </div>
-                  )}
                 </div>
           </div>
 
@@ -2081,7 +2069,7 @@ const CoinCard = memo(({
           <div className="top-traders-section">
             <div className="top-traders-section-header">Top Traders</div>
             <div className="top-traders-content">
-              <TopTradersList coinAddress={mintAddress} isExpanded={isExpanded} />
+              <TopTradersList coinAddress={mintAddress} isExpanded={isExpanded} onWalletClick={handleWalletClick} />
             </div>
           </div>
 
@@ -2468,60 +2456,6 @@ const CoinCard = memo(({
       <div
         ref={actionButtonsRef}
         className={`tiktok-action-buttons ${showActionButtons ? '' : 'collapsed'}`}
-        onTouchStart={_mobilePortal ? (e) => {
-          const scroller = document.querySelector('.modern-scroller-container');
-          _btnScrollerRef.current = scroller;
-          _btnSwipeStartY.current = e.touches[0].clientY;
-          _btnSwipeStartScrollTop.current = scroller ? scroller.scrollTop : 0;
-          _btnDraggingRef.current = false;
-          if (scroller) {
-            // Disable snap AND iOS momentum scrolling so programmatic scrollTop
-            // updates apply instantly during the touch (otherwise iOS defers them
-            // until touchend, which looks like an instant jump).
-            scroller.style.scrollSnapType = 'none';
-            scroller.style.scrollBehavior = 'auto';
-            scroller.style.setProperty('-webkit-overflow-scrolling', 'auto');
-          }
-        } : undefined}
-        onTouchMove={_mobilePortal ? (e) => {
-          const scroller = _btnScrollerRef.current;
-          if (!scroller) return;
-          const dy = _btnSwipeStartY.current - e.touches[0].clientY;
-          if (Math.abs(dy) > 4) _btnDraggingRef.current = true;
-          // Drive the underlying scroller 1:1 so the swipe follows the finger.
-          scroller.scrollTop = _btnSwipeStartScrollTop.current + dy;
-          // Move the (fixed) buttons with the card so they follow the swipe too.
-          if (actionButtonsRef.current) actionButtonsRef.current.style.transform = `translateY(${-dy}px)`;
-        } : undefined}
-        onTouchEnd={_mobilePortal ? (e) => {
-          const scroller = _btnScrollerRef.current;
-          if (!scroller) return;
-          const dy = _btnSwipeStartY.current - e.changedTouches[0].clientY;
-          const cardHeight = scroller.clientHeight || window.innerHeight;
-          const restoreSnap = () => {
-            scroller.style.scrollSnapType = '';
-            scroller.style.scrollBehavior = '';
-            scroller.style.removeProperty('-webkit-overflow-scrolling');
-          };
-          if (actionButtonsRef.current) actionButtonsRef.current.style.transform = '';
-          if (Math.abs(dy) < 20) {
-            // Tap (not a swipe) — return to the starting card and let onClick fire.
-            scroller.scrollTop = _btnSwipeStartScrollTop.current;
-            _btnDraggingRef.current = false;
-            restoreSnap();
-            return;
-          }
-          // Snap to the neighbouring card in the swipe direction, animating from
-          // wherever the finger left off so it feels continuous.
-          const startIdx = Math.round(_btnSwipeStartScrollTop.current / cardHeight);
-          const direction = dy > 0 ? 1 : -1;
-          const targetIdx = Math.max(0, startIdx + direction);
-          scroller.style.scrollBehavior = 'smooth';
-          scroller.scrollTop = targetIdx * cardHeight;
-          // Let the snap fade run now that the finger-follow drag is over.
-          _btnDraggingRef.current = false;
-          setTimeout(restoreSnap, 350);
-        } : undefined}
         style={_mobilePortal ? {
           position: 'fixed',
           // Anchor to the card's right edge, not the viewport right.
@@ -2542,11 +2476,6 @@ const CoinCard = memo(({
           // Fade out while the snap-scroll animation is running so the buttons
           // don't appear to float over the incoming card.
           opacity: isScrolling ? 0 : 1,
-          pointerEvents: isScrolling ? 'none' : 'auto',
-          // Disable pan/zoom gestures on the container so iOS doesn't hijack
-          // vertical swipes as body-scroll and confuse our ModernTokenScroller
-          // document-level touch handler.
-          touchAction: 'none',
           transition: isScrolling ? 'none' : 'opacity 0.15s ease',
         } : undefined}
       >
@@ -2864,107 +2793,6 @@ const CoinCard = memo(({
         document.body
       )}
 
-      {/* ====== TIKTOK-STYLE BOTTOM SHEET: Live Transactions ====== */}
-      {showLiveTransactions && createPortal(
-        <div className="tiktok-sheet-overlay" onClick={() => setShowLiveTransactions(false)}>
-          <div className="tiktok-sheet" onClick={(e) => e.stopPropagation()}>
-            {/* Handle bar */}
-            <div className="tiktok-sheet-handle">
-              <div className="tiktok-sheet-handle-bar" />
-            </div>
-
-            {/* Header */}
-            <div className="tiktok-sheet-header">
-              <span className="tiktok-sheet-title">
-                {transactions.length} Transactions
-              </span>
-              <button className="tiktok-sheet-close" onClick={() => setShowLiveTransactions(false)}>✕</button>
-            </div>
-
-            {/* Status bar */}
-            <div className="tiktok-sheet-status">
-              <span className={`tiktok-sheet-dot ${txConnected ? 'live' : ''}`} />
-              {txConnected ? 'Live' : 'Connecting...'}
-              {transactions[0]?.dex && <span className="tiktok-sheet-dex">via {transactions[0].dex}</span>}
-            </div>
-
-            {/* Transaction list */}
-            <div className="tiktok-sheet-body">
-              {transactions.length === 0 ? (
-                <div className="tiktok-sheet-empty">
-                  <div style={{ fontSize: '32px', marginBottom: '8px' }}>📊</div>
-                  <div>
-                    {txHistoryLoaded ? 'No recent transactions' : 'Waiting for transactions...'}
-                  </div>
-                  <div style={{ fontSize: '12px', opacity: 0.5, marginTop: '4px' }}>
-                    {txConnected
-                      ? (txHistoryLoaded ? 'Listening for new swaps' : 'Monitoring live swaps')
-                      : 'Connecting to backend...'}
-                  </div>
-                </div>
-              ) : (
-                transactions.map((tx, index) => {
-                  const isBuy = tx.side === 'buy';
-                  const sideColor = isBuy ? '#4CAF50' : '#F44336';
-                  const wallet = tx.wallet || tx.feePayer || 'Unknown';
-                  const solAmt = tx.solAmount || 0;
-                  const tokenAmt = tx.tokenAmount || tx.amount || 0;
-                  const age = tx.timestamp ? getTimeAgo(tx.timestamp) : '';
-                  const dexName = tx.dex || '';
-                  const dexShort = dexName.replace(' V4', '').replace(' V2', '').replace(' V3', '').substring(0, 8);
-
-                  return (
-                    <div key={`${tx.signature}-${index}`} className="tiktok-tx-row">
-                      {/* Left: side indicator + wallet */}
-                      <div className="tiktok-tx-left">
-                        <span className="tiktok-tx-side" style={{ color: sideColor }}>
-                          {isBuy ? '● BUY' : '● SELL'}
-                        </span>
-                        <span
-                          className="tiktok-tx-wallet"
-                          onClick={(e) => { e.stopPropagation(); wallet !== 'Unknown' && setSelectedWallet(wallet); }}
-                          style={{ cursor: wallet !== 'Unknown' ? 'pointer' : 'default' }}
-                          title={wallet !== 'Unknown' ? 'Click to view wallet stats' : undefined}
-                        >
-                          {wallet.substring(0, 4)}...{wallet.slice(-4)}
-                        </span>
-                        {dexShort && <span className="tiktok-tx-dex">{dexShort}</span>}
-                      </div>
-
-                      {/* Right: amounts + time */}
-                      <div className="tiktok-tx-right">
-                        <div className="tiktok-tx-amounts">
-                          {solAmt > 0 && (
-                            <span className="tiktok-tx-sol" style={{ color: sideColor }}>
-                              {solAmt < 0.01 ? solAmt.toFixed(4) : solAmt.toFixed(2)} SOL
-                            </span>
-                          )}
-                          {tokenAmt > 0 && (
-                            <span className="tiktok-tx-tokens">
-                              {formatCompactNumber(tokenAmt)} tokens
-                            </span>
-                          )}
-                        </div>
-                        <a
-                          className="tiktok-tx-time"
-                          href={`https://solscan.io/tx/${tx.signature}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {age}
-                        </a>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
-
       {/* ====== TIKTOK-STYLE BOTTOM SHEET: Top PNL Traders ====== */}
       {showTopTraders && createPortal(
         <div className="tiktok-sheet-overlay" onClick={() => setShowTopTraders(false)}>
@@ -2982,7 +2810,7 @@ const CoinCard = memo(({
 
             {/* Top Traders content */}
             <div className="tiktok-sheet-body">
-              <TopTradersList coinAddress={mintAddress} isExpanded={true} />
+              <TopTradersList coinAddress={mintAddress} isExpanded={true} onWalletClick={handleWalletClick} />
             </div>
           </div>
         </div>,
@@ -3084,7 +2912,7 @@ const CoinCard = memo(({
                     <div className="tiktok-comment-header">
                       <span
                         className="tiktok-comment-wallet"
-                        onClick={(e) => { e.stopPropagation(); comment.walletAddress && setSelectedWallet(comment.walletAddress); }}
+                        onClick={(e) => { e.stopPropagation(); comment.walletAddress && handleWalletClick(comment.walletAddress); }}
                         style={{ cursor: comment.walletAddress ? 'pointer' : 'default' }}
                         title={comment.walletAddress ? 'Click to view wallet stats' : undefined}
                       >

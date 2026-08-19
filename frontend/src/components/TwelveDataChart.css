@@ -17,6 +17,12 @@
   z-index: 10;
   overflow-x: auto; /* Allow horizontal scroll if needed on small screens */
   overflow-y: visible;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/old Edge */
+}
+
+.timeframe-selector::-webkit-scrollbar {
+  display: none; /* Hide the native white scrollbar chrome */
 }
 
 .timeframe-btn,

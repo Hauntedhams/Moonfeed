@@ -1,0 +1,427 @@
+/* Wallet Profile View — full-screen, ProfileView-style page for any wallet */
+
+.wpv-root {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  background: linear-gradient(135deg, #0b1220 0%, #0e1426 50%, #0b1220 100%);
+  color: #f5f5f5;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 0 0 90px; /* clear the bottom nav */
+}
+
+html:not(.dark-mode) .wpv-root {
+  background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 50%, #f8f9fa 100%);
+  color: #111827;
+}
+
+/* Back button — top-left, plain white arrow, no background */
+.wpv-back {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 4010;
+  width: 42px;
+  height: 42px;
+  border: none;
+  background: none;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.15s, opacity 0.15s;
+}
+
+.wpv-back:hover {
+  transform: scale(1.1);
+  opacity: 0.8;
+}
+
+html:not(.dark-mode) .wpv-back {
+  color: #111827;
+}
+
+/* Header */
+.wpv-header {
+  padding: 64px 20px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+html:not(.dark-mode) .wpv-header {
+  border-bottom-color: rgba(0, 0, 0, 0.06);
+}
+
+.wpv-top-row {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+
+.wpv-avatar {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 800;
+  color: #fff;
+  flex-shrink: 0;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+.wpv-avatar-egg {
+  font-size: 38px;
+  line-height: 1;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+.wpv-stats {
+  display: flex;
+  flex: 1;
+  justify-content: space-around;
+}
+
+.wpv-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.wpv-stat-num {
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.wpv-stat-label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+html:not(.dark-mode) .wpv-stat-label {
+  color: rgba(0, 0, 0, 0.5);
+}
+
+.wpv-identity-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.wpv-addr-chip {
+  font-size: 12px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 5px 12px;
+  border-radius: 8px;
+  text-decoration: none;
+}
+
+.wpv-addr-chip:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+html:not(.dark-mode) .wpv-addr-chip {
+  color: rgba(0, 0, 0, 0.65);
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+.wpv-track-btn {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(124, 58, 237, 0.4);
+  background: rgba(124, 58, 237, 0.15);
+  color: #c4b5fd;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.wpv-track-btn:hover {
+  background: rgba(124, 58, 237, 0.25);
+}
+
+.wpv-track-btn--on {
+  background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%);
+  color: #fff;
+  border-color: transparent;
+}
+
+.wpv-identity-name {
+  margin-top: 12px;
+  font-size: 15px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wpv-identity-type {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #a3a3a3;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+/* Metrics */
+.wpv-metrics {
+  padding: 18px 20px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.wpv-metric-group-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.4);
+  margin-bottom: 10px;
+}
+
+html:not(.dark-mode) .wpv-metric-group-title {
+  color: rgba(0, 0, 0, 0.45);
+}
+
+.wpv-metric-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.wpv-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+html:not(.dark-mode) .wpv-metric {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.06);
+}
+
+.wpv-metric-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+html:not(.dark-mode) .wpv-metric-label {
+  color: rgba(0, 0, 0, 0.5);
+}
+
+.wpv-metric-value {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.wpv-metric-value.pos { color: #4ade80; }
+.wpv-metric-value.neg { color: #f87171; }
+
+.wpv-error {
+  margin: 8px 20px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.wpv-metrics-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 40px 20px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 13px;
+}
+
+html:not(.dark-mode) .wpv-metrics-loading {
+  color: rgba(0, 0, 0, 0.5);
+}
+
+/* Feed */
+.wpv-feed-title {
+  padding: 22px 20px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+html:not(.dark-mode) .wpv-feed-title {
+  color: rgba(0, 0, 0, 0.45);
+}
+
+.wpv-feed {
+  padding: 0 12px;
+}
+
+.wpv-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.wpv-card {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  border-radius: 12px;
+  overflow: hidden;
+  text-decoration: none;
+  display: block;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.wpv-card-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.wpv-card-bg--ph {
+  opacity: 0.9;
+}
+
+.wpv-card-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.1) 0%, rgba(0, 0, 0, 0.75) 100%);
+}
+
+.wpv-card-body {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 8px;
+}
+
+.wpv-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.wpv-card-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1.5px solid rgba(255, 255, 255, 0.8);
+}
+
+.wpv-card-avatar--ph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.4);
+  text-transform: uppercase;
+}
+
+.wpv-card-badge {
+  font-size: 9px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 6px;
+  color: #fff;
+  letter-spacing: 0.04em;
+}
+
+.wpv-card-badge--buy { background: rgba(34, 197, 94, 0.9); }
+.wpv-card-badge--sell { background: rgba(239, 68, 68, 0.9); }
+
+.wpv-card-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.wpv-card-symbol {
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wpv-card-time {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.7);
+  flex-shrink: 0;
+}
+
+/* Loading / empty */
+.wpv-feed-loading,
+.wpv-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 48px 20px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 14px;
+}
+
+html:not(.dark-mode) .wpv-feed-loading,
+html:not(.dark-mode) .wpv-empty {
+  color: rgba(0, 0, 0, 0.5);
+}
+
+.wpv-empty-icon {
+  font-size: 34px;
+}
+
+.wpv-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid rgba(255, 255, 255, 0.12);
+  border-top-color: #7c3aed;
+  border-radius: 50%;
+  animation: wpvSpin 0.8s linear infinite;
+}
+
+@keyframes wpvSpin {
+  to { transform: rotate(360deg); }
+}
+
+.wpv-footer {
+  text-align: center;
+  padding: 24px 20px 8px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+html:not(.dark-mode) .wpv-footer {
+  color: rgba(0, 0, 0, 0.35);
+}

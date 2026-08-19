@@ -72,9 +72,10 @@ class DeeplinkWalletAdapter extends BaseSignerWalletAdapter {
     this._icon = meta.icon;
     this._publicKey = null;
     this._connecting = false;
-    // Deeplink wallets are always reachable; if the wallet app isn't installed
-    // the launch simply fails with a clear error.
-    this._readyState = WalletReadyState.Loadable;
+    // Report Installed (not Loadable) so Jupiter's modal lists these as ready
+    // connect options instead of routing to its "download a wallet" onboarding
+    // screen. The deeplink launch handles the wallet-not-installed case.
+    this._readyState = WalletReadyState.Installed;
     this.supportedTransactionVersions = new Set(['legacy', 0]);
 
     // Restore an existing session (e.g. after an app restart).

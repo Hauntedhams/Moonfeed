@@ -114,8 +114,8 @@
 /* Tab Navigation */
 .jupiter-tab-nav {
   display: flex;
-  gap: 8px;
-  padding: 12px 20px;
+  gap: 6px;
+  padding: 8px 20px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   background: rgba(0, 0, 0, 0.2);
 }
@@ -125,41 +125,40 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 12px 16px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 14px;
+  gap: 6px;
+  padding: 6px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .tab-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(79, 195, 247, 0.3);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .tab-btn.active {
-  background: linear-gradient(135deg, rgba(79, 195, 247, 0.2), rgba(103, 126, 234, 0.2));
-  border-color: #4FC3F7;
+  background: rgba(79, 195, 247, 0.12);
   color: white;
 }
 
 .tab-icon {
-  font-size: 16px;
+  font-size: 14px;
 }
 
 @media (max-width: 768px) {
   .tab-btn {
-    font-size: 13px;
-    padding: 10px 12px;
+    font-size: 12px;
+    padding: 5px 10px;
   }
   
   .tab-icon {
-    font-size: 14px;
+    font-size: 13px;
   }
 }
 
@@ -218,6 +217,230 @@
   max-height: 600px;
   overflow: hidden;
   flex: 1;
+}
+
+/* ============================================
+   Swipeable swap ⇄ limit interface
+   ============================================ */
+.jt-swipe-viewport {
+  overflow: hidden;
+  width: 100%;
+  flex: 1;
+}
+
+.jt-swipe-track {
+  display: flex;
+  width: 200%;
+  transition: transform 0.32s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  transform: translateX(0);
+}
+
+.jt-swipe-track.at-limit {
+  transform: translateX(-50%);
+}
+
+.jt-swipe-page {
+  width: 50%;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The embedded limit-order page renders inline (no overlay) inside a swipe page */
+.jt-swipe-page--limit {
+  overflow-y: auto;
+}
+
+.jt-swipe-page--limit .trigger-modal-content.embedded {
+  width: 100%;
+  max-width: none;
+  max-height: none;
+  height: auto;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+/* Parent modal already shows coin info + a close button, so hide the embedded one */
+.jt-swipe-page--limit .trigger-modal-content.embedded .close-btn-compact {
+  display: none;
+}
+
+/* ============================================
+   "How to use Moonfeed" onboarding / wallet gate
+   ============================================ */
+.mf-onboarding {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 28px 22px;
+  height: 100%;
+  overflow-y: auto;
+  position: relative;
+}
+
+.mf-onboarding-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+
+.mf-onboarding-close:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.mf-onboarding-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: #ffffff;
+  margin: 4px 0 6px;
+  letter-spacing: -0.02em;
+}
+
+.mf-onboarding-subtitle {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.55);
+  margin: 0 0 26px;
+  max-width: 340px;
+  line-height: 1.5;
+}
+
+/* Left-to-right flow: USD > Hot Wallet > Trade */
+.mf-flow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 30px;
+  width: 100%;
+}
+
+.mf-flow-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.mf-flow-icon {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+}
+
+.mf-flow-icon svg {
+  width: 32px;
+  height: 32px;
+}
+
+.mf-flow-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+  white-space: nowrap;
+}
+
+.mf-flow-arrow {
+  color: rgba(255, 255, 255, 0.45);
+  display: flex;
+  align-items: center;
+  margin-bottom: 22px; /* align arrow with the icon row, above labels */
+}
+
+.mf-flow-arrow svg {
+  width: 22px;
+  height: 22px;
+}
+
+.mf-wallets-heading {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.45);
+  margin-bottom: 12px;
+  align-self: flex-start;
+}
+
+.mf-wallets-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+.mf-wallet-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+
+.mf-wallet-option:hover {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.mf-wallet-option:active {
+  transform: scale(0.98);
+}
+
+.mf-wallet-option--full {
+  justify-content: center;
+}
+
+.mf-wallet-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.mf-wallet-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.mf-wallets-more {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 6px;
+}
+
+.mf-wallets-more:hover {
+  color: #ffffff;
 }
 
 #jupiter-container {

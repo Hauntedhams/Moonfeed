@@ -11,6 +11,7 @@ const TriggerOrderModal = ({
   initialInputAmount,
   initialPercentage,
   initialSide,
+  embedded = false, // When true, render inline (no overlay) as a swipeable page
 }) => {
   const { walletAddress, connected, signTransaction, recheckConnection, connect } = useWallet();
   const [side, setSide] = useState('buy'); // 'buy' or 'sell'
@@ -417,11 +418,10 @@ const TriggerOrderModal = ({
     return num.toFixed(4);
   };
 
-  if (!isOpen) return null;
+  if (!isOpen && !embedded) return null;
 
-  return (
-    <div className="trigger-modal-overlay" onClick={onClose}>
-      <div className="trigger-modal-content compact-layout" onClick={(e) => e.stopPropagation()}>
+  const modalInner = (
+      <div className={`trigger-modal-content compact-layout${embedded ? ' embedded' : ''}`} onClick={(e) => e.stopPropagation()}>
         {success ? (
           <div className="success-message">
             <div className="success-icon">✅</div>
@@ -706,6 +706,13 @@ const TriggerOrderModal = ({
           </>
         )}
       </div>
+  );
+
+  if (embedded) return modalInner;
+
+  return (
+    <div className="trigger-modal-overlay" onClick={onClose}>
+      {modalInner}
     </div>
   );
 };
