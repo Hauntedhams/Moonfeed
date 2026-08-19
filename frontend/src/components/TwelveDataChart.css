@@ -1607,13 +1607,13 @@ html:not(.dark-mode) .chart-error-overlay {
   border-color: rgba(255, 255, 255, 0.42);
 }
 
-/* Expand-card button — shares the Full Chart slot (bottom-right) but shows only
-   while the card is collapsed, giving a clear way to open the coin details. */
+/* Expand-card button — fixed at the bottom-right of the viewport, just above the
+   bottom nav, so it's always visible no matter where the chart sits on screen. */
 .chart-expand-card-btn {
-  position: absolute;
-  bottom: 14px;
+  position: fixed;
+  bottom: calc(env(safe-area-inset-bottom) + 78px);
   right: 14px;
-  z-index: 20;
+  z-index: 90;
   pointer-events: auto;
   display: flex;
   align-items: center;

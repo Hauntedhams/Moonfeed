@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useDarkMode } from '../contexts/DarkModeContext';
 import './TwelveDataChart.css';
 
-const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, desktopSlotRef = null, showPriceScale, showActionButtons = true, isExpanded = false, onCrosshairMove, onFirstPriceUpdate, onTradeClick, onExpand, onFullscreenChange }) => {
+const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDesktopMode = false, desktopSlotRef = null, showPriceScale, showActionButtons = true, isExpanded = false, onCrosshairMove, onFirstPriceUpdate, onTradeClick, onExpand, onFullscreenChange }) => {
   const { isDarkMode: contextDarkMode } = useDarkMode();
   const [srcReady, setSrcReady] = useState(false);
   const [fullscreenMode, setFullscreenMode] = useState(null); // null | 'portrait' | 'landscape'
@@ -652,24 +652,23 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
                 <span>Full Chart</span>
               </button>
             )}
-
-            {/* Collapsed mobile: a bottom-right button to expand the coin card.
-                Shares the Full Chart slot — they never show at the same time.
-                Gated on isActive so only the in-view card's chart shows it (inactive
-                cards' overlays default to the app corner and would stack up). */}
-            {onExpand && isActive && !isExpanded && !isDesktopMode && !fullscreenMode && (
-              <button
-                className="chart-expand-card-btn"
-                onClick={(e) => { e.stopPropagation(); onExpand(e); }}
-                title="Expand details"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="18 15 12 9 6 15"/>
-                </svg>
-                <span>Expand</span>
-              </button>
-            )}
           </div>
+
+          {/* Collapsed mobile: Expand button fixed above the bottom nav so it's always
+              visible, independent of where the chart sits on screen. Gated on isActiveCard
+              so only the single in-view card renders this fixed button (no stacking). */}
+          {onExpand && isActiveCard && !isExpanded && !isDesktopMode && !fullscreenMode && (
+            <button
+              className="chart-expand-card-btn"
+              onClick={(e) => { e.stopPropagation(); onExpand(e); }}
+              title="Expand details"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="18 15 12 9 6 15"/>
+              </svg>
+              <span>Expand</span>
+            </button>
+          )}
 
           {fullscreenMode && (
             <div className={`chart-fs-controls-overlay${fullscreenMode === 'landscape' ? ' chart-fs-controls-overlay--landscape' : ''}`}>

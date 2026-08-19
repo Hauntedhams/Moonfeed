@@ -2577,6 +2577,7 @@ const CoinCard = memo(({
           key={`chart-${mintAddress}`}
           coin={coin}
           isActive={isCurrentCard} // Only the current card — prevents multiple simultaneous DexScreener WebSocket connections which cause rate-limiting ("Loading pair…" forever)
+          isActiveCard={isActiveCard} // Single in-view card — gates the fixed Expand button
           isDesktopMode={isDesktopMode}
           desktopSlotRef={rightPanelRef}
           isExpanded={isDesktopMode ? true : isExpanded}
