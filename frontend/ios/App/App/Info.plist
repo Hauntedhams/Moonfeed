@@ -26,6 +26,12 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<!-- Required so tapping "Take Photo" / "Photo Library" when setting a
+	     profile picture doesn't crash the app (TCC privacy requirement). -->
+	<key>NSCameraUsageDescription</key>
+	<string>Moonfeed uses the camera so you can take a photo to set as your profile picture.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Moonfeed needs access to your photo library so you can choose an image for your profile picture.</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

@@ -1607,6 +1607,57 @@ html:not(.dark-mode) .chart-error-overlay {
   border-color: rgba(255, 255, 255, 0.42);
 }
 
+/* Expand-card button — shares the Full Chart slot (bottom-right) but shows only
+   while the card is collapsed, giving a clear way to open the coin details. */
+.chart-expand-card-btn {
+  position: absolute;
+  bottom: 14px;
+  right: 14px;
+  z-index: 20;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 13px;
+  background: rgba(10, 10, 20, 0.78);
+  color: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 22px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: background 0.18s ease, border-color 0.18s ease;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+.chart-expand-card-btn:hover {
+  background: rgba(10, 10, 20, 0.92);
+  border-color: rgba(255, 255, 255, 0.42);
+}
+
+/* Soft gradient fade behind the Expand button so it reads cleanly over the chart,
+   matching the right-edge mask used behind the action buttons. */
+.chart-expand-card-btn::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 240px;
+  height: 130px;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, rgba(11, 18, 32, 0.9) 0%, rgba(11, 18, 32, 0.55) 45%, transparent 72%);
+}
+
+html:not(.dark-mode) .chart-expand-card-btn::before {
+  background: radial-gradient(ellipse at center, rgba(244, 246, 251, 0.9) 0%, rgba(244, 246, 251, 0.55) 45%, transparent 72%);
+}
+
 /* ── Backdrop: covers viewport during fullscreen (conditionally rendered by React) ── */
 .chart-fs-backdrop {
   position: fixed;

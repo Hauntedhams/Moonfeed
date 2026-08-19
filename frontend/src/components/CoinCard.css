@@ -2438,6 +2438,10 @@ html:not(.dark-mode) .twelve-chart-section {
 }
 
 .transactions-close-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
   background: rgba(255, 255, 255, 0.08);
   border: none;
   color: rgba(255, 255, 255, 0.6);
@@ -3098,6 +3102,25 @@ html:not(.dark-mode) .twelve-chart-section {
   .coin-info-layer {
     /* Adjust height for mobile banner (+24px overlap to hide exposed corners) */
     height: calc(100dvh - clamp(180px, 32vh, 250px) + 24px);
+  }
+
+  /* Collapsed card: the transactions section flows directly under the chart and is
+     clipped by the layer's overflow:hidden — so it's cut off cleanly at the nav on
+     short devices instead of leaving an empty gap. Never let it grow into a blank box. */
+  .coin-info-layer:not(.expanded) .transactions-section {
+    margin: 8px 0 0;
+  }
+}
+
+/* Shorter devices: grow the collapsed info layer (and trim the banner) so the
+   card content sits higher and the transactions rows have room under the chart. */
+@media (max-height: 740px) {
+  .coin-banner {
+    height: clamp(140px, 24vh, 190px);
+  }
+
+  .coin-info-layer:not(.expanded) {
+    height: calc(100dvh - clamp(140px, 24vh, 190px) + 24px);
   }
 }
 

@@ -226,7 +226,7 @@ const CoinCard = memo(({
   }, [showAlertFlyout]);
   const { transactions, isConnected: txConnected, historyLoaded: txHistoryLoaded, error: txError, clearTransactions } = useSolanaTransactions(
     mintAddress,
-    isExpanded || showLiveTransactions || (isDesktopMode && isCurrentCard) // Auto-load when expanded, sheet open, or desktop card is active
+    isExpanded || showLiveTransactions || isCurrentCard // Auto-load for the in-view card so the collapsed marquee stays live
   );
 
   // 🆕 ON-VIEW ENRICHMENT: Trigger enrichment when coin becomes visible
@@ -1887,18 +1887,15 @@ const CoinCard = memo(({
             onClick={() => transactions.length > 0 && !showLiveTransactions && setShowLiveTransactions(true)}
             style={{ cursor: transactions.length > 0 && !showLiveTransactions ? 'pointer' : 'default' }}
           >
-            <div className="transactions-section-header">
-              <span>Transactions</span>
-              {showLiveTransactions && (
-                <button
-                  className="transactions-close-btn"
-                  onClick={(e) => { e.stopPropagation(); setShowLiveTransactions(false); }}
-                  title="Close"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
+            {showLiveTransactions && (
+              <button
+                className="transactions-close-btn"
+                onClick={(e) => { e.stopPropagation(); setShowLiveTransactions(false); }}
+                title="Close"
+              >
+                ✕
+              </button>
+            )}
             <div className="live-transactions-content">
                   {txError && (
                     <div className="tx-error">
@@ -2588,6 +2585,7 @@ const CoinCard = memo(({
           onCrosshairMove={handleChartCrosshairMove}
           onFirstPriceUpdate={handleFirstPriceUpdate}
           onTradeClick={onTradeClick}
+          onExpand={handleExpandToggle}
           onFullscreenChange={onChartFullscreenChange}
         />,
         mobileChartTargetRef.current

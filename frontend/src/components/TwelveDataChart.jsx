@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useDarkMode } from '../contexts/DarkModeContext';
 import './TwelveDataChart.css';
 
-const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, desktopSlotRef = null, showPriceScale, showActionButtons = true, isExpanded = false, onCrosshairMove, onFirstPriceUpdate, onTradeClick, onFullscreenChange }) => {
+const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, desktopSlotRef = null, showPriceScale, showActionButtons = true, isExpanded = false, onCrosshairMove, onFirstPriceUpdate, onTradeClick, onExpand, onFullscreenChange }) => {
   const { isDarkMode: contextDarkMode } = useDarkMode();
   const [srcReady, setSrcReady] = useState(false);
   const [fullscreenMode, setFullscreenMode] = useState(null); // null | 'portrait' | 'landscape'
@@ -252,8 +252,11 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
       rotateWrapperRef.current.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;transform:none;border-radius:12px;';
       // Offset the iframe upward within the slot so the visible portion of the chart
       // content aligns correctly with the slot window (mirrors CSS overflow:hidden clipping).
+      // While collapsed, render the iframe taller than the slot so GeckoTerminal's
+      // bottom "Powered by" watermark falls below the clip and stays hidden until expanded.
+      const footerHide = isExpandedRef.current ? 0 : 34;
       if (iframeRef.current) {
-        iframeRef.current.style.cssText = `position:absolute;top:${-offsetY}px;left:0;width:100%;height:${height}px;transform:none;border:none;display:block;`;
+        iframeRef.current.style.cssText = `position:absolute;top:${-offsetY}px;left:0;width:100%;height:${height + footerHide}px;transform:none;border:none;display:block;`;
       }
       if (btnWrapper) {
         btnWrapper.style.cssText = `position:fixed;top:${clipTop}px;left:${left}px;width:${width}px;height:${clippedH}px;transform:none;z-index:70;pointer-events:none;border-radius:12px;overflow:hidden;`;
@@ -261,7 +264,8 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
       if (mask) {
         // Gradient mask: right-side fade that makes action buttons readable over the chart.
         // z-index 65 = above iframe (60), below Full Chart btn (70) and action buttons (100).
-        const opacity = showMask ? '1' : '0';
+        // Hidden once expanded — the full chart should be visible with no right-edge fade.
+        const opacity = (showMask && !isExpandedRef.current) ? '1' : '0';
         const maskColor = contextDarkMode ? 'rgba(11,18,32,1)' : 'rgba(244,246,251,1)';
         mask.style.cssText = `position:fixed;top:${clipTop}px;right:0px;left:${left + width - 140}px;width:140px;height:${clippedH}px;transform:none;z-index:65;pointer-events:none;border-radius:0 12px 12px 0;background:linear-gradient(to right,transparent,${maskColor} 50%);opacity:${opacity};transition:opacity 0.35s ease;`;
       }
@@ -565,6 +569,23 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
                   <line x1="3" y1="21" x2="10" y2="14"/>
                 </svg>
                 <span>Full Chart</span>
+              </button>
+            )}
+
+            {/* Collapsed mobile: a bottom-right button to expand the coin card.
+                Shares the Full Chart slot — they never show at the same time.
+                Gated on isActive so only the in-view card's chart shows it (inactive
+                cards' overlays default to the app corner and would stack up). */}
+            {onExpand && isActive && !isExpanded && !isDesktopMode && !fullscreenMode && (
+              <button
+                className="chart-expand-card-btn"
+                onClick={(e) => { e.stopPropagation(); onExpand(e); }}
+                title="Expand details"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="18 15 12 9 6 15"/>
+                </svg>
+                <span>Expand</span>
               </button>
             )}
           </div>
