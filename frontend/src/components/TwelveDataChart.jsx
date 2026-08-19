@@ -35,6 +35,12 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
   const observerRef = useRef(null);
   const fallbackTimerRef = useRef(null);
 
+  // Transparent overlay that forwards vertical swipes over the collapsed chart to the
+  // feed scroller. Needed because iOS WKWebView routes touch gestures to the cross-origin
+  // chart iframe even when its container has pointer-events:none.
+  const scrollCatcherRef = useRef(null);
+  const scrollFwdRef = useRef({ startY: 0, startTop: 0, scroller: null });
+
   // Synchronous mirrors — updated during render so they're always current when effects run.
   // Used by updateSlotPosition() to read current mode without stale closures.
   const isDesktopModeRef = useRef(isDesktopMode);
@@ -256,7 +262,7 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
       // bottom "Powered by" watermark falls below the clip and stays hidden until expanded.
       const footerHide = isExpandedRef.current ? 0 : 34;
       if (iframeRef.current) {
-        iframeRef.current.style.cssText = `position:absolute;top:${-offsetY}px;left:0;width:100%;height:${height + footerHide}px;transform:none;border:none;display:block;`;
+        iframeRef.current.style.cssText = `position:absolute;top:${-offsetY}px;left:0;width:100%;height:${height + footerHide}px;transform:none;border:none;display:block;pointer-events:${isExpandedRef.current ? 'auto' : 'none'};`;
       }
       if (btnWrapper) {
         btnWrapper.style.cssText = `position:fixed;top:${clipTop}px;left:${left}px;width:${width}px;height:${clippedH}px;transform:none;z-index:70;pointer-events:none;border-radius:12px;overflow:hidden;`;
@@ -432,6 +438,72 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
 
   const showFullscreenBtn = effectivePairAddress && (isExpanded || isDesktopMode);
 
+  // Only forward-scroll over the chart while the card is collapsed on mobile — when
+  // expanded the chart is interactive, and on desktop the feed doesn't vertical-scroll.
+  const showScrollCatcher = effectivePairAddress && isActive && !isExpanded && !isDesktopMode && !fullscreenMode;
+
+  // Drive the native feed scroller directly from touches on the catcher overlay.
+  // Snap is disabled during the drag (mandatory snap would clamp programmatic scroll),
+  // then we settle onto the nearest/flicked slide and restore snap.
+  useEffect(() => {
+    const el = scrollCatcherRef.current;
+    if (!el || !showScrollCatcher) return;
+    const settle = (s) => {
+      const scroller = s.scroller;
+      if (!scroller) return;
+      const slide = scroller.querySelector('.modern-coin-slide');
+      const slideH = slide ? slide.offsetHeight : window.innerHeight;
+      let idx = Math.round(scroller.scrollTop / slideH);
+      // A quick flick advances one slide even if the drag was short.
+      if (Math.abs(s.vy) > 0.5) idx = s.vy > 0 ? Math.ceil(scroller.scrollTop / slideH) : Math.floor(scroller.scrollTop / slideH);
+      scroller.scrollTo({ top: idx * slideH, behavior: 'smooth' });
+      setTimeout(() => { scroller.style.scrollSnapType = ''; }, 350);
+    };
+    const onStart = (e) => {
+      const scroller = document.querySelector('.modern-scroller-container');
+      if (!scroller || !e.touches[0]) return;
+      scroller.style.scrollSnapType = 'none';
+      scrollFwdRef.current = { startY: e.touches[0].clientY, startTop: scroller.scrollTop, scroller, lastY: e.touches[0].clientY, lastT: e.timeStamp, vy: 0 };
+    };
+    const onMove = (e) => {
+      const s = scrollFwdRef.current;
+      if (!s.scroller || !e.touches[0]) return;
+      const y = e.touches[0].clientY;
+      const dt = e.timeStamp - s.lastT;
+      if (dt > 0) s.vy = (s.lastY - y) / dt; // px/ms, positive = scrolling down
+      s.lastY = y; s.lastT = e.timeStamp;
+      s.scroller.scrollTop = s.startTop - (y - s.startY);
+      e.preventDefault(); // take over from the iframe's own touch handling
+    };
+    const onEnd = () => { const s = scrollFwdRef.current; if (s.scroller) settle(s); };
+    // Trackpad / mouse wheel over the chart: advance one slide per gesture (debounced).
+    let wheelLock = false;
+    const onWheel = (e) => {
+      const scroller = document.querySelector('.modern-scroller-container');
+      if (!scroller) return;
+      e.preventDefault();
+      if (wheelLock || Math.abs(e.deltaY) < 2) return;
+      const slide = scroller.querySelector('.modern-coin-slide');
+      const slideH = slide ? slide.offsetHeight : window.innerHeight;
+      const idx = Math.round(scroller.scrollTop / slideH) + (e.deltaY > 0 ? 1 : -1);
+      scroller.scrollTo({ top: Math.max(0, idx) * slideH, behavior: 'smooth' });
+      wheelLock = true;
+      setTimeout(() => { wheelLock = false; }, 500);
+    };
+    el.addEventListener('touchstart', onStart, { passive: false });
+    el.addEventListener('touchmove', onMove, { passive: false });
+    el.addEventListener('touchend', onEnd, { passive: true });
+    el.addEventListener('touchcancel', onEnd, { passive: true });
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => {
+      el.removeEventListener('touchstart', onStart);
+      el.removeEventListener('touchmove', onMove);
+      el.removeEventListener('touchend', onEnd);
+      el.removeEventListener('touchcancel', onEnd);
+      el.removeEventListener('wheel', onWheel);
+    };
+  }, [showScrollCatcher]);
+
   return (
     <div
       className={`twelve-data-chart-wrapper ${isDesktopMode ? 'desktop-mode' : ''}`}
@@ -556,6 +628,15 @@ const TwelveDataChart = ({ coin, isActive = false, isDesktopMode = false, deskto
               button floats above the cross-origin iframe. pointer-events:none on the wrapper,
               auto on the button itself, so clicks reach it without blocking the iframe. */}
           <div ref={fullscreenBtnRef}>
+            {/* Transparent swipe-catcher: forwards feed scrolling over the collapsed
+                chart. Sits below the Expand button so that button stays tappable. */}
+            {showScrollCatcher && (
+              <div
+                ref={scrollCatcherRef}
+                className="chart-scroll-catcher"
+                style={{ position: 'absolute', inset: 0, zIndex: 10, pointerEvents: 'auto', touchAction: 'none', visibility: 'visible' }}
+              />
+            )}
             {showFullscreenBtn && !fullscreenMode && (
               <button
                 className="chart-fullscreen-btn"
