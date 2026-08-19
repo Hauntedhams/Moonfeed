@@ -1898,7 +1898,7 @@ const CoinCard = memo(({
                     </div>
                   )}
 
-                  <div className="tx-table-header" style={{
+                  <div className="tx-table-header" onClick={(e) => { e.stopPropagation(); setShowLiveTransactions(false); }} style={{
                     display: 'grid',
                     gridTemplateColumns: '42px 52px 1fr 72px 72px 38px',
                     gap: '4px',
@@ -1909,6 +1909,7 @@ const CoinCard = memo(({
                     textTransform: 'uppercase',
                     letterSpacing: '0.5px',
                     borderBottom: '1px solid rgba(255,255,255,0.08)',
+                    cursor: 'pointer',
                   }}>
                     <span>Type</span>
                     <span>DEX</span>

@@ -720,7 +720,6 @@ const ProfileView = ({ onTradeClick }) => {
                 </svg>
               </div>
             )}
-            <div className="pv-ig-avatar-edit">📷</div>
           </div>
           <div className="pv-ig-stats">
             <div className="pv-ig-stat">
@@ -837,7 +836,6 @@ const ProfileView = ({ onTradeClick }) => {
           <div className="pv-ig-history">
             {transactions.length === 0 ? (
               <div className="pv-ig-empty">
-                <span className="pv-ig-empty-icon">📋</span>
                 <p>No trade history yet</p>
                 <span>Coins you buy through Moonfeed will appear here</span>
               </div>
@@ -1858,7 +1856,6 @@ const ProfileView = ({ onTradeClick }) => {
           <div className="pv-ig-tracked">
             {trackedWallets.length === 0 ? (
               <div className="pv-ig-empty">
-                <span className="pv-ig-empty-icon">👁</span>
                 <p>No tracked wallets</p>
                 <span>Click "Track" on any wallet to monitor it here</span>
               </div>
@@ -1902,7 +1899,6 @@ const ProfileView = ({ onTradeClick }) => {
         {profileTab === 'portfolio' && (
           <div className="pv-ig-portfolio">
             <div className="pv-ig-empty">
-              <span className="pv-ig-empty-icon">📊</span>
               <p>Your Portfolio</p>
               <span>Analyze your wallet's trading activity</span>
               <button className="pv-ig-portfolio-btn" onClick={() => setSelectedWallet(publicKey?.toString())}>

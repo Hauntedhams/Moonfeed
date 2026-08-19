@@ -41,6 +41,12 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
   const scrollCatcherRef = useRef(null);
   const scrollFwdRef = useRef({ startY: 0, startTop: 0, scroller: null });
 
+  // Transparent overlay pinned over the bottom "Powered by GeckoTerminal" watermark
+  // strip while the card is expanded. Vertical swipes there scroll the expanded card
+  // instead of panning the interactive chart iframe underneath.
+  const footerCatcherRef = useRef(null);
+  const footerFwdRef = useRef({ startY: 0, startTop: 0, scroller: null });
+
   // Synchronous mirrors — updated during render so they're always current when effects run.
   // Used by updateSlotPosition() to read current mode without stale closures.
   const isDesktopModeRef = useRef(isDesktopMode);
@@ -275,6 +281,22 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
         const maskColor = contextDarkMode ? 'rgba(11,18,32,1)' : 'rgba(244,246,251,1)';
         mask.style.cssText = `position:fixed;top:${clipTop}px;right:0px;left:${left + width - 140}px;width:140px;height:${clippedH}px;transform:none;z-index:65;pointer-events:none;border-radius:0 12px 12px 0;background:linear-gradient(to right,transparent,${maskColor} 50%);opacity:${opacity};transition:opacity 0.35s ease;`;
       }
+
+      // Footer scroll-catcher: while expanded, cover the bottom "Powered by GeckoTerminal"
+      // watermark strip so vertical swipes there scroll the expanded card instead of
+      // panning the interactive chart. Only the visible portion within the clip is covered.
+      const footerCatcher = footerCatcherRef.current;
+      if (footerCatcher) {
+        const FOOTER_H = 40; // height of the GeckoTerminal watermark strip
+        const naturalBottom = top + height;
+        const fTop = Math.max(clipTop, naturalBottom - FOOTER_H);
+        const fH = Math.max(0, clipBottom - fTop);
+        if (isExpandedRef.current && fH > 0) {
+          footerCatcher.style.cssText = `position:fixed;top:${fTop}px;left:${left}px;width:${width}px;height:${fH}px;transform:none;z-index:66;pointer-events:auto;touch-action:none;background:transparent;border-radius:0 0 12px 12px;`;
+        } else {
+          footerCatcher.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:0;height:0;';
+        }
+      }
     }
   };
 
@@ -440,6 +462,10 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
   // expanded the chart is interactive, and on desktop the feed doesn't vertical-scroll.
   const showScrollCatcher = effectivePairAddress && isActive && !isExpanded && !isDesktopMode && !fullscreenMode;
 
+  // Only forward-scroll over the "Powered by GeckoTerminal" footer strip while the card
+  // is expanded on mobile — the rest of the chart stays interactive.
+  const showFooterCatcher = effectivePairAddress && isExpanded && !isDesktopMode && !fullscreenMode;
+
   // Drive the native feed scroller directly from touches on the catcher overlay.
   // Snap is disabled during the drag (mandatory snap would clamp programmatic scroll),
   // then we settle onto the nearest/flicked slide and restore snap.
@@ -501,6 +527,41 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
       el.removeEventListener('wheel', onWheel);
     };
   }, [showScrollCatcher]);
+
+  // Forward vertical swipes/wheel over the footer watermark strip to the expanded
+  // card's scroll container (.coin-info-layer) so the card scrolls as one unit.
+  useEffect(() => {
+    const el = footerCatcherRef.current;
+    if (!el || !showFooterCatcher) return;
+    const getScroller = () => containerRef.current?.closest('.coin-info-layer');
+    const s = footerFwdRef.current;
+    const onStart = (e) => {
+      const scroller = getScroller();
+      if (!scroller || !e.touches[0]) return;
+      s.scroller = scroller;
+      s.startY = e.touches[0].clientY;
+      s.startTop = scroller.scrollTop;
+    };
+    const onMove = (e) => {
+      if (!s.scroller || !e.touches[0]) return;
+      s.scroller.scrollTop = s.startTop - (e.touches[0].clientY - s.startY);
+      e.preventDefault(); // take over from the iframe's own touch handling
+    };
+    const onWheel = (e) => {
+      const scroller = getScroller();
+      if (!scroller) return;
+      scroller.scrollTop += e.deltaY;
+      e.preventDefault();
+    };
+    el.addEventListener('touchstart', onStart, { passive: false });
+    el.addEventListener('touchmove', onMove, { passive: false });
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => {
+      el.removeEventListener('touchstart', onStart);
+      el.removeEventListener('touchmove', onMove);
+      el.removeEventListener('wheel', onWheel);
+    };
+  }, [showFooterCatcher]);
 
   return (
     <div
@@ -621,6 +682,11 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
               (z-index 100). Fades the right edge so buttons are readable against the chart.
               Position/opacity are set imperatively by updateSlotPosition(). */}
           <div ref={maskRef} />
+
+          {/* Footer scroll-catcher — transparent strip over the "Powered by GeckoTerminal"
+              watermark. Position/size set imperatively by updateSlotPosition(). Only mounted
+              while expanded on mobile so swipes there scroll the card, not the chart. */}
+          {showFooterCatcher && <div ref={footerCatcherRef} />}
 
           {/* "Full Chart" button wrapper — mirrors fsSlotRef position at z-index 70 so the
               button floats above the cross-origin iframe. pointer-events:none on the wrapper,
