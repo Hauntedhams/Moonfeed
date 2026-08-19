@@ -381,39 +381,37 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
 
     // Inner (expanded card) content scroll: keep the chart tracking live — it's a
     // slow, deliberate scroll where the chart should stay pinned to its section.
-    const handleInnerScroll = () => { if (!fullscreenModeRef.current) updateSlotPosition(); };
-
     // Feed swipe between cards: the chart is a body-portaled, fixed iframe whose
-    // position is driven by JS. Repositioning it on every scroll event both
-    // thrashes layout (getBoundingClientRect + style writes) and visibly lags
-    // behind the native scroll. Instead, hide it while the feed is moving and
-    // reposition + reveal once the swipe settles, so the card scrolls as one unit.
-    let feedScrollEndTimer = null;
-    const setChartHidden = (hidden) => {
-      const v = hidden ? 'hidden' : 'visible';
-      if (fsSlotRef.current) fsSlotRef.current.style.visibility = v;
-      if (fullscreenBtnRef.current) fullscreenBtnRef.current.style.visibility = v;
-      if (maskRef.current) maskRef.current.style.visibility = v;
+    // position is driven by JS. Rather than hiding it while the feed moves (which
+    // flashed the empty chart area black), we reposition it every animation frame so
+    // it stays visually pinned to its card and scrolls as one smooth unit.
+    let scrollRaf = null;
+    let scrollIdleTimer = null;
+    const track = () => {
+      if (fullscreenModeRef.current || !iframeRef.current) { scrollRaf = null; return; }
+      updateSlotPosition();
+      scrollRaf = requestAnimationFrame(track);
     };
-    const handleFeedScroll = () => {
-      if (fullscreenModeRef.current) return;
-      setChartHidden(true);
-      clearTimeout(feedScrollEndTimer);
-      feedScrollEndTimer = setTimeout(() => {
-        updateSlotPosition();
-        setChartHidden(false);
-      }, 50);
+    const handleScroll = () => {
+      if (fullscreenModeRef.current || !iframeRef.current) return;
+      if (scrollRaf == null) scrollRaf = requestAnimationFrame(track);
+      clearTimeout(scrollIdleTimer);
+      scrollIdleTimer = setTimeout(() => {
+        if (scrollRaf != null) { cancelAnimationFrame(scrollRaf); scrollRaf = null; }
+        updateSlotPosition(); // final settle onto the resting position
+      }, 120);
     };
 
     const handleResize = () => updateSlotPosition(); // resize is always needed (mode can change dims)
     window.addEventListener('resize', handleResize);
-    if (scroller) scroller.addEventListener('scroll', handleFeedScroll, { passive: true });
-    if (infoContent) infoContent.addEventListener('scroll', handleInnerScroll, { passive: true });
+    if (scroller) scroller.addEventListener('scroll', handleScroll, { passive: true });
+    if (infoContent) infoContent.addEventListener('scroll', handleScroll, { passive: true });
     return () => {
       window.removeEventListener('resize', handleResize);
-      clearTimeout(feedScrollEndTimer);
-      if (scroller) scroller.removeEventListener('scroll', handleFeedScroll);
-      if (infoContent) infoContent.removeEventListener('scroll', handleInnerScroll);
+      clearTimeout(scrollIdleTimer);
+      if (scrollRaf != null) cancelAnimationFrame(scrollRaf);
+      if (scroller) scroller.removeEventListener('scroll', handleScroll);
+      if (infoContent) infoContent.removeEventListener('scroll', handleScroll);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
