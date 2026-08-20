@@ -1084,22 +1084,31 @@ html:not(.dark-mode) .coin-card-left-panel::-webkit-scrollbar-thumb:hover {
   overflow: hidden;
 }
 
-.banner-follow-button.following:hover {
-  background: rgba(239, 68, 68, 0.85);
-  border-color: rgba(239, 68, 68, 0.85);
-  color: transparent;
-}
+/* Only swap "Following" -> "Unfollow" on devices with a real hover (desktop/mouse).
+   On touch devices the :hover state sticks after tap, causing both labels to overlap. */
+@media (hover: hover) and (pointer: fine) {
+  .banner-follow-button.following:hover {
+    background: rgba(239, 68, 68, 0.85);
+    border-color: rgba(239, 68, 68, 0.85);
+  }
 
-.banner-follow-button.following:hover::after {
-  content: 'Unfollow';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  color: white;
-  font-size: 0.8rem;
-  font-weight: 600;
-  white-space: nowrap;
+  /* Hide the "Following" label via visibility so a color !important override
+     elsewhere can't keep it visible and overlap the "Unfollow" pseudo-element. */
+  .banner-follow-button.following:hover .follow-label {
+    visibility: hidden;
+  }
+
+  .banner-follow-button.following:hover::after {
+    content: 'Unfollow';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: 0.8rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
 }
 
 /* Follow + price-alert flyout wrapper */

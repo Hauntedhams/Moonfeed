@@ -742,6 +742,31 @@
   pointer-events: all;
 }
 
+.swap-success-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+
+.swap-success-close:hover,
+.swap-success-close:active {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+
 .success-banner-top {
   display: flex;
   align-items: center;

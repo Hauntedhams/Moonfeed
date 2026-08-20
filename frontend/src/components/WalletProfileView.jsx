@@ -97,12 +97,15 @@ const WalletProfileView = ({ walletAddress, onBack }) => {
   const [statsError, setStatsError] = useState(null);
   const [coins, setCoins] = useState([]);
   const [coinsLoading, setCoinsLoading] = useState(true);
-  const { trackWallet, untrackWallet, isTracked } = useTrackedWallets();
+  const { trackWallet, untrackWallet, isTracked, trackedWallets, toggleCopyTrade } = useTrackedWallets();
   const [tracked, setTracked] = useState(false);
 
   useEffect(() => {
     setTracked(isTracked(walletAddress));
   }, [walletAddress, isTracked]);
+
+  const trackedWallet = trackedWallets.find((w) => w.address === walletAddress);
+  const copyEnabled = trackedWallet ? trackedWallet.copyTradeEnabled !== false : false;
 
   // Fetch aggregate wallet analytics
   useEffect(() => {
@@ -147,9 +150,15 @@ const WalletProfileView = ({ walletAddress, onBack }) => {
     return () => { cancelled = true; };
   }, [walletAddress]);
 
-  const toggleTrack = () => {
-    if (tracked) { untrackWallet(walletAddress); setTracked(false); }
-    else { trackWallet(walletAddress); setTracked(true); }
+  // Opt into copying: tracking a wallet enables copy-trade prompts by default.
+  const handleCopyToggle = () => {
+    if (!tracked) { trackWallet(walletAddress); setTracked(true); }
+    else { toggleCopyTrade(walletAddress); }
+  };
+
+  const handleUntrack = () => {
+    untrackWallet(walletAddress);
+    setTracked(false);
   };
 
   const trading = stats?.trading || {};
@@ -196,10 +205,25 @@ const WalletProfileView = ({ walletAddress, onBack }) => {
           >
             {shortAddr(walletAddress)} ↗
           </a>
-          <button className={`wpv-track-btn ${tracked ? 'wpv-track-btn--on' : ''}`} onClick={toggleTrack}>
-            {tracked ? '⭐ Tracked' : '☆ Track'}
+          <button
+            className={`wpv-track-btn ${tracked && copyEnabled ? 'wpv-track-btn--on' : ''}`}
+            onClick={handleCopyToggle}
+          >
+            {!tracked ? '⚡ Copy Next Trade' : copyEnabled ? '✓ Copying Trades' : '⚡ Resume Copying'}
           </button>
         </div>
+
+        {tracked && (
+          <div className="wpv-copy-hint">
+            <span className="wpv-copy-hint-icon">⚡</span>
+            <span className="wpv-copy-hint-text">
+              {copyEnabled
+                ? "You'll get a prompt to mirror this trader's next Jupiter swap."
+                : 'Copy trading paused — tap Resume to get prompts again.'}
+            </span>
+            <button className="wpv-copy-untrack" onClick={handleUntrack}>Remove</button>
+          </div>
+        )}
 
         {identity?.name && (
           <div className="wpv-identity-name">

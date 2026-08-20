@@ -581,6 +581,13 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
           {swapSuccessInfo && (
             <div className="swap-success-fixed-overlay" onClick={(e) => e.stopPropagation()}>
                 <div className="swap-success-banner">
+                  <button
+                    className="swap-success-close"
+                    onClick={handleClose}
+                    aria-label="Close"
+                  >
+                    ✕
+                  </button>
                   <div className="success-banner-top">
                     <span className="success-banner-check">✓</span>
                     <span className="success-banner-title">Trade successful!</span>
