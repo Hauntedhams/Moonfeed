@@ -526,7 +526,7 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
             >
               <div className={`jt-swipe-track ${activeTab === 'limit' ? 'at-limit' : ''}`}>
                 {/* Page 1 — Instant Swap (Jupiter Terminal) */}
-                <div className="jt-swipe-page">
+                <div className="jt-swipe-page jt-swipe-page--swap">
                   <div className="jupiter-widget-wrapper">
                     {/* Loading state while the Terminal boots */}
                     {isLoading && !error && (
@@ -558,6 +558,26 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
                       }}
                     />
                   </div>
+                  <div className="jupiter-modal-footer">
+                    <p className="non-custodial-disclaimer">
+                      Moonfeed is a non-custodial interface. Swaps are executed on-chain by{' '}
+                      <a
+                        href="https://jup.ag"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="disclaimer-link"
+                      >
+                        Jupiter
+                      </a>{' '}
+                      using your own self-custody wallet. Moonfeed never holds, controls, or has
+                      access to your funds.
+                    </p>
+                    <p className="risk-disclaimer">
+                      Crypto trading involves substantial risk. You are solely responsible for your
+                      transactions.
+                    </p>
+                    <p className="powered-by">Powered by Jupiter</p>
+                  </div>
                 </div>
 
                 {/* Page 2 — Limit Order (swipe left to reach) */}
@@ -572,6 +592,26 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
                     initialPercentage={initialPercentage}
                     initialSide={initialSide}
                   />
+                  <div className="jupiter-modal-footer limit-order-footer">
+                    <p className="non-custodial-disclaimer">
+                      Moonfeed is a non-custodial interface. Swaps are executed on-chain by{' '}
+                      <a
+                        href="https://jup.ag"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="disclaimer-link"
+                      >
+                        Jupiter
+                      </a>{' '}
+                      using your own self-custody wallet. Moonfeed never holds, controls, or has
+                      access to your funds.
+                    </p>
+                    <p className="risk-disclaimer">
+                      Crypto trading involves substantial risk. You are solely responsible for your
+                      transactions.
+                    </p>
+                    <p className="powered-by">Powered by Jupiter</p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -718,27 +758,6 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
             </div>
           )}
 
-          {/* Footer */}
-          <div className="jupiter-modal-footer">
-            <p className="non-custodial-disclaimer">
-              Moonfeed is a non-custodial interface. Swaps are executed on-chain by{' '}
-              <a
-                href="https://jup.ag"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="disclaimer-link"
-              >
-                Jupiter
-              </a>{' '}
-              using your own self-custody wallet. Moonfeed never holds, controls, or has
-              access to your funds.
-            </p>
-            <p className="risk-disclaimer">
-              Crypto trading involves substantial risk. You are solely responsible for your
-              transactions.
-            </p>
-            <p className="powered-by">Powered by Jupiter</p>
-          </div>
         </div>
       </div>
     </>

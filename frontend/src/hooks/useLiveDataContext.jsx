@@ -86,15 +86,16 @@ export function LiveDataProvider({ children }) {
             case 'price-update':
               updateCoins(prev => {
                 const updated = new Map(prev);
-                if (message.data) {
-                  message.data.forEach(coin => {
-                    const address = coin.address || coin.mintAddress;
-                    if (address) {
-                      const existing = updated.get(address) || {};
-                      updated.set(address, { ...existing, ...coin });
-                    }
-                  });
-                }
+                const priceUpdates = Array.isArray(message.data)
+                  ? message.data
+                  : (message.data ? [message.data] : [message]);
+                priceUpdates.forEach(coin => {
+                  const address = coin.address || coin.mintAddress || coin.token;
+                  if (address) {
+                    const existing = updated.get(address) || {};
+                    updated.set(address, { ...existing, ...coin });
+                  }
+                });
                 return updated;
               });
               break;

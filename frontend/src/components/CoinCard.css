@@ -1092,14 +1092,14 @@ html:not(.dark-mode) .coin-card-left-panel::-webkit-scrollbar-thumb:hover {
     border-color: rgba(239, 68, 68, 0.85);
   }
 
-  /* Hide the "Following" label via visibility so a color !important override
-     elsewhere can't keep it visible and overlap the "Unfollow" pseudo-element. */
+  /* Hide the "Tracking" label via visibility so a color !important override
+    elsewhere can't keep it visible and overlap the "Untrack" pseudo-element. */
   .banner-follow-button.following:hover .follow-label {
     visibility: hidden;
   }
 
   .banner-follow-button.following:hover::after {
-    content: 'Unfollow';
+    content: 'Untrack';
     position: absolute;
     top: 50%;
     left: 50%;
@@ -1118,6 +1118,13 @@ html:not(.dark-mode) .coin-card-left-panel::-webkit-scrollbar-thumb:hover {
   align-items: center;
   gap: 4px;
   flex-shrink: 0;
+}
+
+.tracked-price {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 /* Side arrow toggle that reveals the "Notify at" chips */
@@ -1318,7 +1325,7 @@ html:not(.dark-mode) .coin-card-left-panel::-webkit-scrollbar-thumb:hover {
 .desktop-coin-header {
   display: none; /* Hidden by default on mobile */
   padding: 0 20px 8px 20px; /* Reduced bottom padding from 16px to 8px */
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  border-bottom: none;
   margin-top: -8px; /* Pull up closer to the header */
 }
 
@@ -1856,6 +1863,7 @@ html:not(.dark-mode) .coin-card-left-panel::-webkit-scrollbar-thumb:hover {
 }
 
 .price-change {
+  order: -1;
   font-size: 0.95rem;
   font-weight: 700;
   padding: 4px 10px;
@@ -2700,8 +2708,8 @@ html:not(.dark-mode) .twelve-chart-section {
     transform: translateY(0);
   }
   100% {
-    /* Track holds two copies of the list; shifting by half loops seamlessly */
-    transform: translateY(-50%);
+    /* Track holds four copies of the list; shifting by one copy loops seamlessly. */
+    transform: translateY(-25%);
   }
 }
 

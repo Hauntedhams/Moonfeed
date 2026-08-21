@@ -10,8 +10,6 @@ import { useLiveData } from '../hooks/useLiveDataContext.jsx';
 import { useSolanaTransactions } from '../hooks/useSolanaTransactions.jsx';
 import { useOnDemandPrice } from '../hooks/useOnDemandPrice.js';
 import { useWallet } from '../contexts/WalletContext';
-import { useAlerts } from '../contexts/AlertsContext';
-import { ALERT_LEVELS } from '../utils/alertStorage';
 import { API_CONFIG } from '../config/api.js';
 import { 
   calculateGraduationPercentage, 
@@ -101,12 +99,10 @@ const CoinCard = memo(({
   const [hasToggledActions, setHasToggledActions] = useState(false); // Track if user has toggled (avoids mount animation)
   const [selectedWallet, setSelectedWallet] = useState(null);
   const [showDescriptionModal, setShowDescriptionModal] = useState(false);
+  const [trackedPrice, setTrackedPrice] = useState(null);
   const [bannerError, setBannerError] = useState(false); // Track banner image load failure
   const [profileSrcIndex, setProfileSrcIndex] = useState(0); // Index into ordered list of profile image URLs to try
   const [profileLoaded, setProfileLoaded] = useState(false); // True once the winning profile img fires onLoad
-  const [showAlertFlyout, setShowAlertFlyout] = useState(false); // "Notify at" flyout beside Follow button
-  const [alertFlyoutPos, setAlertFlyoutPos] = useState({ top: 0, left: 0 });
-  const alertArrowRef = useRef(null);
   const [chartHoveredPrice, setChartHoveredPrice] = useState(null); // Track hovered price from chart
   const [chartHoveredData, setChartHoveredData] = useState(null); // Track full crosshair data (price + time)
   const [chartFirstPrice, setChartFirstPrice] = useState(null); // Track first visible price for % calculation
@@ -155,7 +151,6 @@ const CoinCard = memo(({
   // 🔥 CRITICAL FIX: Get coins Map directly from context to force re-renders when it updates
   const { getCoin, getChart, connected, connectionStatus, coins, updateCount } = useLiveData();
   const { walletAddress, connected: walletConnected } = useWallet();
-  const { prefs: alertPrefs, toggleLevel: toggleAlertLevel } = useAlerts();
   
   // 🔥 PRICE UPDATE FIX: Directly read from coins Map and use it to trigger re-renders
   const address = coin.mintAddress || coin.address;
@@ -191,42 +186,16 @@ const CoinCard = memo(({
     isVisible,
     coin.price_usd || coin.priceUsd || coin.price || 0
   );
-  
-  // 🔥 CRITICAL FIX: Use on-demand price as primary source, fallback to WebSocket/API
-  const livePrice = liveData?.price;
-  const fallbackPrice = coin.price_usd || coin.priceUsd || coin.price || 0;
-  const displayPrice = onDemandPrice || livePrice || fallbackPrice;
 
-  // Active "Notify at" alert levels for this coin (reactive to context prefs)
-  const activeAlertLevels = useMemo(() => {
-    const entry = alertPrefs?.[address];
-    return new Set(entry?.levels || []);
-  }, [alertPrefs, address]);
-
-  // Close the alert flyout when tapping/clicking outside of it
-  const alertWrapRef = useRef(null);
-  useEffect(() => {
-    if (!showAlertFlyout) return;
-    if (alertArrowRef.current) {
-      const r = alertArrowRef.current.getBoundingClientRect();
-      setAlertFlyoutPos({ top: r.top + window.scrollY, left: r.right + 8 });
-    }
-    const handler = (e) => {
-      if (alertWrapRef.current && !alertWrapRef.current.contains(e.target)) {
-        setShowAlertFlyout(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    document.addEventListener('touchstart', handler);
-    return () => {
-      document.removeEventListener('mousedown', handler);
-      document.removeEventListener('touchstart', handler);
-    };
-  }, [showAlertFlyout]);
-  const { transactions, isConnected: txConnected, historyLoaded: txHistoryLoaded, error: txError, clearTransactions } = useSolanaTransactions(
+  const { transactions, livePrice: rpcLivePrice, isConnected: txConnected, historyLoaded: txHistoryLoaded, error: txError, clearTransactions } = useSolanaTransactions(
     mintAddress,
     isExpanded || showLiveTransactions || isCurrentCard // Auto-load for the in-view card so the collapsed marquee stays live
   );
+
+  // Prefer the live WebSocket stream so the card follows the chart's freshest price.
+  const livePrice = liveData?.price;
+  const fallbackPrice = coin.price_usd || coin.priceUsd || coin.price || 0;
+  const displayPrice = rpcLivePrice || livePrice || onDemandPrice || fallbackPrice;
 
   // 🆕 ON-VIEW ENRICHMENT: Trigger enrichment when coin becomes visible
   const [enrichmentRequested, setEnrichmentRequested] = useState(false);
@@ -1252,7 +1221,12 @@ const CoinCard = memo(({
   const changePct = chartHoveredData && chartFirstPrice 
     ? ((chartHoveredPrice - chartFirstPrice) / chartFirstPrice) * 100
     : (liveData?.change24h ?? coin.change_24h ?? coin.priceChange24h ?? coin.change24h ?? 0);
-  const marketCap = liveData?.marketCap ?? coin.market_cap_usd ?? coin.market_cap ?? coin.marketCap ?? 0;
+  const baseMarketCap = liveData?.marketCap ?? coin.market_cap_usd ?? coin.market_cap ?? coin.marketCap ?? 0;
+  const freshestLivePrice = rpcLivePrice || livePrice;
+  const marketCap = liveData?.marketCap
+    ?? (freshestLivePrice && fallbackPrice > 0
+      ? baseMarketCap * (freshestLivePrice / fallbackPrice)
+      : baseMarketCap);
   const volume24h = liveData?.volume24h ?? coin.volume_24h_usd ?? coin.volume_24h ?? coin.volume24h ?? 0;
   const liquidity = liveData?.liquidity ?? coin.liquidity_usd ?? coin.liquidity ?? coin.liquidityUsd ?? 0;
   const holders = liveData?.holders ?? coin.holders ?? coin.holderCount ?? coin.holder_count ?? coin.dexscreener?.holders ?? 0;
@@ -1650,62 +1624,20 @@ const CoinCard = memo(({
                       </div>
                     </div>
                   )}
-                  <div className={`follow-alert-wrap ${showAlertFlyout ? 'flyout-open' : ''}`} ref={alertWrapRef}>
+                  <div className="follow-alert-wrap">
                     <button 
                       className={`banner-follow-button ${isFavorite ? 'following' : ''}`}
                       onClick={(e) => {
                         e.stopPropagation();
+                        setTrackedPrice(isFavorite ? null : displayPrice);
                         onFavoriteToggle?.();
                       }}
-                      title={isFavorite ? 'Click to unfollow' : 'Click to follow'}
+                      title={isFavorite ? 'Stop tracking this coin' : 'Track this coin'}
                     >
-                      <span className="follow-label">{isFavorite ? 'Following' : 'Follow'}</span>
+                      <span className="follow-label">{isFavorite ? 'Tracking' : 'Track'}</span>
                     </button>
-                    <button
-                      ref={alertArrowRef}
-                      className={`alert-arrow-btn ${showAlertFlyout ? 'open' : ''} ${activeAlertLevels.size > 0 ? 'has-alerts' : ''}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowAlertFlyout((v) => !v);
-                      }}
-                      title="Set price alerts"
-                      aria-label="Set price alerts"
-                      aria-expanded={showAlertFlyout}
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                        <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                      {activeAlertLevels.size > 0 && <span className="alert-arrow-dot" />}
-                    </button>
-
-                    {showAlertFlyout && createPortal(
-                      <div
-                        className="alert-flyout"
-                        style={{ position: 'fixed', top: alertFlyoutPos.top, left: alertFlyoutPos.left }}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <span className="alert-flyout-label">Notify at</span>
-                        <div className="alert-flyout-chips">
-                          {ALERT_LEVELS.map((level) => {
-                            const active = activeAlertLevels.has(level);
-                            const positive = level > 0;
-                            return (
-                              <button
-                                key={level}
-                                className={`alert-chip ${active ? 'active' : ''} ${positive ? 'pos' : 'neg'}`}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  toggleAlertLevel(coin, level, displayPrice);
-                                }}
-                                title={`Notify me when price moves ${positive ? '+' : ''}${level}%`}
-                              >
-                                {positive ? '+' : ''}{level}%
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>,
-                      document.body
+                    {isFavorite && trackedPrice > 0 && (
+                      <span className="tracked-price">Tracked at {formatPrice(trackedPrice)}</span>
                     )}
                   </div>
                 </div>
@@ -1935,9 +1867,11 @@ const CoinCard = memo(({
                     ) : (() => {
                       const isOpen = showLiveTransactions;
                       const previewTxns = isOpen ? transactions : transactions.slice(0, 8);
-                      const canRoll = !isOpen && previewTxns.length >= 3;
-                      // When rolling, duplicate the list so the vertical marquee loops seamlessly.
-                      const rows = canRoll ? [...previewTxns, ...previewTxns] : previewTxns;
+                      const canRoll = !isOpen && previewTxns.length > 0;
+                      // Repeat the preview enough times to keep short lists filled while looping.
+                      const rows = canRoll
+                        ? [...previewTxns, ...previewTxns, ...previewTxns, ...previewTxns]
+                        : previewTxns;
                       return (
                         <div
                           className={`transactions-marquee-track ${canRoll ? 'rolling' : ''}`}

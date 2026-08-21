@@ -23,6 +23,7 @@ const MAX_RECONNECT_ATTEMPTS = 5;
 
 export const useSolanaTransactions = (mintAddress, isActive) => {
   const [transactions, setTransactions] = useState([]);
+  const [livePrice, setLivePrice] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [error, setError] = useState(null);
@@ -56,6 +57,7 @@ export const useSolanaTransactions = (mintAddress, isActive) => {
 
     ws.onopen = () => {
       reconnectAttemptsRef.current = 0;
+      ws.send(JSON.stringify({ type: 'subscribe', token: mint }));
       ws.send(JSON.stringify({ type: 'subscribe-txs', token: mint }));
     };
 
@@ -63,6 +65,12 @@ export const useSolanaTransactions = (mintAddress, isActive) => {
       try {
         const msg = JSON.parse(event.data);
         switch (msg.type) {
+          case 'price-update': {
+            const nextPrice = Number(msg.price);
+            if (nextPrice > 0) setLivePrice(nextPrice);
+            break;
+          }
+
           case 'tx-history':
             if (Array.isArray(msg.transactions)) {
               setTransactions(msg.transactions);
@@ -132,6 +140,7 @@ export const useSolanaTransactions = (mintAddress, isActive) => {
         wsRef.current = null;
         ws.onclose = null; // Prevent reconnect on intentional close
         if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'unsubscribe', token: mintAddress }));
           ws.send(JSON.stringify({ type: 'unsubscribe-txs', token: mintAddress }));
         }
         ws.close();
@@ -156,6 +165,7 @@ export const useSolanaTransactions = (mintAddress, isActive) => {
       if (ws) {
         ws.onclose = null; // Prevent reconnect on cleanup
         if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'unsubscribe', token: mintAddress }));
           ws.send(JSON.stringify({ type: 'unsubscribe-txs', token: mintAddress }));
         }
         ws.close();
@@ -163,5 +173,5 @@ export const useSolanaTransactions = (mintAddress, isActive) => {
     };
   }, [mintAddress, isActive, connect]);
 
-  return { transactions, isConnected, historyLoaded, error, clearTransactions };
+  return { transactions, livePrice, isConnected, historyLoaded, error, clearTransactions };
 };

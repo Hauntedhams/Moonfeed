@@ -21,7 +21,7 @@
     justify-content: flex-start;
     align-items: flex-start;
     padding: 40px;
-    background: rgba(0, 0, 0, 0.85);
+    background: transparent;
     backdrop-filter: none;
   }
 }
@@ -31,6 +31,7 @@
   border-radius: 24px;
   width: 100%;
   max-width: 450px;
+  height: 88vh;
   max-height: 88vh;
   overflow: hidden;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
@@ -226,11 +227,13 @@
   overflow: hidden;
   width: 100%;
   flex: 1;
+  min-height: 0; /* allow inner page to scroll instead of overflowing the footer */
 }
 
 .jt-swipe-track {
   display: flex;
   width: 200%;
+  height: 100%;
   transition: transform 0.32s cubic-bezier(0.25, 0.46, 0.45, 0.94);
   transform: translateX(0);
 }
@@ -242,13 +245,41 @@
 .jt-swipe-page {
   width: 50%;
   flex-shrink: 0;
+  height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+.jt-swipe-page--swap {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(79, 195, 247, 0.45) rgba(15, 23, 42, 0.7);
+}
+
+.jt-swipe-page--swap::-webkit-scrollbar {
+  width: 8px;
+}
+
+.jt-swipe-page--swap::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.7);
+}
+
+.jt-swipe-page--swap::-webkit-scrollbar-thumb {
+  background: rgba(79, 195, 247, 0.45);
+  border: 2px solid rgba(15, 23, 42, 0.7);
+  border-radius: 999px;
+}
+
+.jt-swipe-page--swap::-webkit-scrollbar-thumb:hover {
+  background: rgba(79, 195, 247, 0.65);
 }
 
 /* The embedded limit-order page renders inline (no overlay) inside a swipe page */
 .jt-swipe-page--limit {
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .jt-swipe-page--limit .trigger-modal-content.embedded {
