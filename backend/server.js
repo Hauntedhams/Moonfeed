@@ -2253,16 +2253,14 @@ app.get('/api/coins/custom', async (req, res) => {
 // Returns tokens with 70-100% bonding curve progress, sorted by graduation score
 app.get('/api/coins/graduating', async (req, res) => {
   try {
-    console.log('🎓 /api/coins/graduating endpoint called (Moralis API)');
+    console.log('🎓 /api/coins/graduating endpoint called (Solana Tracker API)');
     
     const limit = req.query.limit ? Math.min(parseInt(req.query.limit), 100) : 100;
     
-    // Use Moralis service for graduating tokens
-    const moralisService = require('./moralisService');
+    // Use Solana Tracker for graduating tokens (real bonding-curve progress)
+    const graduatingService = require('./graduatingService');
     
-    // Fetch graduating tokens from Moralis
-   
-    const graduatingTokens = await moralisService.getGraduatingTokens();
+    const graduatingTokens = await graduatingService.getGraduatingTokens();
     
     if (graduatingTokens.length === 0) {
       console.log('⚠️ No graduating tokens found');

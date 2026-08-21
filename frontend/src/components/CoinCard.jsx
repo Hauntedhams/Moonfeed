@@ -1287,7 +1287,7 @@ const CoinCard = memo(({
   let graduationStatus = null;
   let graduationColor = null;
   
-  if (isGraduating || coin.status === 'graduating' || coin.isPumpFun) {
+  if (isGraduating || coin.status === 'graduating') {
     // Try to get live baseBalance from liveData or coin data
     const baseBalance = liveData?.baseBalance ?? coin.baseBalance ?? 0;
     
@@ -1301,17 +1301,6 @@ const CoinCard = memo(({
       graduationPercentage = parseFloat(coin.bondingCurveProgress);
       graduationStatus = getGraduationStatus(graduationPercentage);
       graduationColor = getGraduationColor(graduationPercentage);
-    } else {
-      // Fallback: derive from market cap — pump.fun graduates at $69,420 mcap.
-      // If mcap isn't available, estimate it from price × 1B (pump.fun fixed supply).
-      const GRADUATION_MCAP = 69420;
-      const price = liveData?.price ?? coin.price_usd ?? coin.priceUsd ?? coin.price ?? 0;
-      const bestMcap = marketCap || fdv || (price > 0 ? price * 1_000_000_000 : 0);
-      if (bestMcap > 0) {
-        graduationPercentage = Math.min(100, (bestMcap / GRADUATION_MCAP) * 100);
-        graduationStatus = getGraduationStatus(graduationPercentage);
-        graduationColor = getGraduationColor(graduationPercentage);
-      }
     }
   }
 
