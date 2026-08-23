@@ -1,6 +1,7 @@
 import React, { memo, useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { UnifiedWalletButton } from '@jup-ag/wallet-adapter';
+import WalletConnectOnboarding from './WalletConnectOnboarding';
 import './CoinCard.css';
 import TwelveDataChart from './TwelveDataChart';
 import LiquidityLockIndicator from './LiquidityLockIndicator';
@@ -106,6 +107,8 @@ const CoinCard = memo(({
   const [chartHoveredPrice, setChartHoveredPrice] = useState(null); // Track hovered price from chart
   const [chartHoveredData, setChartHoveredData] = useState(null); // Track full crosshair data (price + time)
   const [chartFirstPrice, setChartFirstPrice] = useState(null); // Track first visible price for % calculation
+  const [buyDrawerOpen, setBuyDrawerOpen] = useState(false);
+  const [buyOrderPrice, setBuyOrderPrice] = useState(0);
   const chartsContainerRef = useRef(null);
   const chartNavRef = useRef(null);
   const prevPriceRef = useRef(null);
@@ -128,6 +131,7 @@ const CoinCard = memo(({
   const _btnSwipeStartScrollTop = useRef(0); // scroller position when a swipe over the buttons begins
   const _btnScrollerRef = useRef(null); // cached scroller element during a button swipe
   const _btnDraggingRef = useRef(false); // true while finger is dragging the scroller via the buttons
+  const buySwipeRef = useRef({ startX: 0, startY: 0, startPrice: 0, tracking: false });
 
   // Track if coin is enriched (has banner, socials, rugcheck, etc.)
   const isEnriched = !!(
@@ -496,6 +500,89 @@ const CoinCard = memo(({
     if (!isFinite(n)) return '0.00%';
     const sign = n > 0 ? '+' : '';
     return `${sign}${n.toFixed(2)}%`;
+  };
+
+  const getBuyOrderStep = () => {
+    const base = Number(displayPrice) || Number(fallbackPrice) || 0;
+    if (base <= 0) return 0.000001;
+    return Math.max(base * 0.005, 0.00000001);
+  };
+
+  const clampBuyOrderPrice = (nextPrice) => {
+    const base = Number(displayPrice) || Number(fallbackPrice) || 0;
+    if (base <= 0) return Math.max(Number(nextPrice) || 0, 0.00000001);
+    return Math.min(Math.max(nextPrice, base * 0.2), base * 2.5);
+  };
+
+  const openBuyDrawer = () => {
+    const base = Number(displayPrice) || Number(fallbackPrice) || 0;
+    setBuyOrderPrice((current) => current > 0 ? current : clampBuyOrderPrice(base * 0.94));
+    setBuyDrawerOpen(true);
+  };
+
+  const adjustBuyOrderPrice = (direction) => {
+    setBuyOrderPrice((current) => {
+      const base = Number(displayPrice) || Number(fallbackPrice) || 0;
+      const startPrice = current > 0 ? current : base;
+      return clampBuyOrderPrice(startPrice + direction * getBuyOrderStep());
+    });
+  };
+
+  const handleBuyWheel = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    adjustBuyOrderPrice(e.deltaY < 0 ? 1 : -1);
+  };
+
+  const handleBuyTouchStart = (e) => {
+    const touch = e.touches?.[0];
+    if (!touch) return;
+    buySwipeRef.current = {
+      startX: touch.clientX,
+      startY: touch.clientY,
+      startPrice: buyOrderPrice || displayPrice || fallbackPrice || 0,
+      tracking: true,
+    };
+  };
+
+  const handleBuyTouchMove = (e) => {
+    const touch = e.touches?.[0];
+    const swipe = buySwipeRef.current;
+    if (!touch || !swipe.tracking) return;
+
+    const deltaX = touch.clientX - swipe.startX;
+    const deltaY = touch.clientY - swipe.startY;
+
+    if (!buyDrawerOpen && deltaX > 56 && Math.abs(deltaX) > Math.abs(deltaY) * 1.35) {
+      e.preventDefault();
+      e.stopPropagation();
+      openBuyDrawer();
+      swipe.tracking = false;
+      return;
+    }
+
+    if (buyDrawerOpen && Math.abs(deltaY) > 4) {
+      e.preventDefault();
+      e.stopPropagation();
+      const nextPrice = swipe.startPrice - deltaY * getBuyOrderStep() * 0.18;
+      setBuyOrderPrice(clampBuyOrderPrice(nextPrice));
+    }
+  };
+
+  const handleBuyTouchEnd = () => {
+    buySwipeRef.current.tracking = false;
+  };
+
+  const submitBuyDrawerOrder = () => {
+    if (!onTradeClick || buyOrderPrice <= 0) return;
+    const percentage = displayPrice > 0 ? ((buyOrderPrice - displayPrice) / displayPrice) * 100 : undefined;
+    onTradeClick(coin, {
+      tab: 'limit',
+      side: 'buy',
+      percentage,
+      targetPrice: buyOrderPrice,
+    });
+    setBuyDrawerOpen(false);
   };
 
   // Helper function to format exact numbers for tooltips
@@ -1324,7 +1411,12 @@ const CoinCard = memo(({
   }
 
   return (
-    <div className="coin-card">
+    <div
+      className={`coin-card${buyDrawerOpen ? ' buy-drawer-active' : ''}`}
+      onTouchStartCapture={isExpanded && isActiveCard && !isDesktopMode ? handleBuyTouchStart : undefined}
+      onTouchMoveCapture={isExpanded && isActiveCard && !isDesktopMode ? handleBuyTouchMove : undefined}
+      onTouchEndCapture={isExpanded && isActiveCard && !isDesktopMode ? handleBuyTouchEnd : undefined}
+    >
       {/* Desktop Split-Screen Layout */}
       {/* Left Panel - Coin Card Content */}
       <div className="coin-card-left-panel">
@@ -2361,6 +2453,65 @@ const CoinCard = memo(({
       </div>
       </div> {/* Close coin-card-left-panel */}
 
+      {isExpanded && isActiveCard && !isDesktopMode && createPortal(
+        <>
+          {!buyDrawerOpen && (
+            <div
+              className="coin-buy-swipe-hotzone"
+              onTouchStart={handleBuyTouchStart}
+              onTouchMove={handleBuyTouchMove}
+              onTouchEnd={handleBuyTouchEnd}
+              aria-hidden="true"
+            />
+          )}
+
+          {buyDrawerOpen && (
+            <>
+              <button
+                className="coin-buy-drawer-backdrop"
+                onClick={() => setBuyDrawerOpen(false)}
+                aria-label="Close buy limit drawer"
+              />
+              <aside className="coin-buy-drawer" aria-label={`Buy ${coin.symbol || coin.name || 'coin'} limit order`}>
+                <div className="coin-buy-drawer-header">
+                  <span className="coin-buy-kicker">Limit buy</span>
+                  <button className="coin-buy-close" onClick={() => setBuyDrawerOpen(false)} aria-label="Close">×</button>
+                </div>
+                <div className="coin-buy-symbol">{coin.symbol || coin.name || 'TOKEN'}</div>
+                <div className="coin-buy-market-price">Market {formatPrice(displayPrice)}</div>
+
+                <div
+                  className="coin-buy-price-wheel"
+                  onWheel={handleBuyWheel}
+                  onTouchStart={handleBuyTouchStart}
+                  onTouchMove={handleBuyTouchMove}
+                  onTouchEnd={handleBuyTouchEnd}
+                  role="spinbutton"
+                  aria-valuetext={formatPrice(buyOrderPrice)}
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'ArrowUp') adjustBuyOrderPrice(1);
+                    if (e.key === 'ArrowDown') adjustBuyOrderPrice(-1);
+                  }}
+                >
+                  <button className="coin-buy-step" onClick={() => adjustBuyOrderPrice(1)} aria-label="Increase buy price">⌃</button>
+                  <div className="coin-buy-price">{formatPrice(buyOrderPrice)}</div>
+                  <div className={`coin-buy-delta ${buyOrderPrice >= displayPrice ? 'above' : 'below'}`}>
+                    {displayPrice > 0 ? formatPercent(((buyOrderPrice - displayPrice) / displayPrice) * 100) : '0.00%'}
+                  </div>
+                  <button className="coin-buy-step" onClick={() => adjustBuyOrderPrice(-1)} aria-label="Decrease buy price">⌄</button>
+                </div>
+
+                <button className="coin-buy-submit" onClick={submitBuyDrawerOrder} disabled={!onTradeClick || buyOrderPrice <= 0}>
+                  Set buy limit
+                </button>
+              </aside>
+            </>
+          )}
+        </>,
+        document.body
+      )}
+
       {/* TikTok-style Action Buttons
            On mobile: portaled to document.body so buttons escape the iOS/Android
            GPU compositing layer created by the scroll container. The chart iframe
@@ -2375,20 +2526,17 @@ const CoinCard = memo(({
         className={`tiktok-action-buttons ${showActionButtons ? '' : 'collapsed'}`}
         style={_mobilePortal ? {
           position: 'fixed',
-          // Anchor to the card's right edge, not the viewport right.
-          // window.innerWidth - mobileChartRight = distance from card right to viewport right.
-          // +15 keeps icons 15px inside the card's right edge (the faded gradient strip).
-          right: mobileChartRight !== null ? `${window.innerWidth - mobileChartRight + 15}px` : '15px',
-          // Anchor top+bottom to the chart section so buttons stay within it.
-          // Fall back to bottom-anchored position until the chart rect is measured.
-          ...(mobileChartTop !== null && mobileChartBottom !== null
-            ? {
-                top: `${mobileChartTop + 2}px`,
-                bottom: `${window.innerHeight - mobileChartBottom + 2}px`,
-                justifyContent: 'space-evenly',
-                gap: 0,
-              }
-            : { bottom: '90px' }),
+          // Anchor to the bottom-right, just above the fixed Expand button, so the
+          // buttons appear to fly out of it. Stack upward (bottom-up reveal).
+          right: '14px',
+          bottom: 'calc(env(safe-area-inset-bottom) + 132px)',
+          top: 'auto',
+          flexDirection: 'column',
+          justifyContent: 'flex-end',
+          alignItems: 'center',
+          gap: '16px',
+          // Scale/reveal originates at the bottom (the Expand button) and rises up.
+          transformOrigin: 'bottom center',
           zIndex: 9999,
           // Fade out while the snap-scroll animation is running so the buttons
           // don't appear to float over the incoming card.
@@ -2396,46 +2544,6 @@ const CoinCard = memo(({
           transition: isScrolling ? 'none' : 'opacity 0.15s ease',
         } : undefined}
       >
-        {/* Favorite / Like */}
-        <button 
-          className={`tiktok-action-btn ${isFavorite ? 'active' : ''}`}
-          onClick={(e) => { e.stopPropagation(); onFavoriteToggle && onFavoriteToggle(coin); }}
-          title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-        >
-          <span className="tiktok-action-icon">
-            {isFavorite ? (
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="#ff2d55" stroke="#ff2d55" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-            ) : (
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-            )}
-          </span>
-          <span className="tiktok-action-label">Fave</span>
-        </button>
-
-        {/* Live Transactions */}
-        <button 
-          className={`tiktok-action-btn ${showLiveTransactions ? 'active' : ''}`}
-          onClick={(e) => { e.stopPropagation(); setShowLiveTransactions(prev => !prev); }}
-          title="Live Transactions"
-        >
-          <span className="tiktok-action-icon">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-          </span>
-          <span className="tiktok-action-label">Txns</span>
-        </button>
-
-        {/* Top Traders / PNL */}
-        <button 
-          className={`tiktok-action-btn ${showTopTraders ? 'active' : ''}`}
-          onClick={(e) => { e.stopPropagation(); setShowTopTraders(prev => !prev); }}
-          title="Top PNL Traders"
-        >
-          <span className="tiktok-action-icon">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
-          </span>
-          <span className="tiktok-action-label">PNL</span>
-        </button>
-
         {/* Comments */}
         <button 
           className={`tiktok-action-btn ${showComments ? 'active' : ''}`}
@@ -2446,18 +2554,6 @@ const CoinCard = memo(({
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
           </span>
           <span className="tiktok-action-label">{comments.length > 0 ? comments.length : 'Chat'}</span>
-        </button>
-
-        {/* Expand Info */}
-        <button 
-          className={`tiktok-action-btn trade-btn ${isExpanded ? 'active' : ''}`}
-          onClick={(e) => { e.stopPropagation(); handleExpandToggle(e); }}
-          title={isExpanded ? "Collapse details" : "Expand details"}
-        >
-          <span className="tiktok-action-icon">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transition: 'transform 0.3s ease', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}><polyline points="18 15 12 9 6 15"/></svg>
-          </span>
-          <span className="tiktok-action-label">{isExpanded ? 'Less' : 'More'}</span>
         </button>
 
         {/* Share / Copy Address */}
@@ -2508,6 +2604,10 @@ const CoinCard = memo(({
           onTradeClick={onTradeClick}
           onExpand={handleExpandToggle}
           onFullscreenChange={onChartFullscreenChange}
+          showLimitOrderLine={buyDrawerOpen}
+          limitOrderPrice={buyOrderPrice}
+          limitOrderCurrentPrice={displayPrice}
+          onOpenBuyDrawer={openBuyDrawer}
         />,
         mobileChartTargetRef.current
       )}
@@ -2809,7 +2909,9 @@ const CoinCard = memo(({
                   </svg>
                   <span>Connect wallet to comment</span>
                   <div className="tiktok-connect-btn-wrap">
-                    <UnifiedWalletButton />
+                    <WalletConnectOnboarding>
+                      <UnifiedWalletButton />
+                    </WalletConnectOnboarding>
                   </div>
                 </div>
               )}

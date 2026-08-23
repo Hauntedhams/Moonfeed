@@ -6,7 +6,7 @@ import ReferralTracker from '../utils/ReferralTracker';
 import { getFullApiUrl } from '../config/api';
 import './JupiterTradeModal.css';
 
-const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, initialTab, initialSolAmount, initialPercentage, initialSide }) => {
+const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, initialTab, initialSolAmount, initialPercentage, initialSide, initialTriggerPrice }) => {
   const jupiterInitialized = useRef(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -591,6 +591,7 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
                     initialInputAmount={initialSolAmount}
                     initialPercentage={initialPercentage}
                     initialSide={initialSide}
+                    initialTriggerPrice={initialTriggerPrice}
                   />
                   <div className="jupiter-modal-footer limit-order-footer">
                     <p className="non-custodial-disclaimer">

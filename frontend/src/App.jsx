@@ -344,6 +344,7 @@ function App() {
           onCoinClick={handleCoinClick}
           onFavoritesChange={handleFavoritesChange}
           onSetupOrder={handleSetupOrder}
+          onWalletClick={handleWalletClick}
         />
       ) : activeTab === 'profile' ? (
         <Suspense fallback={<div style={{ padding: '20px', textAlign: 'center' }}>Loading...</div>}>
@@ -501,6 +502,7 @@ function App() {
           initialSolAmount={tradeModalOptions?.solAmount}
           initialPercentage={tradeModalOptions?.percentage}
           initialSide={tradeModalOptions?.side}
+          initialTriggerPrice={tradeModalOptions?.targetPrice}
         />
       </Suspense>
       

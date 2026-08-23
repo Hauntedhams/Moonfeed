@@ -24,9 +24,9 @@
   
   /* Disable most transitions on mobile for instant interactions
      BUT exempt TikTok action bar, expand-handle & info layer so they animate in BOTH directions */
-  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content),
-  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content)::before,
-  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content)::after {
+  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content):not(.coin-buy-drawer),
+  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content):not(.coin-buy-drawer)::before,
+  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content):not(.coin-buy-drawer)::after {
     transition: none !important;
     transition-duration: 0s !important;
   }
@@ -112,12 +112,12 @@
   pointer-events: auto;
 }
 
-/* --- Collapsed state: clip the container from bottom→top & scale-down each button --- */
+/* --- Collapsed state: clip the container from top→bottom & scale-down each button --- */
 .tiktok-action-buttons.collapsed {
   pointer-events: none;
-  /* Clip from the bottom to the top — visually unmistakable upward collapse.
-     inset(0 0 100% 0) means the bottom edge rises to 100%, hiding everything from below. */
-  clip-path: inset(0 -20px 100% -20px);
+  /* Clip from the top down — buttons collapse/reveal along a bottom-up axis.
+     inset(100% 0 0 0) means the top edge drops to 100%, hiding everything from above. */
+  clip-path: inset(100% -20px 0 -20px);
   transition:
     gap 0.35s cubic-bezier(0.4, 0, 0.2, 1),
     clip-path 0.45s cubic-bezier(0.55, 0, 1, 0.45);
@@ -126,8 +126,8 @@
 .tiktok-action-buttons.collapsed .tiktok-action-btn {
   opacity: 0;
   pointer-events: none;
-  /* Scale down toward the top of the container */
-  transform: scale(0.4) translateY(-30px);
+  /* Scale down and sink toward the bottom of the container */
+  transform: scale(0.4) translateY(30px);
   transition:
     opacity 0.25s cubic-bezier(0.4, 0, 1, 1),
     transform 0.35s cubic-bezier(0.55, 0, 1, 0.45);
@@ -143,27 +143,27 @@
 /* Labels vanish instantly */
 .tiktok-action-buttons.collapsed .tiktok-action-btn .tiktok-action-label {
   opacity: 0;
-  transform: scale(0) translateY(-6px);
+  transform: scale(0) translateY(6px);
   transition: opacity 0.06s ease, transform 0.06s ease;
 }
 
-/* Stagger collapse — bottom (Copy) disappears first → top (Fave) last
-   This creates the visual impression of being "sucked upward" since the
-   clip-path rises from the bottom and bottom items vanish first. */
-.tiktok-action-buttons.collapsed .tiktok-action-btn:nth-child(6) { transition-delay: 0s; }
-.tiktok-action-buttons.collapsed .tiktok-action-btn:nth-child(5) { transition-delay: 0.03s; }
-.tiktok-action-buttons.collapsed .tiktok-action-btn:nth-child(4) { transition-delay: 0.06s; }
-.tiktok-action-buttons.collapsed .tiktok-action-btn:nth-child(3) { transition-delay: 0.09s; }
-.tiktok-action-buttons.collapsed .tiktok-action-btn:nth-child(2) { transition-delay: 0.12s; }
-.tiktok-action-buttons.collapsed .tiktok-action-btn:nth-child(1) { transition-delay: 0.15s; }
+/* Stagger collapse — top disappears first → bottom last
+   This creates the visual impression of sinking downward since the
+   clip-path lowers from the top and top items vanish first. */
+.tiktok-action-buttons.collapsed .tiktok-action-btn:nth-child(1) { transition-delay: 0s; }
+.tiktok-action-buttons.collapsed .tiktok-action-btn:nth-child(2) { transition-delay: 0.03s; }
+.tiktok-action-buttons.collapsed .tiktok-action-btn:nth-child(3) { transition-delay: 0.06s; }
+.tiktok-action-buttons.collapsed .tiktok-action-btn:nth-child(4) { transition-delay: 0.09s; }
+.tiktok-action-buttons.collapsed .tiktok-action-btn:nth-child(5) { transition-delay: 0.12s; }
+.tiktok-action-buttons.collapsed .tiktok-action-btn:nth-child(6) { transition-delay: 0.15s; }
 
 /* Stagger the icon during collapse */
-.tiktok-action-buttons.collapsed .tiktok-action-btn:nth-child(6) .tiktok-action-icon { transition-delay: 0s; }
-.tiktok-action-buttons.collapsed .tiktok-action-btn:nth-child(5) .tiktok-action-icon { transition-delay: 0.02s; }
-.tiktok-action-buttons.collapsed .tiktok-action-btn:nth-child(4) .tiktok-action-icon { transition-delay: 0.05s; }
-.tiktok-action-buttons.collapsed .tiktok-action-btn:nth-child(3) .tiktok-action-icon { transition-delay: 0.07s; }
-.tiktok-action-buttons.collapsed .tiktok-action-btn:nth-child(2) .tiktok-action-icon { transition-delay: 0.10s; }
-.tiktok-action-buttons.collapsed .tiktok-action-btn:nth-child(1) .tiktok-action-icon { transition-delay: 0.12s; }
+.tiktok-action-buttons.collapsed .tiktok-action-btn:nth-child(1) .tiktok-action-icon { transition-delay: 0s; }
+.tiktok-action-buttons.collapsed .tiktok-action-btn:nth-child(2) .tiktok-action-icon { transition-delay: 0.02s; }
+.tiktok-action-buttons.collapsed .tiktok-action-btn:nth-child(3) .tiktok-action-icon { transition-delay: 0.05s; }
+.tiktok-action-buttons.collapsed .tiktok-action-btn:nth-child(4) .tiktok-action-icon { transition-delay: 0.07s; }
+.tiktok-action-buttons.collapsed .tiktok-action-btn:nth-child(5) .tiktok-action-icon { transition-delay: 0.10s; }
+.tiktok-action-buttons.collapsed .tiktok-action-btn:nth-child(6) .tiktok-action-icon { transition-delay: 0.12s; }
 
 /* Expand-handle "absorbs" buttons — scale bump after last button collapses */
 @keyframes toggleAbsorb {
@@ -212,30 +212,30 @@
   transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-/* Stagger expand — top (Fave) drops in first → bottom (Copy) last
-   clip-path reveals from top downward, so top buttons appear first. */
-.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(1) { transition-delay: 0.05s; }
-.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(2) { transition-delay: 0.09s; }
-.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(3) { transition-delay: 0.13s; }
-.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(4) { transition-delay: 0.17s; }
-.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(5) { transition-delay: 0.21s; }
-.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(6) { transition-delay: 0.25s; }
+/* Stagger expand — bottom drops in first → top last
+   clip-path reveals from bottom upward, so bottom buttons appear first. */
+.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(6) { transition-delay: 0.05s; }
+.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(5) { transition-delay: 0.09s; }
+.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(4) { transition-delay: 0.13s; }
+.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(3) { transition-delay: 0.17s; }
+.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(2) { transition-delay: 0.21s; }
+.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(1) { transition-delay: 0.25s; }
 
 /* Stagger the icon pop during expand */
-.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(1) .tiktok-action-icon { transition-delay: 0.08s; }
-.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(2) .tiktok-action-icon { transition-delay: 0.12s; }
-.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(3) .tiktok-action-icon { transition-delay: 0.16s; }
-.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(4) .tiktok-action-icon { transition-delay: 0.20s; }
-.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(5) .tiktok-action-icon { transition-delay: 0.24s; }
-.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(6) .tiktok-action-icon { transition-delay: 0.28s; }
+.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(6) .tiktok-action-icon { transition-delay: 0.08s; }
+.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(5) .tiktok-action-icon { transition-delay: 0.12s; }
+.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(4) .tiktok-action-icon { transition-delay: 0.16s; }
+.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(3) .tiktok-action-icon { transition-delay: 0.20s; }
+.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(2) .tiktok-action-icon { transition-delay: 0.24s; }
+.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(1) .tiktok-action-icon { transition-delay: 0.28s; }
 
 /* Stagger the label during expand */
-.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(1) .tiktok-action-label { transition-delay: 0.12s; }
-.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(2) .tiktok-action-label { transition-delay: 0.16s; }
-.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(3) .tiktok-action-label { transition-delay: 0.20s; }
-.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(4) .tiktok-action-label { transition-delay: 0.24s; }
-.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(5) .tiktok-action-label { transition-delay: 0.28s; }
-.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(6) .tiktok-action-label { transition-delay: 0.32s; }
+.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(6) .tiktok-action-label { transition-delay: 0.12s; }
+.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(5) .tiktok-action-label { transition-delay: 0.16s; }
+.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(4) .tiktok-action-label { transition-delay: 0.20s; }
+.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(3) .tiktok-action-label { transition-delay: 0.24s; }
+.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(2) .tiktok-action-label { transition-delay: 0.28s; }
+.tiktok-action-buttons:not(.collapsed) .tiktok-action-btn:nth-child(1) .tiktok-action-label { transition-delay: 0.32s; }
 
 /* --- Toggle arrow removed: expand-handle now serves as the collapse target --- */
 
@@ -301,6 +301,160 @@
 
 .tiktok-action-btn.active .tiktok-action-label {
   color: #c4b5fd;
+}
+
+.coin-buy-swipe-hotzone {
+  position: fixed;
+  top: 80px;
+  left: 0;
+  bottom: calc(env(safe-area-inset-bottom) + 74px);
+  width: 44px;
+  z-index: 9982;
+  pointer-events: auto;
+  touch-action: pan-y;
+  background: linear-gradient(to right, rgba(34, 197, 94, 0.12), transparent);
+}
+
+.coin-buy-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9983;
+  border: 0;
+  padding: 0;
+  background: rgba(0, 0, 0, 0.18);
+  pointer-events: auto;
+}
+
+.coin-buy-drawer {
+  position: fixed;
+  top: 80px;
+  left: 0;
+  bottom: calc(env(safe-area-inset-bottom) + 74px);
+  width: min(54vw, 280px);
+  z-index: 9984;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 14px;
+  color: #ffffff;
+  background: linear-gradient(180deg, rgba(7, 14, 25, 0.96), rgba(5, 12, 20, 0.92));
+  border-right: 1px solid rgba(34, 197, 94, 0.34);
+  box-shadow: 18px 0 40px rgba(0, 0, 0, 0.42);
+  animation: coinBuyDrawerIn 0.28s cubic-bezier(0.2, 0.9, 0.2, 1) both;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+@keyframes coinBuyDrawerIn {
+  from { transform: translateX(-100%); opacity: 0.6; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.coin-buy-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.coin-buy-kicker {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(34, 197, 94, 0.95);
+}
+
+.coin-buy-close {
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.coin-buy-symbol {
+  font-size: clamp(1.35rem, 6vw, 2rem);
+  font-weight: 900;
+  line-height: 1;
+  overflow-wrap: anywhere;
+}
+
+.coin-buy-market-price {
+  margin-top: -8px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.coin-buy-price-wheel {
+  display: grid;
+  grid-template-rows: 38px auto auto 38px;
+  align-items: center;
+  justify-items: center;
+  min-height: 180px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  touch-action: none;
+  outline: none;
+}
+
+.coin-buy-step {
+  width: 42px;
+  height: 34px;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.coin-buy-price {
+  max-width: 100%;
+  padding: 0 8px;
+  font-size: clamp(1.15rem, 5vw, 1.75rem);
+  font-weight: 900;
+  line-height: 1.1;
+  text-align: center;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+
+.coin-buy-delta {
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: #22c55e;
+}
+
+.coin-buy-delta.below {
+  color: #38bdf8;
+}
+
+.coin-buy-delta.above {
+  color: #fbbf24;
+}
+
+.coin-buy-submit {
+  margin-top: auto;
+  min-height: 44px;
+  border: 0;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #22c55e, #14b8a6);
+  color: #06110d;
+  font-size: 0.92rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.coin-buy-submit:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 /* Trade button — accent color */

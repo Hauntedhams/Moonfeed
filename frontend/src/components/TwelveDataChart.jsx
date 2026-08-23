@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useDarkMode } from '../contexts/DarkModeContext';
 import './TwelveDataChart.css';
 
-const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDesktopMode = false, desktopSlotRef = null, showPriceScale, showActionButtons = true, isExpanded = false, onCrosshairMove, onFirstPriceUpdate, onTradeClick, onExpand, onFullscreenChange }) => {
+const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDesktopMode = false, desktopSlotRef = null, showPriceScale, showActionButtons = true, isExpanded = false, showLimitOrderLine = false, limitOrderPrice = null, limitOrderCurrentPrice = null, onCrosshairMove, onFirstPriceUpdate, onTradeClick, onExpand, onFullscreenChange, onOpenBuyDrawer }) => {
   const { isDarkMode: contextDarkMode } = useDarkMode();
   const [srcReady, setSrcReady] = useState(false);
   const [fullscreenMode, setFullscreenMode] = useState(null); // null | 'portrait' | 'landscape'
@@ -255,7 +255,7 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
       if (clippedH <= 0) {
         // Chart has fully scrolled out of the card — hide everything.
         slot.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:0;height:0;';
-        if (btnWrapper) btnWrapper.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:0;height:0;overflow:hidden;';
+        if (btnWrapper) btnWrapper.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:0;height:0;overflow:visible;';
         if (mask) mask.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:0;height:0;';
         return;
       }
@@ -271,7 +271,7 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
         iframeRef.current.style.cssText = `position:absolute;top:${-offsetY}px;left:0;width:100%;height:${height + footerHide}px;transform:none;border:none;display:block;pointer-events:${isExpandedRef.current ? 'auto' : 'none'};`;
       }
       if (btnWrapper) {
-        btnWrapper.style.cssText = `position:fixed;top:${clipTop}px;left:${left}px;width:${width}px;height:${clippedH}px;transform:none;z-index:70;pointer-events:none;border-radius:12px;overflow:hidden;`;
+        btnWrapper.style.cssText = `position:fixed;top:${clipTop}px;left:${left}px;width:${width}px;height:${clippedH}px;transform:none;z-index:80;pointer-events:none;border-radius:12px;overflow:visible;`;
       }
       if (mask) {
         // Gradient mask: right-side fade that makes action buttons readable over the chart.
@@ -465,6 +465,13 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
   // Only forward-scroll over the "Powered by GeckoTerminal" footer strip while the card
   // is expanded on mobile — the rest of the chart stays interactive.
   const showFooterCatcher = effectivePairAddress && isExpanded && !isDesktopMode && !fullscreenMode;
+  const limitOrderLineTop = (() => {
+    const current = Number(limitOrderCurrentPrice);
+    const target = Number(limitOrderPrice);
+    if (!showLimitOrderLine || !isExpanded || !isActiveCard || !current || !target || current <= 0 || target <= 0) return null;
+    const priceMove = (target - current) / current;
+    return Math.min(90, Math.max(10, 50 - priceMove * 80));
+  })();
 
   // Drive the native feed scroller directly from touches on the catcher overlay.
   // Snap is disabled during the drag (mandatory snap would clamp programmatic scroll),
@@ -692,6 +699,11 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
               button floats above the cross-origin iframe. pointer-events:none on the wrapper,
               auto on the button itself, so clicks reach it without blocking the iframe. */}
           <div ref={fullscreenBtnRef}>
+            {limitOrderLineTop !== null && (
+              <div className="chart-limit-order-line" style={{ top: `${limitOrderLineTop}%` }}>
+                <span>Buy limit</span>
+              </div>
+            )}
             {/* Transparent swipe-catcher: forwards feed scrolling over the collapsed
                 chart. Sits below the Expand button so that button stays tappable. */}
             {showScrollCatcher && (
@@ -701,37 +713,60 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
                 style={{ position: 'absolute', inset: 0, zIndex: 10, pointerEvents: 'auto', touchAction: 'none', visibility: 'visible' }}
               />
             )}
-            {showFullscreenBtn && !fullscreenMode && (
-              <button
-                className="chart-fullscreen-btn"
-                onClick={(e) => { e.stopPropagation(); fullscreenModeRef.current = 'portrait'; setFullscreenMode('portrait'); }}
-                title="View chart fullscreen"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="15 3 21 3 21 9"/>
-                  <polyline points="9 21 3 21 3 15"/>
-                  <line x1="21" y1="3" x2="14" y2="10"/>
-                  <line x1="3" y1="21" x2="10" y2="14"/>
-                </svg>
-                <span>Full Chart</span>
-              </button>
-            )}
           </div>
 
           {/* Collapsed mobile: Expand button fixed above the bottom nav so it's always
               visible, independent of where the chart sits on screen. Gated on isActiveCard
               so only the single in-view card renders this fixed button (no stacking). */}
-          {onExpand && isActiveCard && !isExpanded && !isDesktopMode && !fullscreenMode && (
-            <button
-              className="chart-expand-card-btn"
-              onClick={(e) => { e.stopPropagation(); onExpand(e); }}
-              title="Expand details"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="18 15 12 9 6 15"/>
-              </svg>
-              <span>Expand</span>
-            </button>
+          {/* Bottom-right expand toggle: stays fixed in place whether the card is
+              collapsed or expanded. Chevron points up to expand, down to collapse. */}
+          {onExpand && isActiveCard && !isDesktopMode && !fullscreenMode && (
+            <div className="chart-mobile-right-actions">
+              {onOpenBuyDrawer && (
+                <button
+                  className={`chart-buy-drawer-btn${isExpanded || showActionButtons ? ' visible' : ''}`}
+                  onClick={(e) => { e.stopPropagation(); onOpenBuyDrawer(); }}
+                  aria-label="Open buy limit drawer"
+                  tabIndex={isExpanded || showActionButtons ? 0 : -1}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 20V4" />
+                    <path d="M6 10l6-6 6 6" />
+                    <path d="M5 20h14" />
+                  </svg>
+                </button>
+              )}
+
+              {effectivePairAddress && (
+                <button
+                  className={`chart-fullscreen-card-btn${isExpanded || showActionButtons ? ' visible' : ''}`}
+                  onClick={(e) => { e.stopPropagation(); fullscreenModeRef.current = 'portrait'; setFullscreenMode('portrait'); }}
+                  aria-label="View full chart"
+                  tabIndex={isExpanded || showActionButtons ? 0 : -1}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="20" x2="18" y2="10"/>
+                    <line x1="12" y1="20" x2="12" y2="4"/>
+                    <line x1="6" y1="20" x2="6" y2="14"/>
+                  </svg>
+                </button>
+              )}
+
+              <button
+                className="chart-expand-card-btn"
+                onClick={(e) => { e.stopPropagation(); onExpand(e); }}
+                title={isExpanded ? 'Collapse details' : 'Expand details'}
+                aria-label={isExpanded ? 'Collapse details' : 'Expand details'}
+              >
+                <svg
+                  width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                  style={{ transition: 'transform 0.3s ease', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                >
+                  <polyline points="18 15 12 9 6 15"/>
+                </svg>
+              </button>
+            </div>
           )}
 
           {fullscreenMode && (

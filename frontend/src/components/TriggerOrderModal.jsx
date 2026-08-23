@@ -11,6 +11,7 @@ const TriggerOrderModal = ({
   initialInputAmount,
   initialPercentage,
   initialSide,
+  initialTriggerPrice,
   embedded = false, // When true, render inline (no overlay) as a swipeable page
 }) => {
   const { walletAddress, connected, signTransaction, recheckConnection, connect } = useWallet();
@@ -73,6 +74,14 @@ const TriggerOrderModal = ({
       if (initialPercentage !== undefined && initialPercentage !== null) {
         setPriceType('percentage');
         setPercentage(String(initialPercentage));
+      }
+      if (initialTriggerPrice !== undefined && initialTriggerPrice !== null) {
+        const targetPrice = Number(initialTriggerPrice);
+        if (Number.isFinite(targetPrice) && targetPrice > 0) {
+          setPriceType('price');
+          setTriggerPrice(targetPrice.toFixed(8));
+          setSliderValue(targetPrice);
+        }
       }
     }
   }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
