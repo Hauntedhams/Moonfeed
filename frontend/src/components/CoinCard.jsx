@@ -212,7 +212,11 @@ const CoinCard = memo(({
 
   const { transactions, livePrice: rpcLivePrice, isConnected: txConnected, historyLoaded: txHistoryLoaded, error: txError, clearTransactions } = useSolanaTransactions(
     mintAddress,
-    isExpanded || showLiveTransactions || isCurrentCard // Auto-load for the in-view card so the collapsed marquee stays live
+    // Mobile: only open the tx WebSocket when the user actually expands the card.
+    // Activating it for every collapsed current/preload card churns a WS open+close
+    // on each swipe (10+ during a fast scroll) → resource pressure → WKWebView crash.
+    // Desktop keeps the live collapsed marquee.
+    isExpanded || showLiveTransactions || (!isMobile && isCurrentCard)
   );
 
   // Prefer the live WebSocket stream so the card follows the chart's freshest price.

@@ -399,17 +399,48 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
     const infoContent = containerRef.current?.closest('.coin-info-layer')
       ?? document.querySelector('.coin-info-layer');
 
-    // Track continuously during both feed and expanded-card scrolling so the chart
-    // remains visible and follows its card throughout the gesture.
     let scrollRaf = null;
     let scrollIdleTimer = null;
+    let hiddenDuringScroll = false;
+
+    const isMobileFeedScroll = () => {
+      // Between-card feed swipe on mobile with a collapsed card: the chart is
+      // scrolling away and doesn't need pixel-perfect tracking. Per-frame
+      // getBoundingClientRect + iframe restyle here is the main mobile scroll-lag
+      // source, so instead we hide the chart for the duration of the swipe and
+      // reposition it once when scrolling settles (matches the settle-in UX).
+      return !isDesktopModeRef.current && !isExpandedRef.current;
+    };
+
+    // Cheaply park the fixed iframe slot off-screen without measuring anything.
+    const hideSlot = () => {
+      const off = 'position:fixed;top:-9999px;left:-9999px;width:0;height:0;';
+      if (fsSlotRef.current) fsSlotRef.current.style.cssText = off;
+      if (fullscreenBtnRef.current) fullscreenBtnRef.current.style.cssText = off;
+      if (maskRef.current) maskRef.current.style.cssText = off;
+    };
+
     const track = () => {
       if (fullscreenModeRef.current || !iframeRef.current) { scrollRaf = null; return; }
       updateSlotPosition();
       scrollRaf = requestAnimationFrame(track);
     };
+
     const handleScroll = () => {
       if (fullscreenModeRef.current || !iframeRef.current) return;
+
+      if (isMobileFeedScroll()) {
+        // No per-frame work — just hide once, then settle when the swipe ends.
+        if (!hiddenDuringScroll) { hideSlot(); hiddenDuringScroll = true; }
+        clearTimeout(scrollIdleTimer);
+        scrollIdleTimer = setTimeout(() => {
+          hiddenDuringScroll = false;
+          updateSlotPosition();
+        }, 120);
+        return;
+      }
+
+      // Expanded / desktop: keep smooth per-frame tracking so the chart stays glued.
       if (scrollRaf == null) scrollRaf = requestAnimationFrame(track);
       clearTimeout(scrollIdleTimer);
       scrollIdleTimer = setTimeout(() => {
