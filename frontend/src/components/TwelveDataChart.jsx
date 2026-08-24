@@ -724,10 +724,10 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
             <div className="chart-mobile-right-actions">
               {onOpenBuyDrawer && (
                 <button
-                  className={`chart-buy-drawer-btn${isExpanded || showActionButtons ? ' visible' : ''}`}
+                  className={`chart-buy-drawer-btn${showActionButtons ? ' visible' : ''}`}
                   onClick={(e) => { e.stopPropagation(); onOpenBuyDrawer(); }}
                   aria-label="Open buy limit drawer"
-                  tabIndex={isExpanded || showActionButtons ? 0 : -1}
+                  tabIndex={showActionButtons ? 0 : -1}
                 >
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M12 20V4" />
@@ -739,10 +739,10 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
 
               {effectivePairAddress && (
                 <button
-                  className={`chart-fullscreen-card-btn${isExpanded || showActionButtons ? ' visible' : ''}`}
+                  className={`chart-fullscreen-card-btn${showActionButtons ? ' visible' : ''}`}
                   onClick={(e) => { e.stopPropagation(); fullscreenModeRef.current = 'portrait'; setFullscreenMode('portrait'); }}
                   aria-label="View full chart"
-                  tabIndex={isExpanded || showActionButtons ? 0 : -1}
+                  tabIndex={showActionButtons ? 0 : -1}
                 >
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="18" y1="20" x2="18" y2="10"/>

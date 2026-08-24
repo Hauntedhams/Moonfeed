@@ -1162,8 +1162,12 @@ const CoinCard = memo(({
     const next = !isExpanded;
     setIsExpanded(next);
     
-    // When expanding info → show action buttons; when collapsing to preview → hide them
-    setShowActionButtons(next);
+    if (next) {
+      setShowActionButtons(false);
+      requestAnimationFrame(() => setShowActionButtons(true));
+    } else {
+      setShowActionButtons(false);
+    }
     setHasToggledActions(true); // Mark that user has interacted (enables animation)
     
     // Call parent's expand change handler which should lock scrolling

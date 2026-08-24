@@ -1719,6 +1719,7 @@ html:not(.dark-mode) .chart-mobile-right-actions::before {
   opacity: 1;
   visibility: visible;
   transform: translateX(0) scale(1);
+  animation: chartActionPop 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) both;
   transition:
     opacity 0.28s cubic-bezier(0, 0, 0.2, 1),
     transform 0.40s cubic-bezier(0.34, 1.56, 0.64, 1),
@@ -1741,6 +1742,22 @@ html:not(.dark-mode) .chart-mobile-right-actions::before {
 
 .chart-buy-drawer-btn.visible {
   transition-delay: 0.09s, 0.09s, 0s, 0s, 0s;
+  animation-delay: 0.04s;
+}
+
+@keyframes chartActionPop {
+  0% {
+    opacity: 0;
+    transform: translateX(38px) scale(0.58);
+  }
+  65% {
+    opacity: 1;
+    transform: translateX(-4px) scale(1.08);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
 }
 
 .chart-fullscreen-card-btn.visible:hover,
