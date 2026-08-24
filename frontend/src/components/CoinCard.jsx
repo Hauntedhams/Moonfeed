@@ -76,6 +76,7 @@ const CoinCard = memo(({
   onExpandChange,
   onChartFullscreenChange,
   isVisible = true,
+  mountChart = null, // Settled-index chart gate; falls back to isVisible when not provided
   isCurrentCard = false, // True only for the single card currently in view — gates DexScreener embed load
   isActiveCard = false, // True ONLY for the single card visually in view (not preload) — used to portal action buttons
   onEnrichmentComplete = null // Callback when enrichment completes
@@ -2993,8 +2994,10 @@ const CoinCard = memo(({
           Gated on isVisible: off-screen cards don't mount a chart component, body
           portal, effects, or scroll listener — this is critical for mobile memory
           (prevents WKWebView memory-pressure crashes) and scroll smoothness. The
-          iframe only ever loads for the current/preload card anyway (isActive). */}
-      {isVisible && mobileTargetMounted && mobileChartTargetRef.current && createPortal(
+          iframe only ever loads for the current/preload card anyway (isActive).
+          Uses the settled-index gate (mountChart) so charts never mount/unmount
+          mid-swipe, which would interrupt CSS scroll-snap. */}
+      {(mountChart ?? isVisible) && mobileTargetMounted && mobileChartTargetRef.current && createPortal(
         <TwelveDataChart 
           key={`chart-${mintAddress}`}
           coin={coin}

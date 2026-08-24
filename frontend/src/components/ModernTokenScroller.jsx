@@ -53,6 +53,13 @@ const ModernTokenScroller = ({
   // WebSocket connections that cause DexScreener rate-limiting.
   const [preloadIndex, setPreloadIndex] = useState(null);
 
+  // Chart-mount window index. This LAGS currentIndex and only catches up once the
+  // user stops scrolling for a beat. Charts are mounted relative to this index so
+  // no chart mounts/unmounts DURING a swipe — mutating the DOM mid-scroll makes
+  // iOS abort scroll-snap (partial snaps / "leftover" chart from the prior card).
+  // The chart appears the moment the swipe settles.
+  const [settledIndex, setSettledIndex] = useState(0);
+
   // Virtual scrolling DISABLED - was causing blank UI issues
   // Render distance optimized: Mobile ±2, Desktop ±3
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -636,6 +643,7 @@ const ModernTokenScroller = ({
     setCoins([]);
     setEnrichedCoins(new Map()); // Clear enrichment cache
     setCurrentIndex(0);
+    setSettledIndex(0);
     setExpandedCoin(null); // Close any expanded cards
     
     // Force garbage collection hint (not guaranteed, but helps)
@@ -875,6 +883,9 @@ const ModernTokenScroller = ({
     const renderDistance = isMobile ? 1 : 2;
     const shouldShowChart = Math.abs(index - currentIndex) <= renderDistance;
     const isVisible = Math.abs(index - currentIndex) <= renderDistance;
+    // Chart mounting uses the SETTLED index so charts never mount/unmount mid-swipe
+    // (which would break scroll-snap). It catches up ~140ms after scrolling stops.
+    const mountChart = Math.abs(index - settledIndex) <= renderDistance;
     
     
     // Use enriched coin data if available
@@ -895,6 +906,7 @@ const ModernTokenScroller = ({
           isGraduating={coin.status === 'graduating'}
           isTrending={coin.source?.includes('trending')}
           isVisible={isVisible}
+          mountChart={mountChart}
           onExpandChange={handleCoinExpandChange}
           isCurrentCard={isCurrentCoin || isPreloadCoin}
           isActiveCard={isCurrentCoin}
@@ -925,6 +937,15 @@ const ModernTokenScroller = ({
     }, 120);
     return () => clearTimeout(t);
   }, [currentIndex, coins.length]);
+
+  // Move the chart-mount window to the current card only AFTER scrolling settles.
+  // While the user keeps swiping, currentIndex changes rapidly and this timer keeps
+  // resetting, so settledIndex (and therefore the mounted charts) stays put — no
+  // DOM mutation mid-scroll, so scroll-snap lands cleanly every time.
+  useEffect(() => {
+    const t = setTimeout(() => setSettledIndex(currentIndex), 140);
+    return () => clearTimeout(t);
+  }, [currentIndex]);
 
   // Enrich current coin when currentIndex changes
   useEffect(() => {
