@@ -1,7 +1,9 @@
 .top-traders-container {
   width: 100%;
+  max-width: 100%;
   background: transparent;
   position: relative;
+  overflow-x: hidden;
 }
 
 .top-traders-header {
@@ -55,10 +57,14 @@
 /* Table structure - like Market Metrics info rows */
 .traders-table-container {
   width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 .traders-table {
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   display: flex;
   flex-direction: column;
 }
@@ -66,7 +72,7 @@
 /* Column Headers */
 .table-header {
   display: grid;
-  grid-template-columns: 28px 58px 68px 68px 70px;
+  grid-template-columns: minmax(24px, 28px) minmax(52px, 1fr) minmax(52px, 64px) minmax(52px, 64px) minmax(52px, 64px);
   gap: 3px;
   align-items: center;
   padding: 8px 4px 12px 4px;
@@ -108,6 +114,17 @@
   scrollbar-width: thin;
 }
 
+.top-traders-container.preview .traders-scroll-window {
+  max-height: none;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.top-traders-container.open .traders-scroll-window {
+  max-height: 300px;
+  overscroll-behavior: contain;
+}
+
 .traders-scroll-window::-webkit-scrollbar {
   width: 8px;
 }
@@ -129,12 +146,19 @@
 /* Table row - 5 clean columns layout */
 .table-row {
   display: grid;
-  grid-template-columns: 28px 58px 68px 68px 70px;
+  grid-template-columns: minmax(24px, 28px) minmax(52px, 1fr) minmax(52px, 64px) minmax(52px, 64px) minmax(52px, 64px);
   gap: 3px;
   align-items: center;
   padding: 10px 4px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.06);
   transition: all 0.2s ease;
+}
+
+.table-header,
+.table-row,
+.table-header > *,
+.table-row > * {
+  min-width: 0;
 }
 
 .table-row:last-child {
@@ -287,7 +311,7 @@
 /* Scrollable Table Container */
 .traders-table-container {
   width: 100%;
-  overflow-x: auto;
+  overflow-x: hidden;
   overflow-y: visible;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
@@ -357,11 +381,11 @@
 /* Mobile Responsive - Improved */
 @media (max-width: 768px) {
   .top-traders-container {
-    overflow-x: auto;
+    overflow-x: hidden;
   }
   
   .traders-table {
-    min-width: 600px; /* Ensure minimum width to show all columns */
+    min-width: 0;
   }
   
   .header-cell.rank,
@@ -413,7 +437,7 @@
   }
   
   .traders-table {
-    min-width: 550px; /* Minimum width for very small screens */
+    min-width: 0;
   }
   
   .header-cell.rank,

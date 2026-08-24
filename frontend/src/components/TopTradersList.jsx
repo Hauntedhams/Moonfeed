@@ -3,7 +3,7 @@ import { getFullApiUrl } from '../config/api';
 import WalletPopup from './WalletPopup';
 import './TopTradersList.css';
 
-const TopTradersList = ({ coinAddress, isExpanded, onWalletClick = null }) => {
+const TopTradersList = ({ coinAddress, isExpanded, isOpen = true, previewLimit = 3, onWalletClick = null }) => {
   const [traders, setTraders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -185,8 +185,10 @@ const TopTradersList = ({ coinAddress, isExpanded, onWalletClick = null }) => {
     );
   }
 
+  const visibleTraders = isOpen ? traders : traders.slice(0, previewLimit);
+
   return (
-    <div className="top-traders-container">
+    <div className={`top-traders-container ${isOpen ? 'open' : 'preview'}`}>
       {traders.length === 0 ? (
         <div className="no-traders">No trader data available</div>
       ) : (
@@ -201,12 +203,13 @@ const TopTradersList = ({ coinAddress, isExpanded, onWalletClick = null }) => {
               <div className="col-pnl">PnL</div>
             </div>
             <div className="traders-scroll-window">
-              {traders.map((trader, index) => (
+              {visibleTraders.map((trader, index) => (
                 <div key={trader.wallet || index} className="table-row">
                   <div className="col-rank">#{index + 1}</div>
                   <div 
-                    className="col-wallet clickable"
+                    className={`col-wallet ${isOpen ? 'clickable' : ''}`}
                     onClick={() => {
+                      if (!isOpen) return;
                       if (onWalletClick) {
                         onWalletClick(trader.wallet);
                       } else {
@@ -214,7 +217,7 @@ const TopTradersList = ({ coinAddress, isExpanded, onWalletClick = null }) => {
                         setSelectedTraderData(trader); // Pass full trader data
                       }
                     }}
-                    title="Click to view wallet details"
+                    title={isOpen ? 'Click to view wallet details' : 'Open top traders to interact'}
                   >
                     {formatWallet(trader.wallet)}
                   </div>

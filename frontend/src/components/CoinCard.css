@@ -3350,6 +3350,7 @@ html:not(.dark-mode) .twelve-chart-section {
   transition: all 0.3s ease;
   /* 🔥 FIX: Inherit pointer-events from parent (pass through when collapsed) */
   pointer-events: inherit;
+  overflow: hidden;
 }
 
 .top-traders-section:hover {
@@ -3358,8 +3359,13 @@ html:not(.dark-mode) .twelve-chart-section {
   border-color: rgba(79, 195, 247, 0.4);
 }
 
+.top-traders-section.expanded:hover {
+  transform: none;
+}
+
 /* Section header with icon and title */
 .top-traders-section-header {
+  position: relative;
   font-size: 0.7rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -3370,6 +3376,19 @@ html:not(.dark-mode) .twelve-chart-section {
   display: flex;
   align-items: flex-start; /* Changed from center - align charts to top */
   gap: 8px;
+}
+
+.top-traders-close-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 14px;
+  cursor: pointer;
 }
 
 /* Button wrapper for top traders */
@@ -3416,8 +3435,12 @@ html:not(.dark-mode) .twelve-chart-section {
 .top-traders-content {
   position: relative;
   color: rgba(0, 0, 0, 0.8);
-  min-height: 450px; /* Match parent height */
+  min-height: 0;
   padding: 16px;
+}
+
+.top-traders-section.expanded .top-traders-content {
+  min-height: 340px;
 }
 
 /* =============================================================================

@@ -98,6 +98,7 @@ const CoinCard = memo(({
   const [showGraduationInfo, setShowGraduationInfo] = useState(false);  const [graduationIconPosition, setGraduationIconPosition] = useState(null);
   const [priceFlash, setPriceFlash] = useState('');
   const [showLiveTransactions, setShowLiveTransactions] = useState(false);
+  const [showInlineTopTraders, setShowInlineTopTraders] = useState(false);
   const [showTopTraders, setShowTopTraders] = useState(false); // Toggled via TikTok action button
   const [showComments, setShowComments] = useState(false); // TikTok-style comments bottom sheet
   const [comments, setComments] = useState([]); // Cached comments for count badge
@@ -1167,6 +1168,7 @@ const CoinCard = memo(({
       requestAnimationFrame(() => setShowActionButtons(true));
     } else {
       setShowActionButtons(false);
+      setShowInlineTopTraders(false);
     }
     setHasToggledActions(true); // Mark that user has interacted (enables animation)
     
@@ -1362,6 +1364,7 @@ const CoinCard = memo(({
       setShowProfileModal(false);
       setShowPriceChangeModal(false);
       setShowLiveTransactions(false);
+      setShowInlineTopTraders(false);
       setShowTopTraders(false);
       setShowActionButtons(false);
       setSelectedWallet(null);
@@ -2251,10 +2254,31 @@ const CoinCard = memo(({
           </div>
 
           {/* Top Traders Section - Loaded when expanded */}
-          <div className="top-traders-section">
-            <div className="top-traders-section-header">Top Traders</div>
+          <div
+            className={`top-traders-section ${showInlineTopTraders ? 'expanded' : ''}`}
+            onClick={() => isExpanded && !showInlineTopTraders && setShowInlineTopTraders(true)}
+            style={{ cursor: isExpanded && !showInlineTopTraders ? 'pointer' : 'default' }}
+          >
+            <div className="top-traders-section-header">
+              Top Traders
+              {showInlineTopTraders && (
+                <button
+                  className="top-traders-close-btn"
+                  onClick={(e) => { e.stopPropagation(); setShowInlineTopTraders(false); }}
+                  title="Close"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
             <div className="top-traders-content">
-              <TopTradersList coinAddress={mintAddress} isExpanded={isExpanded} onWalletClick={handleWalletClick} />
+              <TopTradersList
+                coinAddress={mintAddress}
+                isExpanded={isExpanded}
+                isOpen={showInlineTopTraders}
+                previewLimit={3}
+                onWalletClick={handleWalletClick}
+              />
             </div>
           </div>
 
