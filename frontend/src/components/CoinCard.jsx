@@ -164,6 +164,11 @@ const CoinCard = memo(({
     (coin.rugcheck && Object.keys(coin.rugcheck).length > 0)
   );
 
+  // Whether we actually have a banner image to show. On-view enrichment must run
+  // when this is false even if the coin already has socials/rugcheck (which would
+  // otherwise make isEnriched true and skip enrichment → placeholder forever).
+  const hasBanner = !!(coin.banner || coin.bannerImage || coin.header || coin.bannerUrl);
+
   // Removed: Debug-only useEffect for Age/Holders logging
   // This was causing unnecessary re-renders and console spam
 
@@ -256,11 +261,11 @@ const CoinCard = memo(({
   }, [isActiveCard]);
   
   useEffect(() => {
-    // Only enrich if:
-    // 1. Coin is visible
-    // 2. Coin is NOT already enriched
-    // 3. We haven't already requested enrichment for this coin
-    if (isVisible && !isEnriched && !enrichmentRequested && mintAddress) {
+    // Enrich when the card is visible and we still need data. Trigger if the coin
+    // isn't enriched OR simply has no banner yet — a coin can have socials/rugcheck
+    // (isEnriched=true) but still be missing its banner image, and on mobile this
+    // on-view pass is the ONLY thing that fetches banners.
+    if (isVisible && (!isEnriched || !hasBanner) && !enrichmentRequested && mintAddress) {
       debug.log(`🎯 On-view enrichment triggered for ${coin.symbol || coin.name}`);
       setEnrichmentRequested(true);
       
