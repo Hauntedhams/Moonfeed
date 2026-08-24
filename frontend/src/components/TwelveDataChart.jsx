@@ -540,6 +540,7 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => {
       clearTimeout(feedScrollStartTimer);
+      document.body.classList.remove('feed-is-scrolling');
       el.removeEventListener('touchstart', onStart);
       el.removeEventListener('touchmove', onMove);
       el.removeEventListener('touchend', onEnd);
