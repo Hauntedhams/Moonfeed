@@ -885,7 +885,11 @@ const ModernTokenScroller = ({
     const isVisible = Math.abs(index - currentIndex) <= renderDistance;
     // Chart mounting uses the SETTLED index so charts never mount/unmount mid-swipe
     // (which would break scroll-snap). It catches up ~140ms after scrolling stops.
-    const mountChart = Math.abs(index - settledIndex) <= renderDistance;
+    // Mobile keeps only the SINGLE settled card's chart mounted — each GeckoTerminal
+    // iframe is a full external web page (~tens of MB in WKWebView); holding several
+    // is what pushes iOS into a memory-pressure crash that reloads the feed to the top.
+    const chartRenderDistance = isMobile ? 0 : 2;
+    const mountChart = Math.abs(index - settledIndex) <= chartRenderDistance;
     
     
     // Use enriched coin data if available
@@ -908,7 +912,7 @@ const ModernTokenScroller = ({
           isVisible={isVisible}
           mountChart={mountChart}
           onExpandChange={handleCoinExpandChange}
-          isCurrentCard={isCurrentCoin || isPreloadCoin}
+          isCurrentCard={isCurrentCoin || (!isMobile && isPreloadCoin)}
           isActiveCard={isCurrentCoin}
           onEnrichmentComplete={handleEnrichmentComplete}
           onChartFullscreenChange={handleChartFullscreenChange}

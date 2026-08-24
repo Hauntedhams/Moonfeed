@@ -1692,6 +1692,7 @@ const CoinCard = memo(({
             <img 
               src={bannerUrl}
               alt={coin.name || 'Token banner'}
+              loading="lazy"
               decoding="async"
               onError={() => { 
                 debug.log(`Banner image failed to load for ${coin.symbol}:`, bannerUrl);
