@@ -390,9 +390,7 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
     };
   }, [isExpanded]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Window resize + inner content scroll: keep the slot aligned with its reference.
-  // During feed snap-scroll the fixed portal is hidden, because native compositor
-  // scrolling can always outrun JavaScript positioning by a frame on mobile.
+  // Window resize + scroll: keep the fixed chart portal aligned with its reference.
   // Also listen to info-layer-content scroll so the chart stays in sync when the
   // user scrolls through the expanded card's inner content (transactions, etc.).
   useEffect(() => {
@@ -401,8 +399,8 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
     const infoContent = containerRef.current?.closest('.coin-info-layer')
       ?? document.querySelector('.coin-info-layer');
 
-    // Inner (expanded card) content scroll is slow and deliberate, so keep the chart
-    // tracking live there. Feed scrolling only needs one final alignment after snap.
+    // Track continuously during both feed and expanded-card scrolling so the chart
+    // remains visible and follows its card throughout the gesture.
     let scrollRaf = null;
     let scrollIdleTimer = null;
     const track = () => {
@@ -419,21 +417,15 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
         updateSlotPosition(); // final settle onto the resting position
       }, 120);
     };
-    const handleFeedScroll = () => {
-      if (fullscreenModeRef.current || !iframeRef.current) return;
-      clearTimeout(scrollIdleTimer);
-      scrollIdleTimer = setTimeout(updateSlotPosition, 160);
-    };
-
     const handleResize = () => updateSlotPosition(); // resize is always needed (mode can change dims)
     window.addEventListener('resize', handleResize);
-    if (scroller) scroller.addEventListener('scroll', handleFeedScroll, { passive: true });
+    if (scroller) scroller.addEventListener('scroll', handleScroll, { passive: true });
     if (infoContent) infoContent.addEventListener('scroll', handleScroll, { passive: true });
     return () => {
       window.removeEventListener('resize', handleResize);
       clearTimeout(scrollIdleTimer);
       if (scrollRaf != null) cancelAnimationFrame(scrollRaf);
-      if (scroller) scroller.removeEventListener('scroll', handleFeedScroll);
+      if (scroller) scroller.removeEventListener('scroll', handleScroll);
       if (infoContent) infoContent.removeEventListener('scroll', handleScroll);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -480,14 +472,6 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
   useEffect(() => {
     const el = scrollCatcherRef.current;
     if (!el || !showScrollCatcher) return;
-    let feedScrollStartTimer = null;
-    const markFeedScrolling = () => {
-      document.body.classList.add('feed-is-scrolling');
-      clearTimeout(feedScrollStartTimer);
-      feedScrollStartTimer = setTimeout(() => {
-        document.body.classList.remove('feed-is-scrolling');
-      }, 200);
-    };
     const settle = (s) => {
       const scroller = s.scroller;
       if (!scroller) return;
@@ -502,14 +486,12 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
     const onStart = (e) => {
       const scroller = document.querySelector('.modern-scroller-container');
       if (!scroller || !e.touches[0]) return;
-      markFeedScrolling();
       scroller.style.scrollSnapType = 'none';
       scrollFwdRef.current = { startY: e.touches[0].clientY, startTop: scroller.scrollTop, scroller, lastY: e.touches[0].clientY, lastT: e.timeStamp, vy: 0 };
     };
     const onMove = (e) => {
       const s = scrollFwdRef.current;
       if (!s.scroller || !e.touches[0]) return;
-      markFeedScrolling();
       const y = e.touches[0].clientY;
       const dt = e.timeStamp - s.lastT;
       if (dt > 0) s.vy = (s.lastY - y) / dt; // px/ms, positive = scrolling down
@@ -525,7 +507,6 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
       if (!scroller) return;
       e.preventDefault();
       if (wheelLock || Math.abs(e.deltaY) < 2) return;
-      markFeedScrolling();
       const slide = scroller.querySelector('.modern-coin-slide');
       const slideH = slide ? slide.offsetHeight : window.innerHeight;
       const idx = Math.round(scroller.scrollTop / slideH) + (e.deltaY > 0 ? 1 : -1);
@@ -539,8 +520,6 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
     el.addEventListener('touchcancel', onEnd, { passive: true });
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => {
-      clearTimeout(feedScrollStartTimer);
-      document.body.classList.remove('feed-is-scrolling');
       el.removeEventListener('touchstart', onStart);
       el.removeEventListener('touchmove', onMove);
       el.removeEventListener('touchend', onEnd);

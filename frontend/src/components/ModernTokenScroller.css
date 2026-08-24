@@ -40,8 +40,9 @@
 
 /* When scroll is locked (coin expanded) */
 .modern-scroller-container.scroll-locked {
-  overflow: hidden !important;
+  overflow-y: scroll !important;
   pointer-events: none;
+  touch-action: none;
   /* CRITICAL: Disable scroll snap to prevent jumping to next coin */
   scroll-snap-type: none !important;
 }

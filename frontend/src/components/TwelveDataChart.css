@@ -359,14 +359,6 @@ html:not(.dark-mode) .dexscreener-advanced-container::after {
   --error-bg: rgba(255, 107, 107, 0.1);
 }
 
-/* Fixed chart portals cannot track iOS compositor scrolling frame-for-frame.
-   Hide them for the gesture so the in-card chart surface moves with the card. */
-body.feed-is-scrolling .chart-portal-slot,
-body.feed-is-scrolling .chart-portal-mask,
-body.feed-is-scrolling .chart-portal-controls {
-  visibility: hidden !important;
-}
-
 /* Light MODE - uses html:not(.dark-mode) since dark mode adds .dark-mode class */
 html:not(.dark-mode) .twelve-data-chart,
 html:not(.dark-mode) .twelve-data-chart-wrapper {
