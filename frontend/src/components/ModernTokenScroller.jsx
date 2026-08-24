@@ -59,6 +59,20 @@ const ModernTokenScroller = ({
   
   const scrollerRef = useRef(null);
   const isScrollLocked = useRef(false);
+
+  // Live mirrors of state the IntersectionObserver reads. Keeping these in refs
+  // lets the observer be created ONCE (see effect below) instead of being torn
+  // down and re-registered on all 20 slides on every scroll / enrichment.
+  const currentIndexRef = useRef(0);
+  const coinsRef = useRef(coins);
+  const enrichedCoinsRef = useRef(enrichedCoins);
+  const expandedCoinRef = useRef(expandedCoin);
+  const onCurrentCoinChangeRef = useRef(onCurrentCoinChange);
+  currentIndexRef.current = currentIndex;
+  coinsRef.current = coins;
+  enrichedCoinsRef.current = enrichedCoins;
+  expandedCoinRef.current = expandedCoin;
+  onCurrentCoinChangeRef.current = onCurrentCoinChange;
   
   // API base configuration
   const API_BASE = API_CONFIG.COINS_API;
@@ -704,7 +718,10 @@ const ModernTokenScroller = ({
     }
   }, []);
 
-  // 🎯 INDEX TRACKER: IntersectionObserver — never blocks the scroll thread
+  // 🎯 INDEX TRACKER: IntersectionObserver — never blocks the scroll thread.
+  // Reads all mutable state through refs so it only re-registers when the number
+  // of slides changes (not on every scroll/enrichment). This avoids disconnecting
+  // and re-observing 20 slides on each frame, a major scroll-jank source.
   useEffect(() => {
     const container = scrollerRef.current;
     if (!container || coins.length === 0) return;
@@ -714,7 +731,7 @@ const ModernTokenScroller = ({
 
     const observer = new IntersectionObserver(
       (entries) => {
-        if (isScrollLocked.current || expandedCoin || isChartFullscreen.current) return;
+        if (isScrollLocked.current || expandedCoinRef.current || isChartFullscreen.current) return;
 
         // Find the slide with the highest intersection ratio (most visible)
         let best = null;
@@ -726,17 +743,17 @@ const ModernTokenScroller = ({
 
         if (best && best.intersectionRatio > 0.5) {
           const idx = parseInt(best.target.dataset.index, 10);
-          if (!isNaN(idx) && idx !== currentIndex) {
+          if (!isNaN(idx) && idx !== currentIndexRef.current) {
             // startTransition marks this update as non-urgent so React won't
             // interrupt the native scroll animation to process it.
             startTransition(() => {
               setCurrentIndex(idx);
 
-              const coin = coins[idx];
+              const coin = coinsRef.current[idx];
               if (coin) {
-                const enriched = enrichedCoins.get(coin.mintAddress);
+                const enriched = enrichedCoinsRef.current.get(coin.mintAddress);
                 const enrichedCoin = enriched ? { ...coin, ...enriched } : coin;
-                onCurrentCoinChange?.(enrichedCoin, idx);
+                onCurrentCoinChangeRef.current?.(enrichedCoin, idx);
               }
             });
           }
@@ -748,7 +765,7 @@ const ModernTokenScroller = ({
     slides.forEach((slide) => observer.observe(slide));
 
     return () => observer.disconnect();
-  }, [expandedCoin, currentIndex, coins, enrichedCoins, onCurrentCoinChange]);
+  }, [coins.length]);
   
   // Handle favorite toggle
   // useCallback keeps this reference stable across renders so it doesn't

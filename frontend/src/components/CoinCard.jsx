@@ -2989,8 +2989,12 @@ const CoinCard = memo(({
       {/* Single chart instance — portaled to desktop right-panel or mobile target.
           React 18 preserves component state when the portal container changes, so
           the DexScreener iframe is never destroyed/reloaded when toggling between
-          desktop and mobile mode (or going fullscreen). */}
-      {mobileTargetMounted && mobileChartTargetRef.current && createPortal(
+          desktop and mobile mode (or going fullscreen).
+          Gated on isVisible: off-screen cards don't mount a chart component, body
+          portal, effects, or scroll listener — this is critical for mobile memory
+          (prevents WKWebView memory-pressure crashes) and scroll smoothness. The
+          iframe only ever loads for the current/preload card anyway (isActive). */}
+      {isVisible && mobileTargetMounted && mobileChartTargetRef.current && createPortal(
         <TwelveDataChart 
           key={`chart-${mintAddress}`}
           coin={coin}
