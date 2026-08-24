@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useDarkMode } from '../contexts/DarkModeContext';
 import './TwelveDataChart.css';
 
-const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDesktopMode = false, desktopSlotRef = null, showPriceScale, showActionButtons = true, isExpanded = false, showLimitOrderLine = false, limitOrderPrice = null, limitOrderCurrentPrice = null, onCrosshairMove, onFirstPriceUpdate, onTradeClick, onExpand, onFullscreenChange, onOpenBuyDrawer }) => {
+const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDesktopMode = false, desktopSlotRef = null, showPriceScale, showActionButtons = true, isExpanded = false, isTransactionWindowOpen = false, showLimitOrderLine = false, limitOrderPrice = null, limitOrderCurrentPrice = null, onCrosshairMove, onFirstPriceUpdate, onTradeClick, onExpand, onFullscreenChange, onOpenBuyDrawer }) => {
   const { isDarkMode: contextDarkMode } = useDarkMode();
   const [srcReady, setSrcReady] = useState(false);
   const [fullscreenMode, setFullscreenMode] = useState(null); // null | 'portrait' | 'landscape'
@@ -462,9 +462,9 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
   // expanded the chart is interactive, and on desktop the feed doesn't vertical-scroll.
   const showScrollCatcher = effectivePairAddress && isActive && !isExpanded && !isDesktopMode && !fullscreenMode;
 
-  // Only forward-scroll over the "Powered by GeckoTerminal" footer strip while the card
-  // is expanded on mobile — the rest of the chart stays interactive.
-  const showFooterCatcher = effectivePairAddress && isExpanded && !isDesktopMode && !fullscreenMode;
+  // Only forward-scroll over the "Powered by GeckoTerminal" footer strip while the
+  // transaction window is open; otherwise vertical swipes should belong to the feed.
+  const showFooterCatcher = effectivePairAddress && isExpanded && isTransactionWindowOpen && !isDesktopMode && !fullscreenMode;
   const limitOrderLineTop = (() => {
     const current = Number(limitOrderCurrentPrice);
     const target = Number(limitOrderPrice);
@@ -692,7 +692,7 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
 
           {/* Footer scroll-catcher — transparent strip over the "Powered by GeckoTerminal"
               watermark. Position/size set imperatively by updateSlotPosition(). Only mounted
-              while expanded on mobile so swipes there scroll the card, not the chart. */}
+              while the transaction window is open so normal card swipes stay reliable. */}
           {showFooterCatcher && <div ref={footerCatcherRef} />}
 
           {/* "Full Chart" button wrapper — mirrors fsSlotRef position at z-index 70 so the

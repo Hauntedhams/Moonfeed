@@ -2948,6 +2948,7 @@ const CoinCard = memo(({
           isDesktopMode={isDesktopMode}
           desktopSlotRef={rightPanelRef}
           isExpanded={isDesktopMode ? true : isExpanded}
+          isTransactionWindowOpen={showLiveTransactions}
           showPriceScale={isDesktopMode ? false : isExpanded}
           showActionButtons={showActionButtons}
           onCrosshairMove={handleChartCrosshairMove}
