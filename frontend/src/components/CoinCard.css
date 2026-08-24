@@ -2825,6 +2825,7 @@ html:not(.dark-mode) .twelve-chart-section {
   transition: all 0.3s ease;
   pointer-events: inherit;
   overflow: hidden;
+  max-width: 100%;
 }
 
 .transactions-section:hover {
@@ -2966,8 +2967,24 @@ html:not(.dark-mode) .twelve-chart-section {
   max-height: 220px;
   padding: 16px;
   overflow: hidden;
+  overflow-x: hidden;
   scrollbar-width: none;
   -ms-overflow-style: none;
+  max-width: 100%;
+}
+
+.tx-table-header,
+.transaction-item {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow-x: hidden;
+}
+
+.tx-table-header > *,
+.transaction-item > * {
+  min-width: 0;
 }
 
 .live-transactions-content::-webkit-scrollbar {
@@ -3071,10 +3088,12 @@ html:not(.dark-mode) .twelve-chart-section {
 .transactions-full-window {
   max-height: 300px;
   overflow-y: auto;
+  overflow-x: hidden;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
   -ms-overflow-style: none;
+  max-width: 100%;
 }
 
 .transactions-full-window::-webkit-scrollbar {
@@ -3083,12 +3102,15 @@ html:not(.dark-mode) .twelve-chart-section {
 
 .transactions-section.expanded .live-transactions-content {
   max-height: none;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .transactions-marquee-track {
   display: flex;
   flex-direction: column;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   will-change: transform;
 }
 

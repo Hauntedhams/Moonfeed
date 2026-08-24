@@ -2090,9 +2090,9 @@ const CoinCard = memo(({
 
                   <div className="tx-table-header" onClick={(e) => { e.stopPropagation(); setShowLiveTransactions(false); }} style={{
                     display: 'grid',
-                    gridTemplateColumns: '42px 52px 1fr 72px 72px 38px',
-                    gap: '4px',
-                    padding: '6px 10px',
+                    gridTemplateColumns: 'minmax(34px, 42px) minmax(42px, 52px) minmax(0, 1fr) minmax(46px, 62px) minmax(52px, 64px) minmax(30px, 34px)',
+                    gap: '3px',
+                    padding: '6px 8px',
                     fontSize: '10px',
                     fontWeight: '600',
                     color: 'rgba(255,255,255,0.4)',
@@ -2150,9 +2150,9 @@ const CoinCard = memo(({
                                 className="transaction-item"
                                 style={{
                                   display: 'grid',
-                                  gridTemplateColumns: '42px 52px 1fr 72px 72px 38px',
-                                  gap: '4px',
-                                  padding: '7px 10px',
+                                  gridTemplateColumns: 'minmax(34px, 42px) minmax(42px, 52px) minmax(0, 1fr) minmax(46px, 62px) minmax(52px, 64px) minmax(30px, 34px)',
+                                  gap: '3px',
+                                  padding: '7px 8px',
                                   alignItems: 'center',
                                   borderBottom: '1px solid rgba(255,255,255,0.04)',
                                 }}
