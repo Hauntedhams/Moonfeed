@@ -582,9 +582,11 @@ const CoinCard = memo(({
     updateBuySolAmount(buySolAmountInput || buySolAmount);
   };
 
-  const openBuyDrawer = () => {
+  const openBuyDrawer = (mode = 'buy') => {
+    // Swipe-right opens market buy ('buy'); swipe-left opens the limit order ('orders').
+    const requestedMode = mode === 'orders' ? 'orders' : 'buy';
     const base = Number(displayPrice) || Number(fallbackPrice) || 0;
-    setBuyDrawerMode('buy');
+    setBuyDrawerMode(requestedMode);
     setBuyOrderPrice((current) => current > 0 ? current : clampBuyOrderPrice(base * 0.94));
     setBuyDrawerOpen(true);
   };
@@ -641,7 +643,16 @@ const CoinCard = memo(({
     if (!buyDrawerOpen && deltaX > 56 && Math.abs(deltaX) > Math.abs(deltaY) * 1.35) {
       e.preventDefault();
       e.stopPropagation();
-      openBuyDrawer();
+      openBuyDrawer('buy');
+      swipe.tracking = false;
+      return;
+    }
+
+    // Swipe LEFT opens the same order window but pre-set to the limit order.
+    if (!buyDrawerOpen && deltaX < -56 && Math.abs(deltaX) > Math.abs(deltaY) * 1.35) {
+      e.preventDefault();
+      e.stopPropagation();
+      openBuyDrawer('orders');
       swipe.tracking = false;
       return;
     }
