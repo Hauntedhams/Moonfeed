@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useDarkMode } from '../contexts/DarkModeContext';
 import './TwelveDataChart.css';
 
-const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDesktopMode = false, desktopSlotRef = null, showPriceScale, showActionButtons = true, isExpanded = false, isTransactionWindowOpen = false, showLimitOrderLine = false, limitOrderPrice = null, limitOrderCurrentPrice = null, tradeLineMode = 'orders', marketBuyAmount = 0, limitOrderSide = 'buy', onCrosshairMove, onFirstPriceUpdate, onTradeClick, onExpand, onFullscreenChange, onOpenBuyDrawer }) => {
+const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDesktopMode = false, desktopSlotRef = null, showPriceScale, showActionButtons = true, isExpanded = false, showLimitOrderLine = false, limitOrderPrice = null, limitOrderCurrentPrice = null, tradeLineMode = 'orders', marketBuyAmount = 0, limitOrderSide = 'buy', onCrosshairMove, onFirstPriceUpdate, onTradeClick, onExpand, onFullscreenChange, onOpenBuyDrawer }) => {
   const { isDarkMode: contextDarkMode } = useDarkMode();
   const [srcReady, setSrcReady] = useState(false);
   const [fullscreenMode, setFullscreenMode] = useState(null); // null | 'portrait' | 'landscape'
@@ -260,7 +260,8 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
         return;
       }
 
-      slot.style.cssText = `position:fixed;top:${clipTop}px;left:${left}px;width:${width}px;height:${clippedH}px;transform:none;z-index:60;border-radius:12px;overflow:hidden;pointer-events:${isExpandedRef.current ? 'auto' : 'none'};`;
+      const chartTouchAction = isExpandedRef.current ? 'pan-y pinch-zoom' : 'none';
+      slot.style.cssText = `position:fixed;top:${clipTop}px;left:${left}px;width:${width}px;height:${clippedH}px;transform:none;z-index:60;border-radius:12px;overflow:hidden;pointer-events:${isExpandedRef.current ? 'auto' : 'none'};touch-action:${chartTouchAction};`;
       rotateWrapperRef.current.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;transform:none;border-radius:12px;';
       // Offset the iframe upward within the slot so the visible portion of the chart
       // content aligns correctly with the slot window (mirrors CSS overflow:hidden clipping).
@@ -268,7 +269,7 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
       // bottom "Powered by" watermark falls below the clip and stays hidden until expanded.
       const footerHide = isExpandedRef.current ? 0 : 34;
       if (iframeRef.current) {
-        iframeRef.current.style.cssText = `position:absolute;top:${-offsetY}px;left:0;width:100%;height:${height + footerHide}px;transform:none;border:none;display:block;pointer-events:${isExpandedRef.current ? 'auto' : 'none'};`;
+        iframeRef.current.style.cssText = `position:absolute;top:${-offsetY}px;left:0;width:100%;height:${height + footerHide}px;transform:none;border:none;display:block;pointer-events:${isExpandedRef.current ? 'auto' : 'none'};touch-action:${chartTouchAction};`;
       }
       if (btnWrapper) {
         btnWrapper.style.cssText = `position:fixed;top:${clipTop}px;left:${left}px;width:${width}px;height:${clippedH}px;transform:none;z-index:80;pointer-events:none;border-radius:12px;overflow:visible;`;
@@ -282,9 +283,8 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
         mask.style.cssText = `position:fixed;top:${clipTop}px;right:0px;left:${left + width - 140}px;width:140px;height:${clippedH}px;transform:none;z-index:65;pointer-events:none;border-radius:0 12px 12px 0;background:linear-gradient(to right,transparent,${maskColor} 50%);opacity:${opacity};transition:opacity 0.35s ease;`;
       }
 
-      // Footer scroll-catcher: while expanded, cover the bottom "Powered by GeckoTerminal"
-      // watermark strip so vertical swipes there scroll the expanded card instead of
-      // panning the interactive chart. Only the visible portion within the clip is covered.
+      // Footer scroll-catcher: while expanded, reserve the bottom "Powered by GeckoTerminal"
+      // strip for vertical card scrolling. Chart controls above it remain interactive.
       const footerCatcher = footerCatcherRef.current;
       if (footerCatcher) {
         const FOOTER_H = 40; // height of the GeckoTerminal watermark strip
@@ -455,9 +455,9 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
   // expanded the chart is interactive, and on desktop the feed doesn't vertical-scroll.
   const showScrollCatcher = effectivePairAddress && isActive && !isExpanded && !isDesktopMode && !fullscreenMode;
 
-  // Only forward-scroll over the "Powered by GeckoTerminal" footer strip while the
-  // transaction window is open; otherwise vertical swipes should belong to the feed.
-  const showFooterCatcher = effectivePairAddress && isExpanded && isTransactionWindowOpen && !isDesktopMode && !fullscreenMode;
+  // The cross-origin iframe traps vertical gestures. Reserve only its nonessential
+  // footer strip as a card-scroll surface, leaving chart controls and content tappable.
+  const showFooterCatcher = effectivePairAddress && isExpanded && !isDesktopMode && !fullscreenMode;
   const limitOrderLineTop = (() => {
     const current = Number(limitOrderCurrentPrice);
     const target = Number(limitOrderPrice);
@@ -688,10 +688,8 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
               Position/opacity are set imperatively by updateSlotPosition(). */}
           <div ref={maskRef} className="chart-portal-mask" />
 
-          {/* Footer scroll-catcher — transparent strip over the "Powered by GeckoTerminal"
-              watermark. Position/size set imperatively by updateSlotPosition(). Only mounted
-              while the transaction window is open so normal card swipes stay reliable. */}
-          {showFooterCatcher && <div ref={footerCatcherRef} />}
+          {/* Transparent card-scroll surface over the GeckoTerminal branding footer. */}
+          {showFooterCatcher && <div ref={footerCatcherRef} className="chart-footer-scroll-catcher" />}
 
           {/* "Full Chart" button wrapper — mirrors fsSlotRef position at z-index 70 so the
               button floats above the cross-origin iframe. pointer-events:none on the wrapper,
