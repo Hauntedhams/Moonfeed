@@ -1645,6 +1645,37 @@
   cursor: not-allowed;
 }
 
+/* Cashout button — full-width cancel action at the bottom of an active order card */
+.order-card-cashout-btn {
+  position: relative;
+  z-index: 2;
+  margin: 10px 14px 14px;
+  padding: 11px 16px;
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  border-radius: 12px;
+  background: rgba(248, 113, 113, 0.14);
+  color: #f87171;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.12s;
+}
+
+.order-card-cashout-btn:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.24);
+  border-color: rgba(248, 113, 113, 0.55);
+}
+
+.order-card-cashout-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.order-card-cashout-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 /* Progress section */
 .order-card-progress-section {
   position: relative;

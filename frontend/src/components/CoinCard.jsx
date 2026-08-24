@@ -11,6 +11,7 @@ import { useLiveData } from '../hooks/useLiveDataContext.jsx';
 import { useSolanaTransactions } from '../hooks/useSolanaTransactions.jsx';
 import { useOnDemandPrice } from '../hooks/useOnDemandPrice.js';
 import { useWallet } from '../contexts/WalletContext';
+import { placeTriggerOrder, getExpiryTimestamp, EXPIRY_OPTIONS } from '../utils/triggerOrders.js';
 import { API_CONFIG } from '../config/api.js';
 import { 
   calculateGraduationPercentage, 
@@ -27,6 +28,10 @@ import { rafManager, eventListenerManager, cleanupManager } from '../utils/mobil
 // held for the whole physical gesture and only released once the wheel truly stops.
 let _wheelGestureLocked = false;
 let _wheelGestureIdleTimer = null;
+
+const BUY_AMOUNT_MIN = 0.01;
+const BUY_AMOUNT_MAX = 5;
+const BUY_AMOUNT_STEP = 0.01;
 
 // Deterministic gradient color from a coin symbol/name string
 function getCoinGradient(seed) {
@@ -108,7 +113,19 @@ const CoinCard = memo(({
   const [chartHoveredData, setChartHoveredData] = useState(null); // Track full crosshair data (price + time)
   const [chartFirstPrice, setChartFirstPrice] = useState(null); // Track first visible price for % calculation
   const [buyDrawerOpen, setBuyDrawerOpen] = useState(false);
+  const [buyDrawerMode, setBuyDrawerMode] = useState('buy');
+  const [buyDrawerOrderSide, setBuyDrawerOrderSide] = useState('buy');
+  const [buySolAmount, setBuySolAmount] = useState(0.1);
+  const [buySolAmountInput, setBuySolAmountInput] = useState('0.10');
   const [buyOrderPrice, setBuyOrderPrice] = useState(0);
+  const [orderAmountInput, setOrderAmountInput] = useState('0.10');
+  const [sellFundingSolInput, setSellFundingSolInput] = useState('0.10');
+  const [sellOrderPending, setSellOrderPending] = useState(false);
+  const pendingSellOrderRef = useRef(null);
+  const [orderExpiry, setOrderExpiry] = useState('7d');
+  const [orderSubmitting, setOrderSubmitting] = useState(false);
+  const [orderError, setOrderError] = useState(null);
+  const [orderSuccess, setOrderSuccess] = useState(null);
   const chartsContainerRef = useRef(null);
   const chartNavRef = useRef(null);
   const prevPriceRef = useRef(null);
@@ -154,7 +171,7 @@ const CoinCard = memo(({
   // Get live data from WebSocket (COMPLETELY disabled on mobile for performance)
   // 🔥 CRITICAL FIX: Get coins Map directly from context to force re-renders when it updates
   const { getCoin, getChart, connected, connectionStatus, coins, updateCount } = useLiveData();
-  const { walletAddress, connected: walletConnected } = useWallet();
+  const { walletAddress, connected: walletConnected, signTransaction, connection } = useWallet();
   
   // 🔥 PRICE UPDATE FIX: Directly read from coins Map and use it to trigger re-renders
   const address = coin.mintAddress || coin.address;
@@ -514,8 +531,33 @@ const CoinCard = memo(({
     return Math.min(Math.max(nextPrice, base * 0.2), base * 2.5);
   };
 
+  const clampBuySolAmount = (nextAmount) => {
+    const amount = Number(nextAmount);
+    if (!Number.isFinite(amount)) return BUY_AMOUNT_MIN;
+    return Math.min(Math.max(amount, BUY_AMOUNT_MIN), BUY_AMOUNT_MAX);
+  };
+
+  const updateBuySolAmount = (nextAmount) => {
+    const clampedAmount = Number(clampBuySolAmount(nextAmount).toFixed(2));
+    setBuySolAmount(clampedAmount);
+    setBuySolAmountInput(clampedAmount.toFixed(2));
+  };
+
+  const handleBuySolAmountInputChange = (value) => {
+    setBuySolAmountInput(value);
+    const nextAmount = Number(value);
+    if (Number.isFinite(nextAmount) && nextAmount > 0) {
+      setBuySolAmount(Number(clampBuySolAmount(nextAmount).toFixed(2)));
+    }
+  };
+
+  const normalizeBuySolAmountInput = () => {
+    updateBuySolAmount(buySolAmountInput || buySolAmount);
+  };
+
   const openBuyDrawer = () => {
     const base = Number(displayPrice) || Number(fallbackPrice) || 0;
+    setBuyDrawerMode('buy');
     setBuyOrderPrice((current) => current > 0 ? current : clampBuyOrderPrice(base * 0.94));
     setBuyDrawerOpen(true);
   };
@@ -528,10 +570,25 @@ const CoinCard = memo(({
     });
   };
 
+  const adjustBuySolAmount = (direction) => {
+    setBuySolAmount((current) => {
+      const nextAmount = clampBuySolAmount(current + direction * BUY_AMOUNT_STEP);
+      const normalizedAmount = Number(nextAmount.toFixed(2));
+      setBuySolAmountInput(normalizedAmount.toFixed(2));
+      return normalizedAmount;
+    });
+  };
+
   const handleBuyWheel = (e) => {
     e.preventDefault();
     e.stopPropagation();
     adjustBuyOrderPrice(e.deltaY < 0 ? 1 : -1);
+  };
+
+  const handleBuyAmountWheel = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    adjustBuySolAmount(e.deltaY < 0 ? 1 : -1);
   };
 
   const handleBuyTouchStart = (e) => {
@@ -540,6 +597,7 @@ const CoinCard = memo(({
     buySwipeRef.current = {
       startX: touch.clientX,
       startY: touch.clientY,
+      startAmount: buySolAmount,
       startPrice: buyOrderPrice || displayPrice || fallbackPrice || 0,
       tracking: true,
     };
@@ -561,7 +619,14 @@ const CoinCard = memo(({
       return;
     }
 
-    if (buyDrawerOpen && Math.abs(deltaY) > 4) {
+    if (buyDrawerOpen && buyDrawerMode === 'buy' && Math.abs(deltaY) > 4) {
+      e.preventDefault();
+      e.stopPropagation();
+      const nextAmount = swipe.startAmount - deltaY * BUY_AMOUNT_STEP * 0.28;
+      updateBuySolAmount(nextAmount);
+    }
+
+    if (buyDrawerOpen && buyDrawerMode === 'orders' && Math.abs(deltaY) > 4) {
       e.preventDefault();
       e.stopPropagation();
       const nextPrice = swipe.startPrice - deltaY * getBuyOrderStep() * 0.18;
@@ -573,14 +638,121 @@ const CoinCard = memo(({
     buySwipeRef.current.tracking = false;
   };
 
-  const submitBuyDrawerOrder = () => {
-    if (!onTradeClick || buyOrderPrice <= 0) return;
-    const percentage = displayPrice > 0 ? ((buyOrderPrice - displayPrice) / displayPrice) * 100 : undefined;
+  // Reads the wallet's balance of this token — used as a fallback when the swap
+  // result doesn't report how many tokens were received.
+  const fetchTokenBalance = async () => {
+    if (!walletAddress || !connection || !mintAddress) return 0;
+    const { PublicKey } = await import('@solana/web3.js');
+    const res = await connection.getParsedTokenAccountsByOwner(
+      new PublicKey(walletAddress),
+      { mint: new PublicKey(mintAddress) }
+    );
+    return res.value.reduce(
+      (sum, acc) => sum + (acc.account.data.parsed?.info?.tokenAmount?.uiAmount || 0),
+      0
+    );
+  };
+
+  // Step 2 of the sell flow: once the buy-in swap confirms, place the sell order
+  // for everything that was just acquired.
+  useEffect(() => {
+    const handleSwapSuccess = async (event) => {
+      const pending = pendingSellOrderRef.current;
+      if (!pending) return;
+      const detail = event.detail || {};
+      const swappedMint = detail.coin?.mintAddress || detail.coin?.address;
+      if (swappedMint !== mintAddress) return;
+
+      pendingSellOrderRef.current = null;
+      setSellOrderPending(false);
+      setOrderSubmitting(true);
+      setOrderError(null);
+      try {
+        const decimals = detail.coin?.decimals || 6;
+        const raw = Number(detail.swapResult?.outputAmount);
+        let tokenAmount = Number.isFinite(raw) && raw > 0 ? raw / Math.pow(10, decimals) : 0;
+        if (!(tokenAmount > 0)) tokenAmount = await fetchTokenBalance();
+        if (!(tokenAmount > 0)) throw new Error('Could not read your new balance — place the sell order manually.');
+
+        await placeTriggerOrder({
+          walletAddress,
+          signTransaction,
+          mintAddress,
+          side: 'sell',
+          inputAmount: tokenAmount,
+          triggerPrice: pending.triggerPrice,
+          expiredAt: pending.expiredAt,
+        });
+        setOrderSuccess(`Sell order placed at ${formatPrice(pending.triggerPrice)}`);
+      } catch (err) {
+        setOrderError(err.message || 'Failed to place sell order');
+      } finally {
+        setOrderSubmitting(false);
+      }
+    };
+
+    window.addEventListener('moonfeed:swap-success', handleSwapSuccess);
+    return () => window.removeEventListener('moonfeed:swap-success', handleSwapSuccess);
+  }, [mintAddress, walletAddress, signTransaction]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const startSellFlow = () => {
+    setOrderError(null);
+    setOrderSuccess(null);
+
+    if (!walletConnected || !walletAddress) {
+      setOrderError('Connect your wallet to place a limit order.');
+      return;
+    }
+    const solAmount = parseFloat(sellFundingSolInput);
+    if (!(solAmount > 0)) {
+      setOrderError('Enter how much SOL you want to put in.');
+      return;
+    }
+    if (!onTradeClick) return;
+
+    pendingSellOrderRef.current = {
+      triggerPrice: buyOrderPrice,
+      expiredAt: getExpiryTimestamp(orderExpiry),
+    };
+    setSellOrderPending(true);
+    onTradeClick(coin, { tab: 'swap', side: 'buy', solAmount });
+  };
+
+  const submitBuyDrawerOrder = async () => {
+    if (orderSubmitting || buyOrderPrice <= 0) return;
+    setOrderError(null);
+    setOrderSuccess(null);
+
+    if (!walletConnected || !walletAddress) {
+      setOrderError('Connect your wallet to place a limit order.');
+      return;
+    }
+
+    setOrderSubmitting(true);
+    try {
+      await placeTriggerOrder({
+        walletAddress,
+        signTransaction,
+        mintAddress,
+        side: buyDrawerOrderSide,
+        inputAmount: orderAmountInput,
+        triggerPrice: buyOrderPrice,
+        expiredAt: getExpiryTimestamp(orderExpiry),
+      });
+      setOrderSuccess(`Limit ${buyDrawerOrderSide} placed at ${formatPrice(buyOrderPrice)}`);
+    } catch (err) {
+      setOrderError(err.message || 'Failed to place order');
+    } finally {
+      setOrderSubmitting(false);
+    }
+  };
+
+  const submitBuyDrawerTrade = () => {
+    if (!onTradeClick || buySolAmount <= 0) return;
     onTradeClick(coin, {
-      tab: 'limit',
+      tab: 'swap',
       side: 'buy',
-      percentage,
-      targetPrice: buyOrderPrice,
+      solAmount: buySolAmount,
     });
     setBuyDrawerOpen(false);
   };
@@ -2472,39 +2644,218 @@ const CoinCard = memo(({
                 onClick={() => setBuyDrawerOpen(false)}
                 aria-label="Close buy limit drawer"
               />
-              <aside className="coin-buy-drawer" aria-label={`Buy ${coin.symbol || coin.name || 'coin'} limit order`}>
+              <aside className="coin-buy-drawer" aria-label={`Trade ${coin.symbol || coin.name || 'coin'}`}>
                 <div className="coin-buy-drawer-header">
-                  <span className="coin-buy-kicker">Limit buy</span>
+                  <div className="coin-buy-mode-tabs" aria-label="Trade mode">
+                    <button
+                      className={`coin-buy-mode-tab${buyDrawerMode === 'buy' ? ' active' : ''}`}
+                      onClick={() => setBuyDrawerMode('buy')}
+                    >
+                      Buy
+                    </button>
+                    <button
+                      className={`coin-buy-mode-tab${buyDrawerMode === 'orders' ? ' active' : ''}`}
+                      onClick={() => setBuyDrawerMode('orders')}
+                    >
+                      Orders
+                    </button>
+                  </div>
                   <button className="coin-buy-close" onClick={() => setBuyDrawerOpen(false)} aria-label="Close">×</button>
                 </div>
                 <div className="coin-buy-symbol">{coin.symbol || coin.name || 'TOKEN'}</div>
                 <div className="coin-buy-market-price">Market {formatPrice(displayPrice)}</div>
 
-                <div
-                  className="coin-buy-price-wheel"
-                  onWheel={handleBuyWheel}
-                  onTouchStart={handleBuyTouchStart}
-                  onTouchMove={handleBuyTouchMove}
-                  onTouchEnd={handleBuyTouchEnd}
-                  role="spinbutton"
-                  aria-valuetext={formatPrice(buyOrderPrice)}
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === 'ArrowUp') adjustBuyOrderPrice(1);
-                    if (e.key === 'ArrowDown') adjustBuyOrderPrice(-1);
-                  }}
-                >
-                  <button className="coin-buy-step" onClick={() => adjustBuyOrderPrice(1)} aria-label="Increase buy price">⌃</button>
-                  <div className="coin-buy-price">{formatPrice(buyOrderPrice)}</div>
-                  <div className={`coin-buy-delta ${buyOrderPrice >= displayPrice ? 'above' : 'below'}`}>
-                    {displayPrice > 0 ? formatPercent(((buyOrderPrice - displayPrice) / displayPrice) * 100) : '0.00%'}
-                  </div>
-                  <button className="coin-buy-step" onClick={() => adjustBuyOrderPrice(-1)} aria-label="Decrease buy price">⌄</button>
-                </div>
+                {buyDrawerMode === 'buy' ? (
+                  <>
+                    <div
+                      className="coin-buy-amount-panel"
+                      onWheel={handleBuyAmountWheel}
+                      onTouchStart={handleBuyTouchStart}
+                      onTouchMove={handleBuyTouchMove}
+                      onTouchEnd={handleBuyTouchEnd}
+                      role="spinbutton"
+                      aria-valuetext={`${buySolAmount.toFixed(2)} SOL`}
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'ArrowUp') adjustBuySolAmount(1);
+                        if (e.key === 'ArrowDown') adjustBuySolAmount(-1);
+                      }}
+                    >
+                      <span className="coin-buy-amount-label">Buy amount</span>
+                      <button className="coin-buy-step" onClick={() => adjustBuySolAmount(1)} aria-label="Increase buy amount">⌃</button>
+                      <div className="coin-buy-amount-value">{buySolAmount.toFixed(2)} SOL</div>
+                      <button className="coin-buy-step" onClick={() => adjustBuySolAmount(-1)} aria-label="Decrease buy amount">⌄</button>
+                      <div className="coin-buy-amount-range">
+                        <span>{BUY_AMOUNT_MIN.toFixed(2)} SOL</span>
+                        <span>{BUY_AMOUNT_MAX.toFixed(0)} SOL</span>
+                      </div>
+                    </div>
 
-                <button className="coin-buy-submit" onClick={submitBuyDrawerOrder} disabled={!onTradeClick || buyOrderPrice <= 0}>
-                  Set buy limit
-                </button>
+                    <label className="coin-buy-custom-amount">
+                      <span>Custom amount</span>
+                      <div className="coin-buy-custom-input-wrap">
+                        <input
+                          type="number"
+                          min={BUY_AMOUNT_MIN}
+                          max={BUY_AMOUNT_MAX}
+                          step={BUY_AMOUNT_STEP}
+                          value={buySolAmountInput}
+                          onChange={(e) => handleBuySolAmountInputChange(e.target.value)}
+                          onBlur={normalizeBuySolAmountInput}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') e.currentTarget.blur();
+                          }}
+                          aria-label="Custom buy amount in SOL"
+                        />
+                        <strong>SOL</strong>
+                      </div>
+                    </label>
+
+                    <button className="coin-buy-submit" onClick={submitBuyDrawerTrade} disabled={!onTradeClick || buySolAmount <= 0}>
+                      Buy now
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <div className="coin-buy-order-side-toggle" aria-label="Order side">
+                      <button
+                        className={`coin-buy-order-side-btn${buyDrawerOrderSide === 'buy' ? ' active' : ''}`}
+                        onClick={() => {
+                          setBuyDrawerOrderSide('buy');
+                          setOrderAmountInput('0.10');
+                          setOrderError(null);
+                          setOrderSuccess(null);
+                        }}
+                      >
+                        Buy at
+                      </button>
+                      <button
+                        className={`coin-buy-order-side-btn${buyDrawerOrderSide === 'sell' ? ' active' : ''}`}
+                        onClick={() => {
+                          setBuyDrawerOrderSide('sell');
+                          setOrderError(null);
+                          setOrderSuccess(null);
+                        }}
+                      >
+                        Sell at*
+                      </button>
+                    </div>
+
+                    {buyDrawerOrderSide === 'sell' && (
+                      <div className="coin-buy-order-side-note">
+                        * Sell at needs a buy-in first. Pick your sell price, then how much SOL to put in —
+                        the sell order is placed automatically once the buy confirms.
+                      </div>
+                    )}
+
+                    {buyDrawerOrderSide === 'sell' && (
+                      <span className="coin-buy-step-label">Step 1 · Sell price</span>
+                    )}
+
+                    <div
+                      className="coin-buy-price-wheel compact"
+                      onWheel={handleBuyWheel}
+                      onTouchStart={handleBuyTouchStart}
+                      onTouchMove={handleBuyTouchMove}
+                      onTouchEnd={handleBuyTouchEnd}
+                      role="spinbutton"
+                      aria-valuetext={formatPrice(buyOrderPrice)}
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'ArrowUp') adjustBuyOrderPrice(1);
+                        if (e.key === 'ArrowDown') adjustBuyOrderPrice(-1);
+                      }}
+                    >
+                      <button className="coin-buy-step" onClick={() => adjustBuyOrderPrice(1)} aria-label="Increase buy price">⌃</button>
+                      <div className="coin-buy-price">{formatPrice(buyOrderPrice)}</div>
+                      <div className={`coin-buy-delta ${buyOrderPrice >= displayPrice ? 'above' : 'below'}`}>
+                        {displayPrice > 0 ? formatPercent(((buyOrderPrice - displayPrice) / displayPrice) * 100) : '0.00%'}
+                      </div>
+                      <button className="coin-buy-step" onClick={() => adjustBuyOrderPrice(-1)} aria-label="Decrease buy price">⌄</button>
+                    </div>
+
+                    {buyDrawerOrderSide === 'buy' && (
+                      <label className="coin-buy-custom-amount">
+                        <span>Amount to spend</span>
+                        <div className="coin-buy-custom-input-wrap">
+                          <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            value={orderAmountInput}
+                            onChange={(e) => setOrderAmountInput(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                            aria-label="Amount of SOL to spend"
+                          />
+                          <strong>SOL</strong>
+                        </div>
+                      </label>
+                    )}
+
+                    <div className="coin-buy-expiry">
+                      <span className="coin-buy-expiry-label">Expires in</span>
+                      <div className="coin-buy-expiry-row">
+                        {EXPIRY_OPTIONS.map((option) => (
+                          <button
+                            key={option.id}
+                            className={`coin-buy-expiry-btn${orderExpiry === option.id ? ' active' : ''}`}
+                            onClick={() => setOrderExpiry(option.id)}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {buyDrawerOrderSide === 'sell' && (
+                      <label className="coin-buy-custom-amount">
+                        <span>Step 2 · SOL to put in</span>
+                        <div className="coin-buy-custom-input-wrap">
+                          <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            value={sellFundingSolInput}
+                            onChange={(e) => setSellFundingSolInput(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                            aria-label="Amount of SOL to buy in with"
+                          />
+                          <strong>SOL</strong>
+                        </div>
+                        <div className="coin-buy-balance-line">
+                          {sellOrderPending
+                            ? 'Waiting for your buy to confirm — the sell order is placed automatically.'
+                            : `Buys ~${formatPrice(displayPrice)} entry, then sells everything you get at ${formatPrice(buyOrderPrice)}.`}
+                        </div>
+                      </label>
+                    )}
+
+                    {orderError && <div className="coin-buy-order-status error">{orderError}</div>}
+                    {orderSuccess && <div className="coin-buy-order-status success">{orderSuccess}</div>}
+
+                    {buyDrawerOrderSide === 'buy' ? (
+                      <button
+                        className="coin-buy-submit"
+                        onClick={submitBuyDrawerOrder}
+                        disabled={orderSubmitting || buyOrderPrice <= 0 || !(parseFloat(orderAmountInput) > 0)}
+                      >
+                        {orderSubmitting ? 'Placing order…' : 'Place limit buy'}
+                      </button>
+                    ) : (
+                      <button
+                        className="coin-buy-submit"
+                        onClick={startSellFlow}
+                        disabled={orderSubmitting || sellOrderPending || buyOrderPrice <= 0 || !(parseFloat(sellFundingSolInput) > 0)}
+                      >
+                        {orderSubmitting
+                          ? 'Placing sell order…'
+                          : sellOrderPending
+                            ? 'Waiting for buy…'
+                            : `Buy in & set sell order`}
+                      </button>
+                    )}
+                  </>
+                )}
               </aside>
             </>
           )}

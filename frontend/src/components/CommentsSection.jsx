@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useWallet } from '../contexts/WalletContext';
 import { UnifiedWalletButton } from '@jup-ag/wallet-adapter';
+import WalletConnectOnboarding from './WalletConnectOnboarding';
 import './CommentsSection.css';
 
 // Wallet icon SVG
@@ -237,7 +238,9 @@ const CommentsSection = ({ coinAddress, coinSymbol, onWalletClick }) => {
                 <p className="connect-wallet-title">Connect to comment</p>
                 <p className="connect-wallet-sub">Join the conversation for ${coinSymbol || 'this coin'}</p>
                 <div className="connect-wallet-btn-wrap">
-                  <UnifiedWalletButton />
+                  <WalletConnectOnboarding>
+                    <UnifiedWalletButton />
+                  </WalletConnectOnboarding>
                 </div>
               </div>
             )}

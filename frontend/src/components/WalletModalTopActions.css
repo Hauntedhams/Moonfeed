@@ -28,15 +28,16 @@ div:has(> .moonfeed-wallet-modal-top) {
 }
 
 .moonfeed-wallet-modal-top__link {
-  background: none;
-  border: none;
-  padding: 4px 2px;
-  font-size: 13px;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.6);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  cursor: pointer;
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 4px 2px !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  color: rgba(255, 255, 255, 0.6) !important;
+  text-decoration: underline !important;
+  text-underline-offset: 2px !important;
+  cursor: pointer !important;
 }
 
 .moonfeed-wallet-modal-top__link:active {
@@ -46,4 +47,22 @@ div:has(> .moonfeed-wallet-modal-top) {
 .moonfeed-wallet-modal-top__sep {
   color: rgba(255, 255, 255, 0.3);
   font-size: 13px;
+}
+
+/* Jupiter renders its header close control without a stable class or label. */
+body:has(.moonfeed-wallet-modal-top) button:has(> svg[viewBox="0 0 20 21"]) {
+  width: 36px !important;
+  min-width: 36px !important;
+  max-width: 36px !important;
+  height: 36px !important;
+  min-height: 36px !important;
+  max-height: 36px !important;
+  padding: 0 !important;
+  border: none !important;
+  border-radius: 50% !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: rgba(255, 255, 255, 0.8) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
 }

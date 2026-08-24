@@ -953,8 +953,9 @@ const SOLANA_TRACKER_BASE_URL = 'https://data.solanatracker.io';
 let currentCoins = [];
 let newCoins = []; // Separate cache for new feed
 let customCoins = []; // Cache for custom filtered coins
-let dextrendingCoins = []; // Cache for Dexscreener trending coins
+let dextrendingCoins = []; // Cache for Dexscreener trending coins (fresh, <=30d)
 let dextrendingLastFetch = 0; // Timestamp of last fetch
+let whalefeedCoins = []; // Cache for large, established coins (no age cap)
 const DEXTRENDING_CACHE_TTL = 15 * 60 * 1000; // 15 minutes cache
 
 // Top traders cache to prevent duplicate API calls
@@ -1443,146 +1444,460 @@ async function fetchNewCoinBatch() {
   return coinsWithPriority;
 }
 
-// Fetch trending coins from Dexscreener trending/boosted tokens API
-// https://api.dexscreener.com/token-boosts/top/v1
-async function fetchDexscreenerTrendingBatch() {
+// ========================================
+// DEXTRENDING QUALITY RANKING
+// ========================================
+// Dexscreener's boost list is pay-to-appear, so raw boost order surfaces brand new
+// tokens with ~$1 liquidity. We re-rank so first-load users see established coins:
+// real 6-figure-ish liquidity pools, sustained volume, some age, and locked liquidity.
+
+const DEXTRENDING_QUALITY_GATE = {
+  minLiquidityUsd: 10000,   // real safety floor — kept firm
+  minVolume24hUsd: 30000,
+  minMarketCapUsd: 50000,
+  minAgeHours: 6,
+  maxAgeHours: 30 * 24, // DEXtrending is the "fresh but solid" feed: <= 30 days old
+  minTxns24h: 150
+};
+
+// Age stops earning score past this point.
+const DEXTRENDING_AGE_SATURATION_HOURS = 30 * 24;
+
+// WHALE feed: large, established coins. Higher bars, no age cap.
+const WHALEFEED_QUALITY_GATE = {
+  minLiquidityUsd: 250000,
+  minVolume24hUsd: 200000,
+  minMarketCapUsd: 1000000,
+  minAgeHours: 24,
+  minTxns24h: 200
+};
+
+const DEXTRENDING_IDEAL_LIQUIDITY_MIN = 100000;  // 6-figure sweet spot
+const DEXTRENDING_IDEAL_LIQUIDITY_MAX = 2000000;
+
+function getCoinAgeHours(coin) {
+  if (!coin.pairCreatedAt) return null;
+  const created = typeof coin.pairCreatedAt === 'number'
+    ? coin.pairCreatedAt
+    : Date.parse(coin.pairCreatedAt);
+  if (!created || Number.isNaN(created)) return null;
+  return (Date.now() - created) / (1000 * 60 * 60);
+}
+
+// Passes the "safe to show a brand new user" bar (fresh but solid, <= 30 days)
+function passesDextrendingQualityGate(coin) {
+  const ageHours = getCoinAgeHours(coin);
+  return (
+    (coin.liquidity_usd || 0) >= DEXTRENDING_QUALITY_GATE.minLiquidityUsd &&
+    (coin.volume_24h_usd || 0) >= DEXTRENDING_QUALITY_GATE.minVolume24hUsd &&
+    (coin.market_cap_usd || 0) >= DEXTRENDING_QUALITY_GATE.minMarketCapUsd &&
+    (coin.txns_24h || 0) >= DEXTRENDING_QUALITY_GATE.minTxns24h &&
+    ageHours !== null &&
+    ageHours >= DEXTRENDING_QUALITY_GATE.minAgeHours &&
+    ageHours <= DEXTRENDING_QUALITY_GATE.maxAgeHours
+  );
+}
+
+// Passes the "big established whale coin" bar (no upper age limit)
+function passesWhalefeedQualityGate(coin) {
+  const ageHours = getCoinAgeHours(coin);
+  return (
+    (coin.liquidity_usd || 0) >= WHALEFEED_QUALITY_GATE.minLiquidityUsd &&
+    (coin.volume_24h_usd || 0) >= WHALEFEED_QUALITY_GATE.minVolume24hUsd &&
+    (coin.market_cap_usd || 0) >= WHALEFEED_QUALITY_GATE.minMarketCapUsd &&
+    (coin.txns_24h || 0) >= WHALEFEED_QUALITY_GATE.minTxns24h &&
+    ageHours !== null &&
+    ageHours >= WHALEFEED_QUALITY_GATE.minAgeHours
+  );
+}
+
+function scoreDextrendingCoin(coin) {
+  const liquidity = coin.liquidity_usd || 0;
+  const volume = coin.volume_24h_usd || 0;
+  const marketCap = coin.market_cap_usd || 0;
+  const txns = coin.txns_24h || 0;
+  const ageHours = getCoinAgeHours(coin);
+
+  let score = 0;
+
+  // Liquidity: full credit inside the 6-figure sweet spot, tapering outside it
+  if (liquidity >= DEXTRENDING_IDEAL_LIQUIDITY_MIN && liquidity <= DEXTRENDING_IDEAL_LIQUIDITY_MAX) {
+    score += 40;
+  } else if (liquidity > DEXTRENDING_IDEAL_LIQUIDITY_MAX) {
+    score += 34;
+  } else if (liquidity > 0) {
+    score += 40 * (liquidity / DEXTRENDING_IDEAL_LIQUIDITY_MIN);
+  }
+
+  // Active volume, scaled logarithmically ($50k -> ~0, $5M -> 25)
+  if (volume > 0) {
+    score += Math.min(25, Math.max(0, 12.5 * Math.log10(volume / 50000)));
+  }
+
+  // Healthy turnover: volume should be a meaningful multiple of liquidity, but not absurd
+  const turnover = liquidity > 0 ? volume / liquidity : 0;
+  if (turnover >= 0.5 && turnover <= 15) {
+    score += 10;
+  } else if (turnover > 15 && turnover <= 40) {
+    score += 5;
+  }
+
+  // History / survivorship: 6h -> 0, 30+ days -> 15
+  if (ageHours !== null && ageHours > 0) {
+    const saturation = DEXTRENDING_AGE_SATURATION_HOURS / 24;
+    score += Math.min(15, Math.max(0, 15 * (Math.log10(ageHours / 24 + 1) / Math.log10(saturation + 1))));
+  }
+
+  // Verified locked (or burned) liquidity from Rugcheck
+  if (coin.liquidityLocked === true) {
+    score += 15;
+  } else if ((coin.lockPercentage || 0) > 50 || (coin.burnPercentage || 0) > 50) {
+    score += 10;
+  }
+
+  // Real trader participation
+  if (txns > 0) {
+    score += Math.min(10, Math.max(0, 5 * Math.log10(txns / 200)));
+  }
+
+  // Market cap sanity: prefer coins that aren't microscopic
+  if (marketCap >= 1000000) score += 5;
+  else if (marketCap >= 200000) score += 2;
+
+  // Penalize pools where market cap dwarfs liquidity (thin, easy to dump)
+  if (liquidity > 0 && marketCap / liquidity > 100) score -= 15;
+
+  return score;
+}
+
+// Feed order: (1) fresh + solid young coins, (2) the ORIGINAL Dexscreener boosted
+// coins (pay-to-appear boost list, ranked by boost amount), (3) everything else
+// (large/old established coins) behind them.
+function rankDextrendingCoins(coins) {
+  const established = [];
+  const boosted = [];
+  const rest = [];
+
+  const tierOf = (coin) =>
+    passesDextrendingQualityGate(coin) ? 'established'
+      : (coin.boostAmount || 0) > 0 ? 'boosted'
+      : 'speculative';
+
+  for (const coin of coins) {
+    const tier = tierOf(coin);
+    if (tier === 'established') established.push(coin);
+    else if (tier === 'boosted') boosted.push(coin);
+    else rest.push(coin);
+  }
+
+  established.sort((a, b) => scoreDextrendingCoin(b) - scoreDextrendingCoin(a));
+  boosted.sort((a, b) => (b.boostAmount || 0) - (a.boostAmount || 0)); // keep original boost ranking
+  rest.sort((a, b) => scoreDextrendingCoin(b) - scoreDextrendingCoin(a));
+
+  return [...established, ...boosted, ...rest].map((coin, index) => ({
+    ...coin,
+    priority: index + 1,
+    qualityTier: tierOf(coin),
+    qualityScore: Math.round(scoreDextrendingCoin(coin) * 10) / 10
+  }));
+}
+
+// Whale ranking rewards raw size (deep liquidity, big volume, big market cap)
+function scoreWhalefeedCoin(coin) {
+  const liquidity = coin.liquidity_usd || 0;
+  const volume = coin.volume_24h_usd || 0;
+  const marketCap = coin.market_cap_usd || 0;
+
+  let score = 0;
+
+  // Deeper pools rank higher, log-scaled ($250k -> 0, $250M -> ~60)
+  if (liquidity > 0) {
+    score += Math.min(60, Math.max(0, 20 * Math.log10(liquidity / 250000)));
+  }
+  // Sustained volume ($200k -> 0, $200M -> ~30)
+  if (volume > 0) {
+    score += Math.min(30, Math.max(0, 10 * Math.log10(volume / 200000)));
+  }
+  // Market cap heft ($1M -> 0, $1B -> ~30)
+  if (marketCap > 0) {
+    score += Math.min(30, Math.max(0, 10 * Math.log10(marketCap / 1000000)));
+  }
+  // Verified locked/burned liquidity is a bonus, not a requirement at this size
+  if (coin.liquidityLocked === true) score += 10;
+
+  return score;
+}
+
+// Only established whale coins qualify; everything else is dropped from this feed
+function rankWhalefeedCoins(coins) {
+  return coins
+    .filter(passesWhalefeedQualityGate)
+    .sort((a, b) => scoreWhalefeedCoin(b) - scoreWhalefeedCoin(a))
+    .map((coin, index) => ({
+      ...coin,
+      priority: index + 1,
+      qualityTier: 'whale',
+      qualityScore: Math.round(scoreWhalefeedCoin(coin) * 10) / 10,
+      source: 'dexscreener-whale'
+    }));
+}
+
+// A single Dexscreener boost list only returns ~25 Solana tokens, almost all brand
+// new micro-caps. Widen the candidate pool with the other free Dexscreener endpoints
+// so the ranker actually has established coins to choose from.
+const DEXSCREENER_HEADERS = { 'User-Agent': 'Moonfeed/1.0' };
+
+// Dexscreener has no "top pairs by volume" endpoint, so the search endpoint is the only
+// way to reach established coins. Each query returns up to 30 relevance-ranked pairs, so a
+// wider keyword set = a bigger candidate pool = more solid young coins clear the gate.
+const DEXSCREENER_SEARCH_QUERIES = [
+  'SOL', 'solana', 'pump', 'bonk', 'meme', 'cat', 'dog', 'ai', 'moon', 'trump',
+  'wif', 'jup', 'ray', 'fartcoin', 'pepe', 'elon', 'baby', 'inu', 'coin', 'token',
+  'king', 'god', 'gme', 'usa', 'doge', 'frog', 'bird', 'shib', 'cash', 'gold',
+  'fun', 'life', 'world', 'space', 'rocket', 'degen', 'chill', 'guy', 'mog', 'popcat',
+  'goat', 'bome', 'giga', 'ponke', 'michi', 'act', 'pnut', 'fwog', 'sigma', 'based',
+  'pump.fun', 'raydium', 'new', 'launch', 'usd', 'wojak', 'maga', 'banana', 'monkey', 'ape',
+  'lion', 'tiger', 'wolf', 'panda', 'bear', 'bull', 'snake', 'shark', 'whale', 'duck',
+  'hamster', 'fox', 'horse', 'unicorn', 'dragon', 'phoenix', 'ghost', 'zombie', 'alien', 'robot',
+  'ninja', 'samurai', 'pirate', 'wizard', 'angel', 'devil', 'boy', 'girl', 'man', 'lady'
+];
+
+// Search rate limit is ~60 req/min
+const DEXSCREENER_SEARCH_DELAY_MS = 1100;
+
+// Majors / stables / LSTs are not meme coin discovery content
+const DEXTRENDING_EXCLUDED_MINTS = new Set([
+  'So11111111111111111111111111111111111111112',  // WSOL
+  'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',  // USDC
+  'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',  // USDT
+  'mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So',   // mSOL
+  'J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn',  // jitoSOL
+  '7vfCXTUXx5WJV5JADk17DUJ4ksgau7utNKj4b963voxs'   // wETH
+]);
+
+async function fetchDexscreenerJson(url) {
   try {
-    // Check cache first
+    const response = await fetch(url, { headers: DEXSCREENER_HEADERS });
+    if (!response.ok) {
+      console.warn(`⚠️ Dexscreener ${response.status} for ${url}`);
+      return null;
+    }
+    return await response.json();
+  } catch (error) {
+    console.warn(`⚠️ Dexscreener request failed for ${url}: ${error.message}`);
+    return null;
+  }
+}
+
+// Collects Solana token addresses + their boost/profile metadata from the list endpoints
+async function fetchDexscreenerListedTokens() {
+  const lists = [
+    'https://api.dexscreener.com/token-boosts/top/v1',
+    'https://api.dexscreener.com/token-boosts/latest/v1',
+    'https://api.dexscreener.com/token-profiles/latest/v1'
+  ];
+
+  const results = await Promise.all(lists.map(fetchDexscreenerJson));
+  const metaByAddress = new Map();
+
+  results.forEach(list => {
+    if (!Array.isArray(list)) return;
+    list
+      .filter(item => item.chainId === 'solana' && item.tokenAddress)
+      .forEach(item => {
+        const existing = metaByAddress.get(item.tokenAddress) || {};
+        metaByAddress.set(item.tokenAddress, {
+          ...existing,
+          ...item,
+          // Keep the largest boost seen across lists
+          amount: Math.max(existing.amount || 0, item.amount || 0),
+          totalAmount: Math.max(existing.totalAmount || 0, item.totalAmount || 0)
+        });
+      });
+  });
+
+  return metaByAddress;
+}
+
+// Search endpoint returns full pair objects directly (rate limit ~60 req/min)
+async function fetchDexscreenerSearchPairs() {
+  const pairs = [];
+
+  for (const query of DEXSCREENER_SEARCH_QUERIES) {
+    const data = await fetchDexscreenerJson(
+      `https://api.dexscreener.com/latest/dex/search?q=${encodeURIComponent(query)}`
+    );
+    if (data?.pairs) {
+      pairs.push(...data.pairs.filter(p => p.chainId === 'solana'));
+    }
+    await new Promise(resolve => setTimeout(resolve, DEXSCREENER_SEARCH_DELAY_MS));
+  }
+
+  return pairs;
+}
+
+async function fetchDexscreenerPairsForAddresses(addresses) {
+  const pairs = [];
+
+  for (let i = 0; i < addresses.length; i += 30) {
+    const batch = addresses.slice(i, i + 30);
+    const data = await fetchDexscreenerJson(
+      `https://api.dexscreener.com/latest/dex/tokens/${batch.join(',')}`
+    );
+    if (data?.pairs) pairs.push(...data.pairs);
+
+    if (i + 30 < addresses.length) {
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+  }
+
+  return pairs;
+}
+
+function formatDexscreenerPair(pair, meta = {}) {
+  const baseToken = pair.baseToken || {};
+  const address = baseToken.address;
+
+  let iconUrl = null;
+  if (meta.icon) {
+    iconUrl = meta.icon.startsWith('http')
+      ? meta.icon
+      : `https://dd.dexscreener.com/ds-data/tokens/solana/${address}.png`;
+  }
+  iconUrl = iconUrl || pair.info?.imageUrl || null;
+
+  const change24h = parseFloat(pair.priceChange?.h24) || 0;
+
+  return {
+    mintAddress: address,
+    name: baseToken.name || 'Unknown',
+    symbol: baseToken.symbol || 'UNKNOWN',
+    image: iconUrl,
+    profileImage: iconUrl,
+    logo: iconUrl,
+    price_usd: parseFloat(pair.priceUsd) || 0,
+    market_cap_usd: parseFloat(pair.marketCap) || 0,
+    volume_24h_usd: parseFloat(pair.volume?.h24) || 0,
+    liquidity_usd: parseFloat(pair.liquidity?.usd) || 0,
+    price_change_24h: change24h,
+    change_24h: change24h,
+    change24h: change24h,
+    priceChange24h: change24h,
+    description: meta.description || '',
+
+    // Dexscreener specific fields
+    boostAmount: meta.amount || 0,
+    totalAmount: meta.totalAmount || 0,
+    dexscreenerUrl: meta.url || pair.url,
+    header: meta.header,
+    links: meta.links || [],
+
+    // Additional pair data
+    dexId: pair.dexId,
+    pairAddress: pair.pairAddress,
+    pairCreatedAt: pair.pairCreatedAt,
+    volume_6h_usd: parseFloat(pair.volume?.h6) || 0,
+    volume_1h_usd: parseFloat(pair.volume?.h1) || 0,
+    txns_24h: (pair.txns?.h24?.buys || 0) + (pair.txns?.h24?.sells || 0),
+    buys_24h: pair.txns?.h24?.buys || 0,
+    sells_24h: pair.txns?.h24?.sells || 0,
+
+    source: 'dexscreener-trending'
+  };
+}
+
+// Fetch trending coins from Dexscreener boosts, profiles and search endpoints
+// Building the pool takes ~60s (search is rate limited), so concurrent callers share one build.
+let dextrendingBuildPromise = null;
+
+function fetchDexscreenerTrendingBatch() {
+  const now = Date.now();
+  const isFresh = dextrendingCoins.length > 0 && (now - dextrendingLastFetch) < DEXTRENDING_CACHE_TTL;
+
+  if (isFresh) {
+    const cacheAge = Math.round((now - dextrendingLastFetch) / 1000 / 60);
+    console.log(`📦 Using cached Dexscreener trending data (${cacheAge} min old, ${dextrendingCoins.length} coins)`);
+    return Promise.resolve(dextrendingCoins);
+  }
+
+  if (!dextrendingBuildPromise) {
+    dextrendingBuildPromise = buildDexscreenerTrendingBatch()
+      .finally(() => { dextrendingBuildPromise = null; });
+  }
+
+  // Stale-while-revalidate: never make a user wait on the rebuild if we have something to show
+  if (dextrendingCoins.length > 0) {
+    dextrendingBuildPromise.catch(() => {});
+    console.log(`📦 Serving stale Dexscreener data (${dextrendingCoins.length} coins) while rebuilding`);
+    return Promise.resolve(dextrendingCoins);
+  }
+
+  return dextrendingBuildPromise;
+}
+
+async function buildDexscreenerTrendingBatch() {
+  try {
     const now = Date.now();
-    if (dextrendingCoins.length > 0 && (now - dextrendingLastFetch) < DEXTRENDING_CACHE_TTL) {
-      const cacheAge = Math.round((now - dextrendingLastFetch) / 1000 / 60);
-      console.log(`📦 Using cached Dexscreener trending data (${cacheAge} min old, ${dextrendingCoins.length} coins)`);
-      return dextrendingCoins;
-    }
-    
-    console.log('🔥 Fetching fresh Dexscreener trending coins...');
-    
-    // Step 1: Get boosted token addresses
-    const boostsResponse = await fetch('https://api.dexscreener.com/token-boosts/top/v1', {
-      headers: {
-        'User-Agent': 'Moonfeed/1.0'
-      }
-    });
-    
-    if (!boostsResponse.ok) {
-      throw new Error(`Dexscreener API error: ${boostsResponse.status} ${boostsResponse.statusText}`);
-    }
-    
-    const boostsData = await boostsResponse.json();
-    
-    // Filter for Solana tokens only
-    const solanaBoosts = boostsData.filter(item => item.chainId === 'solana');
-    console.log(`🌙 Got ${solanaBoosts.length} Solana boosted tokens (${boostsData.length} total)`);
-    
-    if (solanaBoosts.length === 0) {
-      console.log('⚠️ No Solana tokens found in boosts');
+
+    console.log('🔥 Building Dexscreener candidate pool (boosts + profiles + search)...');
+
+    const [metaByAddress, searchPairs] = await Promise.all([
+      fetchDexscreenerListedTokens(),
+      fetchDexscreenerSearchPairs()
+    ]);
+
+    const listedPairs = metaByAddress.size > 0
+      ? await fetchDexscreenerPairsForAddresses([...metaByAddress.keys()])
+      : [];
+
+    const allPairs = [...listedPairs, ...searchPairs];
+    console.log(`🌙 Candidate pool: ${metaByAddress.size} listed tokens, ${searchPairs.length} search pairs, ${allPairs.length} pairs total`);
+
+    if (allPairs.length === 0) {
+      console.log('⚠️ No Solana pairs found from Dexscreener');
       return [];
     }
-    
-    // Step 2: Fetch token details from Dexscreener in batches of 30
-    const tokenAddresses = solanaBoosts.map(b => b.tokenAddress);
-    const allTokenData = [];
-    
-    // Split into batches of 30 (Dexscreener API limit)
-    for (let i = 0; i < tokenAddresses.length; i += 30) {
-      const batch = tokenAddresses.slice(i, i + 30);
-      const addressString = batch.join(',');
-      
-      console.log(`📡 Fetching details for batch ${Math.floor(i / 30) + 1} (${batch.length} tokens)...`);
-      
-      const detailsResponse = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${addressString}`, {
-        headers: {
-          'User-Agent': 'Moonfeed/1.0'
-        }
-      });
-      
-      if (detailsResponse.ok) {
-        const detailsData = await detailsResponse.json();
-        if (detailsData.pairs) {
-          allTokenData.push(...detailsData.pairs);
-        }
-      }
-      
-      // Rate limit: wait 300ms between batches
-      if (i + 30 < tokenAddresses.length) {
-        await new Promise(resolve => setTimeout(resolve, 300));
+
+    // Keep the deepest pool per token
+    const bestPairByAddress = new Map();
+    for (const pair of allPairs) {
+      const address = pair.baseToken?.address;
+      if (!address || pair.chainId !== 'solana') continue;
+      if (DEXTRENDING_EXCLUDED_MINTS.has(address)) continue;
+
+      const existing = bestPairByAddress.get(address);
+      if (!existing || (parseFloat(pair.liquidity?.usd) || 0) > (parseFloat(existing.liquidity?.usd) || 0)) {
+        bestPairByAddress.set(address, pair);
       }
     }
-    
-    console.log(`✅ Got details for ${allTokenData.length} token pairs`);
-    
-    // Step 3: Merge boost data with token details
-    const formattedTokens = solanaBoosts.map((boost, index) => {
-      // Find matching pair data (prefer highest liquidity pair)
-      const matchingPairs = allTokenData.filter(p => 
-        p.baseToken?.address?.toLowerCase() === boost.tokenAddress?.toLowerCase()
-      );
-      
-      const pair = matchingPairs.sort((a, b) => 
-        (parseFloat(b.liquidity?.usd) || 0) - (parseFloat(a.liquidity?.usd) || 0)
-      )[0] || {};
-      
-      const baseToken = pair.baseToken || {};
-      
-      // Parse icon hash to full URL if needed
-      let iconUrl = null;
-      if (boost.icon) {
-        iconUrl = boost.icon.startsWith('http')
-          ? boost.icon
-          : `https://dd.dexscreener.com/ds-data/tokens/solana/${boost.tokenAddress}.png`;
-      }
-      // Fall back to DexScreener pair info image if boost icon is absent
-      iconUrl = iconUrl || pair.info?.imageUrl || null;
-      
-      return {
-        mintAddress: boost.tokenAddress,
-        name: baseToken.name || 'Unknown',
-        symbol: baseToken.symbol || 'UNKNOWN',
-        image: iconUrl || null,
-        profileImage: iconUrl || null,
-        logo: iconUrl || null,
-        price_usd: parseFloat(pair.priceUsd) || 0,
-        market_cap_usd: parseFloat(pair.marketCap) || 0,
-        volume_24h_usd: parseFloat(pair.volume?.h24) || 0,
-        liquidity_usd: parseFloat(pair.liquidity?.usd) || 0,
-        price_change_24h: parseFloat(pair.priceChange?.h24) || 0,
-        change_24h: parseFloat(pair.priceChange?.h24) || 0, // ✅ Frontend expects this field
-        change24h: parseFloat(pair.priceChange?.h24) || 0,  // ✅ Alternative field name
-        priceChange24h: parseFloat(pair.priceChange?.h24) || 0, // ✅ For consistency
-        description: boost.description || '',
-        
-        // Dexscreener specific fields
-        boostAmount: boost.amount || 0,
-        totalAmount: boost.totalAmount || 0,
-        dexscreenerUrl: boost.url,
-        header: boost.header,
-        links: boost.links || [],
-        
-        // Additional pair data
-        dexId: pair.dexId,
-        pairAddress: pair.pairAddress,
-        pairCreatedAt: pair.pairCreatedAt,
-        
-        // Position/priority (maintain boost order)
-        priority: index + 1,
-        source: 'dexscreener-trending'
-      };
-    });
-    
-    console.log(`✅ Formatted ${formattedTokens.length} Dexscreener trending tokens`);
-    
-    // Update cache
-    dextrendingCoins = formattedTokens;
+
+    const formattedTokens = [...bestPairByAddress.entries()]
+      .map(([address, pair]) => formatDexscreenerPair(pair, metaByAddress.get(address) || {}));
+
+    console.log(`✅ Formatted ${formattedTokens.length} unique Dexscreener tokens`);
+
+    // DEXtrending: fresh but solid coins (<=30d) lead, speculative appended behind
+    const rankedTokens = rankDextrendingCoins(formattedTokens);
+    const establishedCount = rankedTokens.filter(c => c.qualityTier === 'established').length;
+    console.log(`🏅 DEXtrending ranked: ${establishedCount} established / ${rankedTokens.length - establishedCount} speculative`);
+
+    // Whalefeed: large, established coins only (no age cap)
+    const rankedWhales = rankWhalefeedCoins(formattedTokens);
+    console.log(`🐋 Whalefeed ranked: ${rankedWhales.length} established whale coins`);
+
+    // Update caches
+    dextrendingCoins = rankedTokens;
+    whalefeedCoins = rankedWhales;
     dextrendingLastFetch = now;
     
-    // ✅ ADD DEXtrending coins to Native RPC Price tracking
+    // ✅ ADD DEXtrending + whale coins to Native RPC Price tracking
     if (solanaNativePriceService && solanaNativePriceService.isRunning) {
-      const allCoins = [...currentCoins, ...newCoins, ...formattedTokens];
+      const allCoins = [...currentCoins, ...newCoins, ...rankedTokens, ...rankedWhales];
       solanaNativePriceService.updateCoinList(allCoins);
-      console.log(`🔗 Updated Native RPC service with ${allCoins.length} total coins (${currentCoins.length} trending + ${newCoins.length} new + ${formattedTokens.length} dextrending)`);
+      console.log(`🔗 Updated Native RPC service with ${allCoins.length} total coins (${currentCoins.length} trending + ${newCoins.length} new + ${rankedTokens.length} dextrending + ${rankedWhales.length} whale)`);
     }
     
-    return formattedTokens;
+    return rankedTokens;
     
   } catch (error) {
     console.error('❌ Error fetching Dexscreener trending:', error.message);
@@ -1740,6 +2055,7 @@ app.get('/api/top-traders/:coinAddress', async (req, res) => {
 
     const response = await fetch(apiUrl, {
       method: 'GET',
+      signal: AbortSignal.timeout(8000),
       headers: {
         'x-api-key': SOLANA_TRACKER_API_KEY,
         'Content-Type': 'application/json'
@@ -1769,8 +2085,10 @@ app.get('/api/top-traders/:coinAddress', async (req, res) => {
         throw new Error('Trader data service timed out. Please try again in a moment.');
       } else if (response.status === 429) {
         throw new Error('Rate limit reached. Please try again shortly.');
-      } else if (response.status === 401 || response.status === 403) {
+      } else if (response.status === 401) {
         throw new Error('Trader data service authentication error.');
+      } else if (response.status === 403) {
+        throw new Error('Top trader data is temporarily unavailable because the data provider has no remaining credits.');
       } else if (response.status >= 500) {
         throw new Error('Trader data service is temporarily unavailable.');
       }
@@ -1814,9 +2132,13 @@ app.get('/api/top-traders/:coinAddress', async (req, res) => {
   } catch (error) {
     console.error('❌ Error fetching top traders:', error.message);
     console.error('❌ Stack:', error.stack);
-    res.status(500).json({
+    const isTimeout = error.name === 'TimeoutError' || error.name === 'AbortError';
+    const isCreditsError = error.message.includes('no remaining credits');
+    res.status(isTimeout ? 504 : 500).json({
       success: false,
-      error: 'Failed to fetch top traders',
+      error: isTimeout
+        ? 'Top trader data request timed out. Please try again shortly.'
+        : isCreditsError ? error.message : 'Failed to fetch top traders',
       details: error.message
     });
   }
@@ -1956,13 +2278,13 @@ app.get('/api/coins/dextrending', async (req, res) => {
     // Apply live prices from Jupiter before serving
     const coinsWithPrices = applyLivePrices(dextrendingCoins);
     
-    const limitedCoins = coinsWithPrices.slice(0, limit);
-    
-    // Apply cached rugcheck data to coins
-    const rugcheckEnriched = rugcheckBatchProcessor.enrichCoinsWithCache(limitedCoins);
+    // Apply cached rugcheck data BEFORE ranking so locked liquidity influences ordering
+    const rugcheckEnriched = rugcheckBatchProcessor.enrichCoinsWithCache(coinsWithPrices);
     if (rugcheckEnriched > 0) {
-      console.log(`🔒 Applied cached rugcheck data to ${rugcheckEnriched}/${limitedCoins.length} dextrending coins`);
+      console.log(`🔒 Applied cached rugcheck data to ${rugcheckEnriched}/${coinsWithPrices.length} dextrending coins`);
     }
+    
+    const limitedCoins = rankDextrendingCoins(coinsWithPrices).slice(0, limit);
     
     // 🚫 NO AUTO-ENRICHMENT for DEXtrending - only enrich on-scroll/on-expand
     // DEXtrending already has good metadata from Dexscreener, enrichment should be user-triggered
@@ -1983,6 +2305,58 @@ app.get('/api/coins/dextrending', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to fetch Dexscreener trending coins',
+      details: error.message
+    });
+  }
+});
+
+// WHALEFEED endpoint - Returns large, established coins (deep liquidity, no age cap)
+app.get('/api/coins/whalefeed', async (req, res) => {
+  try {
+    console.log('🐋 /api/coins/whalefeed endpoint called');
+
+    const limit = req.query.limit ? Math.min(parseInt(req.query.limit), 100) : 30;
+
+    // Ensure the shared Dexscreener pool is built (also populates whalefeedCoins)
+    await fetchDexscreenerTrendingBatch();
+
+    if (whalefeedCoins.length === 0) {
+      return res.json({
+        success: true,
+        coins: [],
+        count: 0,
+        total: 0,
+        message: 'No whale coins available',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Apply live prices from Jupiter before serving
+    const coinsWithPrices = applyLivePrices(whalefeedCoins);
+
+    // Apply cached rugcheck data, then re-rank so lock status can influence order
+    const rugcheckEnriched = rugcheckBatchProcessor.enrichCoinsWithCache(coinsWithPrices);
+    if (rugcheckEnriched > 0) {
+      console.log(`🔒 Applied cached rugcheck data to ${rugcheckEnriched}/${coinsWithPrices.length} whale coins`);
+    }
+
+    const limitedCoins = rankWhalefeedCoins(coinsWithPrices).slice(0, limit);
+
+    console.log(`✅ Returning ${limitedCoins.length}/${whalefeedCoins.length} whale coins (limit: ${limit})`);
+
+    res.json({
+      success: true,
+      coins: limitedCoins,
+      count: limitedCoins.length,
+      total: whalefeedCoins.length,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('❌ Error in /api/coins/whalefeed endpoint:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch whale coins',
       details: error.message
     });
   }
@@ -2566,10 +2940,27 @@ function startDextrendingAutoRefresher() {
       
       // Queue coins for background rugcheck processing
       rugcheckBatchProcessor.queueFeedCoins(freshDextrendingBatch, 'dextrending');
+      if (whalefeedCoins.length > 0) {
+        rugcheckBatchProcessor.queueFeedCoins(whalefeedCoins, 'whalefeed');
+      }
       
       console.log('✅ DEXTRENDING feed cache updated (rugcheck queued for background processing)');
     }
   );
+
+  // Warm the cache immediately — a cold pool build takes ~60s and would otherwise
+  // block the first user request.
+  fetchDexscreenerTrendingBatch()
+    .then(coins => {
+      if (coins.length > 0) {
+        rugcheckBatchProcessor.queueFeedCoins(coins, 'dextrending');
+      }
+      if (whalefeedCoins.length > 0) {
+        rugcheckBatchProcessor.queueFeedCoins(whalefeedCoins, 'whalefeed');
+      }
+      console.log(`🔥 DEXTRENDING cache warmed with ${coins.length} coins (${whalefeedCoins.length} whale)`);
+    })
+    .catch(err => console.error('❌ DEXTRENDING cache warm-up failed:', err.message));
 }
 
 // ═══════════════════════════════════════════════════════════════

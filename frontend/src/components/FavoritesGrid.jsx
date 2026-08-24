@@ -4,15 +4,20 @@ import NotificationsFeed from './NotificationsFeed';
 import { useWallet } from '../contexts/WalletContext';
 import { useDemoMode } from '../contexts/DemoModeContext';
 import { useAlerts } from '../contexts/AlertsContext';
+import { useTrackedWallets } from '../contexts/TrackedWalletsContext';
+import { useCopyTrade } from '../contexts/CopyTradeContext';
 import { UnifiedWalletButton } from '@jup-ag/wallet-adapter';
+import WalletConnectOnboarding from './WalletConnectOnboarding';
 import { getTransactions } from '../utils/transactionStorage';
 import './FavoritesGrid.css';
 
-function FavoritesGrid({ favorites = [], onCoinClick, onFavoritesChange, onSetupOrder }) {
+function FavoritesGrid({ favorites = [], onCoinClick, onFavoritesChange, onSetupOrder, onWalletClick }) {
   const [activeTab, setActiveTab] = useState('all');
   const { connected: walletConnected, walletAddress: walletAddr } = useWallet();
   const { isDemoMode, demoWalletAddress } = useDemoMode();
   const { notifications: alertNotifs, markAllRead } = useAlerts();
+  const { trackedWallets, untrackWallet, toggleCopyTrade } = useTrackedWallets();
+  const { queue: copyTradeQueue, copyTrade } = useCopyTrade();
   const connected = isDemoMode || walletConnected;
   const walletAddress = isDemoMode ? demoWalletAddress : walletAddr;
   const [transactions, setTransactions] = useState([]);
@@ -248,7 +253,9 @@ function FavoritesGrid({ favorites = [], onCoinClick, onFavoritesChange, onSetup
         <div className="empty-state">
           <p>Connect wallet to see notifications</p>
           <div className="wallet-button-container">
-            <UnifiedWalletButton />
+            <WalletConnectOnboarding>
+              <UnifiedWalletButton />
+            </WalletConnectOnboarding>
           </div>
         </div>
       </div>
@@ -266,6 +273,7 @@ function FavoritesGrid({ favorites = [], onCoinClick, onFavoritesChange, onSetup
         customTabs={[
           { id: 'all', label: 'All', icon: 'sparkles' },
           { id: 'feed', label: 'Saved', icon: 'star' },
+          { id: 'copytrades', label: 'Tracked', icon: 'users' },
           { id: 'history', label: 'History', icon: 'clock' },
           { id: 'notifications', label: 'Alerts', icon: 'zap' },
         ]}
@@ -380,6 +388,95 @@ function FavoritesGrid({ favorites = [], onCoinClick, onFavoritesChange, onSetup
           </div>
         </div>
         )
+      ) : activeTab === 'copytrades' ? (
+        <div className="fav-grid-scroll">
+          {trackedWallets.length === 0 ? (
+            <div className="fav-empty-inline">
+              <div className="empty-icon">👥</div>
+              <h2>No Copy Trades Yet</h2>
+              <p>Tap any wallet in the feed and enable "Copy Trades" to track it here</p>
+            </div>
+          ) : (
+            <>
+            {copyTradeQueue.length > 0 && (
+              <div className="tracked-trade-section">
+                <div className="tracked-trade-heading">Recent Trades</div>
+                <div className="tracked-trade-list">
+                  {copyTradeQueue.map((trade) => (
+                    <div key={trade.id} className={`tracked-trade-row tracked-trade-row--${trade.type}`}>
+                      <div className="tracked-trade-main">
+                        <div className="tracked-trade-topline">
+                          <span className="tracked-trade-wallet">{trade.walletLabel}</span>
+                          <span className={`tracked-trade-badge tracked-trade-badge--${trade.type}`}>
+                            {trade.type === 'sell' ? 'SELL' : 'BUY'}
+                          </span>
+                        </div>
+                        <div className="tracked-trade-detail">
+                          <strong>{trade.tokenSymbol || 'Unknown token'}</strong>
+                          <span>
+                            {trade.type === 'sell' ? 'sold for' : 'bought for'}{' '}
+                            {Number(trade.solAmount || 0).toFixed(4)} SOL
+                          </span>
+                        </div>
+                        <span className="tracked-trade-time">{formatTimeAgo((trade.timestamp || 0) * 1000)}</span>
+                      </div>
+                      <button
+                        className="tracked-trade-copy-btn"
+                        onClick={() => copyTrade(trade)}
+                      >
+                        Copy Trade
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="copytrade-list">
+              {trackedWallets.map((w) => {
+                const copyOn = w.copyTradeEnabled !== false;
+                return (
+                  <div
+                    key={w.address}
+                    className="copytrade-row"
+                    onClick={() => onWalletClick?.(w.address)}
+                  >
+                    <div className="copytrade-avatar">
+                      {w.address.slice(0, 2).toUpperCase()}
+                    </div>
+                    <div className="copytrade-info">
+                      <span className="copytrade-label">{w.label}</span>
+                      <span className="copytrade-addr">
+                        {w.address.slice(0, 5)}…{w.address.slice(-5)}
+                      </span>
+                    </div>
+                    <div className="copytrade-actions" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        className={`copytrade-toggle ${copyOn ? 'copytrade-toggle--on' : 'copytrade-toggle--off'}`}
+                        onClick={() => toggleCopyTrade(w.address)}
+                        title={copyOn ? 'Copy trading on — tap to disable' : 'Copy trading off — tap to enable'}
+                        aria-pressed={copyOn}
+                      >
+                        <span className="copytrade-toggle-track">
+                          <span className="copytrade-toggle-thumb" />
+                        </span>
+                      </button>
+                      <button
+                        className="copytrade-remove"
+                        onClick={() => untrackWallet(w.address)}
+                        title="Stop tracking this wallet"
+                        aria-label="Stop tracking"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            </>
+          )}
+        </div>
       ) : activeTab === 'history' ? (
         <div className="fav-grid-scroll">
           {transactions.length === 0 ? (

@@ -8,6 +8,7 @@ import React, {
 } from 'react';
 import { useTrackedWallets } from './TrackedWalletsContext';
 import { getFullApiUrl } from '../config/api';
+import { initTradeNotifications, notifyWalletTrade } from '../utils/tradeNotifications';
 
 const CopyTradeContext = createContext(null);
 
@@ -46,6 +47,13 @@ function saveLastSeen(map) {
 export const CopyTradeProvider = ({ children, onCopyTrade }) => {
   const { trackedWallets } = useTrackedWallets();
   const [queue, setQueue] = useState([]); // pending toast notifications
+
+  // Request OS notification permission once we have wallets to watch.
+  useEffect(() => {
+    if (trackedWallets.some(w => w.copyTradeEnabled !== false)) {
+      initTradeNotifications();
+    }
+  }, [trackedWallets]);
 
   // Keep lastSeen in a ref so poll() always reads the freshest value
   const lastSeenRef = useRef(loadLastSeen());
@@ -111,6 +119,9 @@ export const CopyTradeProvider = ({ children, onCopyTrade }) => {
           });
 
         if (newNotifs.length === 0) return prev;
+
+        // Fire a native OS notification for each new trade.
+        newNotifs.forEach(n => notifyWalletTrade(n));
 
         // Haptic feedback on mobile
         try {

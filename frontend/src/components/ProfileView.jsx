@@ -163,7 +163,8 @@ const ProfileView = ({ onTradeClick }) => {
         if (pair) {
           const banner = pair.info?.header || pair.info?.imageUrl || null;
           const pairAddress = pair.pairAddress || null;
-          if (banner || pairAddress) updates.set(mint, { banner, pairAddress });
+          const priceNative = pair.priceNative ? parseFloat(pair.priceNative) : null;
+          if (banner || pairAddress || priceNative) updates.set(mint, { banner, pairAddress, priceNative });
         }
       } catch (_) { /* silent */ }
     }));
@@ -841,7 +842,23 @@ const ProfileView = ({ onTradeClick }) => {
               </div>
             ) : (
               <div className="pv-ig-hist-grid">
-                {transactions.map((tx) => (
+                {transactions.map((tx) => {
+                  // P/L % since the trade: compare trade price to current SOL price.
+                  const priceNow = coinBanners.get(tx.tokenMint)?.priceNative;
+                  const isSell = tx.type === 'sell';
+                  let tradePrice = Number(tx.pricePerToken) || 0;
+                  if (!tradePrice) {
+                    tradePrice = isSell
+                      ? (Number(tx.inputAmount) > 0 ? Number(tx.outputAmount) / Number(tx.inputAmount) : 0)
+                      : (Number(tx.outputAmount) > 0 ? Number(tx.inputAmount) / Number(tx.outputAmount) : 0);
+                  }
+                  let pnlPct = null;
+                  if (priceNow > 0 && tradePrice > 0) {
+                    pnlPct = isSell
+                      ? ((tradePrice - priceNow) / priceNow) * 100
+                      : ((priceNow - tradePrice) / tradePrice) * 100;
+                  }
+                  return (
                   <div key={tx.signature} className={`pv-ig-hist-card pv-ig-hist-card--${tx.type || 'buy'}`} onClick={() => handleHistoryCardClick(tx)} style={{ cursor: 'pointer' }}>
                     {(coinBanners.get(tx.tokenMint)?.banner || tx.tokenImage) && (
                       <img
@@ -852,6 +869,11 @@ const ProfileView = ({ onTradeClick }) => {
                       />
                     )}
                     <div className="pv-ig-hist-overlay" />
+                    {pnlPct !== null && (
+                      <span className={`pv-ig-hist-pnl ${pnlPct >= 0 ? 'pv-ig-hist-pnl--up' : 'pv-ig-hist-pnl--down'}`}>
+                        {pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(1)}%
+                      </span>
+                    )}
                     <div className="pv-ig-hist-body">
                       <div className="pv-ig-hist-top">
                         {tx.tokenImage ? (
@@ -874,7 +896,8 @@ const ProfileView = ({ onTradeClick }) => {
                       </div>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

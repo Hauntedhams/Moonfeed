@@ -37,15 +37,15 @@ function BottomNavBar({ activeTab, setActiveTab, onSearchClick, onOrdersClick, n
         </span>
         <span className="nav-label">Trade</span>
       </button>
-      <button className={`nav-btn${activeTab === 'favorites' ? ' active' : ''}`} onClick={() => setActiveTab('favorites')}>
+      <button className={`nav-btn${activeTab === 'tracked' ? ' active' : ''}`} onClick={() => setActiveTab('tracked')}>
         <span className="nav-icon">
-          {/* Star/Favorite icon */}
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 3L12.4721 7.94454L17.9445 8.52786L13.9722 12.0555L15.2361 17.4721L10 14.5L4.76393 17.4721L6.02778 12.0555L2.05548 8.52786L7.52786 7.94454L10 3Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>
+          {/* Radar/Track icon */}
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="10" cy="10" r="7" stroke="currentColor" strokeWidth="1.5"/><circle cx="10" cy="10" r="3" stroke="currentColor" strokeWidth="1.5"/><path d="M10 1.5V4M10 16V18.5M1.5 10H4M16 10H18.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
           {badgeCount > 0 && (
             <span className="nav-badge">{badgeCount > 99 ? '99+' : badgeCount}</span>
           )}
         </span>
-        <span className="nav-label">Favorites</span>
+        <span className="nav-label">Tracked</span>
       </button>
       <button className={`nav-btn${activeTab === 'profile' ? ' active' : ''}`} onClick={() => setActiveTab('profile')}>
         <span className="nav-icon">

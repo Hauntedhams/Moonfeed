@@ -28,6 +28,45 @@ const dexcheckService = new DexCheckWalletService();
 const walletCache = new Map();
 const WALLET_CACHE_TTL = 3 * 60 * 1000; // 3 minutes
 
+const buildHeliusAnalyticsResponse = (owner, heliusData) => {
+  const trading = heliusData.trading || {};
+  const solActivity = heliusData.solActivity || {};
+  const tokens = heliusData.tokens || [];
+  const closedPositions = trading.closedTrades ?? 0;
+  const totalTrades = trading.totalTrades ?? 0;
+
+  return {
+    success: true,
+    wallet: owner,
+    timestamp: new Date().toISOString(),
+    isHeliusData: true,
+    hasData: heliusData.hasData !== false,
+    winRate: 0,
+    totalProfit: 0,
+    roi: 0,
+    avgHoldTimeSecs: null,
+    trading: {
+      totalTrades,
+      uniqueTokens: trading.uniqueTokens ?? tokens.length,
+      activePositions: trading.activeTrades ?? 0,
+      closedPositions,
+      winningPositions: 0,
+      losingPositions: 0
+    },
+    pnl: {
+      realized: 0,
+      unrealized: 0,
+      total: 0,
+      invested: Number(solActivity.totalSpent) || 0,
+      proceeds: Number(solActivity.totalReceived) || 0
+    },
+    recentActivity: heliusData.recentActivity || [],
+    dataSources: { solanaTracker: false, helius: true },
+    partial: true,
+    partialReason: 'Solana Tracker analytics unavailable; PnL and win rate require a price-valued history.'
+  };
+};
+
 // Helper function to call Solana Tracker API
 const callSolanaTrackerAPI = async (endpoint, cacheKey) => {
   const SOLANA_TRACKER_API_KEY = process.env.SOLANA_TRACKER_API_KEY;
@@ -98,9 +137,6 @@ router.get('/:owner', async (req, res) => {
     }
 
     const SOLANA_TRACKER_API_KEY = process.env.SOLANA_TRACKER_API_KEY;
-    if (!SOLANA_TRACKER_API_KEY) {
-      return res.status(500).json({ success: false, error: 'SOLANA_TRACKER_API_KEY not configured' });
-    }
 
     console.log(`🔍 Fetching wallet analytics for: ${owner.slice(0, 4)}...${owner.slice(-4)}`);
 
@@ -111,25 +147,34 @@ router.get('/:owner', async (req, res) => {
       return res.json(cached.data);
     }
 
-    // Fetch Solana Tracker PnL V2 and DexCheck in parallel (DexCheck with 6s timeout)
-    const stPnlPromise = fetch(`https://data.solanatracker.io/v2/pnl/wallets/${owner}`, {
-      headers: { 'x-api-key': SOLANA_TRACKER_API_KEY, 'Content-Type': 'application/json' }
-    }).then(r => r.ok ? r.json() : null).catch(() => null);
-
-    const dexcheckWithTimeout = Promise.race([
-      dexcheckService.getComprehensiveAnalytics(owner),
-      new Promise(resolve => setTimeout(() => resolve({ success: false, error: 'timeout' }), 6000))
-    ]);
-
-    const [stData, dexcheckData] = await Promise.all([stPnlPromise, dexcheckWithTimeout]);
+    // Try the fast precomputed source first.
+    const stPnlPromise = SOLANA_TRACKER_API_KEY
+      ? fetch(`https://data.solanatracker.io/v2/pnl/wallets/${owner}`, {
+          headers: { 'x-api-key': SOLANA_TRACKER_API_KEY, 'Content-Type': 'application/json' }
+        }).then(r => r.ok ? r.json() : null).catch(() => null)
+      : Promise.resolve(null);
+    const stData = await stPnlPromise;
 
     if (!stData) {
-      return res.status(502).json({ success: false, error: 'Failed to fetch wallet data from Solana Tracker' });
+      console.warn(`⚠️ Solana Tracker unavailable; using Helius fallback for wallet ${owner.slice(0, 4)}...`);
+      const heliusData = await heliusService.getWalletAnalytics(owner);
+      if (!heliusData.success) {
+        return res.status(502).json({ success: false, error: 'Failed to fetch wallet analytics', details: heliusData.error });
+      }
+
+      const fallbackData = buildHeliusAnalyticsResponse(owner, heliusData);
+      walletCache.set(cacheKey, { data: fallbackData, timestamp: Date.now() });
+      return res.json(fallbackData);
     }
 
     const summary = stData.summary || {};
     const analysis = stData.analysis || {};
     const stats = stData.stats || {};
+
+    const dexcheckData = await Promise.race([
+      dexcheckService.getComprehensiveAnalytics(owner),
+      new Promise(resolve => setTimeout(() => resolve({ success: false, error: 'timeout' }), 6000))
+    ]);
 
     const combinedData = {
       success: true,
@@ -273,14 +318,37 @@ router.get('/:owner/trades', async (req, res) => {
 
     console.log(`🔍 Fetching wallet trades for: ${owner.slice(0, 4)}...${owner.slice(-4)}`);
 
-    const result = await callSolanaTrackerAPI(`/wallet/${owner}/trades`, `wallet-trades-${owner}`);
-    
-    console.log(`✅ Successfully fetched wallet trades`);
+    try {
+      const result = await callSolanaTrackerAPI(`/wallet/${owner}/trades`, `wallet-trades-${owner}`);
+      console.log(`✅ Successfully fetched wallet trades from Solana Tracker`);
+      return res.json({ success: true, ...result });
+    } catch (trackerError) {
+      console.warn(`⚠️ Solana Tracker trades unavailable; using Helius fallback: ${trackerError.message}`);
+      const heliusResult = await heliusService.getSwapTransactions(owner, 50);
+      if (!heliusResult.success) {
+        return res.status(502).json({ success: false, error: 'Failed to fetch wallet trades', details: heliusResult.error });
+      }
 
-    res.json({
-      success: true,
-      ...result
-    });
+      const trades = (heliusResult.transactions || []).map((swap) => ({
+        tx: swap.signature || swap.id,
+        type: swap.type,
+        mint: swap.tokenMint,
+        symbol: swap.tokenSymbol || 'Unknown',
+        name: swap.tokenName || swap.tokenSymbol || 'Unknown',
+        image: swap.tokenImage || null,
+        solAmount: swap.type === 'buy' ? swap.inputAmount : swap.outputAmount,
+        time: swap.timestamp
+      }));
+
+      return res.json({
+        success: true,
+        data: { trades },
+        trades,
+        count: trades.length,
+        cached: heliusResult.cached || false,
+        fallback: 'helius'
+      });
+    }
 
   } catch (error) {
     console.error('❌ Error fetching wallet trades:', error.message);

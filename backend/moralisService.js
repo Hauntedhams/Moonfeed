@@ -69,7 +69,7 @@ function transformToken(moralisToken) {
     
     // Pump.fun specific
     isPumpFun: true,
-    status: 'graduating',
+    status: bondingProgress < 100 ? 'graduating' : 'graduated',
     bondingCurveProgress: bondingProgress,
     bondingProgress: bondingProgress, // Alias for compatibility
     
@@ -133,9 +133,10 @@ async function fetchBondingTokens(limit = 100, minProgress = 70) {
     console.log(`✅ Fetched ${data.result.length} bonding tokens from Moralis`);
     
     // Filter tokens above minimum progress threshold
-    const filtered = data.result.filter(token => 
-      (parseFloat(token.bondingCurveProgress) || 0) >= minProgress
-    );
+    const filtered = data.result.filter(token => {
+      const progress = parseFloat(token.bondingCurveProgress);
+      return Number.isFinite(progress) && progress >= minProgress && progress < 100;
+    });
     
     console.log(`📊 ${filtered.length} tokens have >=${minProgress}% bonding progress`);
     

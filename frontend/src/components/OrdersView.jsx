@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useWallet as useJupiterWallet } from '@jup-ag/wallet-adapter';
 import { UnifiedWalletButton } from '@jup-ag/wallet-adapter';
+import WalletConnectOnboarding from './WalletConnectOnboarding';
 import { getFullApiUrl } from '../config/api';
 import { getTransactions, deleteTransaction, storeTransaction, clearTransactions } from '../utils/transactionStorage';
 import { useDemoMode } from '../contexts/DemoModeContext';
@@ -597,7 +598,9 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
               <h3>Connect Wallet</h3>
               <p>Connect your Solana wallet to view limit orders and your recent meme coin purchases.</p>
               <div className="wallet-button-container">
-                <UnifiedWalletButton />
+                <WalletConnectOnboarding>
+                  <UnifiedWalletButton />
+                </WalletConnectOnboarding>
               </div>
             </div>
           </div>
@@ -920,6 +923,18 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
                           <span className="order-card-executing-sub">Will appear in History once sold</span>
                         </div>
                       )}
+
+                      {/* Cashout — cancels the limit order and returns funds to the wallet */}
+                      <button
+                        className="order-card-cashout-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleCancelOrder(orderId);
+                        }}
+                        disabled={isCancelling}
+                      >
+                        {isCancelling ? 'Cashing out…' : 'Cashout'}
+                      </button>
                     </div>
                   );
                 }

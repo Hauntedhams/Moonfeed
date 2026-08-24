@@ -726,3 +726,232 @@
 .feed-row-order-btn:active {
   transform: translateY(0);
 }
+
+/* ── Copy Trades tab: tracked wallet list ───────────────────── */
+.tracked-trade-section {
+  margin-bottom: 18px;
+}
+
+.tracked-trade-heading {
+  margin: 0 0 10px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.tracked-trade-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tracked-trade-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.tracked-trade-row--buy {
+  border-color: rgba(34, 197, 94, 0.2);
+}
+
+.tracked-trade-row--sell {
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+.tracked-trade-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.tracked-trade-topline,
+.tracked-trade-detail {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.tracked-trade-wallet,
+.tracked-trade-detail strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tracked-trade-wallet {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.tracked-trade-badge {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.tracked-trade-badge--buy { color: #22c55e; }
+.tracked-trade-badge--sell { color: #ef4444; }
+
+.tracked-trade-detail {
+  margin-top: 3px;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 13px;
+}
+
+.tracked-trade-detail strong {
+  color: #fff;
+  max-width: 45%;
+}
+
+.tracked-trade-time {
+  display: block;
+  margin-top: 4px;
+  color: rgba(255, 255, 255, 0.38);
+  font-size: 11px;
+}
+
+.tracked-trade-copy-btn {
+  flex-shrink: 0;
+  border: 1px solid rgba(124, 58, 237, 0.55);
+  border-radius: 8px;
+  padding: 8px 11px;
+  background: rgba(124, 58, 237, 0.16);
+  color: #d8c8ff;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tracked-trade-copy-btn:hover {
+  background: rgba(124, 58, 237, 0.3);
+}
+
+.copytrade-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.copytrade-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 14px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.copytrade-row:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.copytrade-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.copytrade-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.copytrade-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.copytrade-addr {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  font-variant-numeric: tabular-nums;
+}
+
+.copytrade-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.copytrade-toggle {
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+
+.copytrade-toggle-track {
+  display: block;
+  width: 38px;
+  height: 22px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.18);
+  position: relative;
+  transition: background 0.18s ease;
+}
+
+.copytrade-toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.18s ease;
+}
+
+.copytrade-toggle--on .copytrade-toggle-track {
+  background: #22c55e;
+}
+
+.copytrade-toggle--on .copytrade-toggle-thumb {
+  transform: translateX(16px);
+}
+
+.copytrade-remove {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.copytrade-remove:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+}

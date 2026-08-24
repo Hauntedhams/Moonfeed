@@ -1,7 +1,7 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react'
 import './App.css'
 import ModernTokenScroller from './components/ModernTokenScroller'
-import FavoritesGrid from './components/FavoritesGrid'
+import TrackedView from './components/TrackedView'
 import BottomNavBar from './components/BottomNavBar'
 import TopTabs from './components/TopTabs'
 import ErrorBoundary from './components/ErrorBoundary'
@@ -101,7 +101,7 @@ function App() {
 
   // Handle coin click from favorites grid
   const handleCoinClick = (coin) => {
-    setPreviousTab('favorites');
+    setPreviousTab('tracked');
     setSelectedCoin(coin);
     setCurrentViewedCoin(coin);
     setActiveTab('coin-detail');
@@ -240,6 +240,11 @@ function App() {
   // Handle Jupiter swap success
   const handleSwapSuccess = ({ txid, swapResult, quoteResponseMeta, coin, walletAddress }) => {
     console.log('🎉 Swap successful for', coin.symbol, 'TX:', txid);
+
+    // Lets a card that queued a follow-up action (e.g. the sell-at buy-in) react.
+    window.dispatchEvent(new CustomEvent('moonfeed:swap-success', {
+      detail: { txid, swapResult, coin, walletAddress }
+    }));
     
     // Store the transaction in localStorage for transaction history
     if (txid && coin) {
@@ -327,7 +332,7 @@ function App() {
           <CopyTradeToast />
           <div style={{ height: '100dvh', position: 'relative', overflow: 'hidden' }}>
         {/* Top tabs - only show on home screen */}
-        {activeTab !== 'favorites' && activeTab !== 'coin-detail' && activeTab !== 'profile' && activeTab !== 'orders' && (
+        {activeTab !== 'tracked' && activeTab !== 'coin-detail' && activeTab !== 'profile' && activeTab !== 'orders' && (
           <TopTabs 
             activeFilter={filters.type || 'graduating'} 
             onFilterChange={handleTopTabFilterChange}
@@ -338,13 +343,13 @@ function App() {
         )}
       
       <div style={{ paddingTop: '0' }}>
-        {activeTab === 'favorites' ? (
-        <FavoritesGrid
+        {activeTab === 'tracked' ? (
+        <TrackedView
           favorites={favorites}
-          onCoinClick={handleCoinClick}
           onFavoritesChange={handleFavoritesChange}
-          onSetupOrder={handleSetupOrder}
+          onTradeClick={handleTradeClick}
           onWalletClick={handleWalletClick}
+          onCurrentCoinChange={handleCurrentCoinChange}
         />
       ) : activeTab === 'profile' ? (
         <Suspense fallback={<div style={{ padding: '20px', textAlign: 'center' }}>Loading...</div>}>
@@ -446,7 +451,7 @@ function App() {
       </div>
       
       <BottomNavBar 
-        activeTab={activeTab === 'coin-detail' ? 'favorites' : activeTab} 
+        activeTab={activeTab === 'coin-detail' ? 'tracked' : activeTab} 
         setActiveTab={(tab) => {
           if (tab === 'trade') {
             handleGlobalTradeClick();

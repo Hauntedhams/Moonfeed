@@ -162,6 +162,9 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
       }
       
       console.log('🪐 Loading Jupiter Plugin for', coin.symbol);
+      const initialAmountLamports = Number(initialSolAmount) > 0
+        ? Math.round(Number(initialSolAmount) * 1_000_000_000)
+        : undefined;
       
       // Close existing instance
       if (window.Jupiter._instance) {
@@ -189,6 +192,7 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
         formProps: {
           initialInputMint: "So11111111111111111111111111111111111111112", // SOL
           initialOutputMint: coin.mintAddress,
+          ...(initialAmountLamports ? { initialAmount: initialAmountLamports } : {}),
           // Referral fees: collected via Jupiter Referral Program
           // Fee accounts must be created at https://referral.jup.ag/dashboard first
           referralAccount: "Gy6SuRWnn4garDXHwXc9usuF7rKrbQS7TxKH9rJjGfxt",

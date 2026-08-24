@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { getFullApiUrl } from '../config/api';
 import { useTrackedWallets } from '../contexts/TrackedWalletsContext';
+import './ProfileView.css';
 import './WalletProfileView.css';
 
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
@@ -99,10 +100,18 @@ const WalletProfileView = ({ walletAddress, onBack }) => {
   const [coinsLoading, setCoinsLoading] = useState(true);
   const { trackWallet, untrackWallet, isTracked, trackedWallets, toggleCopyTrade } = useTrackedWallets();
   const [tracked, setTracked] = useState(false);
+  const [copyHintDismissed, setCopyHintDismissed] = useState(false);
 
   useEffect(() => {
     setTracked(isTracked(walletAddress));
+    setCopyHintDismissed(false);
   }, [walletAddress, isTracked]);
+
+  // Hide the feed's floating card action buttons while this overlay is open
+  useEffect(() => {
+    document.body.classList.add('wpv-open');
+    return () => document.body.classList.remove('wpv-open');
+  }, []);
 
   const trackedWallet = trackedWallets.find((w) => w.address === walletAddress);
   const copyEnabled = trackedWallet ? trackedWallet.copyTradeEnabled !== false : false;
@@ -150,6 +159,13 @@ const WalletProfileView = ({ walletAddress, onBack }) => {
     return () => { cancelled = true; };
   }, [walletAddress]);
 
+  const handleTrackWallet = () => {
+    if (!tracked) {
+      trackWallet(walletAddress);
+      setTracked(true);
+    }
+  };
+
   // Opt into copying: tracking a wallet enables copy-trade prompts by default.
   const handleCopyToggle = () => {
     if (!tracked) { trackWallet(walletAddress); setTracked(true); }
@@ -173,57 +189,39 @@ const WalletProfileView = ({ walletAddress, onBack }) => {
         </svg>
       </button>
 
-      {/* Header */}
-      <div className="wpv-header">
-        <div className="wpv-top-row">
-          <div className="wpv-avatar" style={{ background: gradientFor(walletAddress) }}>
-            <span className="wpv-avatar-egg" role="img" aria-label="wallet">🥚</span>
+      {/* Header — mirrors ProfileView, with wallet stats in the name/bio slot */}
+      <div className="pv-ig-header wpv-ig-header">
+        <div className="pv-ig-top-row">
+          <div className="pv-ig-avatar-wrap">
+            <div className="pv-ig-avatar-ph" style={{ background: gradientFor(walletAddress) }}>
+              <span className="wpv-avatar-egg" role="img" aria-label="wallet">🥚</span>
+            </div>
           </div>
-          <div className="wpv-stats">
-            <div className="wpv-stat">
-              <span className="wpv-stat-num">{statsLoading ? '—' : formatNumber(trading.totalTrades)}</span>
-              <span className="wpv-stat-label">Trades</span>
+          <div className="pv-ig-stats">
+            <div className="pv-ig-stat">
+              <span className="pv-ig-stat-num">{statsLoading ? '—' : formatNumber(trading.totalTrades)}</span>
+              <span className="pv-ig-stat-label">Trades</span>
             </div>
-            <div className="wpv-stat">
-              <span className="wpv-stat-num">{statsLoading ? '—' : formatNumber(trading.uniqueTokens)}</span>
-              <span className="wpv-stat-label">Tokens</span>
+            <div className="pv-ig-stat">
+              <span className="pv-ig-stat-num">{statsLoading ? '—' : formatNumber(trading.uniqueTokens)}</span>
+              <span className="pv-ig-stat-label">Tokens</span>
             </div>
-            <div className="wpv-stat">
-              <span className="wpv-stat-num">{statsLoading ? '—' : formatPercent(stats?.winRate)}</span>
-              <span className="wpv-stat-label">Win Rate</span>
+            <div className="pv-ig-stat">
+              <span className="pv-ig-stat-num">{statsLoading ? '—' : formatPercent(stats?.winRate)}</span>
+              <span className="pv-ig-stat-label">Win Rate</span>
             </div>
           </div>
         </div>
 
-        <div className="wpv-identity-row">
-          <a
-            className="wpv-addr-chip"
-            href={`https://solscan.io/account/${walletAddress}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            title="View on Solscan"
-          >
-            {shortAddr(walletAddress)} ↗
-          </a>
-          <button
-            className={`wpv-track-btn ${tracked && copyEnabled ? 'wpv-track-btn--on' : ''}`}
-            onClick={handleCopyToggle}
-          >
-            {!tracked ? '⚡ Copy Next Trade' : copyEnabled ? '✓ Copying Trades' : '⚡ Resume Copying'}
-          </button>
-        </div>
-
-        {tracked && (
-          <div className="wpv-copy-hint">
-            <span className="wpv-copy-hint-icon">⚡</span>
-            <span className="wpv-copy-hint-text">
-              {copyEnabled
-                ? "You'll get a prompt to mirror this trader's next Jupiter swap."
-                : 'Copy trading paused — tap Resume to get prompts again.'}
-            </span>
-            <button className="wpv-copy-untrack" onClick={handleUntrack}>Remove</button>
-          </div>
-        )}
+        <a
+          className="pv-ig-addr-chip"
+          href={`https://solscan.io/account/${walletAddress}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="View on Solscan"
+        >
+          {shortAddr(walletAddress)} ↗
+        </a>
 
         {identity?.name && (
           <div className="wpv-identity-name">
@@ -231,65 +229,100 @@ const WalletProfileView = ({ walletAddress, onBack }) => {
             {identity.type && <span className="wpv-identity-type">{identity.type}</span>}
           </div>
         )}
+
+        {/* Statistics occupy the name/bio slot of the profile layout */}
+        {statsLoading ? (
+          <div className="wpv-metrics-loading">
+            <div className="wpv-spinner" />
+            <span>Loading analytics…</span>
+          </div>
+        ) : stats ? (
+          <div className="wpv-metrics wpv-metrics--inheader">
+            <div className="wpv-metric-group">
+              <div className="wpv-metric-group-title">Performance</div>
+              <div className="wpv-metric-grid">
+                <div className="wpv-metric">
+                  <span className="wpv-metric-label">Realized PnL</span>
+                  <span className={`wpv-metric-value ${(pnl.realized ?? 0) >= 0 ? 'pos' : 'neg'}`}>{formatCurrency(pnl.realized)}</span>
+                </div>
+                <div className="wpv-metric">
+                  <span className="wpv-metric-label">Win Rate</span>
+                  <span className="wpv-metric-value">{formatPercent(stats.winRate)}</span>
+                </div>
+                <div className="wpv-metric">
+                  <span className="wpv-metric-label">ROI</span>
+                  <span className={`wpv-metric-value ${(stats.roi ?? 0) >= 0 ? 'pos' : 'neg'}`}>{formatPercent(stats.roi)}</span>
+                </div>
+                <div className="wpv-metric">
+                  <span className="wpv-metric-label">Avg Hold</span>
+                  <span className="wpv-metric-value">{formatHold(stats.avgHoldTimeSecs)}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="wpv-metric-group">
+              <div className="wpv-metric-group-title">PnL Overview</div>
+              <div className="wpv-metric-grid">
+                <div className="wpv-metric">
+                  <span className="wpv-metric-label">Invested</span>
+                  <span className="wpv-metric-value">{formatCurrency(pnl.invested)}</span>
+                </div>
+                <div className="wpv-metric">
+                  <span className="wpv-metric-label">Proceeds</span>
+                  <span className="wpv-metric-value">{formatCurrency(pnl.proceeds)}</span>
+                </div>
+                <div className="wpv-metric">
+                  <span className="wpv-metric-label">Unrealized</span>
+                  <span className={`wpv-metric-value ${(pnl.unrealized ?? 0) >= 0 ? 'pos' : 'neg'}`}>{formatCurrency(pnl.unrealized)}</span>
+                </div>
+                <div className="wpv-metric">
+                  <span className="wpv-metric-label">Open / Closed</span>
+                  <span className="wpv-metric-value">{formatNumber(trading.activePositions)} / {formatNumber(trading.closedPositions)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {statsError && !statsLoading && (
+          <div className="wpv-error">Couldn't load full analytics for this wallet.</div>
+        )}
+
+        {/* Actions row — mirrors ProfileView's Edit/Disconnect row */}
+        <div className="pv-ig-actions">
+          <button
+            className={`pv-ig-btn pv-ig-btn--edit wpv-track-action ${tracked ? 'wpv-track-action--on' : ''}`}
+            onClick={handleTrackWallet}
+            disabled={tracked}
+          >
+            {tracked ? '✓ Tracked' : 'Track Wallet'}
+          </button>
+          <button
+            className={`pv-ig-btn pv-ig-btn--edit ${tracked && copyEnabled ? 'wpv-track-btn--on' : ''}`}
+            onClick={handleCopyToggle}
+          >
+            {!tracked ? 'Copy Next Trade' : copyEnabled ? '✓ Copying Trades' : 'Resume Copying'}
+          </button>
+        </div>
+
+        {tracked && !copyHintDismissed && (
+          <div className="wpv-copy-hint">
+            <span className="wpv-copy-hint-text">
+              {copyEnabled
+                ? "You'll get a prompt to mirror this trader's next Jupiter swap."
+                : 'Copy trading paused — tap Resume to get prompts again.'}
+            </span>
+            <button
+              className="wpv-copy-dismiss"
+              onClick={() => setCopyHintDismissed(true)}
+              title="Dismiss"
+              aria-label="Dismiss copy trading message"
+            >
+              ×
+            </button>
+          </div>
+        )}
       </div>
-
-      {/* PnL / performance cards */}
-      {statsLoading ? (
-        <div className="wpv-metrics-loading">
-          <div className="wpv-spinner" />
-          <span>Loading analytics…</span>
-        </div>
-      ) : stats ? (
-        <div className="wpv-metrics">
-          <div className="wpv-metric-group">
-            <div className="wpv-metric-group-title">Performance</div>
-            <div className="wpv-metric-grid">
-              <div className="wpv-metric">
-                <span className="wpv-metric-label">Realized PnL</span>
-                <span className={`wpv-metric-value ${(pnl.realized ?? 0) >= 0 ? 'pos' : 'neg'}`}>{formatCurrency(pnl.realized)}</span>
-              </div>
-              <div className="wpv-metric">
-                <span className="wpv-metric-label">Win Rate</span>
-                <span className="wpv-metric-value">{formatPercent(stats.winRate)}</span>
-              </div>
-              <div className="wpv-metric">
-                <span className="wpv-metric-label">ROI</span>
-                <span className={`wpv-metric-value ${(stats.roi ?? 0) >= 0 ? 'pos' : 'neg'}`}>{formatPercent(stats.roi)}</span>
-              </div>
-              <div className="wpv-metric">
-                <span className="wpv-metric-label">Avg Hold</span>
-                <span className="wpv-metric-value">{formatHold(stats.avgHoldTimeSecs)}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="wpv-metric-group">
-            <div className="wpv-metric-group-title">PnL Overview</div>
-            <div className="wpv-metric-grid">
-              <div className="wpv-metric">
-                <span className="wpv-metric-label">Invested</span>
-                <span className="wpv-metric-value">{formatCurrency(pnl.invested)}</span>
-              </div>
-              <div className="wpv-metric">
-                <span className="wpv-metric-label">Proceeds</span>
-                <span className="wpv-metric-value">{formatCurrency(pnl.proceeds)}</span>
-              </div>
-              <div className="wpv-metric">
-                <span className="wpv-metric-label">Unrealized</span>
-                <span className={`wpv-metric-value ${(pnl.unrealized ?? 0) >= 0 ? 'pos' : 'neg'}`}>{formatCurrency(pnl.unrealized)}</span>
-              </div>
-              <div className="wpv-metric">
-                <span className="wpv-metric-label">Open / Closed</span>
-                <span className="wpv-metric-value">{formatNumber(trading.activePositions)} / {formatNumber(trading.closedPositions)}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {statsError && !statsLoading && (
-        <div className="wpv-error">Couldn't load full analytics for this wallet.</div>
-      )}
 
       {/* Coins feed */}
       <div className="wpv-feed-title">Coins Traded</div>
@@ -340,7 +373,7 @@ const WalletProfileView = ({ walletAddress, onBack }) => {
         )}
       </div>
 
-      <div className="wpv-footer">📊 Data from Solana Tracker</div>
+      <div className="wpv-footer">Data from Solana Tracker</div>
     </div>
   );
 };

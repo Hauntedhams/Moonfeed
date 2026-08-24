@@ -400,6 +400,10 @@ const ModernTokenScroller = ({
         // Use the dextrending endpoint for "dextrending" tab
         endpoint = `${API_BASE}/dextrending`;
         console.log(`🔥 Using DEXTRENDING endpoint for Dexscreener trending tokens:`, endpoint);
+      } else if (filters.type === 'whalefeed') {
+        // Use the whalefeed endpoint for large, established coins
+        endpoint = `${API_BASE}/whalefeed`;
+        console.log(`🐋 Using WHALEFEED endpoint for large established coins:`, endpoint);
       } else {
         // For all other cases, use the trending endpoint WITHOUT limit
         // Backend will return all coins it has cached

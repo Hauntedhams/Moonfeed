@@ -48,6 +48,9 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Local notifications for tracked-wallet trade alerts (Android 13+). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <!-- Android 11+ package visibility: allow resolving Mobile Wallet Adapter
          (solana-wallet://) intents so installed wallets like Phantom/Solflare
          can be discovered and launched. -->

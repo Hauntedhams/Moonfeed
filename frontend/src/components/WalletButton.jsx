@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useWallet } from '../contexts/WalletContext';
 import { useDemoMode } from '../contexts/DemoModeContext';
 import { UnifiedWalletButton } from '@jup-ag/wallet-adapter';
+import WalletConnectOnboarding from './WalletConnectOnboarding';
 import './WalletButton.css';
 
 /**
@@ -37,7 +38,9 @@ const WalletButton = () => {
   if (!connected) {
     return (
       <div className="wallet-connect-wrapper">
-        <UnifiedWalletButton />
+        <WalletConnectOnboarding>
+          <UnifiedWalletButton />
+        </WalletConnectOnboarding>
       </div>
     );
   }

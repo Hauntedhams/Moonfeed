@@ -110,6 +110,8 @@ const TopTradersList = ({ coinAddress, isExpanded, onWalletClick = null }) => {
       // Better error messages for users
       if (err.name === 'AbortError') {
         setError('Request timed out. Please try again.');
+      } else if (err.message.includes('no remaining credits')) {
+        setError('Top trader data is temporarily unavailable.');
       } else if (err.message === 'Failed to fetch' || err.message === 'Load failed' || err.name === 'TypeError') {
         // Exact browser network-level errors (not backend error messages)
         setError('Network error. Please check your connection.');

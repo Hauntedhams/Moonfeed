@@ -1646,6 +1646,27 @@ html:not(.dark-mode) .chart-error-overlay {
   pointer-events: none;
 }
 
+/* Soft gradient fade behind the whole action stack so the buttons read cleanly
+   over the chart. Lives on the container (not the expand button) so it never
+   paints on top of the full-chart / buy buttons. Centered on the expand button,
+   which is always flush with the container's right edge. */
+.chart-mobile-right-actions::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: -98px;
+  transform: translateY(-50%);
+  width: 240px;
+  height: 130px;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, rgba(11, 18, 32, 0.9) 0%, rgba(11, 18, 32, 0.55) 45%, transparent 72%);
+}
+
+html:not(.dark-mode) .chart-mobile-right-actions::before {
+  background: radial-gradient(ellipse at center, rgba(244, 246, 251, 0.9) 0%, rgba(244, 246, 251, 0.55) 45%, transparent 72%);
+}
+
 .chart-mobile-right-actions > button {
   pointer-events: auto;
 }
@@ -1667,11 +1688,11 @@ html:not(.dark-mode) .chart-error-overlay {
   cursor: pointer;
   opacity: 0;
   visibility: hidden;
-  transform: translateX(18px) scale(0.58);
+  transform: translateX(-56px) scale(0.58);
   transition:
-    transform 0.38s cubic-bezier(0.34, 1.56, 0.64, 1),
-    opacity 0.22s cubic-bezier(0, 0, 0.2, 1),
-    visibility 0.22s ease,
+    opacity 0.25s cubic-bezier(0.4, 0, 1, 1),
+    transform 0.35s cubic-bezier(0.55, 0, 1, 0.45),
+    visibility 0s linear 0.25s,
     background 0.18s ease,
     border-color 0.18s ease;
   -webkit-tap-highlight-color: transparent;
@@ -1682,7 +1703,7 @@ html:not(.dark-mode) .chart-error-overlay {
 .chart-buy-drawer-btn {
   color: #9ff5bb;
   border-color: rgba(34, 197, 94, 0.72);
-  transform: translateX(112px) scale(0.58);
+  transform: translateX(-112px) scale(0.58);
 }
 
 .chart-fullscreen-card-btn svg,
@@ -1698,6 +1719,28 @@ html:not(.dark-mode) .chart-error-overlay {
   opacity: 1;
   visibility: visible;
   transform: translateX(0) scale(1);
+  transition:
+    opacity 0.28s cubic-bezier(0, 0, 0.2, 1),
+    transform 0.40s cubic-bezier(0.34, 1.56, 0.64, 1),
+    visibility 0s linear 0s,
+    background 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.chart-fullscreen-card-btn:not(.visible) {
+  transition-delay: 0s, 0s, 0.25s, 0s, 0s;
+}
+
+.chart-buy-drawer-btn:not(.visible) {
+  transition-delay: 0.03s, 0.03s, 0.28s, 0s, 0s;
+}
+
+.chart-fullscreen-card-btn.visible {
+  transition-delay: 0.05s, 0.05s, 0s, 0s, 0s;
+}
+
+.chart-buy-drawer-btn.visible {
+  transition-delay: 0.09s, 0.09s, 0s, 0s, 0s;
 }
 
 .chart-fullscreen-card-btn.visible:hover,
@@ -1780,25 +1823,6 @@ html:not(.dark-mode) .chart-error-overlay {
 
 .chart-expand-card-btn:active {
   transform: scale(0.94);
-}
-
-/* Soft gradient fade behind the Expand button so it reads cleanly over the chart,
-   matching the right-edge mask used behind the action buttons. */
-.chart-expand-card-btn::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 240px;
-  height: 130px;
-  z-index: -1;
-  pointer-events: none;
-  background: radial-gradient(ellipse at center, rgba(11, 18, 32, 0.9) 0%, rgba(11, 18, 32, 0.55) 45%, transparent 72%);
-}
-
-html:not(.dark-mode) .chart-expand-card-btn::before {
-  background: radial-gradient(ellipse at center, rgba(244, 246, 251, 0.9) 0%, rgba(244, 246, 251, 0.55) 45%, transparent 72%);
 }
 
 /* ── Backdrop: covers viewport during fullscreen (conditionally rendered by React) ── */

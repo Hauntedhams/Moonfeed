@@ -9,6 +9,7 @@ const TopTabs = ({ activeFilter, onFilterChange, showFilterButton = false, onFil
   // 🆕 Base tabs (always visible)
   const baseTabs = [
     { id: 'dextrending', label: 'DEXtrending', icon: 'trending-up' },
+    { id: 'whalefeed', label: 'Whale', icon: 'whale' },
     { id: 'graduating', label: 'Graduating', icon: 'graduation-cap' },
     { id: 'new', label: 'New', icon: 'sparkles' },
     { id: 'trending', label: 'Trending', icon: 'fire' }
@@ -71,6 +72,15 @@ const TopTabs = ({ activeFilter, onFilterChange, showFilterButton = false, onFil
             <polyline points="16,7 22,7 22,13"/>
           </svg>
         );
+      case 'whale':
+        return (
+          <svg {...iconProps}>
+            <path d="M3 11c2 0 3 1.5 5 1.5S11 11 13 11s3 1.5 5 1.5c1.5 0 2.2-.8 3-1.5"/>
+            <path d="M3 11c0-4 3-7 8-7 4 0 7 2.5 8 6"/>
+            <path d="M11 4c1 1.5 1.5 3 1.5 5"/>
+            <path d="M20 15c0 3-2 5-5 5-2 0-3.5-1-4.5-2.5"/>
+          </svg>
+        );
       case 'zap':
         return (
           <svg {...iconProps}>
@@ -88,6 +98,15 @@ const TopTabs = ({ activeFilter, onFilterChange, showFilterButton = false, onFil
           <svg {...iconProps}>
             <circle cx="12" cy="12" r="10"/>
             <polyline points="12,6 12,12 16,14"/>
+          </svg>
+        );
+      case 'users':
+        return (
+          <svg {...iconProps}>
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
           </svg>
         );
       case 'filter':
@@ -227,7 +246,7 @@ const TopTabs = ({ activeFilter, onFilterChange, showFilterButton = false, onFil
         const isValidTarget = customTabs || 
           (targetIndex >= 0 && targetIndex < tabs.length && 
            (tabs[targetIndex].id === 'trending' || tabs[targetIndex].id === 'new' || 
-            tabs[targetIndex].id === 'dextrending' || tabs[targetIndex].id === 'graduating' || tabs[targetIndex].id === 'custom'));
+            tabs[targetIndex].id === 'dextrending' || tabs[targetIndex].id === 'whalefeed' || tabs[targetIndex].id === 'graduating' || tabs[targetIndex].id === 'custom'));
             
         if (targetIndex >= 0 && targetIndex < tabs.length && isValidTarget) {
           onFilterChange({ type: tabs[targetIndex].id });
@@ -302,7 +321,7 @@ const TopTabs = ({ activeFilter, onFilterChange, showFilterButton = false, onFil
             scale = 0.9;
           }
           
-          const canClick = customTabs ? true : (tab.id === 'trending' || tab.id === 'new' || tab.id === 'dextrending' || (tab.id === 'custom' && hasCustomFilters));
+          const canClick = customTabs ? true : (tab.id === 'trending' || tab.id === 'new' || tab.id === 'dextrending' || tab.id === 'whalefeed' || (tab.id === 'custom' && hasCustomFilters));
           const showClickHint = isActive && isCenter && canClick && onActiveTabClick;
           const isDisabled = !customTabs && tab.id === 'custom' && !hasCustomFilters;
           
@@ -314,7 +333,7 @@ const TopTabs = ({ activeFilter, onFilterChange, showFilterButton = false, onFil
                 e.stopPropagation(); // Prevent event bubbling
                 
                 // Allow all tabs for customTabs, otherwise check specific tabs
-                const isAllowed = customTabs || tab.id === 'trending' || tab.id === 'new' || tab.id === 'dextrending' || tab.id === 'graduating' || (tab.id === 'custom' && hasCustomFilters);
+                const isAllowed = customTabs || tab.id === 'trending' || tab.id === 'new' || tab.id === 'dextrending' || tab.id === 'whalefeed' || tab.id === 'graduating' || (tab.id === 'custom' && hasCustomFilters);
                 
                 if (isAllowed) {
                   // If clicking on the already active tab, show the coin list modal
@@ -333,15 +352,15 @@ const TopTabs = ({ activeFilter, onFilterChange, showFilterButton = false, onFil
                 opacity: isDisabled ? 0.4 : opacity,
                 zIndex,
                 transform: `scale(${scale})`,
-                cursor: (customTabs || tab.id === 'trending' || tab.id === 'new' || tab.id === 'dextrending' || tab.id === 'graduating' || (tab.id === 'custom' && hasCustomFilters)) ? 'pointer' : 'not-allowed',
+                cursor: (customTabs || tab.id === 'trending' || tab.id === 'new' || tab.id === 'dextrending' || tab.id === 'whalefeed' || tab.id === 'graduating' || (tab.id === 'custom' && hasCustomFilters)) ? 'pointer' : 'not-allowed',
                 touchAction: 'none' // Prevent default touch behaviors
               }}
             >
               <span className="tab-label" style={{
-                opacity: (customTabs || tab.id === 'trending' || tab.id === 'new' || tab.id === 'dextrending' || tab.id === 'graduating' || (tab.id === 'custom' && hasCustomFilters))
+                opacity: (customTabs || tab.id === 'trending' || tab.id === 'new' || tab.id === 'dextrending' || tab.id === 'whalefeed' || tab.id === 'graduating' || (tab.id === 'custom' && hasCustomFilters))
                   ? (isActive ? 1 : 0.8)
                   : 0.5,
-                color: (customTabs || tab.id === 'trending' || tab.id === 'new' || tab.id === 'dextrending' || tab.id === 'graduating' || (tab.id === 'custom' && hasCustomFilters))
+                color: (customTabs || tab.id === 'trending' || tab.id === 'new' || tab.id === 'dextrending' || tab.id === 'whalefeed' || tab.id === 'graduating' || (tab.id === 'custom' && hasCustomFilters))
                   ? (isActive ? 'rgba(255, 255, 255, 1)' : 'rgba(255, 255, 255, 0.8)')
                   : 'rgba(255, 255, 255, 0.5)'
               }}>{tab.label}</span>

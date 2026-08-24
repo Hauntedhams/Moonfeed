@@ -1,5 +1,6 @@
 import React from 'react';
 import { UnifiedWalletButton } from '@jup-ag/wallet-adapter';
+import WalletConnectOnboarding from './WalletConnectOnboarding';
 import './JupiterWalletButton.css';
 
 /**
@@ -10,7 +11,9 @@ import './JupiterWalletButton.css';
 export const JupiterWalletButton = ({ className = '', style = {} }) => {
   return (
     <div className={`jupiter-wallet-button-container ${className}`} style={style}>
-      <UnifiedWalletButton />
+      <WalletConnectOnboarding>
+        <UnifiedWalletButton />
+      </WalletConnectOnboarding>
     </div>
   );
 };
