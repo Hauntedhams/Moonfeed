@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useDarkMode } from '../contexts/DarkModeContext';
 import './TwelveDataChart.css';
 
-const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDesktopMode = false, desktopSlotRef = null, showPriceScale, showActionButtons = true, isExpanded = false, isTransactionWindowOpen = false, showLimitOrderLine = false, limitOrderPrice = null, limitOrderCurrentPrice = null, onCrosshairMove, onFirstPriceUpdate, onTradeClick, onExpand, onFullscreenChange, onOpenBuyDrawer }) => {
+const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDesktopMode = false, desktopSlotRef = null, showPriceScale, showActionButtons = true, isExpanded = false, isTransactionWindowOpen = false, showLimitOrderLine = false, limitOrderPrice = null, limitOrderCurrentPrice = null, tradeLineMode = 'orders', marketBuyAmount = 0, limitOrderSide = 'buy', onCrosshairMove, onFirstPriceUpdate, onTradeClick, onExpand, onFullscreenChange, onOpenBuyDrawer }) => {
   const { isDarkMode: contextDarkMode } = useDarkMode();
   const [srcReady, setSrcReady] = useState(false);
   const [fullscreenMode, setFullscreenMode] = useState(null); // null | 'portrait' | 'landscape'
@@ -461,10 +461,15 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
   const limitOrderLineTop = (() => {
     const current = Number(limitOrderCurrentPrice);
     const target = Number(limitOrderPrice);
-    if (!showLimitOrderLine || !isExpanded || !isActiveCard || !current || !target || current <= 0 || target <= 0) return null;
+    if (!showLimitOrderLine || !isExpanded || !isActiveCard || !current || current <= 0) return null;
+    if (tradeLineMode === 'buy') return Number(marketBuyAmount) > 0 ? 50 : null;
+    if (!target || target <= 0) return null;
     const priceMove = (target - current) / current;
     return Math.min(90, Math.max(10, 50 - priceMove * 80));
   })();
+  const tradeLineLabel = tradeLineMode === 'buy'
+    ? `Buy ${Number(marketBuyAmount).toFixed(2)} SOL`
+    : `${limitOrderSide === 'sell' ? 'Sell' : 'Buy'} limit`;
 
   // Drive the native feed scroller directly from touches on the catcher overlay.
   // Snap is disabled during the drag (mandatory snap would clamp programmatic scroll),
@@ -694,7 +699,7 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
           <div ref={fullscreenBtnRef} className="chart-portal-controls">
             {limitOrderLineTop !== null && (
               <div className="chart-limit-order-line" style={{ top: `${limitOrderLineTop}%` }}>
-                <span>Buy limit</span>
+                <span>{tradeLineLabel}</span>
               </div>
             )}
             {/* Transparent swipe-catcher: forwards feed scrolling over the collapsed

@@ -2987,6 +2987,9 @@ const CoinCard = memo(({
           showLimitOrderLine={buyDrawerOpen}
           limitOrderPrice={buyOrderPrice}
           limitOrderCurrentPrice={displayPrice}
+          tradeLineMode={buyDrawerMode}
+          marketBuyAmount={buySolAmount}
+          limitOrderSide={buyDrawerOrderSide}
           onOpenBuyDrawer={openBuyDrawer}
         />,
         mobileChartTargetRef.current
