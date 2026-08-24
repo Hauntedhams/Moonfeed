@@ -330,6 +330,9 @@ const CoinCard = memo(({
   // Hide portaled action buttons while the scroll snap animation is running so
   // they don't appear to float over the incoming card.
   // Only active when the buttons are actually portaled (mobile + isActiveCard).
+  // rAF-throttled: 'scroll' can fire faster than paint, so we coalesce to one
+  // state update per frame instead of one per event (avoids extra re-renders
+  // that compete with the browser's native scroll-snap animation).
   useEffect(() => {
     if (isDesktopMode || !isActiveCard) {
       setIsScrolling(false);
@@ -337,16 +340,22 @@ const CoinCard = memo(({
     }
     const scroller = document.querySelector('.modern-scroller-container');
     if (!scroller) return;
+    let scrollRaf = null;
     const handleScroll = () => {
       // While the user is dragging the scroller via the action buttons, keep the
       // buttons visible so the swipe visibly follows the finger over them.
       if (_btnDraggingRef.current) return;
-      setIsScrolling(true);
-      clearTimeout(scrollEndTimerRef.current);
-      scrollEndTimerRef.current = setTimeout(() => setIsScrolling(false), 250);
+      if (scrollRaf) return; // already scheduled for this frame
+      scrollRaf = requestAnimationFrame(() => {
+        scrollRaf = null;
+        setIsScrolling(true);
+        clearTimeout(scrollEndTimerRef.current);
+        scrollEndTimerRef.current = setTimeout(() => setIsScrolling(false), 250);
+      });
     };
     scroller.addEventListener('scroll', handleScroll, { passive: true });
     return () => {
+      if (scrollRaf) cancelAnimationFrame(scrollRaf);
       scroller.removeEventListener('scroll', handleScroll);
       clearTimeout(scrollEndTimerRef.current);
       setIsScrolling(false);
@@ -356,41 +365,48 @@ const CoinCard = memo(({
   // Track the chart section's top and bottom offsets so portaled action buttons
   // are anchored within the chart area (not above it in the coin-info header).
   // Mirrors TwelveDataChart's clipTop/clipBottom logic: clamp to coin-info-layer bounds.
-  const [mobileChartTop, setMobileChartTop] = useState(null);
-  const [mobileChartBottom, setMobileChartBottom] = useState(null);
-  const [mobileChartRight, setMobileChartRight] = useState(null);
+  // Batched into one state object (was 3 separate setState calls per scroll event).
+  const [mobileChartRect, setMobileChartRect] = useState({ top: null, bottom: null, right: null });
+  const { top: mobileChartTop, bottom: mobileChartBottom, right: mobileChartRight } = mobileChartRect;
   useLayoutEffect(() => {
     if (isDesktopMode || !isActiveCard || !mobileChartTargetRef.current) {
-      setMobileChartTop(null);
-      setMobileChartBottom(null);
-      setMobileChartRight(null);
+      setMobileChartRect({ top: null, bottom: null, right: null });
       return;
     }
-    const update = () => {
-      const el = mobileChartTargetRef.current;
-      if (!el) return;
+    // Cache elements that don't change while this card is active — avoids
+    // repeated closest()/querySelector() DOM walks on every scroll frame.
+    const el = mobileChartTargetRef.current;
+    const layerEl = el.closest('.coin-info-layer');
+    const navEl = document.querySelector('.bottom-nav');
+    let raf = null;
+    const measure = () => {
+      raf = null;
       const rect = el.getBoundingClientRect();
-      // Clamp to coin-info-layer (the scrollable card body) — same clip logic as TwelveDataChart.
-      const layerEl = el.closest('.coin-info-layer');
       const layerRect = layerEl?.getBoundingClientRect();
       const clipTop    = layerRect ? Math.max(rect.top,    layerRect.top)    : rect.top;
       const clipBottom = layerRect ? Math.min(rect.bottom, layerRect.bottom) : rect.bottom;
       // Also clamp against the bottom nav so buttons never overlap it.
-      const navEl = document.querySelector('.bottom-nav');
       const navTop = navEl ? navEl.getBoundingClientRect().top : window.innerHeight;
       const safeBottom = Math.min(clipBottom, navTop - 4);
       if (safeBottom > clipTop) {
-        setMobileChartTop(clipTop);
-        setMobileChartBottom(safeBottom);
-        // Use the card's right edge (layerRect takes precedence over chart rect).
-        setMobileChartRight(layerRect ? layerRect.right : rect.right);
+        setMobileChartRect({
+          top: clipTop,
+          bottom: safeBottom,
+          // Use the card's right edge (layerRect takes precedence over chart rect).
+          right: layerRect ? layerRect.right : rect.right,
+        });
       }
     };
-    update();
+    const update = () => {
+      if (raf) return; // coalesce to one measurement per animation frame
+      raf = requestAnimationFrame(measure);
+    };
+    measure();
     const scroller = document.querySelector('.modern-scroller-container');
     if (scroller) scroller.addEventListener('scroll', update, { passive: true });
     window.addEventListener('resize', update);
     return () => {
+      if (raf) cancelAnimationFrame(raf);
       if (scroller) scroller.removeEventListener('scroll', update);
       window.removeEventListener('resize', update);
     };
@@ -1173,7 +1189,8 @@ const CoinCard = memo(({
     setHasToggledActions(true); // Mark that user has interacted (enables animation)
     
     // Call parent's expand change handler which should lock scrolling
-    onExpandChange?.(next);
+    // (use the same address fallback the parent compares against for its 'expanded' class)
+    onExpandChange?.(next, coin.mintAddress || coin.tokenAddress);
   };
 
   // Handle chart price hover - update main price display
@@ -1890,7 +1907,7 @@ const CoinCard = memo(({
                       onClick={(e) => {
                         e.stopPropagation();
                         setTrackedPrice(isFavorite ? null : displayPrice);
-                        onFavoriteToggle?.();
+                        onFavoriteToggle?.(coin);
                       }}
                       title={isFavorite ? 'Stop tracking this coin' : 'Track this coin'}
                     >
@@ -2672,7 +2689,13 @@ const CoinCard = memo(({
                 onClick={() => setBuyDrawerOpen(false)}
                 aria-label="Close buy limit drawer"
               />
-              <aside className="coin-buy-drawer" aria-label={`Trade ${coin.symbol || coin.name || 'coin'}`}>
+              <aside
+                className="coin-buy-drawer"
+                aria-label={`Trade ${coin.symbol || coin.name || 'coin'}`}
+                onTouchStart={(e) => e.stopPropagation()}
+                onTouchMove={(e) => e.stopPropagation()}
+                onWheel={(e) => e.stopPropagation()}
+              >
                 <div className="coin-buy-drawer-header">
                   <div className="coin-buy-mode-tabs" aria-label="Trade mode">
                     <button

@@ -347,7 +347,8 @@
   box-shadow: 18px 0 40px rgba(0, 0, 0, 0.42);
   animation: coinBuyDrawerIn 0.28s cubic-bezier(0.2, 0.9, 0.2, 1) both;
   pointer-events: auto;
-  touch-action: none;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
 }
 
 .coin-buy-drawer::-webkit-scrollbar {

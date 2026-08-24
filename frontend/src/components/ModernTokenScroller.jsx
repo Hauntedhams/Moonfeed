@@ -307,6 +307,12 @@ const ModernTokenScroller = ({
   }, [currentIndex, coins]);
   */
 
+  // Cache merged coin+enrichment objects keyed by mintAddress so a re-render
+  // triggered by ANY coin's enrichment arriving doesn't hand every other
+  // already-enriched CoinCard a brand-new object reference (which would
+  // defeat React.memo and re-render cards that didn't actually change).
+  const mergedCoinCacheRef = useRef(new Map());
+
   // Get enriched coin data or fall back to original
   const getEnrichedCoin = useCallback((coin) => {
     // First check if the coin itself already has COMPLETE enrichment data (e.g., from search)
@@ -320,8 +326,12 @@ const ModernTokenScroller = ({
     // Otherwise check the enrichment cache
     const enriched = enrichedCoins.get(coin.mintAddress);
     if (enriched) {
+      const cached = mergedCoinCacheRef.current.get(coin.mintAddress);
+      if (cached && cached.coin === coin && cached.enriched === enriched) {
+        return cached.result; // same inputs — reuse the same object reference
+      }
       // Merge enriched data with original, preserving image fields if enrichment didn't supply them
-      return {
+      const result = {
         ...coin,
         ...enriched,
         banner: enriched.banner || coin.banner,
@@ -330,6 +340,8 @@ const ModernTokenScroller = ({
         logo: enriched.logo || coin.logo,
         icon: enriched.icon || coin.icon,
       };
+      mergedCoinCacheRef.current.set(coin.mintAddress, { coin, enriched, result });
+      return result;
     }
     return coin;
   }, [enrichedCoins]);
@@ -739,7 +751,9 @@ const ModernTokenScroller = ({
   }, [expandedCoin, currentIndex, coins, enrichedCoins, onCurrentCoinChange]);
   
   // Handle favorite toggle
-  const handleFavoriteToggle = (coin) => {
+  // useCallback keeps this reference stable across renders so it doesn't
+  // defeat CoinCard's React.memo for every mounted (off-screen) card.
+  const handleFavoriteToggle = useCallback((coin) => {
     console.log('🔥 Favorite toggle called for:', coin.symbol, coin.mintAddress || coin.tokenAddress);
     
     const isFavorite = favorites.some(fav => 
@@ -762,7 +776,13 @@ const ModernTokenScroller = ({
     
     onFavoritesChange?.(newFavorites);
     console.log('🔥 onFavoritesChange called with:', newFavorites.length, 'favorites');
-  };
+  }, [favorites, onFavoritesChange]);
+
+  // Stable handler for chart fullscreen changes (no per-coin data needed).
+  const handleChartFullscreenChange = useCallback((isFs) => {
+    isChartFullscreen.current = isFs;
+    setChartFullscreenLock(isFs);
+  }, []);
   
   // Handle Buy $MOO button click
   const handleBuyMoo = useCallback(async () => {
@@ -852,20 +872,17 @@ const ModernTokenScroller = ({
         <CoinCard
           coin={enrichedCoin}
           isFavorite={isFavorite(coin)}
-          onFavoriteToggle={() => handleFavoriteToggle(coin)}
+          onFavoriteToggle={handleFavoriteToggle}
           onTradeClick={onTradeClick}
           onWalletClick={onWalletClick}
           isGraduating={coin.status === 'graduating'}
           isTrending={coin.source?.includes('trending')}
           isVisible={isVisible}
-          onExpandChange={(isExpanded) => handleCoinExpandChange(isExpanded, coin.mintAddress || coin.tokenAddress)}
+          onExpandChange={handleCoinExpandChange}
           isCurrentCard={isCurrentCoin || isPreloadCoin}
           isActiveCard={isCurrentCoin}
           onEnrichmentComplete={handleEnrichmentComplete}
-          onChartFullscreenChange={(isFs) => {
-            isChartFullscreen.current = isFs;
-            setChartFullscreenLock(isFs);
-          }}
+          onChartFullscreenChange={handleChartFullscreenChange}
         />
       </div>
     );
