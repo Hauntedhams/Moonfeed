@@ -390,9 +390,9 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
     };
   }, [isExpanded]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Window resize + scroller scroll: keep the slot aligned with its reference element.
-  // The scroller scroll listener handles snap-scroll animations so the fixed slot
-  // stays in sync while the card is animating into position.
+  // Window resize + inner content scroll: keep the slot aligned with its reference.
+  // During feed snap-scroll the fixed portal is hidden, because native compositor
+  // scrolling can always outrun JavaScript positioning by a frame on mobile.
   // Also listen to info-layer-content scroll so the chart stays in sync when the
   // user scrolls through the expanded card's inner content (transactions, etc.).
   useEffect(() => {
@@ -401,12 +401,8 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
     const infoContent = containerRef.current?.closest('.coin-info-layer')
       ?? document.querySelector('.coin-info-layer');
 
-    // Inner (expanded card) content scroll: keep the chart tracking live — it's a
-    // slow, deliberate scroll where the chart should stay pinned to its section.
-    // Feed swipe between cards: the chart is a body-portaled, fixed iframe whose
-    // position is driven by JS. Rather than hiding it while the feed moves (which
-    // flashed the empty chart area black), we reposition it every animation frame so
-    // it stays visually pinned to its card and scrolls as one smooth unit.
+    // Inner (expanded card) content scroll is slow and deliberate, so keep the chart
+    // tracking live there. Feed scrolling only needs one final alignment after snap.
     let scrollRaf = null;
     let scrollIdleTimer = null;
     const track = () => {
@@ -423,16 +419,21 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
         updateSlotPosition(); // final settle onto the resting position
       }, 120);
     };
+    const handleFeedScroll = () => {
+      if (fullscreenModeRef.current || !iframeRef.current) return;
+      clearTimeout(scrollIdleTimer);
+      scrollIdleTimer = setTimeout(updateSlotPosition, 160);
+    };
 
     const handleResize = () => updateSlotPosition(); // resize is always needed (mode can change dims)
     window.addEventListener('resize', handleResize);
-    if (scroller) scroller.addEventListener('scroll', handleScroll, { passive: true });
+    if (scroller) scroller.addEventListener('scroll', handleFeedScroll, { passive: true });
     if (infoContent) infoContent.addEventListener('scroll', handleScroll, { passive: true });
     return () => {
       window.removeEventListener('resize', handleResize);
       clearTimeout(scrollIdleTimer);
       if (scrollRaf != null) cancelAnimationFrame(scrollRaf);
-      if (scroller) scroller.removeEventListener('scroll', handleScroll);
+      if (scroller) scroller.removeEventListener('scroll', handleFeedScroll);
       if (infoContent) infoContent.removeEventListener('scroll', handleScroll);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -479,6 +480,14 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
   useEffect(() => {
     const el = scrollCatcherRef.current;
     if (!el || !showScrollCatcher) return;
+    let feedScrollStartTimer = null;
+    const markFeedScrolling = () => {
+      document.body.classList.add('feed-is-scrolling');
+      clearTimeout(feedScrollStartTimer);
+      feedScrollStartTimer = setTimeout(() => {
+        document.body.classList.remove('feed-is-scrolling');
+      }, 200);
+    };
     const settle = (s) => {
       const scroller = s.scroller;
       if (!scroller) return;
@@ -493,12 +502,14 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
     const onStart = (e) => {
       const scroller = document.querySelector('.modern-scroller-container');
       if (!scroller || !e.touches[0]) return;
+      markFeedScrolling();
       scroller.style.scrollSnapType = 'none';
       scrollFwdRef.current = { startY: e.touches[0].clientY, startTop: scroller.scrollTop, scroller, lastY: e.touches[0].clientY, lastT: e.timeStamp, vy: 0 };
     };
     const onMove = (e) => {
       const s = scrollFwdRef.current;
       if (!s.scroller || !e.touches[0]) return;
+      markFeedScrolling();
       const y = e.touches[0].clientY;
       const dt = e.timeStamp - s.lastT;
       if (dt > 0) s.vy = (s.lastY - y) / dt; // px/ms, positive = scrolling down
@@ -514,6 +525,7 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
       if (!scroller) return;
       e.preventDefault();
       if (wheelLock || Math.abs(e.deltaY) < 2) return;
+      markFeedScrolling();
       const slide = scroller.querySelector('.modern-coin-slide');
       const slideH = slide ? slide.offsetHeight : window.innerHeight;
       const idx = Math.round(scroller.scrollTop / slideH) + (e.deltaY > 0 ? 1 : -1);
@@ -527,6 +539,7 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
     el.addEventListener('touchcancel', onEnd, { passive: true });
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => {
+      clearTimeout(feedScrollStartTimer);
       el.removeEventListener('touchstart', onStart);
       el.removeEventListener('touchmove', onMove);
       el.removeEventListener('touchend', onEnd);
@@ -683,12 +696,12 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
           )}
 
           {/* iframe's permanent home — position/size set imperatively by updateSlotPosition() */}
-          <div ref={fsSlotRef} />
+          <div ref={fsSlotRef} className="chart-portal-slot" />
 
           {/* Gradient mask — sits above the iframe (z-index 65) and behind the action buttons
               (z-index 100). Fades the right edge so buttons are readable against the chart.
               Position/opacity are set imperatively by updateSlotPosition(). */}
-          <div ref={maskRef} />
+          <div ref={maskRef} className="chart-portal-mask" />
 
           {/* Footer scroll-catcher — transparent strip over the "Powered by GeckoTerminal"
               watermark. Position/size set imperatively by updateSlotPosition(). Only mounted
@@ -698,7 +711,7 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
           {/* "Full Chart" button wrapper — mirrors fsSlotRef position at z-index 70 so the
               button floats above the cross-origin iframe. pointer-events:none on the wrapper,
               auto on the button itself, so clicks reach it without blocking the iframe. */}
-          <div ref={fullscreenBtnRef}>
+          <div ref={fullscreenBtnRef} className="chart-portal-controls">
             {limitOrderLineTop !== null && (
               <div className="chart-limit-order-line" style={{ top: `${limitOrderLineTop}%` }}>
                 <span>Buy limit</span>

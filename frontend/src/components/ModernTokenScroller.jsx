@@ -59,6 +59,7 @@ const ModernTokenScroller = ({
   
   const scrollerRef = useRef(null);
   const isScrollLocked = useRef(false);
+  const scrollIdleTimerRef = useRef(null);
   
   // API base configuration
   const API_BASE = API_CONFIG.COINS_API;
@@ -82,6 +83,40 @@ const ModernTokenScroller = ({
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // The chart iframe is portaled to document.body, so native momentum scrolling can
+  // move the card a frame before JavaScript can reposition the iframe. Mark the whole
+  // gesture imperatively (without React renders) so fixed chart layers can be hidden
+  // until scroll snap has fully settled.
+  useEffect(() => {
+    const container = scrollerRef.current;
+    if (!container || !isMobile) return;
+
+    const markScrolling = () => {
+      document.body.classList.add('feed-is-scrolling');
+      clearTimeout(scrollIdleTimerRef.current);
+      scrollIdleTimerRef.current = setTimeout(() => {
+        document.body.classList.remove('feed-is-scrolling');
+      }, 160);
+    };
+
+    const finishScrolling = () => {
+      clearTimeout(scrollIdleTimerRef.current);
+      document.body.classList.remove('feed-is-scrolling');
+    };
+
+    container.addEventListener('touchstart', markScrolling, { passive: true });
+    container.addEventListener('scroll', markScrolling, { passive: true });
+    container.addEventListener('scrollend', finishScrolling, { passive: true });
+
+    return () => {
+      container.removeEventListener('touchstart', markScrolling);
+      container.removeEventListener('scroll', markScrolling);
+      container.removeEventListener('scrollend', finishScrolling);
+      clearTimeout(scrollIdleTimerRef.current);
+      document.body.classList.remove('feed-is-scrolling');
+    };
+  }, [isMobile]);
 
   // Enrich coins with DexScreener data (ON-DEMAND via backend)
   const enrichCoins = useCallback(async (mintAddresses) => {
