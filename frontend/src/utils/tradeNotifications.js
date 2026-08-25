@@ -7,6 +7,7 @@ import { LocalNotifications } from '@capacitor/local-notifications';
 const isNative = Capacitor.isNativePlatform();
 let permissionGranted = false;
 let initialized = false;
+let serviceWorkerRegistrationPromise = null;
 
 // Notification ids must be 32-bit ints; derive one from the tx signature.
 function idFromSignature(signature) {
@@ -45,6 +46,16 @@ export async function initTradeNotifications() {
   return permissionGranted;
 }
 
+async function getServiceWorkerRegistration() {
+  if (!('serviceWorker' in navigator)) return null;
+  if (!serviceWorkerRegistrationPromise) {
+    serviceWorkerRegistrationPromise = navigator.serviceWorker
+      .getRegistration()
+      .catch(() => null);
+  }
+  return serviceWorkerRegistrationPromise;
+}
+
 function buildMessage(swap) {
   const label =
     swap.walletLabel ||
@@ -56,8 +67,8 @@ function buildMessage(swap) {
       ? ` for ${Number(swap.solAmount).toFixed(3)} SOL`
       : '';
   return {
-    title: `${label} made a trade`,
-    body: `${action.charAt(0).toUpperCase() + action.slice(1)} ${symbol}${sol}`,
+    title: 'Your tracked wallet just made a trade!',
+    body: `${label} ${action} ${symbol}${sol}`,
   };
 }
 
@@ -80,7 +91,25 @@ export async function notifyWalletTrade(swap) {
         ],
       });
     } else if ('Notification' in window && permissionGranted) {
-      new Notification(title, { body });
+      const notificationOptions = {
+        body,
+        icon: '/android-chrome-192x192.png',
+        badge: '/favicon-32x32.png',
+        tag: `tracked-wallet-${swap.signature || swap.walletAddress || Date.now()}`,
+        renotify: true,
+        data: {
+          signature: swap.signature,
+          walletAddress: swap.walletAddress,
+          url: '/',
+        },
+      };
+
+      const registration = await getServiceWorkerRegistration();
+      if (registration?.showNotification) {
+        await registration.showNotification(title, notificationOptions);
+      } else {
+        new Notification(title, notificationOptions);
+      }
     }
   } catch (err) {
     console.debug('[TradeNotifications] schedule error:', err?.message);

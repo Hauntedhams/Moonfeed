@@ -96,6 +96,7 @@ const CoinCard = memo(({
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showPriceChangeModal, setShowPriceChangeModal] = useState(false);
   const [hoveredMetric, setHoveredMetric] = useState(null);
+  const [pinnedMetric, setPinnedMetric] = useState(null);
   const [showGraduationInfo, setShowGraduationInfo] = useState(false);  const [graduationIconPosition, setGraduationIconPosition] = useState(null);
   const [priceFlash, setPriceFlash] = useState('');
   const [showLiveTransactions, setShowLiveTransactions] = useState(false);
@@ -256,6 +257,7 @@ const CoinCard = memo(({
   useEffect(() => {
     if (!isActiveCard) {
       setHoveredMetric(null);
+      setPinnedMetric(null);
       setShowGraduationInfo(false);
     }
   }, [isActiveCard]);
@@ -1214,6 +1216,11 @@ const CoinCard = memo(({
     onExpandChange?.(next, coin.mintAddress || coin.tokenAddress);
   };
 
+  const showMetricBreakdown = (e, type, value, element) => {
+    e?.stopPropagation();
+    setPinnedMetric({ type, value, element });
+  };
+
   // Handle chart price hover - update main price display
   const handleChartPriceHover = (hoveredPrice) => {
     setChartHoveredPrice(hoveredPrice);
@@ -1627,6 +1634,8 @@ const CoinCard = memo(({
     window.__COINCARD_RENDER_LOGGED__ = true;
   }
 
+  const activeMetric = hoveredMetric || pinnedMetric;
+
   return (
     <div
       className={`coin-card${buyDrawerOpen ? ' buy-drawer-active' : ''}`}
@@ -1978,6 +1987,7 @@ const CoinCard = memo(({
                 className="header-metric"
                 onMouseEnter={() => setHoveredMetric({ type: 'marketCap', value: marketCap, element: 'marketCap' })}
                 onMouseLeave={() => setHoveredMetric(null)}
+                onClick={(e) => showMetricBreakdown(e, 'marketCap', marketCap, 'marketCap')}
               >
                 <div className="header-metric-label">Market Cap</div>
                 <div className="header-metric-value">${formatCompact(marketCap)}</div>
@@ -1986,6 +1996,7 @@ const CoinCard = memo(({
                 className="header-metric"
                 onMouseEnter={() => setHoveredMetric({ type: 'volume', value: volume24h, element: 'volume' })}
                 onMouseLeave={() => setHoveredMetric(null)}
+                onClick={(e) => showMetricBreakdown(e, 'volume', volume24h, 'volume')}
               >
                 <div className="header-metric-label">Volume</div>
                 <div className="header-metric-value">${formatCompact(volume24h)}</div>
@@ -1994,6 +2005,7 @@ const CoinCard = memo(({
                 className="header-metric"
                 onMouseEnter={() => setHoveredMetric({ type: 'liquidity', value: liquidity, element: 'liquidity' })}
                 onMouseLeave={() => setHoveredMetric(null)}
+                onClick={(e) => showMetricBreakdown(e, 'liquidity', liquidity, 'liquidity')}
               >
                 <div className="header-metric-label">Liquidity</div>
                 <div className="header-metric-value-with-icon">
@@ -2015,6 +2027,7 @@ const CoinCard = memo(({
                 className="header-metric"
                 onMouseEnter={() => setHoveredMetric({ type: 'age', value: ageHours, element: 'age' })}
                 onMouseLeave={() => setHoveredMetric(null)}
+                onClick={(e) => showMetricBreakdown(e, 'age', ageHours, 'age')}
               >
                 <div className="header-metric-label">Age</div>
                 <div className="header-metric-value">
@@ -2025,6 +2038,7 @@ const CoinCard = memo(({
                 className="header-metric"
                 onMouseEnter={() => setHoveredMetric({ type: 'holders', value: holders, element: 'holders' })}
                 onMouseLeave={() => setHoveredMetric(null)}
+                onClick={(e) => showMetricBreakdown(e, 'holders', holders, 'holders')}
               >
                 <div className="header-metric-label">Holders</div>
                 <div className="header-metric-value">{holders > 0 ? formatCompact(holders) : '-'}</div>
@@ -2035,6 +2049,7 @@ const CoinCard = memo(({
                   className="header-metric"
                   onMouseEnter={() => setHoveredMetric({ type: 'fdv', value: fdv, element: 'fdv' })}
                   onMouseLeave={() => setHoveredMetric(null)}
+                  onClick={(e) => showMetricBreakdown(e, 'fdv', fdv, 'fdv')}
                 >
                   <div className="header-metric-label">FDV</div>
                   <div className="header-metric-value">${formatCompact(fdv)}</div>
@@ -2045,6 +2060,7 @@ const CoinCard = memo(({
                   className="header-metric"
                   onMouseEnter={() => setHoveredMetric({ type: 'txns', value: totalTxns24h, element: 'txns' })}
                   onMouseLeave={() => setHoveredMetric(null)}
+                  onClick={(e) => showMetricBreakdown(e, 'txns', totalTxns24h, 'txns')}
                 >
                   <div className="header-metric-label">Txns</div>
                   <div className="header-metric-value">{formatCompact(totalTxns24h)}</div>
@@ -2055,6 +2071,7 @@ const CoinCard = memo(({
                   className="header-metric"
                   onMouseEnter={() => setHoveredMetric({ type: 'buySell', value: ((buys24h / (buys24h + sells24h)) * 100).toFixed(0), element: 'buySell' })}
                   onMouseLeave={() => setHoveredMetric(null)}
+                  onClick={(e) => showMetricBreakdown(e, 'buySell', ((buys24h / (buys24h + sells24h)) * 100).toFixed(0), 'buySell')}
                 >
                   <div className="header-metric-label">Buy/Sell</div>
                   <div className="header-metric-value">
@@ -2067,6 +2084,7 @@ const CoinCard = memo(({
                   className="header-metric"
                   onMouseEnter={() => setHoveredMetric({ type: 'boosts', value: boosts, element: 'boosts' })}
                   onMouseLeave={() => setHoveredMetric(null)}
+                  onClick={(e) => showMetricBreakdown(e, 'boosts', boosts, 'boosts')}
                 >
                   <div className="header-metric-label">Boosts</div>
                   <div className="header-metric-value" style={{color: '#ff6b35'}}>{boosts}</div>
@@ -2074,10 +2092,10 @@ const CoinCard = memo(({
               )}
               
               {/* Tooltip - Rendered via Portal to escape stacking contexts */}
-              {hoveredMetric && createPortal(
+              {activeMetric && createPortal(
                 <div className="metric-tooltip">
                   {(() => {
-                    const tooltipData = getTooltipContent(hoveredMetric.type, hoveredMetric.value, coin);
+                    const tooltipData = getTooltipContent(activeMetric.type, activeMetric.value, coin);
                     return (
                       <>
                         <div className="tooltip-title">{tooltipData.title}</div>

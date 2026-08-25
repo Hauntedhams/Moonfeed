@@ -3,13 +3,15 @@ import { API_CONFIG } from '../config/api';
 import './FeedSelector.css';
 
 // Feed definitions (kept in sync with the old TopTabs base tabs)
-const BASE_FEEDS = [
+export const BASE_FEEDS = [
   { id: 'dextrending', label: 'DEXtrending', icon: 'trending-up' },
   { id: 'whalefeed', label: 'Whale', icon: 'whale' },
   { id: 'graduating', label: 'Graduating', icon: 'graduation-cap' },
   { id: 'new', label: 'New', icon: 'sparkles' },
   { id: 'trending', label: 'Trending', icon: 'fire' }
 ];
+
+export const FEED_ORDER = BASE_FEEDS.map((feed) => feed.id);
 
 const CUSTOM_FEED = { id: 'custom', label: 'Custom', icon: 'filter' };
 

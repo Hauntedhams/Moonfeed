@@ -5,6 +5,11 @@ import InteractiveTutorial from './InteractiveTutorial';
 import { API_CONFIG, getApiUrl } from '../config/api';
 import './ModernTokenScroller.css';
 
+const SWIPE_HINT_SEEN_KEY = 'moonfeed_swipe_hint_seen';
+const EXPAND_HINT_SEEN_KEY = 'moonfeed_expand_hint_seen';
+const ANALYTICS_HINT_SEEN_KEY = 'moonfeed_analytics_hint_seen';
+const HELP_HINT_SEEN_KEY = 'moonfeed_help_hint_seen';
+
 // Debounce utility for performance
 const debounce = (func, wait) => {
   let timeout;
@@ -24,6 +29,7 @@ const ModernTokenScroller = ({
   onWalletClick, // Open a full profile page for a clicked wallet address
   onCurrentCoinChange, // Add this callback to notify parent about current coin
   onTotalCoinsChange, // Add this callback to notify parent about total coins
+  feedOrder = [], // Preset feed order for continuous scrolling
   advancedFilters = null, // Add advanced filters prop
   // New props for filter handling
   onAdvancedFilter = null,
@@ -47,6 +53,19 @@ const ModernTokenScroller = ({
   const [isBackendLoading, setIsBackendLoading] = useState(false); // Track backend loading state
   const [isTutorialActive, setIsTutorialActive] = useState(false); // Interactive tutorial mode
   const [isFirstVisit, setIsFirstVisit] = useState(() => !InteractiveTutorial.hasCompleted()); // Show nudge for new users
+  const [showSwipeHint, setShowSwipeHint] = useState(() => {
+    try {
+      return localStorage.getItem(SWIPE_HINT_SEEN_KEY) !== 'true';
+    } catch (_) {
+      return true;
+    }
+  });
+  const [showExpandHint, setShowExpandHint] = useState(false);
+  const [showAnalyticsHint, setShowAnalyticsHint] = useState(false);
+  const [showHelpHint, setShowHelpHint] = useState(false);
+  const [expandHintTargets, setExpandHintTargets] = useState({ top: null, bottom: null });
+  const [analyticsHintTarget, setAnalyticsHintTarget] = useState(null);
+  const [helpHintTarget, setHelpHintTarget] = useState(null);
   
   // Chart preload: activate the next card's chart shortly after landing so it's
   // ready before the user scrolls. Only 1 card ahead — avoids simultaneous
@@ -66,6 +85,9 @@ const ModernTokenScroller = ({
   
   const scrollerRef = useRef(null);
   const isScrollLocked = useRef(false);
+  const feedEndTriggerRef = useRef(null);
+  const loadedFeedTypesRef = useRef([]);
+  const isLoadingMoreFeedRef = useRef(false);
 
   // Live mirrors of state the IntersectionObserver reads. Keeping these in refs
   // lets the observer be created ONCE (see effect below) instead of being torn
@@ -84,6 +106,76 @@ const ModernTokenScroller = ({
   // API base configuration
   const API_BASE = API_CONFIG.COINS_API;
 
+  const dismissSwipeHint = useCallback(() => {
+    setShowSwipeHint(false);
+    try {
+      localStorage.setItem(SWIPE_HINT_SEEN_KEY, 'true');
+    } catch (_) {}
+  }, []);
+
+  const hasSeenExpandHint = useCallback(() => {
+    try {
+      return localStorage.getItem(EXPAND_HINT_SEEN_KEY) === 'true';
+    } catch (_) {
+      return false;
+    }
+  }, []);
+
+  const dismissExpandHint = useCallback(() => {
+    setShowExpandHint(false);
+    try {
+      localStorage.setItem(EXPAND_HINT_SEEN_KEY, 'true');
+    } catch (_) {}
+  }, []);
+
+  const hasSeenAnalyticsHint = useCallback(() => {
+    try {
+      return localStorage.getItem(ANALYTICS_HINT_SEEN_KEY) === 'true';
+    } catch (_) {
+      return false;
+    }
+  }, []);
+
+  const dismissAnalyticsHint = useCallback(() => {
+    setShowAnalyticsHint(false);
+    try {
+      localStorage.setItem(ANALYTICS_HINT_SEEN_KEY, 'true');
+    } catch (_) {}
+  }, []);
+
+  const hasSeenHelpHint = useCallback(() => {
+    try {
+      return localStorage.getItem(HELP_HINT_SEEN_KEY) === 'true';
+    } catch (_) {
+      return false;
+    }
+  }, []);
+
+  const dismissHelpHint = useCallback(() => {
+    setShowHelpHint(false);
+    try {
+      localStorage.setItem(HELP_HINT_SEEN_KEY, 'true');
+    } catch (_) {}
+  }, []);
+
+  const restartOnboardingHints = useCallback(() => {
+    try {
+      localStorage.removeItem(SWIPE_HINT_SEEN_KEY);
+      localStorage.removeItem(EXPAND_HINT_SEEN_KEY);
+      localStorage.removeItem(ANALYTICS_HINT_SEEN_KEY);
+      localStorage.removeItem(HELP_HINT_SEEN_KEY);
+    } catch (_) {}
+    setShowExpandHint(false);
+    setShowAnalyticsHint(false);
+    setShowHelpHint(false);
+    setCurrentIndex(0);
+    setSettledIndex(0);
+    setPreloadIndex(null);
+    setExpandedCoin(null);
+    scrollerRef.current?.scrollTo({ top: 0, behavior: 'auto' });
+    setShowSwipeHint(true);
+  }, []);
+
   // Auto-dismiss nudge after 12 seconds so it doesn't persist forever
   useEffect(() => {
     if (!isFirstVisit) return;
@@ -92,6 +184,163 @@ const ModernTokenScroller = ({
     }, 12000);
     return () => clearTimeout(nudgeTimer);
   }, [isFirstVisit]);
+
+  useEffect(() => {
+    if (!showSwipeHint || onlyFavorites || coins.length < 2 || isTutorialActive) return;
+    const hintTimer = setTimeout(dismissSwipeHint, 9000);
+    return () => clearTimeout(hintTimer);
+  }, [showSwipeHint, onlyFavorites, coins.length, isTutorialActive, dismissSwipeHint]);
+
+  useEffect(() => {
+    if (showSwipeHint && currentIndex > 0) {
+      dismissSwipeHint();
+      if (!hasSeenExpandHint()) {
+        setShowExpandHint(true);
+      }
+    }
+  }, [showSwipeHint, currentIndex, dismissSwipeHint, hasSeenExpandHint]);
+
+  useEffect(() => {
+    if (!showExpandHint || onlyFavorites || isTutorialActive) return;
+
+    const updateTargets = () => {
+      const topButton = document.querySelector('.modern-coin-slide.active .expand-handle');
+      const bottomButton = document.querySelector('.chart-expand-card-btn');
+      const toTarget = (element) => {
+        if (!element) return null;
+        const rect = element.getBoundingClientRect();
+        return {
+          left: rect.left + rect.width / 2,
+          top: rect.top + rect.height / 2,
+          width: rect.width,
+          height: rect.height
+        };
+      };
+
+      setExpandHintTargets({
+        top: toTarget(topButton),
+        bottom: toTarget(bottomButton)
+      });
+    };
+
+    updateTargets();
+    const targetTimer = setInterval(updateTargets, 300);
+    window.addEventListener('resize', updateTargets);
+
+    return () => {
+      clearInterval(targetTimer);
+      window.removeEventListener('resize', updateTargets);
+    };
+  }, [showExpandHint, onlyFavorites, isTutorialActive]);
+
+  useEffect(() => {
+    if (!showExpandHint) return;
+    const hintTimer = setTimeout(dismissExpandHint, 10000);
+    return () => clearTimeout(hintTimer);
+  }, [showExpandHint, dismissExpandHint]);
+
+  useEffect(() => {
+    if (showExpandHint && expandedCoin) {
+      dismissExpandHint();
+      if (!hasSeenAnalyticsHint()) {
+        setShowAnalyticsHint(true);
+      }
+    }
+  }, [showExpandHint, expandedCoin, dismissExpandHint, hasSeenAnalyticsHint]);
+
+  useEffect(() => {
+    if (!showAnalyticsHint || onlyFavorites || isTutorialActive || !expandedCoin) return;
+
+    const updateTarget = () => {
+      const metricsRow = document.querySelector('.modern-coin-slide.active .header-metrics-grid');
+      if (!metricsRow) {
+        setAnalyticsHintTarget(null);
+        return;
+      }
+
+      const rect = metricsRow.getBoundingClientRect();
+      setAnalyticsHintTarget({
+        left: rect.left + rect.width / 2,
+        top: rect.top + rect.height / 2,
+        width: rect.width,
+        height: rect.height
+      });
+    };
+
+    updateTarget();
+    const targetTimer = setInterval(updateTarget, 300);
+    window.addEventListener('resize', updateTarget);
+
+    return () => {
+      clearInterval(targetTimer);
+      window.removeEventListener('resize', updateTarget);
+    };
+  }, [showAnalyticsHint, onlyFavorites, isTutorialActive, expandedCoin]);
+
+  useEffect(() => {
+    if (!showAnalyticsHint) return;
+    const hintTimer = setTimeout(dismissAnalyticsHint, 10000);
+    return () => clearTimeout(hintTimer);
+  }, [showAnalyticsHint, dismissAnalyticsHint]);
+
+  useEffect(() => {
+    if (!showAnalyticsHint) return;
+    const handleMetricClick = (event) => {
+      if (event.target.closest('.header-metric')) {
+        dismissAnalyticsHint();
+        if (!hasSeenHelpHint()) {
+          setShowHelpHint(true);
+        }
+      }
+    };
+
+    document.addEventListener('click', handleMetricClick, true);
+    return () => document.removeEventListener('click', handleMetricClick, true);
+  }, [showAnalyticsHint, dismissAnalyticsHint, hasSeenHelpHint]);
+
+  useEffect(() => {
+    const handleRestartOnboarding = () => {
+      restartOnboardingHints();
+    };
+
+    window.addEventListener('moonfeed:restart-onboarding', handleRestartOnboarding);
+    return () => window.removeEventListener('moonfeed:restart-onboarding', handleRestartOnboarding);
+  }, [restartOnboardingHints]);
+
+  useEffect(() => {
+    if (!showHelpHint || onlyFavorites || isTutorialActive) return;
+
+    const updateTarget = () => {
+      const helpButton = document.querySelector('.moonfeed-hamburger-wrapper .moonfeed-info-button');
+      if (!helpButton) {
+        setHelpHintTarget(null);
+        return;
+      }
+
+      const rect = helpButton.getBoundingClientRect();
+      setHelpHintTarget({
+        left: rect.left + rect.width / 2,
+        top: rect.top + rect.height / 2,
+        width: rect.width,
+        height: rect.height
+      });
+    };
+
+    updateTarget();
+    const targetTimer = setInterval(updateTarget, 300);
+    window.addEventListener('resize', updateTarget);
+
+    return () => {
+      clearInterval(targetTimer);
+      window.removeEventListener('resize', updateTarget);
+    };
+  }, [showHelpHint, onlyFavorites, isTutorialActive]);
+
+  useEffect(() => {
+    if (!showHelpHint) return;
+    const hintTimer = setTimeout(dismissHelpHint, 10000);
+    return () => clearTimeout(hintTimer);
+  }, [showHelpHint, dismissHelpHint]);
 
   // Update mobile detection on window resize
   useEffect(() => {
@@ -367,6 +616,50 @@ const ModernTokenScroller = ({
     return coin;
   }, [enrichedCoins]);
   
+  const getFeedEndpoint = useCallback((feedType, customFilters = advancedFilters) => {
+    let endpoint = `${API_BASE}/trending`;
+
+    if (feedType === 'custom' && customFilters) {
+      const queryParams = new URLSearchParams();
+      Object.entries(customFilters).forEach(([key, value]) => {
+        if (value !== null && value !== undefined && value !== '') {
+          queryParams.append(key, value);
+        }
+      });
+      endpoint = `${API_BASE}/custom?${queryParams.toString()}`;
+    } else if (feedType === 'new') {
+      const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      const limit = isMobileDevice ? 30 : 50;
+      endpoint = `${API_BASE}/new?limit=${limit}`;
+    } else if (feedType === 'graduating') {
+      const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      const limit = isMobileDevice ? 50 : 100;
+      endpoint = `${API_BASE}/graduating?limit=${limit}`;
+    } else if (feedType === 'dextrending') {
+      endpoint = `${API_BASE}/dextrending`;
+    } else if (feedType === 'whalefeed') {
+      endpoint = `${API_BASE}/whalefeed`;
+    }
+
+    return endpoint;
+  }, [API_BASE, advancedFilters]);
+
+  const normalizeFeedCoins = useCallback((feedCoins, feedType) => {
+    const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768;
+    const maxCoins = isMobileDevice ? 20 : 50;
+    let normalizedCoins = [...feedCoins];
+
+    if (isMobileDevice && normalizedCoins.length > maxCoins) {
+      console.log(`📱 MOBILE LIMIT: Reducing ${feedType} from ${normalizedCoins.length} to ${maxCoins} coins to prevent crashes`);
+      normalizedCoins = normalizedCoins.slice(0, maxCoins);
+    }
+
+    return normalizedCoins.map((coin) => ({
+      ...coin,
+      _moonfeedFeedType: feedType
+    }));
+  }, []);
+
   // Fetch coins from backend with fast loading approach
   const fetchCoins = useCallback(async () => {
     if (loading) return;
@@ -388,8 +681,8 @@ const ModernTokenScroller = ({
         return;
       }
       
-      // Determine endpoint based on filters - USE TRENDING ENDPOINT FOR COMPATIBILITY
-      let endpoint = `${API_BASE}/trending`; // Use trending endpoint that works on backend
+      const currentFeedType = filters.type || 'trending';
+      let endpoint = getFeedEndpoint(currentFeedType);
       let requestOptions = { 
         method: 'GET',
         headers: {
@@ -399,47 +692,23 @@ const ModernTokenScroller = ({
       
       console.log('🔥 TRENDING LOADING: Using trending endpoint for coin data');
       console.log('🔍 Fetch request details:', {
-        filterType: filters.type,
+        filterType: currentFeedType,
         hasAdvancedFilters: !!advancedFilters,
         advancedFilters: advancedFilters
       });
-      
-      // Handle different filter types
-      if (filters.type === 'custom' && advancedFilters) {
-        // Use custom endpoint with query parameters
-        const queryParams = new URLSearchParams();
-        Object.entries(advancedFilters).forEach(([key, value]) => {
-          if (value !== null && value !== undefined && value !== '') {
-            queryParams.append(key, value);
-          }
-        });
-        endpoint = `${API_BASE}/custom?${queryParams.toString()}`;
+
+      if (currentFeedType === 'custom' && advancedFilters) {
         console.log('🔍 Using custom filter endpoint:', endpoint);
         console.log('🔍 Filter params:', advancedFilters);
-      } else if (filters.type === 'new') {
-        // Use the new endpoint for "new" tab
-        // 🔥 MOBILE FIX: Add limit for mobile devices to prevent memory issues
-        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-        const limit = isMobile ? 30 : 50; // Limit to 30 on mobile, 50 on desktop
-        endpoint = `${API_BASE}/new?limit=${limit}`;
-        console.log(`🆕 Using NEW endpoint for emerging coins (limit: ${limit} for ${isMobile ? 'mobile' : 'desktop'}):`, endpoint);
-      } else if (filters.type === 'graduating') {
-        // Use the graduating endpoint for "graduating" tab
-        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-        const limit = isMobile ? 50 : 100; // Limit to 50 on mobile, 100 on desktop
-        endpoint = `${API_BASE}/graduating?limit=${limit}`;
-        console.log(`🎓 Using GRADUATING endpoint for Pump.fun graduating tokens (limit: ${limit} for ${isMobile ? 'mobile' : 'desktop'}):`, endpoint);
-      } else if (filters.type === 'dextrending') {
-        // Use the dextrending endpoint for "dextrending" tab
-        endpoint = `${API_BASE}/dextrending`;
+      } else if (currentFeedType === 'new') {
+        console.log('🆕 Using NEW endpoint for emerging coins:', endpoint);
+      } else if (currentFeedType === 'graduating') {
+        console.log('🎓 Using GRADUATING endpoint for Pump.fun graduating tokens:', endpoint);
+      } else if (currentFeedType === 'dextrending') {
         console.log(`🔥 Using DEXTRENDING endpoint for Dexscreener trending tokens:`, endpoint);
-      } else if (filters.type === 'whalefeed') {
-        // Use the whalefeed endpoint for large, established coins
-        endpoint = `${API_BASE}/whalefeed`;
+      } else if (currentFeedType === 'whalefeed') {
         console.log(`🐋 Using WHALEFEED endpoint for large established coins:`, endpoint);
       } else {
-        // For all other cases, use the trending endpoint WITHOUT limit
-        // Backend will return all coins it has cached
         console.log('⚡ Using trending endpoint for immediate load:', endpoint);
       }
       
@@ -495,18 +764,7 @@ const ModernTokenScroller = ({
       
       console.log(`✅ TRENDING LOAD: Successfully loaded ${data.coins.length} trending coins`);
       
-      // 🔥 MOBILE PERFORMANCE: Limit total coins on mobile to prevent memory crashes
-      const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768;
-      const maxCoins = isMobileDevice ? 20 : 50; // Mobile: 20 coins max, Desktop: 50 coins max
-      
-      // Use trending coins directly (they're already sorted by trending score)
-      let sortedCoins = [...data.coins];
-      
-      // Limit coins on mobile
-      if (isMobileDevice && sortedCoins.length > maxCoins) {
-        console.log(`📱 MOBILE LIMIT: Reducing from ${sortedCoins.length} to ${maxCoins} coins to prevent crashes`);
-        sortedCoins = sortedCoins.slice(0, maxCoins);
-      }
+      const sortedCoins = normalizeFeedCoins(data.coins, currentFeedType);
       
       setCoins(sortedCoins);
       onTotalCoinsChange?.(sortedCoins.length); // Notify parent of total coins
@@ -514,7 +772,7 @@ const ModernTokenScroller = ({
       // DISABLE background enrichment on mobile completely to prevent crashes
       // Desktop users get enrichment, mobile users get lightweight experience
       console.log('📱 Mobile optimization: Background enrichment DISABLED for performance');
-      console.log(`📊 Loaded ${sortedCoins.length} coins (${isMobileDevice ? 'mobile' : 'desktop'} mode)`);
+      console.log(`📊 Loaded ${sortedCoins.length} coins`);
       
     } catch (err) {
       console.error('❌ Error fetching coins:', err);
@@ -522,7 +780,61 @@ const ModernTokenScroller = ({
     } finally {
       setLoading(false);
     }
-  }, [onlyFavorites, favorites, filters, advancedFilters]);
+  }, [onlyFavorites, favorites, filters, advancedFilters, getFeedEndpoint, normalizeFeedCoins]);
+
+  const appendNextFeed = useCallback(async () => {
+    if (!feedOrder.length || isLoadingMoreFeedRef.current || loading) return;
+    if (onlyFavorites || filters.type === 'custom' || advancedFilters) return;
+
+    const startingFeedType = filters.type || feedOrder[0];
+    const loadedFeedTypes = loadedFeedTypesRef.current.length ? loadedFeedTypesRef.current : [startingFeedType];
+    const lastFeedType = loadedFeedTypes[loadedFeedTypes.length - 1];
+    const lastFeedIndex = feedOrder.indexOf(lastFeedType);
+    if (lastFeedIndex === -1) return;
+
+    const nextFeedType = feedOrder[(lastFeedIndex + 1) % feedOrder.length];
+    isLoadingMoreFeedRef.current = true;
+
+    try {
+      const endpoint = getFeedEndpoint(nextFeedType, null);
+      console.log(`🔁 Appending next feed (${nextFeedType}) from:`, endpoint);
+
+      const response = await fetch(endpoint, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      if (!data.coins || !Array.isArray(data.coins) || data.coins.length === 0) {
+        console.warn(`⚠️ No coins available to append for ${nextFeedType}`);
+        return;
+      }
+
+      const nextCoins = normalizeFeedCoins(data.coins, nextFeedType);
+      setCoins((previousCoins) => {
+        const existingMints = new Set(previousCoins.map((coin) => coin.mintAddress || coin.tokenAddress || coin.id).filter(Boolean));
+        const uniqueNextCoins = nextCoins.filter((coin) => {
+          const key = coin.mintAddress || coin.tokenAddress || coin.id;
+          return !key || !existingMints.has(key);
+        });
+
+        const combinedCoins = [...previousCoins, ...uniqueNextCoins];
+        onTotalCoinsChange?.(combinedCoins.length);
+        console.log(`✅ Appended ${uniqueNextCoins.length} ${nextFeedType} coins (${combinedCoins.length} total)`);
+        return combinedCoins;
+      });
+
+      loadedFeedTypesRef.current = [...loadedFeedTypes, nextFeedType];
+    } catch (err) {
+      console.error(`❌ Error appending ${nextFeedType} feed:`, err);
+    } finally {
+      isLoadingMoreFeedRef.current = false;
+    }
+  }, [feedOrder, loading, onlyFavorites, filters.type, advancedFilters, getFeedEndpoint, normalizeFeedCoins, onTotalCoinsChange]);
   
   // Background enrichment function - progressively adds banners and security data (silent)
   const startBackgroundEnrichment = useCallback(async () => {
@@ -644,6 +956,9 @@ const ModernTokenScroller = ({
     setEnrichedCoins(new Map()); // Clear enrichment cache
     setCurrentIndex(0);
     setSettledIndex(0);
+    setPreloadIndex(null);
+    feedEndTriggerRef.current = null;
+    loadedFeedTypesRef.current = filters.type === 'custom' ? [] : [filters.type || feedOrder[0] || 'trending'];
     setExpandedCoin(null); // Close any expanded cards
     
     // Force garbage collection hint (not guaranteed, but helps)
@@ -955,6 +1270,22 @@ const ModernTokenScroller = ({
     return () => clearTimeout(t);
   }, [currentIndex]);
 
+  useEffect(() => {
+    if (!feedOrder.length || onlyFavorites || filters.type === 'custom' || advancedFilters) return;
+    if (loading || coins.length === 0 || currentIndex !== coins.length - 1) return;
+    if (expandedCoin || chartFullscreenLock || isScrollLocked.current) return;
+
+    const triggerKey = `${loadedFeedTypesRef.current.join('>')}:${coins.length}`;
+    if (feedEndTriggerRef.current === triggerKey) return;
+    feedEndTriggerRef.current = triggerKey;
+
+    const timer = setTimeout(() => {
+      appendNextFeed();
+    }, 450);
+
+    return () => clearTimeout(timer);
+  }, [currentIndex, coins.length, filters.type, onlyFavorites, advancedFilters, loading, expandedCoin, chartFullscreenLock, feedOrder.length, appendNextFeed]);
+
   // Enrich current coin when currentIndex changes
   useEffect(() => {
     if (coins.length > 0 && currentIndex >= 0 && currentIndex < coins.length) {
@@ -1037,6 +1368,49 @@ const ModernTokenScroller = ({
       </div>
     );
   }
+
+  const getExpandCalloutStyle = (target, verticalOffset = 0) => {
+    if (!target) return {};
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const calloutWidth = Math.min(238, viewportWidth - 32);
+    const targetIsRightSide = target.left > viewportWidth / 2;
+    const preferredLeft = targetIsRightSide
+      ? target.left - calloutWidth - 18
+      : target.left + 18;
+    const preferredTop = target.top + verticalOffset;
+
+    return {
+      left: Math.max(16, Math.min(viewportWidth - calloutWidth - 16, preferredLeft)),
+      top: Math.max(18, Math.min(viewportHeight - 90, preferredTop)),
+      width: calloutWidth
+    };
+  };
+
+  const getAnalyticsCalloutStyle = (target) => {
+    if (!target) return {};
+    const viewportWidth = window.innerWidth;
+    const calloutWidth = Math.min(310, viewportWidth - 32);
+    const preferredTop = target.top + target.height / 2 + 18;
+
+    return {
+      left: Math.max(16, Math.min(viewportWidth - calloutWidth - 16, target.left - calloutWidth / 2)),
+      top: Math.max(18, Math.min(window.innerHeight - 88, preferredTop)),
+      width: calloutWidth
+    };
+  };
+
+  const getHelpCalloutStyle = (target) => {
+    if (!target) return {};
+    const viewportWidth = window.innerWidth;
+    const calloutWidth = Math.min(300, viewportWidth - 32);
+
+    return {
+      left: Math.max(16, Math.min(viewportWidth - calloutWidth - 16, target.left + 18)),
+      top: Math.max(18, target.top + target.height / 2 + 14),
+      width: calloutWidth
+    };
+  };
   
   return (
     <div className="modern-token-scroller">
@@ -1089,6 +1463,83 @@ const ModernTokenScroller = ({
           </div>
         )}
       </div>
+
+      {showSwipeHint && !onlyFavorites && !isTutorialActive && coins.length > 1 && currentIndex === 0 && (
+        <div className="swipe-up-hint" aria-hidden="true">
+          <div className="swipe-up-hint-backdrop" />
+          <div className="swipe-up-hint-card">
+            <div className="swipe-up-phone">
+              <div className="swipe-up-finger" />
+            </div>
+            <div className="swipe-up-text">Swipe up for more</div>
+          </div>
+        </div>
+      )}
+
+      {showExpandHint && !onlyFavorites && !isTutorialActive && !expandedCoin && (
+        <div className="expand-card-hint" aria-hidden="true">
+          <div className="expand-card-hint-backdrop" />
+          {expandHintTargets.top && (
+            <>
+              <div
+                className="expand-card-target-ring expand-card-target-ring-top"
+                style={{ left: expandHintTargets.top.left, top: expandHintTargets.top.top }}
+              />
+              <div
+                className="expand-card-callout expand-card-callout-top"
+                style={getExpandCalloutStyle(expandHintTargets.top, 24)}
+              >
+                Expand coin card for more info
+              </div>
+            </>
+          )}
+          {expandHintTargets.bottom && (
+            <>
+              <div
+                className="expand-card-target-ring expand-card-target-ring-bottom"
+                style={{ left: expandHintTargets.bottom.left, top: expandHintTargets.bottom.top }}
+              />
+              <div
+                className="expand-card-callout expand-card-callout-bottom"
+                style={getExpandCalloutStyle(expandHintTargets.bottom, -66)}
+              >
+                or tap here
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {showAnalyticsHint && !onlyFavorites && !isTutorialActive && expandedCoin && analyticsHintTarget && (
+        <div className="analytics-breakdown-hint" aria-hidden="true">
+          <div className="analytics-breakdown-hint-backdrop" />
+          <div
+            className="analytics-breakdown-target-ring"
+            style={{
+              left: analyticsHintTarget.left,
+              top: analyticsHintTarget.top,
+              width: Math.min(analyticsHintTarget.width, window.innerWidth - 28),
+              height: analyticsHintTarget.height + 12
+            }}
+          />
+          <div className="analytics-breakdown-callout" style={getAnalyticsCalloutStyle(analyticsHintTarget)}>
+            Tap any coin analytics for a breakdown
+          </div>
+        </div>
+      )}
+
+      {showHelpHint && !onlyFavorites && !isTutorialActive && helpHintTarget && (
+        <div className="help-section-hint" aria-hidden="true">
+          <div className="help-section-hint-backdrop" />
+          <div
+            className="help-section-target-ring"
+            style={{ left: helpHintTarget.left, top: helpHintTarget.top }}
+          />
+          <div className="help-section-callout" style={getHelpCalloutStyle(helpHintTarget)}>
+            This information is always available in the Help section
+          </div>
+        </div>
+      )}
       
 
       

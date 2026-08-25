@@ -655,7 +655,10 @@ const MoonfeedInfoButton = ({
     },
     {
       label: 'Help',
-      onClick: () => { setMenuOpen(false); setShowHelp(true); },
+      onClick: () => {
+        setMenuOpen(false);
+        window.dispatchEvent(new CustomEvent('moonfeed:restart-onboarding'));
+      },
     },
   ];
 

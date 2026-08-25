@@ -3,7 +3,7 @@ import './App.css'
 import ModernTokenScroller from './components/ModernTokenScroller'
 import TrackedView from './components/TrackedView'
 import BottomNavBar from './components/BottomNavBar'
-import FeedSelector from './components/FeedSelector'
+import FeedSelector, { FEED_ORDER } from './components/FeedSelector'
 import ErrorBoundary from './components/ErrorBoundary'
 import { WalletProvider } from './contexts/WalletContext'
 import { TrackedWalletsProvider } from './contexts/TrackedWalletsContext'
@@ -440,6 +440,7 @@ function App() {
             onVisibleCoinsChange={handleVisibleCoinsChange}
             onCurrentCoinChange={handleCurrentCoinChange}
             onTotalCoinsChange={handleTotalCoinsChange}
+            feedOrder={FEED_ORDER}
             advancedFilters={advancedFilters}
             onAdvancedFilter={handleAdvancedFilter}
             isAdvancedFilterActive={isAdvancedFilterActive}
