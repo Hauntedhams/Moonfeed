@@ -579,100 +579,110 @@ const ProfileView = ({ onTradeClick }) => {
 
   if (!connected) {
     return (
-      <div className="profile-view">
-        <div className="profile-container">
-          {/* Dark Mode Toggle Switch - Top Left */}
-          <div className="dark-mode-toggle-container" title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}>
-            <div className="toggle-switch">
-              <input 
-                type="checkbox" 
-                id="darkModeToggle" 
-                checked={isDarkMode}
-                onChange={toggleDarkMode}
-              />
-              <label htmlFor="darkModeToggle" className="toggle-slider">
-                <span className="toggle-icon sun">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                  </svg>
-                </span>
-                <span className="toggle-icon moon">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </span>
-              </label>
+      <div className="profile-view pv-social">
+        {/* ─── INSTAGRAM-STYLE HEADER (locked preview) ─── */}
+        <div className="pv-ig-header">
+          <div className="pv-ig-top-row">
+            <div className="pv-ig-avatar-wrap pv-ig-avatar-wrap--locked" title="Connect a wallet to add a photo">
+              <div className="pv-ig-avatar-ph">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="12" cy="8" r="4" stroke="currentColor" strokeWidth="2"/>
+                  <path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2" stroke="currentColor" strokeWidth="2"/>
+                </svg>
+              </div>
+            </div>
+            <div className="pv-ig-stats">
+              <div className="pv-ig-stat">
+                <span className="pv-ig-stat-num">0</span>
+                <span className="pv-ig-stat-label">Trades</span>
+              </div>
+              <div className="pv-ig-stat">
+                <span className="pv-ig-stat-num">0</span>
+                <span className="pv-ig-stat-label">Orders</span>
+              </div>
+              <div className="pv-ig-stat">
+                <span className="pv-ig-stat-num">0</span>
+                <span className="pv-ig-stat-label">Tracked</span>
+              </div>
             </div>
           </div>
 
-          {/* Header */}
-          <div className="profile-header">
-            <div className="profile-icon">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="12" cy="8" r="4" stroke="currentColor" strokeWidth="2"/>
-                <path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2" stroke="currentColor" strokeWidth="2"/>
-              </svg>
-            </div>
-            <h1>Profile</h1>
-            <p className="profile-subtitle">Browse and explore everything for free — connecting a wallet is optional and only needed when you want to trade.</p>
+          <h2 className="pv-ig-display-name">
+            <span className="pv-ig-ph">Your Profile</span>
+          </h2>
+          <p className="pv-ig-bio">
+            Connect a wallet to customize your profile — set up your name, photo and bio, and unlock tracking, comments, saved coins and trade history.
+          </p>
+
+          <div className="pv-ig-connect-cta">
+            <JupiterWalletButton label="Connect wallet to customize" />
+            <p className="wallet-hint">
+              Browse everything for free — a wallet is only needed to customize your profile and trade.
+            </p>
           </div>
 
-          {/* Wallet Connection Section */}
-          <div className="wallet-connection-section">
-            <div className="connection-card">
-              <h3>Connect Wallet (Optional)</h3>
-              <p>You can use the app fully without a wallet. Connecting one is optional — link a Solana wallet only when you want to trade or sync your history across devices.</p>
-              <div className="wallet-button-container">
-                <JupiterWalletButton />
-              </div>
-              <p className="wallet-hint">
-                No app install required to browse — a wallet is only used to sign trades
-              </p>
-            </div>
+          <div className="pv-ig-actions">
+            <button className="pv-ig-btn pv-ig-btn--icon" onClick={toggleDarkMode} title={isDarkMode ? 'Light mode' : 'Dark mode'}>
+              {isDarkMode ? (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                  <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+              ) : (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              )}
+            </button>
           </div>
+        </div>
 
-          {/* Features Preview */}
-          <div className="features-preview">
-            <h3>Extra features unlocked when you connect a wallet:</h3>
-            <div className="feature-grid">
-              <div className="feature-item">
-                <div className="feature-content">
-                  <h4>Transaction History</h4>
-                  <p>View your complete Solana trading history</p>
-                </div>
-              </div>
-              <div className="feature-item">
-                <div className="feature-content">
-                  <h4>Synced Favorites</h4>
-                  <p>Your favorites synced across devices</p>
-                </div>
-              </div>
-              <div className="feature-item">
-                <div className="feature-content">
-                  <h4>Portfolio Tracking</h4>
-                  <p>Track your meme coin portfolio performance</p>
-                </div>
-              </div>
-              <div className="feature-item">
-                <div className="feature-content">
-                  <h4>Price Alerts</h4>
-                  <p>Get notified when your coins hit target prices</p>
-                </div>
-              </div>
-              <div className="feature-item">
-                <div className="feature-content">
-                  <h4>Quick Trading</h4>
-                  <p>One-click trading with Jupiter integration</p>
-                </div>
-              </div>
-              <div className="feature-item">
-                <div className="feature-content">
-                  <h4>Advanced Analytics</h4>
-                  <p>Detailed insights into your trading patterns</p>
-                </div>
-              </div>
-            </div>
+        {/* ─── TAB BAR (locked preview) ─── */}
+        <div className="pv-ig-tabbar pv-ig-tabbar--locked">
+          <div className="pv-ig-tab pv-ig-tab--active" title="Trade History">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+              <rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>
+            </svg>
+          </div>
+          <div className="pv-ig-tab" title="Limit Orders">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/>
+              <rect x="9" y="3" width="6" height="4" rx="1"/>
+              <line x1="9" y1="12" x2="15" y2="12"/>
+              <line x1="9" y1="16" x2="13" y2="16"/>
+            </svg>
+          </div>
+          <div className="pv-ig-tab" title="Wallet">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 12V8H6a2 2 0 01-2-2c0-1.1.9-2 2-2h12v4"/>
+              <path d="M4 6v12a2 2 0 002 2h14v-4"/>
+              <path d="M18 12a2 2 0 000 4h4v-4h-4z"/>
+            </svg>
+          </div>
+          <div className="pv-ig-tab" title="Tracked Wallets">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+              <path d="M23 21v-2a4 4 0 00-3-3.87"/>
+              <path d="M16 3.13a4 4 0 010 7.75"/>
+            </svg>
+          </div>
+          <div className="pv-ig-tab" title="Portfolio">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="20" x2="18" y2="10"/>
+              <line x1="12" y1="20" x2="12" y2="4"/>
+              <line x1="6" y1="20" x2="6" y2="14"/>
+              <path d="M2 20h20"/>
+            </svg>
+          </div>
+        </div>
+
+        {/* ─── LOCKED CONTENT PROMPT ─── */}
+        <div className="pv-ig-content">
+          <div className="pv-ig-empty">
+            <p>Connect wallet to customize</p>
+            <span>Set up your profile and unlock tracking, comments, saved coins and trade history.</span>
           </div>
         </div>
       </div>

@@ -3,7 +3,7 @@ import './App.css'
 import ModernTokenScroller from './components/ModernTokenScroller'
 import TrackedView from './components/TrackedView'
 import BottomNavBar from './components/BottomNavBar'
-import TopTabs from './components/TopTabs'
+import FeedSelector from './components/FeedSelector'
 import ErrorBoundary from './components/ErrorBoundary'
 import { WalletProvider } from './contexts/WalletContext'
 import { TrackedWalletsProvider } from './contexts/TrackedWalletsContext'
@@ -331,14 +331,14 @@ function App() {
           <CopyTradeProvider onCopyTrade={handleCopyTrade}>
           <CopyTradeToast />
           <div style={{ height: '100dvh', position: 'relative', overflow: 'hidden' }}>
-        {/* Top tabs - only show on home screen */}
+        {/* Feed selector + search - only show on home screen */}
         {activeTab !== 'tracked' && activeTab !== 'coin-detail' && activeTab !== 'profile' && activeTab !== 'orders' && (
-          <TopTabs 
-            activeFilter={filters.type || 'graduating'} 
+          <FeedSelector
+            activeFilter={filters.type || 'graduating'}
             onFilterChange={handleTopTabFilterChange}
-            onActiveTabClick={handleActiveTabClick}
-            showFilterButton={false}
+            onCoinSelect={handleCoinFound}
             hasCustomFilters={isAdvancedFilterActive}
+            onAdvancedFilterClick={() => setAdvancedFilterModalOpen(true)}
           />
         )}
       
@@ -444,7 +444,7 @@ function App() {
             onAdvancedFilter={handleAdvancedFilter}
             isAdvancedFilterActive={isAdvancedFilterActive}
             showFiltersButton={true} // Show filters button on home view
-            onSearchClick={handleSearchClick} // Add search click handler
+            onSearchClick={null} // Search is handled by the top-right FeedSelector pill
           />
         </ErrorBoundary>
       )}

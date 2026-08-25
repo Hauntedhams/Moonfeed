@@ -401,7 +401,6 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
 
     let scrollRaf = null;
     let scrollIdleTimer = null;
-    let hiddenDuringScroll = false;
 
     const isMobileFeedScroll = () => {
       // Between-card feed swipe on mobile with a collapsed card: the chart is
@@ -412,12 +411,27 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
       return !isDesktopModeRef.current && !isExpandedRef.current;
     };
 
-    // Cheaply park the fixed iframe slot off-screen without measuring anything.
-    const hideSlot = () => {
-      const off = 'position:fixed;top:-9999px;left:-9999px;width:0;height:0;';
-      if (fsSlotRef.current) fsSlotRef.current.style.cssText = off;
-      if (fullscreenBtnRef.current) fullscreenBtnRef.current.style.cssText = off;
-      if (maskRef.current) maskRef.current.style.cssText = off;
+    // Mobile collapsed feed swipe: keep the chart glued to its card with a cheap
+    // GPU transform (translateY by the scroll delta) instead of the expensive
+    // per-frame updateSlotPosition() (getBoundingClientRect + cssText writes).
+    // Both the current card's chart and the preloaded next card's chart are already
+    // positioned at rest, so translating them by the live scroll delta makes them
+    // slide naturally with their cards — the chart stays visible the whole swipe.
+    let mobileBaseline = null;
+    const clearMobileTransform = () => {
+      if (fsSlotRef.current) fsSlotRef.current.style.transform = 'none';
+      if (fullscreenBtnRef.current) fullscreenBtnRef.current.style.transform = 'none';
+      if (maskRef.current) maskRef.current.style.transform = 'none';
+    };
+    const trackMobile = () => {
+      if (fullscreenModeRef.current || !iframeRef.current) { scrollRaf = null; return; }
+      const st = scroller ? scroller.scrollTop : 0;
+      if (mobileBaseline == null) mobileBaseline = st;
+      const tf = `translate3d(0, ${mobileBaseline - st}px, 0)`;
+      if (fsSlotRef.current) fsSlotRef.current.style.transform = tf;
+      if (fullscreenBtnRef.current) fullscreenBtnRef.current.style.transform = tf;
+      if (maskRef.current) maskRef.current.style.transform = tf;
+      scrollRaf = requestAnimationFrame(trackMobile);
     };
 
     const track = () => {
@@ -430,12 +444,14 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
       if (fullscreenModeRef.current || !iframeRef.current) return;
 
       if (isMobileFeedScroll()) {
-        // No per-frame work — just hide once, then settle when the swipe ends.
-        if (!hiddenDuringScroll) { hideSlot(); hiddenDuringScroll = true; }
+        // Cheap transform tracking keeps the chart glued & visible during the swipe.
+        if (scrollRaf == null) scrollRaf = requestAnimationFrame(trackMobile);
         clearTimeout(scrollIdleTimer);
         scrollIdleTimer = setTimeout(() => {
-          hiddenDuringScroll = false;
-          updateSlotPosition();
+          if (scrollRaf != null) { cancelAnimationFrame(scrollRaf); scrollRaf = null; }
+          mobileBaseline = null;
+          clearMobileTransform();
+          updateSlotPosition(); // snap exactly onto the settled position
         }, 120);
         return;
       }

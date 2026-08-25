@@ -1827,6 +1827,65 @@
   margin: 4px 0 0;
 }
 
+/* Connect CTA (disconnected preview) */
+.pv-ig-connect-cta {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  margin: 12px 0 4px;
+}
+
+.pv-ig-connect-cta .jupiter-wallet-button-container,
+.pv-ig-connect-cta .jupiter-wallet-button-container button {
+  width: 100%;
+}
+
+/* Jupiter renders overrideContent as a nested div — style it as a button */
+.pv-ig-connect-cta .jupiter-wallet-button-container > div > div {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 12px;
+  padding: 14px 24px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+  text-align: center;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.3);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.pv-ig-connect-cta .jupiter-wallet-button-container > div > div:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 28px rgba(102, 126, 234, 0.4);
+}
+
+.pv-ig-connect-cta .wallet-hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: center;
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* Locked avatar / tab bar (disconnected preview) */
+.pv-ig-avatar-wrap--locked {
+  cursor: default;
+}
+
+.pv-ig-tabbar--locked .pv-ig-tab {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.pv-ig-tabbar--locked .pv-ig-tab:hover {
+  color: var(--text-secondary);
+}
+
+.pv-ig-tabbar--locked .pv-ig-tab--active {
+  opacity: 1;
+}
+
 /* Actions row */
 .pv-ig-actions {
   display: flex;
