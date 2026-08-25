@@ -2155,12 +2155,12 @@ const CoinCard = memo(({
                     {transactions.length === 0 ? (
                       <div className="transactions-empty">
                         <div className="empty-text">
-                          {txHistoryLoaded ? 'No recent transactions' : 'Waiting for transactions...'}
+                          {txHistoryLoaded ? 'Loading' : 'Waiting for transactions...'}
                         </div>
                         <div className="empty-subtext">
                           {txConnected
-                            ? (txHistoryLoaded ? '🟢 Listening for new swaps' : '🟢 Live monitoring active')
-                            : '⏳ Connecting...'}
+                            ? (txHistoryLoaded ? 'Listening for new swaps' : 'Live monitoring active')
+                            : 'Connecting...'}
                         </div>
                       </div>
                     ) : (() => {
@@ -2701,7 +2701,19 @@ const CoinCard = memo(({
               onTouchMove={handleBuyTouchMove}
               onTouchEnd={handleBuyTouchEnd}
               aria-hidden="true"
-            />
+            >
+              {/* Tap-or-swipe affordance to open the trade window */}
+              <button
+                type="button"
+                className="coin-buy-swipe-handle"
+                onClick={(e) => { e.stopPropagation(); openBuyDrawer('buy'); }}
+                aria-label="Open trade window"
+              >
+                <svg width="10" height="16" viewBox="0 0 10 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M2 2l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+            </div>
           )}
 
           {buyDrawerOpen && (
