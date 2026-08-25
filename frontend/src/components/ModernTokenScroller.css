@@ -313,7 +313,7 @@
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.34);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  animation: swipe-hint-enter 0.35s ease-out both;
+  animation: anchored-callout-enter 0.35s ease-out both;
 }
 
 .analytics-breakdown-callout::before {
@@ -393,7 +393,18 @@
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.34);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  animation: swipe-hint-enter 0.35s ease-out both;
+  animation: anchored-callout-enter 0.35s ease-out both;
+}
+
+@keyframes anchored-callout-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .help-section-callout::before {

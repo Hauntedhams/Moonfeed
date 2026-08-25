@@ -261,6 +261,18 @@ const CoinCard = memo(({
       setShowGraduationInfo(false);
     }
   }, [isActiveCard]);
+
+  useEffect(() => {
+    if (!pinnedMetric) return;
+
+    const handleOutsideMetricClick = (event) => {
+      if (event.target.closest('.header-metric')) return;
+      setPinnedMetric(null);
+    };
+
+    document.addEventListener('pointerdown', handleOutsideMetricClick, true);
+    return () => document.removeEventListener('pointerdown', handleOutsideMetricClick, true);
+  }, [pinnedMetric]);
   
   useEffect(() => {
     // Enrich when the card is visible and we still need data. Trigger if the coin

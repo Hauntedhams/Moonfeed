@@ -1008,8 +1008,15 @@ const ModernTokenScroller = ({
   // Handle expand state changes for coins
   const handleCoinExpandChange = useCallback((isExpanded, coinAddress) => {
     const container = scrollerRef.current;
+    const snapToCurrentSlide = () => {
+      if (!container) return;
+      const slideHeight = container.querySelector('.modern-coin-slide')?.offsetHeight || container.clientHeight || window.innerHeight;
+      const targetTop = currentIndexRef.current * slideHeight;
+      container.scrollTop = targetTop;
+    };
     
     if (isExpanded) {
+      snapToCurrentSlide();
       // Lock scrolling when coin expands
       setExpandedCoin(coinAddress);
       isScrollLocked.current = true;
@@ -1028,6 +1035,7 @@ const ModernTokenScroller = ({
       // Unlock scrolling when coin collapses
       setExpandedCoin(null);
       isScrollLocked.current = false;
+      snapToCurrentSlide();
       
       // Restore scroll position after collapse animation
       if (container) {
@@ -1040,6 +1048,35 @@ const ModernTokenScroller = ({
       }
     }
   }, []);
+
+  useEffect(() => {
+    const container = scrollerRef.current;
+    if (!container || coins.length === 0) return;
+
+    let snapTimer = null;
+    const snapToNearestSlide = () => {
+      if (isScrollLocked.current || expandedCoinRef.current || isChartFullscreen.current) return;
+      const slideHeight = container.querySelector('.modern-coin-slide')?.offsetHeight || container.clientHeight || window.innerHeight;
+      if (!slideHeight) return;
+
+      const nearestIndex = Math.max(0, Math.min(coinsRef.current.length - 1, Math.round(container.scrollTop / slideHeight)));
+      const targetTop = nearestIndex * slideHeight;
+      if (Math.abs(container.scrollTop - targetTop) > 2) {
+        container.scrollTo({ top: targetTop, behavior: 'smooth' });
+      }
+    };
+
+    const handleScroll = () => {
+      window.clearTimeout(snapTimer);
+      snapTimer = window.setTimeout(snapToNearestSlide, 160);
+    };
+
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      window.clearTimeout(snapTimer);
+      container.removeEventListener('scroll', handleScroll);
+    };
+  }, [coins.length]);
 
   // 🎯 INDEX TRACKER: IntersectionObserver — never blocks the scroll thread.
   // Reads all mutable state through refs so it only re-registers when the number
