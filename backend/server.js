@@ -1,5 +1,15 @@
 require('dotenv').config();
 const express = require('express');
+
+// Safety net: never let a stray upstream rejection (e.g. GeckoTerminal 429) crash the
+// whole server. Log and keep running — individual requests already handle their errors.
+process.on('unhandledRejection', (reason) => {
+  console.error('⚠️ [unhandledRejection]', reason?.message || reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('⚠️ [uncaughtException]', err?.message || err);
+});
+
 const cors = require('cors');
 const compression = require('compression'); // Add compression
 const fetch = require('node-fetch');
@@ -380,24 +390,34 @@ function geckoFreshTtl(timeframe) {
 const pendingGeckoRequests = new Map();
 
 // Global outbound throttle for GeckoTerminal calls. The pendingGeckoRequests map above
-// only dedupes repeat requests for the SAME pool; it does nothing when many DIFFERENT
-// pools are requested concurrently (e.g. multiple users/coins loading charts at once),
-// which was tripping GeckoTerminal's own rate limit (403/429) on cold (uncached) pools.
-// This serializes all outbound GeckoTerminal calls with a minimum spacing between them,
-// while still propagating each call's real result/error back to its own caller.
-let geckoQueueTail = Promise.resolve();
-const GECKO_MIN_SPACING_MS = 2200;
+// dedupes concurrent requests for the SAME pool/timeframe (see the proxy handler, which
+// now actually populates it). This limiter bounds how many DIFFERENT pools we hit at once
+// so we stay under GeckoTerminal's rate limit without serializing everything to a crawl.
+const GECKO_MAX_CONCURRENT = 2;
+const GECKO_MIN_SPACING_MS = 350;
+let geckoActive = 0;
+let geckoLastStart = 0;
+const geckoWaiters = [];
 function runThrottledGecko(fn) {
-  const previous = geckoQueueTail;
-  let release;
-  geckoQueueTail = new Promise((r) => { release = r; });
-  return previous.then(async () => {
-    try {
-      return await fn();
-    } finally {
-      setTimeout(release, GECKO_MIN_SPACING_MS);
-    }
+  return new Promise((resolve, reject) => {
+    geckoWaiters.push({ fn, resolve, reject });
+    drainGeckoQueue();
   });
+}
+function drainGeckoQueue() {
+  if (geckoActive >= GECKO_MAX_CONCURRENT || geckoWaiters.length === 0) return;
+  const wait = Math.max(0, GECKO_MIN_SPACING_MS - (Date.now() - geckoLastStart));
+  setTimeout(() => {
+    if (geckoActive >= GECKO_MAX_CONCURRENT || geckoWaiters.length === 0) return;
+    const { fn, resolve, reject } = geckoWaiters.shift();
+    geckoActive++;
+    geckoLastStart = Date.now();
+    Promise.resolve()
+      .then(fn)
+      .then(resolve, reject)
+      .finally(() => { geckoActive--; drainGeckoQueue(); });
+    drainGeckoQueue(); // allow up to MAX_CONCURRENT to start (spaced)
+  }, wait);
 }
 
 // ─── Pool Address Resolver ───────────────────────────────────────
@@ -664,79 +684,69 @@ app.get('/api/geckoterminal/ohlcv/:network/:poolAddress/:timeframe', async (req,
       currency: 'usd'
     });
 
-    // Fetch from GeckoTerminal with proper headers, serialized through the global
-    // throttle queue so concurrent distinct-pool requests don't burst past GeckoTerminal's
-    // rate limit. One quick retry on 429 (transient) before giving up.
-    const fetch = require('node-fetch');
-    const doFetch = () => fetch(`${url}?${params}`, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
-      },
-      timeout: 15000
-    });
-    let response = await runThrottledGecko(doFetch);
-    if (response.status === 429) {
-      console.log(`⏳ [Proxy] 429 for ${poolAddress}/${timeframe}, retrying once after backoff...`);
-      await new Promise((r) => setTimeout(r, 800));
-      response = await runThrottledGecko(doFetch);
-    }
+    // Share one upstream fetch across all concurrent callers for this exact key.
+    // Runs through the concurrency-limited throttle so we stay under GeckoTerminal's
+    // rate limit; retries a transient 429 once. On success caches + resolves the data.
+    const fetchPromise = (async () => {
+      const fetch = require('node-fetch');
+      const doFetch = () => fetch(`${url}?${params}`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+        },
+        timeout: 15000
+      });
+      let response = await runThrottledGecko(doFetch);
+      if (response.status === 429) {
+        console.log(`⏳ [Proxy] 429 for ${poolAddress}/${timeframe}, retrying once after backoff...`);
+        await new Promise((r) => setTimeout(r, 800));
+        response = await runThrottledGecko(doFetch);
+      }
+      if (!response.ok) {
+        const errorText = await response.text();
+        const err = new Error(`GeckoTerminal API error: ${response.status} ${response.statusText}`);
+        err.status = response.status;
+        err.body = errorText.substring(0, 200);
+        throw err;
+      }
+      const data = await response.json();
+      if (!data?.data?.attributes?.ohlcv_list) {
+        throw new Error('Invalid OHLCV data format from GeckoTerminal');
+      }
+      geckoCache.set(cacheKey, { data, timestamp: Date.now() });
+      if (geckoCache.size > 500) {
+        geckoCache.delete(geckoCache.keys().next().value);
+      }
+      return data;
+    })();
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`❌ [Proxy] GeckoTerminal API error: ${response.status} - ${errorText.substring(0, 200)}`);
-      
-      // If rate limited, forbidden, or any error and we have ANY cache (even very old), use it
-      if (cached && (response.status === 403 || response.status === 429 || response.status >= 500)) {
-        console.log(`⚠️ [Proxy] API error (${response.status}), using stale cache (age: ${Math.round((Date.now() - cached.timestamp) / 60000)}min)`);
+    pendingGeckoRequests.set(cacheKey, fetchPromise);
+    // Cleanup must not create a second unhandled rejection path (Node exits on those).
+    fetchPromise.catch(() => {}).finally(() => pendingGeckoRequests.delete(cacheKey));
+
+    let data;
+    try {
+      data = await fetchPromise;
+    } catch (error) {
+      const status = error.status;
+      console.error(`❌ [Proxy] GeckoTerminal API error: ${status || ''} - ${error.body || error.message}`);
+      // On any upstream error, serve ANY cached data we have (even old) rather than failing.
+      if (cached) {
+        console.log(`⚠️ [Proxy] Error, serving stale cache (age: ${Math.round((Date.now() - cached.timestamp) / 60000)}min)`);
         return res.json(cached.data);
       }
-      
-      // Return a more user-friendly error message for rate limits
-      if (response.status === 429) {
-        return res.status(503).json({ 
+      if (status === 429 || status === 403) {
+        return res.status(503).json({
           error: 'Chart data temporarily unavailable due to rate limiting. Please try again in a moment.',
-          status: 429,
-          retryAfter: 60 // seconds
+          status,
+          retryAfter: status === 403 ? 120 : 30
         });
       }
-      
-      // Handle 403 Forbidden (often from GeckoTerminal blocking)
-      if (response.status === 403) {
-        return res.status(503).json({ 
-          error: 'Chart data temporarily unavailable. Using cached data when available.',
-          status: 403,
-          retryAfter: 120 // seconds
-        });
-      }
-      
-      throw new Error(`GeckoTerminal API error: ${response.status} ${response.statusText}`);
+      throw error;
     }
 
-    const data = await response.json();
-    
-    // Validate the response structure
-    if (!data || !data.data || !data.data.attributes || !data.data.attributes.ohlcv_list) {
-      console.error(`❌ [Proxy] Invalid response structure from GeckoTerminal:`, JSON.stringify(data).substring(0, 200));
-      throw new Error('Invalid OHLCV data format from GeckoTerminal');
-    }
-    
-    // Cache the response with current timestamp
-    geckoCache.set(cacheKey, {
-      data,
-      timestamp: Date.now()
-    });
-    
-    // Clean up old cache entries (keep last 500 to support multiple timeframes)
-    if (geckoCache.size > 500) {
-      const firstKey = geckoCache.keys().next().value;
-      geckoCache.delete(firstKey);
-    }
-    
     console.log(`✅ [Proxy] Returning ${data.data.attributes.ohlcv_list.length} OHLCV data points for ${poolAddress}`);
-    
-    // Return the raw GeckoTerminal response
     res.json(data);
 
   } catch (error) {
