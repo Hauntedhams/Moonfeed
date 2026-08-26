@@ -108,6 +108,11 @@
   color: #6b7280;
 }
 
+.native-chart-overlay-tappable {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
 .native-chart-spinner {
   width: 26px;
   height: 26px;

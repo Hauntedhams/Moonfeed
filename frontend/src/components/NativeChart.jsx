@@ -124,38 +124,53 @@ const NativeChart = ({ coin, isActive = false, isExpanded = false, livePrice = n
     const tf = TIMEFRAMES[tfIndex];
     setStatus('loading');
     lastCandleRef.current = null; // block live folding until fresh data lands
-    try {
-      const url = `${API_CONFIG.BASE_URL}/api/geckoterminal/ohlcv/solana/${pool}/${tf.interval}?aggregate=${tf.aggregate}&limit=200`;
-      const res = await fetch(url);
-      const json = await res.json();
-      const list = json?.data?.attributes?.ohlcv_list || [];
-      if (!Array.isArray(list) || list.length === 0) {
-        seriesRef.current?.setData([]);
-        setStatus('empty');
-        return;
+    const url = `${API_CONFIG.BASE_URL}/api/geckoterminal/ohlcv/solana/${pool}/${tf.interval}?aggregate=${tf.aggregate}&limit=200`;
+    // The backend can transiently 503 a cold (uncached) pool if GeckoTerminal's own
+    // rate limit is hit — retry a couple of times before treating it as empty/error.
+    const RETRY_DELAYS_MS = [0, 900, 2000];
+    let list = null;
+    let hadError = false;
+    for (const delay of RETRY_DELAYS_MS) {
+      if (delay) await new Promise((r) => setTimeout(r, delay));
+      try {
+        const res = await fetch(url);
+        if (!res.ok) { hadError = true; continue; } // transient — retry
+        const json = await res.json();
+        list = json?.data?.attributes?.ohlcv_list || [];
+        hadError = false;
+        break;
+      } catch (e) {
+        hadError = true;
       }
-      // GeckoTerminal returns [ts, open, high, low, close, volume], newest-first.
-      const candles = list
-        .map(([t, o, h, l, c]) => ({ time: t, open: +o, high: +h, low: +l, close: +c }))
-        .filter((c) => Number.isFinite(c.time) && Number.isFinite(c.close))
-        .sort((a, b) => a.time - b.time);
-      // lightweight-charts requires strictly ascending, unique timestamps.
-      const deduped = [];
-      for (const c of candles) {
-        if (deduped.length && deduped[deduped.length - 1].time === c.time) {
-          deduped[deduped.length - 1] = c;
-        } else {
-          deduped.push(c);
-        }
-      }
-      if (!seriesRef.current) return;
-      seriesRef.current.setData(deduped);
-      lastCandleRef.current = deduped[deduped.length - 1] || null;
-      chartRef.current?.timeScale().fitContent();
-      setStatus('ready');
-    } catch (e) {
-      setStatus('error');
     }
+    if (!seriesRef.current) return; // unmounted mid-fetch
+    if (hadError) {
+      setStatus('error');
+      return;
+    }
+    if (!Array.isArray(list) || list.length === 0) {
+      seriesRef.current.setData([]);
+      setStatus('empty');
+      return;
+    }
+    // GeckoTerminal returns [ts, open, high, low, close, volume], newest-first.
+    const candles = list
+      .map(([t, o, h, l, c]) => ({ time: t, open: +o, high: +h, low: +l, close: +c }))
+      .filter((c) => Number.isFinite(c.time) && Number.isFinite(c.close))
+      .sort((a, b) => a.time - b.time);
+    // lightweight-charts requires strictly ascending, unique timestamps.
+    const deduped = [];
+    for (const c of candles) {
+      if (deduped.length && deduped[deduped.length - 1].time === c.time) {
+        deduped[deduped.length - 1] = c;
+      } else {
+        deduped.push(c);
+      }
+    }
+    seriesRef.current.setData(deduped);
+    lastCandleRef.current = deduped[deduped.length - 1] || null;
+    chartRef.current?.timeScale().fitContent();
+    setStatus('ready');
   }, [pool, tfIndex]);
 
   useEffect(() => {
@@ -216,8 +231,8 @@ const NativeChart = ({ coin, isActive = false, isExpanded = false, livePrice = n
         </div>
       )}
       {status === 'error' && (
-        <div className="native-chart-overlay">
-          <span className="native-chart-msg">Chart unavailable</span>
+        <div className="native-chart-overlay native-chart-overlay-tappable" onClick={(e) => { e.stopPropagation(); load(); }}>
+          <span className="native-chart-msg">Chart unavailable — tap to retry</span>
         </div>
       )}
     </div>

@@ -379,6 +379,27 @@ function geckoFreshTtl(timeframe) {
 // Request deduplication - prevent multiple simultaneous requests to same endpoint
 const pendingGeckoRequests = new Map();
 
+// Global outbound throttle for GeckoTerminal calls. The pendingGeckoRequests map above
+// only dedupes repeat requests for the SAME pool; it does nothing when many DIFFERENT
+// pools are requested concurrently (e.g. multiple users/coins loading charts at once),
+// which was tripping GeckoTerminal's own rate limit (403/429) on cold (uncached) pools.
+// This serializes all outbound GeckoTerminal calls with a minimum spacing between them,
+// while still propagating each call's real result/error back to its own caller.
+let geckoQueueTail = Promise.resolve();
+const GECKO_MIN_SPACING_MS = 2200;
+function runThrottledGecko(fn) {
+  const previous = geckoQueueTail;
+  let release;
+  geckoQueueTail = new Promise((r) => { release = r; });
+  return previous.then(async () => {
+    try {
+      return await fn();
+    } finally {
+      setTimeout(release, GECKO_MIN_SPACING_MS);
+    }
+  });
+}
+
 // ─── Pool Address Resolver ───────────────────────────────────────
 // Many feeds (trending, new, graduating) only have a mintAddress but no
 // pairAddress / poolAddress.  The chart needs a pool address to fetch OHLCV
@@ -557,14 +578,14 @@ async function preloadChartData(coins, options = {}) {
         });
 
         const fetch = require('node-fetch');
-        const response = await fetch(`${url}?${params}`, {
+        const response = await runThrottledGecko(() => fetch(`${url}?${params}`, {
           method: 'GET',
           headers: {
             'Accept': 'application/json',
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
           },
           timeout: 10000
-        });
+        }));
 
         if (!response.ok) {
           console.warn(`⚠️ GeckoTerminal API error for ${coin.symbol}: ${response.status}`);
@@ -643,9 +664,11 @@ app.get('/api/geckoterminal/ohlcv/:network/:poolAddress/:timeframe', async (req,
       currency: 'usd'
     });
 
-    // Fetch from GeckoTerminal with proper headers
+    // Fetch from GeckoTerminal with proper headers, serialized through the global
+    // throttle queue so concurrent distinct-pool requests don't burst past GeckoTerminal's
+    // rate limit. One quick retry on 429 (transient) before giving up.
     const fetch = require('node-fetch');
-    const response = await fetch(`${url}?${params}`, {
+    const doFetch = () => fetch(`${url}?${params}`, {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
@@ -653,6 +676,12 @@ app.get('/api/geckoterminal/ohlcv/:network/:poolAddress/:timeframe', async (req,
       },
       timeout: 15000
     });
+    let response = await runThrottledGecko(doFetch);
+    if (response.status === 429) {
+      console.log(`⏳ [Proxy] 429 for ${poolAddress}/${timeframe}, retrying once after backoff...`);
+      await new Promise((r) => setTimeout(r, 800));
+      response = await runThrottledGecko(doFetch);
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
