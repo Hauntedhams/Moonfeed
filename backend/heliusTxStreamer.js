@@ -14,12 +14,9 @@
 const WebSocket = require('ws');
 const axios = require('axios');
 const solanaTransactionService = require('./solanaTransactionService');
+const { HELIUS_WS_URL, HELIUS_RPC_URL, PUBLIC_WS_URL, PUBLIC_RPC_URL } = require('./solanaRpcConfig');
 
-const HELIUS_API_KEY = process.env.HELIUS_API_KEY || process.env.HELIUS_KEY || null;
-const HELIUS_WS_URL = HELIUS_API_KEY ? `wss://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}` : null;
-// Public Solana mainnet RPC — primary source (no key required)
-const PUBLIC_SOLANA_WS_URL = 'wss://api.mainnet-beta.solana.com';
-const PUBLIC_SOLANA_RPC_URL = 'https://api.mainnet-beta.solana.com';
+// Helius is primary (public mainnet-beta 429s hard and drops logsSubscribe).
 const FLUSH_DEBOUNCE_MS = 500; // Batch signatures for 500ms before parsing
 const MAX_BATCH_SIZE = 20;     // Max signatures per Helius Enhanced API call
 const PING_INTERVAL_MS = 30_000; // Send ping every 30s to keep Helius WS alive
@@ -46,7 +43,7 @@ class HeliusTxStreamer {
         pingInterval: null,
       };
       this.streams.set(mintAddress, stream);
-      this._openStream(mintAddress, stream, true); // primary: public Solana RPC
+      this._openStream(mintAddress, stream, false); // primary: Helius RPC
     }
     stream.clients.add(clientWs);
     console.log(`[TxStreamer] Client subscribed to ${mintAddress.substring(0, 8)}. Total clients: ${stream.clients.size}`);
@@ -83,8 +80,8 @@ class HeliusTxStreamer {
 
   // ─── Private ─────────────────────────────────────────────────────────────
 
-  _openStream(mintAddress, stream, usePublicRpc = true) {
-    const wsUrl = (!usePublicRpc && HELIUS_WS_URL) ? HELIUS_WS_URL : PUBLIC_SOLANA_WS_URL;
+  _openStream(mintAddress, stream, usePublicRpc = false) {
+    const wsUrl = usePublicRpc ? PUBLIC_WS_URL : (HELIUS_WS_URL || PUBLIC_WS_URL);
     try {
       const ws = new WebSocket(wsUrl);
       stream.ws = ws;
@@ -153,8 +150,8 @@ class HeliusTxStreamer {
 
         // Reconnect if clients still subscribed
         if (this.streams.has(mintAddress) && stream.clients.size > 0) {
-          const nextPublic = true; // always use public RPC
-          console.log(`[TxStreamer] Reconnecting ${mintAddress.substring(0, 8)} in 3s (public RPC)...`);
+          const nextPublic = false; // prefer Helius (public RPC 429s)
+          console.log(`[TxStreamer] Reconnecting ${mintAddress.substring(0, 8)} in 3s (Helius RPC)...`);
           setTimeout(() => {
             if (this.streams.has(mintAddress) && stream.clients.size > 0) {
               this._openStream(mintAddress, stream, nextPublic);
@@ -174,12 +171,12 @@ class HeliusTxStreamer {
 
     let swaps = [];
 
-    // Strategy 1: Public Solana RPC getTransaction (no key required)
+    // Strategy 1: Helius RPC getTransaction (public mainnet-beta 429s)
     if (sigs.length > 0) {
       try {
         const results = await Promise.allSettled(
           sigs.map(sig =>
-            axios.post(PUBLIC_SOLANA_RPC_URL, {
+            axios.post(HELIUS_RPC_URL || PUBLIC_RPC_URL, {
               jsonrpc: '2.0', id: 1,
               method: 'getTransaction',
               params: [sig, { maxSupportedTransactionVersion: 0, encoding: 'jsonParsed' }],

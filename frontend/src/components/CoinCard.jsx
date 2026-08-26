@@ -4,6 +4,8 @@ import { UnifiedWalletButton } from '@jup-ag/wallet-adapter';
 import WalletConnectOnboarding from './WalletConnectOnboarding';
 import './CoinCard.css';
 import TwelveDataChart from './TwelveDataChart';
+import NativeChart from './NativeChart';
+import { USE_NATIVE_CHART } from '../config/features';
 import LiquidityLockIndicator from './LiquidityLockIndicator';
 import TopTradersList from './TopTradersList';
 import WalletPopup from './WalletPopup';
@@ -3009,7 +3011,25 @@ const CoinCard = memo(({
           iframe only ever loads for the current/preload card anyway (isActive).
           Uses the settled-index gate (mountChart) so charts never mount/unmount
           mid-swipe, which would interrupt CSS scroll-snap. */}
-      {(mountChart ?? isVisible) && mobileTargetMounted && mobileChartTargetRef.current && createPortal(
+      {(mountChart ?? isVisible) && mobileTargetMounted && (() => {
+        // Native chart (Phase 1): renders in-flow into the right panel on desktop,
+        // or the mobile chart slot on mobile. No body-portal / iframe touch-trap.
+        if (USE_NATIVE_CHART) {
+          const target = isDesktopMode ? rightPanelRef.current : mobileChartTargetRef.current;
+          if (!target) return null;
+          return createPortal(
+            <NativeChart
+              key={`nchart-${mintAddress}`}
+              coin={coin}
+              isActive={isCurrentCard}
+              isExpanded={isDesktopMode ? true : isExpanded}
+              livePrice={rpcLivePrice}
+            />,
+            target
+          );
+        }
+        if (!mobileChartTargetRef.current) return null;
+        return createPortal(
         <TwelveDataChart 
           key={`chart-${mintAddress}`}
           coin={coin}
@@ -3035,7 +3055,8 @@ const CoinCard = memo(({
           onOpenBuyDrawer={openBuyDrawer}
         />,
         mobileChartTargetRef.current
-      )}
+        );
+      })()}
 
       {/* Banner Modal - Use Portal to render at document root */}
       {showBannerModal && createPortal(

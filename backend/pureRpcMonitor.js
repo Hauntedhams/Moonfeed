@@ -1,5 +1,10 @@
 const { Connection, PublicKey } = require('@solana/web3.js');
 const axios = require('axios');
+const { HELIUS_RPC_URL } = require('./solanaRpcConfig');
+
+// Prefer free Dexscreener polling for live price over paid RPC account subscriptions.
+// Only pre-DEX pump.fun tokens (no Dexscreener pool yet) fall back to on-chain RPC.
+const PREFER_DEXSCREENER = true;
 
 /**
  * Pure Solana RPC Monitor
@@ -9,7 +14,9 @@ const axios = require('axios');
  */
 class PureRpcMonitor {
   constructor() {
-    this.connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
+    // Helius RPC (public mainnet-beta 429s on account subscriptions). web3.js
+    // derives the wss:// subscription endpoint from this URL automatically.
+    this.connection = new Connection(HELIUS_RPC_URL, 'confirmed');
     this.subscriptions = new Map(); // tokenMint -> subscription data
     this.clients = new Map(); // tokenMint -> Set of WebSocket clients
     
@@ -552,6 +559,8 @@ class PureRpcMonitor {
         currentPrice = await this.getRaydiumPrice({ type: 'raydium', poolAddress: sub.poolAddress, tokenMint });
       } else if (sub.type === 'orca') {
         currentPrice = await this.getOrcaPrice({ type: 'orca', poolAddress: sub.poolAddress, tokenMint });
+      } else if (sub.type === 'dexscreener') {
+        currentPrice = await this.getDexscreenerPrice(tokenMint);
       }
       
       if (currentPrice && client.readyState === 1) {
@@ -569,6 +578,19 @@ class PureRpcMonitor {
     }
 
     try {
+      // Dexscreener-first: DEX-listed tokens get free ~1.5s price polling, avoiding
+      // paid RPC account subscriptions. Pre-DEX pump.fun tokens (no Dexscreener pool)
+      // fall through to the on-chain RPC path below.
+      if (PREFER_DEXSCREENER) {
+        const dexPrice = await this.getDexscreenerPrice(tokenMint);
+        if (dexPrice && dexPrice.price > 0) {
+          this.broadcastPrice(tokenMint, dexPrice);
+          this.startDexscreenerPolling(tokenMint);
+          return;
+        }
+        console.log(`ℹ️  [Monitor] No Dexscreener pool for ${tokenMint.substring(0, 8)}, using on-chain RPC (pre-DEX token)`);
+      }
+
       // Find the token's pool
       const poolData = await this.findTokenPool(tokenMint);
       

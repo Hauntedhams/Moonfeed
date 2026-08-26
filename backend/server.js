@@ -365,7 +365,16 @@ app.get('/api/coins/:tokenAddress/historical-prices', async (req, res) => {
 const geckoCache = new Map();
 const GECKO_CACHE_DURATION = 30 * 60 * 1000; // 30 minutes for OHLCV data (prevent rate limits)
 const GECKO_POOL_CACHE_DURATION = 60 * 60 * 1000; // 60 minutes for pool info
-const GECKO_STALE_CACHE_MAX = 24 * 60 * 60 * 1000; // Use stale cache up to 24 hours old if rate limited (very aggressive caching)
+const GECKO_STALE_CACHE_MAX = 24 * 60 * 60 * 1000; // On-ERROR fallback ceiling: serve cache up to 24h old only when the upstream API fails (rate limit / 5xx)
+
+// Fresh window by timeframe. Intraday charts refresh quickly so candles stay near-live;
+// higher timeframes barely move, so they stay cached longer to conserve the GeckoTerminal
+// rate budget. After this window we actually re-fetch instead of serving stale on the happy path.
+function geckoFreshTtl(timeframe) {
+  if (timeframe === 'minute') return 90 * 1000;    // 1.5 min
+  if (timeframe === 'hour') return 15 * 60 * 1000; // 15 min
+  return GECKO_CACHE_DURATION;                      // day / other
+}
 
 // Request deduplication - prevent multiple simultaneous requests to same endpoint
 const pendingGeckoRequests = new Map();
@@ -606,7 +615,8 @@ app.get('/api/geckoterminal/ohlcv/:network/:poolAddress/:timeframe', async (req,
     
     // Check cache first
     const cached = geckoCache.get(cacheKey);
-    if (cached && Date.now() - cached.timestamp < GECKO_CACHE_DURATION) {
+    const freshTtl = geckoFreshTtl(timeframe);
+    if (cached && Date.now() - cached.timestamp < freshTtl) {
       console.log(`📊 [Proxy] ✅ Cache hit for OHLCV: ${poolAddress}/${timeframe} (age: ${Math.round((Date.now() - cached.timestamp) / 1000)}s)`);
       return res.json(cached.data);
     }
@@ -621,12 +631,6 @@ app.get('/api/geckoterminal/ohlcv/:network/:poolAddress/:timeframe', async (req,
         // If the pending request failed, continue to try again
         console.log(`⚠️ [Proxy] Pending request failed, retrying: ${poolAddress}/${timeframe}`);
       }
-    }
-
-    // Use stale cache if available and not too old (prevent unnecessary API calls)
-    if (cached && Date.now() - cached.timestamp < GECKO_STALE_CACHE_MAX) {
-      console.log(`📊 [Proxy] 📦 Using slightly stale cache to avoid rate limits: ${poolAddress}/${timeframe} (age: ${Math.round((Date.now() - cached.timestamp) / 60000)}min)`);
-      return res.json(cached.data);
     }
 
     console.log(`📊 [Proxy] OHLCV data requested: ${network}/${poolAddress}/${timeframe} (aggregate: ${aggregate}, limit: ${limit})`);

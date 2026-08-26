@@ -1,0 +1,130 @@
+/* Phase 1 native candlestick chart. Fills the same slot as the old iframe
+   (.mobile-chart-target, 380px). Collapsed: canvas ignores pointer events so
+   the feed scrolls as one unit. Expanded: interactive pan/zoom. */
+
+.native-chart {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 380px;
+  background: #0a0e1a;
+}
+
+.native-chart.light {
+  background: #ffffff;
+}
+
+.native-chart-tfs {
+  display: flex;
+  gap: 4px;
+  padding: 6px 10px;
+  flex: 0 0 auto;
+  pointer-events: auto;
+  z-index: 2;
+}
+
+.native-chart-tf {
+  border: none;
+  border-radius: 6px;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.06);
+  color: #9aa4bf;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.native-chart.light .native-chart-tf {
+  background: rgba(0, 0, 0, 0.05);
+  color: #6b7280;
+}
+
+.native-chart-tf.active {
+  background: #4f8cff;
+  color: #ffffff;
+}
+
+/* Live price badge — flashes green on an up-tick, red on a down-tick. */
+.native-chart-live {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  margin-right: 6px;
+  color: #cbd5e1;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.native-chart.light .native-chart-live {
+  color: #334155;
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.native-chart-live.up {
+  color: #26a69a;
+  animation: nc-flash-up 0.5s ease;
+}
+
+.native-chart-live.down {
+  color: #ef5350;
+  animation: nc-flash-down 0.5s ease;
+}
+
+@keyframes nc-flash-up {
+  0% { background: rgba(38, 166, 154, 0.45); }
+  100% { background: rgba(255, 255, 255, 0.06); }
+}
+
+@keyframes nc-flash-down {
+  0% { background: rgba(239, 83, 80, 0.45); }
+  100% { background: rgba(255, 255, 255, 0.06); }
+}
+
+.native-chart-canvas {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  /* Collapsed: pass touches through to the feed scroller for buttery scrolling. */
+  pointer-events: none;
+}
+
+.native-chart.expanded .native-chart-canvas {
+  pointer-events: auto;
+}
+
+.native-chart-overlay {
+  position: absolute;
+  inset: 34px 0 0 0; /* below the timeframe bar */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.native-chart-msg {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.native-chart-spinner {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 3px solid rgba(120, 140, 180, 0.25);
+  border-top-color: #4f8cff;
+  animation: native-chart-spin 0.7s linear infinite;
+}
+
+@keyframes native-chart-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Desktop split-screen: fill the right panel instead of the fixed 380px mobile slot. */
+@media (min-width: 1200px) {
+  .coin-card-right-panel .native-chart {
+    height: 100%;
+    flex: 1 1 auto;
+  }
+}
