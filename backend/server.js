@@ -389,12 +389,32 @@ function geckoFreshTtl(timeframe) {
 // Request deduplication - prevent multiple simultaneous requests to same endpoint
 const pendingGeckoRequests = new Map();
 
-// Global outbound throttle for GeckoTerminal calls. The pendingGeckoRequests map above
+// CoinGecko Pro key (paid tier). When set, OHLCV goes through CoinGecko's onchain Pro API
+// (300 req/min on Basic) instead of the keyless GeckoTerminal endpoint (~30 req/min).
+// Same data + response shape, so it's a drop-in. Falls back to keyless when unset.
+const COINGECKO_API_KEY = process.env.COINGECKO_API_KEY || '';
+function geckoOhlcvRequest(network, poolAddress, timeframe, params) {
+  if (COINGECKO_API_KEY) {
+    return {
+      url: `https://pro-api.coingecko.com/api/v3/onchain/networks/${network}/pools/${poolAddress}/ohlcv/${timeframe}?${params}`,
+      headers: { 'Accept': 'application/json', 'x-cg-pro-api-key': COINGECKO_API_KEY },
+    };
+  }
+  return {
+    url: `https://api.geckoterminal.com/api/v2/networks/${network}/pools/${poolAddress}/ohlcv/${timeframe}?${params}`,
+    headers: {
+      'Accept': 'application/json',
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+    },
+  };
+}
+
+// Global outbound throttle for GeckoTerminal/CoinGecko calls. The pendingGeckoRequests map
 // dedupes concurrent requests for the SAME pool/timeframe (see the proxy handler, which
 // now actually populates it). This limiter bounds how many DIFFERENT pools we hit at once
-// so we stay under GeckoTerminal's rate limit without serializing everything to a crawl.
-const GECKO_MAX_CONCURRENT = 2;
-const GECKO_MIN_SPACING_MS = 350;
+// so we stay under the provider's rate limit. Limits are relaxed when a paid key is present.
+const GECKO_MAX_CONCURRENT = COINGECKO_API_KEY ? 8 : 2;
+const GECKO_MIN_SPACING_MS = COINGECKO_API_KEY ? 90 : 350;
 let geckoActive = 0;
 let geckoLastStart = 0;
 const geckoWaiters = [];
@@ -590,20 +610,17 @@ async function preloadChartData(coins, options = {}) {
 
         // Only fetch from API if NO cache exists at all
         console.log(`🌐 Fetching fresh data for ${coin.symbol} (no cache)...`);
-        const url = `https://api.geckoterminal.com/api/v2/networks/solana/pools/${poolAddress}/ohlcv/${timeframe}`;
         const params = new URLSearchParams({
           aggregate: aggregate.toString(),
           limit: limit.toString(),
           currency: 'usd'
         });
+        const { url, headers } = geckoOhlcvRequest('solana', poolAddress, timeframe, params);
 
         const fetch = require('node-fetch');
-        const response = await runThrottledGecko(() => fetch(`${url}?${params}`, {
+        const response = await runThrottledGecko(() => fetch(url, {
           method: 'GET',
-          headers: {
-            'Accept': 'application/json',
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
-          },
+          headers,
           timeout: 10000
         }));
 
@@ -676,27 +693,19 @@ app.get('/api/geckoterminal/ohlcv/:network/:poolAddress/:timeframe', async (req,
 
     console.log(`📊 [Proxy] OHLCV data requested: ${network}/${poolAddress}/${timeframe} (aggregate: ${aggregate}, limit: ${limit})`);
 
-    // Construct GeckoTerminal API URL
-    const url = `https://api.geckoterminal.com/api/v2/networks/${network}/pools/${poolAddress}/ohlcv/${timeframe}`;
     const params = new URLSearchParams({
       aggregate: aggregate.toString(),
       limit: limit.toString(),
       currency: 'usd'
     });
+    const { url, headers } = geckoOhlcvRequest(network, poolAddress, timeframe, params);
 
     // Share one upstream fetch across all concurrent callers for this exact key.
-    // Runs through the concurrency-limited throttle so we stay under GeckoTerminal's
+    // Runs through the concurrency-limited throttle so we stay under the provider's
     // rate limit; retries a transient 429 once. On success caches + resolves the data.
     const fetchPromise = (async () => {
       const fetch = require('node-fetch');
-      const doFetch = () => fetch(`${url}?${params}`, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
-        },
-        timeout: 15000
-      });
+      const doFetch = () => fetch(url, { method: 'GET', headers, timeout: 15000 });
       let response = await runThrottledGecko(doFetch);
       if (response.status === 429) {
         console.log(`⏳ [Proxy] 429 for ${poolAddress}/${timeframe}, retrying once after backoff...`);
@@ -3046,6 +3055,7 @@ server.listen(PORT, async () => {
   console.log('\n🚀 ═══════════════════════════════════════════════════════════════');
   console.log(`🚀 MoonFeed Backend Server running on port ${PORT}`);
   console.log('🚀 ═══════════════════════════════════════════════════════════════\n');
+  console.log(`📈 Chart OHLCV source: ${COINGECKO_API_KEY ? 'CoinGecko Pro (paid key detected, 300/min)' : 'GeckoTerminal keyless (~30/min)'}`);
   
   // Connect to MongoDB for comments feature
   await connectDB();
