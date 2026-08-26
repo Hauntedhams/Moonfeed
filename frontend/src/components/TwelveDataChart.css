@@ -1862,12 +1862,9 @@ html:not(.dark-mode) .chart-mobile-right-actions::before {
   bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
 }
 
-/* In landscape mode the chart's GeckoTerminal toolbar appears at the physical
-   bottom — move our controls to the top so they don't overlap and cause
-   accidental taps on Vertical when the user interacts with the chart bottom. */
 .chart-fs-controls-overlay--landscape {
-  bottom: auto;
-  top: calc(env(safe-area-inset-top, 0px) + 16px);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
+  top: auto;
 }
 
 .chart-fs-controls-overlay {

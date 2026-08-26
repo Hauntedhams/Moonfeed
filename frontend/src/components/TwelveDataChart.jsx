@@ -205,16 +205,14 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
     };
 
     if (fm === 'landscape') {
-      // Slot + wrapper: identical to portrait — full-viewport, no transform.
-      // This is the key fix: by keeping the slot/wrapper layout identical to portrait,
-      // there are zero dead zones and the backdrop can never receive accidental events.
-      slot.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100dvh;transform:none;z-index:99991;border-radius:0;';
+      const viewportWidth = Math.round(window.visualViewport?.width || window.innerWidth);
+      const viewportHeight = Math.round(window.visualViewport?.height || window.innerHeight);
+      const blocksHoverPointer = window.matchMedia?.('(hover: hover) and (pointer: fine)').matches;
+      const chartPointerEvents = blocksHoverPointer ? 'none' : 'auto';
+      slot.style.cssText = `position:fixed;top:${viewportHeight}px;left:0;width:${viewportHeight}px;height:${viewportWidth}px;transform:rotate(-90deg);transform-origin:top left;z-index:99991;border-radius:0;overflow:hidden;backface-visibility:hidden;-webkit-backface-visibility:hidden;will-change:transform;pointer-events:${chartPointerEvents};`;
       rotateWrapperRef.current.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;transform:none;';
-      // Only the iframe is rotated: sized landscape (dvh × dvw), centered in the wrapper,
-      // then rotated 90° so it visually fills the full viewport in landscape orientation.
-      // The slot/wrapper carry no transform so hit-testing and the backdrop work perfectly.
       if (iframeRef.current) {
-        iframeRef.current.style.cssText = 'position:absolute;top:calc((100dvh - 100dvw)/2);left:calc((100dvw - 100dvh)/2);width:100dvh;height:100dvw;transform:rotate(90deg);transform-origin:center;border:none;display:block;';
+        iframeRef.current.style.cssText = `position:absolute;top:0;left:0;width:100%;height:100%;transform:none;border:none;display:block;pointer-events:${chartPointerEvents};touch-action:${chartPointerEvents === 'auto' ? 'pan-x pan-y pinch-zoom' : 'none'};`;
       }
       if (btnWrapper) btnWrapper.style.cssText = '';
       if (mask) mask.style.cssText = '';
@@ -317,6 +315,7 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
     // Create the rotation wrapper if needed
     if (!rotateWrapperRef.current) {
       const wrapper = document.createElement('div');
+      wrapper.className = 'chart-rotate-wrapper';
       Object.assign(wrapper.style, { position: 'absolute', top: '0', left: '0', width: '100%', height: '100%' });
       rotateWrapperRef.current = wrapper;
     }

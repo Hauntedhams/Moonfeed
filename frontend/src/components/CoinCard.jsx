@@ -1,4 +1,4 @@
-import React, { memo, useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
+import React, { memo, useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { UnifiedWalletButton } from '@jup-ag/wallet-adapter';
 import WalletConnectOnboarding from './WalletConnectOnboarding';
@@ -385,57 +385,6 @@ const CoinCard = memo(({
       setIsScrolling(false);
     };
   }, [isDesktopMode, isActiveCard]);
-
-  // Track the chart section's top and bottom offsets so portaled action buttons
-  // are anchored within the chart area (not above it in the coin-info header).
-  // Mirrors TwelveDataChart's clipTop/clipBottom logic: clamp to coin-info-layer bounds.
-  // Batched into one state object (was 3 separate setState calls per scroll event).
-  const [mobileChartRect, setMobileChartRect] = useState({ top: null, bottom: null, right: null });
-  const { top: mobileChartTop, bottom: mobileChartBottom, right: mobileChartRight } = mobileChartRect;
-  useLayoutEffect(() => {
-    if (isDesktopMode || !isActiveCard || !mobileChartTargetRef.current) {
-      setMobileChartRect({ top: null, bottom: null, right: null });
-      return;
-    }
-    // Cache elements that don't change while this card is active — avoids
-    // repeated closest()/querySelector() DOM walks on every scroll frame.
-    const el = mobileChartTargetRef.current;
-    const layerEl = el.closest('.coin-info-layer');
-    const navEl = document.querySelector('.bottom-nav');
-    let raf = null;
-    const measure = () => {
-      raf = null;
-      const rect = el.getBoundingClientRect();
-      const layerRect = layerEl?.getBoundingClientRect();
-      const clipTop    = layerRect ? Math.max(rect.top,    layerRect.top)    : rect.top;
-      const clipBottom = layerRect ? Math.min(rect.bottom, layerRect.bottom) : rect.bottom;
-      // Also clamp against the bottom nav so buttons never overlap it.
-      const navTop = navEl ? navEl.getBoundingClientRect().top : window.innerHeight;
-      const safeBottom = Math.min(clipBottom, navTop - 4);
-      if (safeBottom > clipTop) {
-        setMobileChartRect({
-          top: clipTop,
-          bottom: safeBottom,
-          // Use the card's right edge (layerRect takes precedence over chart rect).
-          right: layerRect ? layerRect.right : rect.right,
-        });
-      }
-    };
-    const update = () => {
-      if (raf) return; // coalesce to one measurement per animation frame
-      raf = requestAnimationFrame(measure);
-    };
-    measure();
-    const scroller = document.querySelector('.modern-scroller-container');
-    if (scroller) scroller.addEventListener('scroll', update, { passive: true });
-    window.addEventListener('resize', update);
-    return () => {
-      if (raf) cancelAnimationFrame(raf);
-      if (scroller) scroller.removeEventListener('scroll', update);
-      window.removeEventListener('resize', update);
-    };
-  }, [isDesktopMode, isActiveCard, mobileTargetMounted]); // eslint-disable-line react-hooks/exhaustive-deps
-
 
   // Close transaction panel when coin becomes invisible
   useEffect(() => {
