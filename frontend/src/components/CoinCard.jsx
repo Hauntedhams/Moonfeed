@@ -118,6 +118,7 @@ const CoinCard = memo(({
   const [buySolAmount, setBuySolAmount] = useState(0.1);
   const [buySolAmountInput, setBuySolAmountInput] = useState('0.10');
   const [buyOrderPrice, setBuyOrderPrice] = useState(0);
+  const [orderStepMultiplier, setOrderStepMultiplier] = useState(1);
   const [orderAmountInput, setOrderAmountInput] = useState('0.10');
   const [sellFundingSolInput, setSellFundingSolInput] = useState('0.10');
   const [sellOrderPending, setSellOrderPending] = useState(false);
@@ -536,6 +537,8 @@ const CoinCard = memo(({
     return Math.max(base * 0.005, 0.00000001);
   };
 
+  const getOrderTargetStep = () => getBuyOrderStep() * orderStepMultiplier;
+
   const clampBuyOrderPrice = (nextPrice) => {
     const base = Number(displayPrice) || Number(fallbackPrice) || 0;
     if (base <= 0) return Math.max(Number(nextPrice) || 0, 0.00000001);
@@ -607,7 +610,7 @@ const CoinCard = memo(({
     setBuyOrderPrice((current) => {
       const base = Number(displayPrice) || Number(fallbackPrice) || 0;
       const startPrice = current > 0 ? current : base;
-      return clampBuyOrderPrice(startPrice + direction * getBuyOrderStep());
+      return clampBuyOrderPrice(startPrice + direction * getOrderTargetStep());
     });
   };
 
@@ -679,7 +682,7 @@ const CoinCard = memo(({
     if (buyDrawerOpen && buyDrawerMode === 'orders' && Math.abs(deltaY) > 4) {
       e.preventDefault();
       e.stopPropagation();
-      const nextPrice = swipe.startPrice - deltaY * getBuyOrderStep() * 0.18;
+      const nextPrice = swipe.startPrice - deltaY * getOrderTargetStep() * 0.18;
       setBuyOrderPrice(clampBuyOrderPrice(nextPrice));
     }
   };
@@ -2850,6 +2853,23 @@ const CoinCard = memo(({
                         </div>
                       </label>
                     )}
+
+                    <label className="coin-buy-target-multiplier">
+                      <span className="coin-buy-target-multiplier-label">
+                        <span>Target step</span>
+                        <strong>{orderStepMultiplier}x</strong>
+                      </span>
+                      <input
+                        type="range"
+                        min="1"
+                        max="100"
+                        step="1"
+                        value={orderStepMultiplier}
+                        onChange={(e) => setOrderStepMultiplier(Number(e.target.value))}
+                        aria-label="Target price step multiplier"
+                      />
+                      <span className="coin-buy-target-multiplier-scale"><span>1x</span><span>100x</span></span>
+                    </label>
 
                     <div className="coin-buy-expiry">
                       <span className="coin-buy-expiry-label">Expires in</span>

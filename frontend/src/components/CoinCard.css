@@ -908,6 +908,50 @@
   color: #fbbf24;
 }
 
+.coin-buy-target-multiplier {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.045);
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.coin-buy-target-multiplier-label,
+.coin-buy-target-multiplier-scale {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.coin-buy-target-multiplier-label strong {
+  color: #4ade80;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.coin-buy-target-multiplier input[type='range'] {
+  width: 100%;
+  height: 5px;
+  margin: 1px 0;
+  accent-color: #22c55e;
+  cursor: pointer;
+}
+
+.coin-buy-target-multiplier-scale {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
 .coin-buy-submit {
   position: sticky;
   bottom: 0;
