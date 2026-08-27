@@ -13,7 +13,7 @@ import { useLiveData } from '../hooks/useLiveDataContext.jsx';
 import { useSolanaTransactions } from '../hooks/useSolanaTransactions.jsx';
 import { useOnDemandPrice } from '../hooks/useOnDemandPrice.js';
 import { useWallet } from '../contexts/WalletContext';
-import { placeTriggerOrder, getExpiryTimestamp, EXPIRY_OPTIONS } from '../utils/triggerOrders.js';
+import { placeTriggerOrder, getExpiryTimestamp, EXPIRY_OPTIONS, fetchTokenDecimals } from '../utils/triggerOrders.js';
 import { API_CONFIG } from '../config/api.js';
 import { 
   calculateGraduationPercentage, 
@@ -719,15 +719,19 @@ const CoinCard = memo(({
       const pending = pendingSellOrderRef.current;
       if (!pending) return;
       const detail = event.detail || {};
-      const swappedMint = detail.coin?.mintAddress || detail.coin?.address;
-      if (swappedMint !== mintAddress) return;
+      const swappedMint = detail.coin?.mintAddress || detail.coin?.mint || detail.coin?.tokenAddress || detail.coin?.address;
+      // Older and enriched coin objects use different mint field names. Only
+      // reject an event when it explicitly belongs to another token.
+      if (swappedMint && swappedMint !== mintAddress) return;
 
       pendingSellOrderRef.current = null;
       setSellOrderPending(false);
       setOrderSubmitting(true);
       setOrderError(null);
       try {
-        const decimals = detail.coin?.decimals || 6;
+        const decimals = Number.isInteger(detail.coin?.decimals)
+          ? detail.coin.decimals
+          : await fetchTokenDecimals(mintAddress);
         const raw = Number(detail.swapResult?.outputAmount);
         let tokenAmount = Number.isFinite(raw) && raw > 0 ? raw / Math.pow(10, decimals) : 0;
         if (!(tokenAmount > 0)) tokenAmount = await fetchTokenBalance();
