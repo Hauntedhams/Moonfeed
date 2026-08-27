@@ -68,6 +68,7 @@
 
 .feed-selector-dropdown--expanded {
   width: min(880px, calc(100vw - 24px));
+  max-height: min(90dvh, 680px);
 }
 
 @keyframes feed-selector-in {
