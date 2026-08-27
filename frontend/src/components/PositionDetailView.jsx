@@ -47,6 +47,7 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [chartPrice, setChartPrice] = useState(null);
 
   useEffect(() => {
     if (!walletAddress || !mint) return;
@@ -54,6 +55,7 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
     setLoading(true);
     setError(null);
     setData(null);
+    setChartPrice(null);
     fetchJsonWithTimeout(getFullApiUrl(`/api/wallet/${walletAddress}/position/${mint}`))
       .then((d) => { if (!cancelled) setData(d); })
       .catch((e) => { if (!cancelled) setError(e.message); })
@@ -110,13 +112,20 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
   const tokenSymbol = position?.symbol || profileHint?.tokenSymbol || 'Token';
   const tokenName = position?.name || profileHint?.tokenName || tokenSymbol;
   const tokenImage = position?.image || profileHint?.tokenImage || null;
-  const pnlTotal = position?.pnl?.total ?? 0;
+  const reportedPnl = position?.pnl?.total ?? 0;
+  const entryPrice = Number(position?.avgEntryPrice);
+  const invested = Number(position?.invested);
+  const hasHistoricalPrice = Number.isFinite(chartPrice) && chartPrice > 0 && Number.isFinite(entryPrice) && entryPrice > 0 && Number.isFinite(invested) && invested > 0;
+  const historicalRoi = hasHistoricalPrice ? ((chartPrice - entryPrice) / entryPrice) * 100 : null;
+  const pnlTotal = hasHistoricalPrice ? invested * (historicalRoi / 100) : reportedPnl;
+  const roi = hasHistoricalPrice ? historicalRoi : position?.roi;
   const isProfit = pnlTotal >= 0;
   const chartCoin = mint ? { mintAddress: mint } : null;
   const displayName = profileHint?.displayName || profileHint?.name || buildWalletName(walletAddress);
 
   return (
-    <div className="pdv-root">
+    <div className="pdv-backdrop" onClick={onBack}>
+    <div className="pdv-root" onClick={(event) => event.stopPropagation()}>
       <button className="pdv-back" onClick={onBack} title="Back" aria-label="Back">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="15 18 9 12 15 6" />
@@ -167,7 +176,7 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
           {position ? formatCurrency(pnlTotal) : 'Loading PnL'}
         </div>
         <div className={`pdv-pnl-pct ${position ? (isProfit ? 'pos' : 'neg') : 'loading'}`}>
-          {position ? formatPercent(position.roi) : 'Fetching wallet position'}
+          {position ? formatPercent(roi) : 'Fetching wallet position'}
         </div>
       </div>
 
@@ -178,6 +187,8 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
           isExpanded={true}
           markers={markers}
           initialTfIndex={tfIndexForHold(position?.timing?.holdTimeSecs)}
+          focusTimelineFrom={position?.timing?.firstBuy}
+          onCrosshairMove={(point) => setChartPrice(point?.price ?? null)}
         />
       </div>
 
@@ -211,6 +222,7 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
           Trade {tokenSymbol}
         </button>
       )}
+    </div>
     </div>
   );
 }

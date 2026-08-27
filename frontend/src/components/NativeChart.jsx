@@ -55,8 +55,10 @@ const NativeChart = ({
   isExpanded = false,
   livePrice = null,
   markers = null,
+  onCrosshairMove = null,
   initialTfIndex = null,
   focusOneMinute = false,
+  focusTimelineFrom = null,
   targetPrice = null,
   targetLabel = '',
   targetColor = '#22d3ee',
@@ -165,6 +167,25 @@ const NativeChart = ({
       chartRef.current.applyOptions({ handleScroll: isExpanded, handleScale: isExpanded });
     }
   }, [isExpanded]);
+
+  // Feed the parent card's header with the historical candle under the
+  // crosshair. Clearing the pointer restores its live price indicator.
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart || !onCrosshairMove) return undefined;
+    const handleMove = (param) => {
+      const series = seriesRef.current;
+      const candle = series ? param.seriesData?.get(series) : null;
+      const price = Number(candle?.close ?? candle?.value);
+      if (param.time && Number.isFinite(price) && price > 0) {
+        onCrosshairMove({ price, time: param.time });
+      } else {
+        onCrosshairMove(null);
+      }
+    };
+    chart.subscribeCrosshairMove(handleMove);
+    return () => chart.unsubscribeCrosshairMove(handleMove);
+  }, [onCrosshairMove, status, tfIndex]);
 
   // Limit-order sell mode always works from a tight one-minute view of the
   // current coin, even if the user was previously looking at a wider chart.
@@ -283,6 +304,26 @@ const NativeChart = ({
   useEffect(() => {
     if (isActive) load();
   }, [isActive, load]);
+
+  // Position detail opens at the trader's entry point, leaving the subsequent
+  // price action visible and scrollable instead of always fitting all history.
+  useEffect(() => {
+    const chart = chartRef.current;
+    const last = lastCandleRef.current;
+    const entryMs = Number(focusTimelineFrom);
+    if (!chart || !last || status !== 'ready' || !Number.isFinite(entryMs) || entryMs <= 0) return;
+
+    const entry = Math.floor(entryMs / 1000);
+    const interval = tfSeconds(TIMEFRAMES[tfIndex]);
+    const from = Math.max(0, entry - interval * 3);
+    const to = last.time + interval * 6;
+    try {
+      chart.timeScale().setVisibleRange({ from, to });
+    } catch (_) {
+      // The selected timeframe may not retain an old entry candle; fitContent
+      // from load() remains a useful fallback until the user changes timeframe.
+    }
+  }, [focusTimelineFrom, status, tfIndex]);
 
   // Overlay caller-supplied markers (e.g. buy/sell points) once real candles are in.
   useEffect(() => {

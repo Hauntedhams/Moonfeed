@@ -11,6 +11,7 @@ import JupiterWalletButton from './JupiterWalletButton';
 import './ProfileView.css';
 import './OrdersView.css';
 import { getTransactions } from '../utils/transactionStorage';
+import { computeFillStats, getSolUsdPrice } from '../utils/orderFillTracking';
 
 const ProfileView = ({ onTradeClick }) => {
   // Use Jupiter Wallet Kit adapter
@@ -44,6 +45,13 @@ const ProfileView = ({ onTradeClick }) => {
   const [selectedWallet, setSelectedWallet] = useState(null);
   const [profileTab, setProfileTab] = useState('history');
   const [transactions, setTransactions] = useState([]);
+  const [solUsdPrice, setSolUsdPrice] = useState(150);
+
+  // Keep a live-ish SOL/USD price around for converting filled-order values to USD
+  useEffect(() => {
+    getSolUsdPrice().then(setSolUsdPrice);
+  }, []);
+
 
   // Coin history detail sheet
   const [historyDetailCoin, setHistoryDetailCoin] = useState(null);
@@ -1160,6 +1168,25 @@ const ProfileView = ({ onTradeClick }) => {
                             </span>
                           </div>
                         </div>
+
+                        {status === 'executed' && (() => {
+                          const { percent, usdAmount } = computeFillStats(order, transactions, solUsdPrice);
+                          return (
+                            <div className="order-hist-fulfilled-banner">
+                              <span className="order-hist-fulfilled-title">🎉 Fulfilled!</span>
+                              <span className="order-hist-fulfilled-stats">
+                                {Number.isFinite(percent) && (
+                                  <span className={`order-hist-fulfilled-pct${percent >= 0 ? ' positive' : ' negative'}`}>
+                                    {percent >= 0 ? '+' : ''}{percent.toFixed(1)}%
+                                  </span>
+                                )}
+                                {usdAmount > 0 && (
+                                  <span className="order-hist-fulfilled-usd">${usdAmount.toFixed(2)}</span>
+                                )}
+                              </span>
+                            </div>
+                          );
+                        })()}
 
                         <div className="order-hist-price-section">
                           <div className="order-hist-divider" />

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useWallet as useJupiterWallet, useUnifiedWalletContext } from '@jup-ag/wallet-adapter';
 import { useDemoMode } from '../contexts/DemoModeContext';
 import './JupiterTradeModal.css';
@@ -18,6 +18,18 @@ export const WalletConnectOnboardingProvider = ({ children }) => {
   const wallet = useJupiterWallet();
   const [open, setOpen] = useState(false);
   const [pendingWallet, setPendingWallet] = useState(null);
+  const onDismissRef = React.useRef(null);
+  const openWalletConnect = useCallback(({ onDismiss } = {}) => {
+    onDismissRef.current = onDismiss || null;
+    setOpen(true);
+  }, []);
+  const closeWalletConnect = useCallback(() => {
+    setOpen(false);
+    const onDismiss = onDismissRef.current;
+    onDismissRef.current = null;
+    onDismiss?.();
+  }, []);
+  const onboardingContext = useMemo(() => ({ openWalletConnect }), [openWalletConnect]);
 
   useEffect(() => {
     if (!pendingWallet || wallet.connected || wallet.connecting) return;
@@ -43,13 +55,13 @@ export const WalletConnectOnboardingProvider = ({ children }) => {
   };
 
   return (
-    <WalletConnectOnboardingContext.Provider value={{ openWalletConnect: () => setOpen(true) }}>
+    <WalletConnectOnboardingContext.Provider value={onboardingContext}>
       {children}
       {open && !wallet.connected && (
-        <div className="wallet-onboarding-overlay" onClick={() => setOpen(false)}>
+        <div className="wallet-onboarding-overlay" onClick={closeWalletConnect}>
           <div className="wallet-onboarding-modal" onClick={(e) => e.stopPropagation()}>
             <div className="mf-onboarding">
-              <button className="mf-onboarding-close" onClick={() => setOpen(false)} aria-label="Close">✕</button>
+              <button className="mf-onboarding-close" onClick={closeWalletConnect} aria-label="Close">✕</button>
               <h2 className="mf-onboarding-title">How to use Moonfeed</h2>
               <p className="mf-onboarding-subtitle">Connect a hot wallet to start trading in three simple steps.</p>
 
@@ -114,8 +126,8 @@ export const WalletConnectOnboardingProvider = ({ children }) => {
               </div>
               <button type="button" className="mf-wallets-more" onClick={() => setShowModal(true)}>More wallet options</button>
               <div className="wallet-onboarding-footer-actions">
-                <button type="button" onClick={() => setOpen(false)}>Browse without a wallet</button>
-                <button type="button" onClick={() => { enableDemoMode(); setOpen(false); }}>Explore demo account</button>
+                <button type="button" onClick={closeWalletConnect}>Browse without a wallet</button>
+                <button type="button" onClick={() => { enableDemoMode(); closeWalletConnect(); }}>Explore demo account</button>
               </div>
             </div>
           </div>

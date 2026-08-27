@@ -17,6 +17,7 @@ import ReferralTracker from './utils/ReferralTracker'
 import MobileOptimizer from './utils/mobileOptimizer'
 import { initializePerformanceMonitoring } from './utils/mobileOptimizations'
 import { storeTransaction } from './utils/transactionStorage'
+import useOrderFillNotifications from './hooks/useOrderFillNotifications'
 
 // Lazy load heavy components that aren't needed immediately
 const WalletDebug = lazy(() => import('./components/WalletDebug'))
@@ -51,6 +52,7 @@ function App() {
   const [favorites, setFavorites] = useState([]);
   const { publicKey, connected } = useWallet();
   const walletAddress = publicKey?.toString() || null;
+  useOrderFillNotifications(); // background: notifies when a limit order fills
   const favoritesSyncedWalletRef = useRef(null); // account address we've already pulled synced favorites for
   const skipNextFavoritesSaveRef = useRef(false); // true right after loading remote data, to avoid an immediate re-save
   const [searchModalOpen, setSearchModalOpen] = useState(false);

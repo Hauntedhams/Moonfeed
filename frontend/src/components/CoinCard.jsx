@@ -96,7 +96,6 @@ const CoinCard = memo(({
   const [priceFlash, setPriceFlash] = useState('');
   const [showLiveTransactions, setShowLiveTransactions] = useState(false);
   const [showInlineTopTraders, setShowInlineTopTraders] = useState(false);
-  const [showTopTraders, setShowTopTraders] = useState(false); // Toggled via TikTok action button
   const [showComments, setShowComments] = useState(false); // TikTok-style comments bottom sheet
   const [comments, setComments] = useState([]); // Cached comments for count badge
   const [showActionButtons, setShowActionButtons] = useState(false); // Hidden in collapsed/preview state; shown only when card is expanded
@@ -134,6 +133,7 @@ const CoinCard = memo(({
   const rightPanelRef = useRef(null); // Ref for the right panel (desktop chart target)
   const mobileChartTargetRef = useRef(null); // Ref for mobile chart target (portal destination)
   const txSectionRef = useRef(null); // Ref for the transactions section (outside-click close)
+  const topTradersSectionRef = useRef(null);
   
   // Track desktop mode for responsive chart positioning
   const [isDesktopMode, setIsDesktopMode] = useState(() => window.innerWidth >= 1200);
@@ -434,10 +434,20 @@ const CoinCard = memo(({
   useEffect(() => {
     if (!showLiveTransactions || !txSectionRef.current) return;
     const frame = requestAnimationFrame(() => {
-      txSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      txSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
     return () => cancelAnimationFrame(frame);
   }, [showLiveTransactions]);
+
+  // Match the transactions action: reveal the in-card Top Traders window and
+  // bring it into view when opened from the floating action stack.
+  useEffect(() => {
+    if (!showInlineTopTraders || !topTradersSectionRef.current) return;
+    const frame = requestAnimationFrame(() => {
+      topTradersSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [showInlineTopTraders]);
 
   // Fetch comment count when card is visible (lightweight — just the count)
   useEffect(() => {
@@ -576,11 +586,18 @@ const CoinCard = memo(({
   };
 
   const openBuyDrawer = (mode = 'buy') => {
-    // Swipe-right opens market buy ('buy'); swipe-left opens the limit order ('orders').
+    // Swipe-right opens market buy ('buy'); swipe-left opens the limit order ('orders'),
+    // defaulted to "sell at" since a left swipe is a take-profit/exit gesture.
     const requestedMode = mode === 'orders' ? 'orders' : 'buy';
     const base = Number(displayPrice) || Number(fallbackPrice) || 0;
     setBuyDrawerMode(requestedMode);
-    setBuyOrderPrice((current) => current > 0 ? current : clampBuyOrderPrice(base * 0.94));
+    if (requestedMode === 'orders') {
+      setBuyDrawerOrderSide('sell');
+      // Sell targets default above market (take-profit); buy targets default below (dip-buy).
+      setBuyOrderPrice((current) => current > 0 ? current : clampBuyOrderPrice(base * 1.06));
+    } else {
+      setBuyOrderPrice((current) => current > 0 ? current : clampBuyOrderPrice(base * 0.94));
+    }
     setBuyDrawerOpen(true);
   };
 
@@ -1437,7 +1454,6 @@ const CoinCard = memo(({
       setShowPriceChangeModal(false);
       setShowLiveTransactions(false);
       setShowInlineTopTraders(false);
-      setShowTopTraders(false);
       setShowActionButtons(false);
       setSelectedWallet(null);
       setShowDescriptionModal(false);
@@ -2350,6 +2366,7 @@ const CoinCard = memo(({
 
           {/* Top Traders Section - Loaded when expanded */}
           <div
+            ref={topTradersSectionRef}
             className={`top-traders-section ${showInlineTopTraders ? 'expanded' : ''}`}
             onClick={() => isExpanded && !showInlineTopTraders && setShowInlineTopTraders(true)}
             style={{ cursor: isExpanded && !showInlineTopTraders ? 'pointer' : 'default' }}
@@ -3009,10 +3026,11 @@ const CoinCard = memo(({
         {/* Live transaction window */}
         <button
           className={`tiktok-action-btn ${showLiveTransactions ? 'active' : ''}`}
-          onClick={(e) => {
+          onPointerDown={(e) => {
+            e.preventDefault();
             e.stopPropagation();
-            setShowTopTraders(false);
-            setShowLiveTransactions(true);
+            setShowInlineTopTraders(false);
+            setShowLiveTransactions((open) => !open);
           }}
           title="Live transactions"
           aria-label="Open live transactions"
@@ -3030,11 +3048,11 @@ const CoinCard = memo(({
 
         {/* Top PnL traders window */}
         <button
-          className={`tiktok-action-btn ${showTopTraders ? 'active' : ''}`}
+          className={`tiktok-action-btn ${showInlineTopTraders ? 'active' : ''}`}
           onClick={(e) => {
             e.stopPropagation();
             setShowLiveTransactions(false);
-            setShowTopTraders(true);
+            setShowInlineTopTraders((open) => !open);
           }}
           title="Top PnL traders"
           aria-label="Open top PnL traders"
@@ -3184,6 +3202,7 @@ const CoinCard = memo(({
               isActive={isCurrentCard}
               isExpanded={isDesktopMode ? true : isExpanded}
               livePrice={displayPrice}
+              onCrosshairMove={handleChartCrosshairMove}
               focusOneMinute={orderChartFocused}
               targetPrice={orderChartFocused ? buyOrderPrice : null}
               targetLabel={orderTargetLabel}
@@ -3418,39 +3437,6 @@ const CoinCard = memo(({
             borderRight: 'none',
             transform: 'rotate(45deg)'
           }}></div>
-        </div>,
-        document.body
-      )}
-
-      {/* ====== TIKTOK-STYLE BOTTOM SHEET: Top PNL Traders ====== */}
-      {showTopTraders && createPortal(
-        <div className="tiktok-sheet-overlay" onClick={() => setShowTopTraders(false)}>
-          <div className="tiktok-sheet" onClick={(e) => e.stopPropagation()}>
-            {/* Handle bar */}
-            <div className="tiktok-sheet-handle">
-              <div className="tiktok-sheet-handle-bar" />
-            </div>
-
-            {/* Header */}
-            <div className="tiktok-sheet-header">
-              <span className="tiktok-sheet-title tiktok-sheet-title--trophy">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M8 21h8" />
-                  <path d="M12 17v4" />
-                  <path d="M7 4h10v5a5 5 0 0 1-10 0V4Z" />
-                  <path d="M17 4h3a2 2 0 0 1-2 4h-1" />
-                  <path d="M7 4H4a2 2 0 0 0 2 4h1" />
-                </svg>
-                Top PNL Traders
-              </span>
-              <button className="tiktok-sheet-close" onClick={() => setShowTopTraders(false)}>✕</button>
-            </div>
-
-            {/* Top Traders content */}
-            <div className="tiktok-sheet-body">
-              <TopTradersList coinAddress={mintAddress} isExpanded={true} onWalletClick={handleWalletClick} />
-            </div>
-          </div>
         </div>,
         document.body
       )}

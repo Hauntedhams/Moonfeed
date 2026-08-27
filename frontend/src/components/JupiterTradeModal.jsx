@@ -56,7 +56,7 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
   }, [pendingWallet, jupiterWallet.wallet, jupiterWallet.connected, jupiterWallet.connecting]);
 
   useEffect(() => {
-    if (isOpen && !jupiterWallet.connected) openWalletConnect();
+    if (isOpen && !jupiterWallet.connected) openWalletConnect({ onDismiss: onClose });
   }, [isOpen, jupiterWallet.connected, openWalletConnect]);
 
   // Track trade with affiliate system
@@ -382,7 +382,7 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
     // You can add success notification here
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || !jupiterWallet.connected) return null;
 
   return (
     <>

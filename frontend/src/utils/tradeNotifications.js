@@ -72,6 +72,60 @@ function buildMessage(swap) {
   };
 }
 
+function buildFillMessage(order, stats) {
+  const symbol = order.tokenSymbol || order.symbol || 'your token';
+  const action = order.type === 'sell' ? 'Sold' : 'Bought';
+  const pct = Number.isFinite(stats?.percent)
+    ? ` (${stats.percent >= 0 ? '+' : ''}${stats.percent.toFixed(1)}%)`
+    : '';
+  const usd = stats?.usdAmount > 0 ? ` for $${stats.usdAmount.toFixed(2)}` : '';
+  return {
+    title: '🎉 Limit order filled!',
+    body: `${action} ${symbol}${usd}${pct}`,
+  };
+}
+
+// Fire a native (or web) notification when a limit order fills.
+export async function notifyOrderFilled(order, stats) {
+  if (!permissionGranted) return;
+  const { title, body } = buildFillMessage(order, stats);
+  const orderId = order.orderId || order.id || String(Date.now());
+
+  try {
+    if (isNative) {
+      await LocalNotifications.schedule({
+        notifications: [
+          {
+            id: idFromSignature(orderId),
+            title,
+            body,
+            schedule: { at: new Date(Date.now() + 200) },
+            extra: { orderId, tokenMint: order.tokenMint },
+          },
+        ],
+      });
+    } else if ('Notification' in window) {
+      const notificationOptions = {
+        body,
+        icon: '/android-chrome-192x192.png',
+        badge: '/favicon-32x32.png',
+        tag: `order-filled-${orderId}`,
+        renotify: true,
+        data: { orderId, tokenMint: order.tokenMint, url: '/' },
+      };
+
+      const registration = await getServiceWorkerRegistration();
+      if (registration?.showNotification) {
+        await registration.showNotification(title, notificationOptions);
+      } else {
+        new Notification(title, notificationOptions);
+      }
+    }
+  } catch (err) {
+    console.debug('[TradeNotifications] order-filled schedule error:', err?.message);
+  }
+}
+
 // Fire a native (or web) notification for a single detected swap.
 export async function notifyWalletTrade(swap) {
   if (!permissionGranted) return;

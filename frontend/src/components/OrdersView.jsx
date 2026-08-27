@@ -5,6 +5,7 @@ import WalletConnectOnboarding from './WalletConnectOnboarding';
 import { getFullApiUrl } from '../config/api';
 import { getTransactions, deleteTransaction, storeTransaction, clearTransactions } from '../utils/transactionStorage';
 import { useDemoMode } from '../contexts/DemoModeContext';
+import { computeFillStats, getSolUsdPrice } from '../utils/orderFillTracking';
 import './OrdersView.css';
 
 const OrdersView = ({ onCoinClick, onTradeClick }) => {
@@ -30,6 +31,13 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
   const [coinBanners, setCoinBanners] = useState(new Map());
   // Map of tokenMint -> { symbol, name } for client-side enrichment of address-like symbols
   const [enrichedTokenMeta, setEnrichedTokenMeta] = useState(new Map());
+  const [solUsdPrice, setSolUsdPrice] = useState(150);
+
+  // Keep a live-ish SOL/USD price around for converting filled-order values to USD
+  useEffect(() => {
+    getSolUsdPrice().then(setSolUsdPrice);
+  }, []);
+
 
   // Fetch orders when wallet connects or filter changes
   useEffect(() => {
@@ -735,9 +743,9 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
                 const orderId = order.orderId || order.id || 'unknown';
                 const estimatedValue = order.estimatedValue || 0;
                 
-                // Calculate percentage difference between current and trigger price
-                const priceDiffPercent = triggerPrice > 0 
-                  ? ((currentPrice - triggerPrice) / triggerPrice * 100).toFixed(2)
+                // How far the price still has to move from where it is now to hit the target
+                const priceDiffPercent = currentPrice > 0
+                  ? ((currentPrice - triggerPrice) / currentPrice * 100).toFixed(2)
                   : 0;
                 const isPriceAboveTrigger = currentPrice > triggerPrice;
                 
@@ -810,6 +818,9 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
                     ? Math.min(100, Math.max(0, (currentPrice / triggerPrice) * 100))
                     : 0;
                   const isCancelling = cancellingOrder === orderId;
+                  // What a cashout returns: the locked SOL for a buy, the tokens' current value for a sell.
+                  const cashoutSol = orderType === 'sell' ? amount * currentPrice : estimatedValue;
+                  const cashoutUsd = cashoutSol * solUsdPrice;
                   const dexBanner = coinBanners.get(order.tokenMint);
                   const bannerSrc = dexBanner?.banner || order.tokenBannerImage || order.tokenImage || null;
                   const resolvedPairAddress = dexBanner?.pairAddress || order.tokenPairAddress || null;
@@ -933,7 +944,14 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
                         }}
                         disabled={isCancelling}
                       >
-                        {isCancelling ? 'Cashing out…' : 'Cashout'}
+                        {isCancelling ? 'Cashing out…' : (
+                          <>
+                            Cashout
+                            {cashoutUsd > 0 && (
+                              <span className="order-card-cashout-amount">${cashoutUsd.toFixed(2)}</span>
+                            )}
+                          </>
+                        )}
                       </button>
                     </div>
                   );
@@ -1015,6 +1033,25 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
                         </span>
                       </div>
                     </div>
+
+                    {(status === 'executed' || status === 'completed') && (() => {
+                      const { percent, usdAmount } = computeFillStats(order, transactions, solUsdPrice);
+                      return (
+                        <div className="order-hist-fulfilled-banner">
+                          <span className="order-hist-fulfilled-title">🎉 Fulfilled!</span>
+                          <span className="order-hist-fulfilled-stats">
+                            {Number.isFinite(percent) && (
+                              <span className={`order-hist-fulfilled-pct${percent >= 0 ? ' positive' : ' negative'}`}>
+                                {percent >= 0 ? '+' : ''}{percent.toFixed(1)}%
+                              </span>
+                            )}
+                            {usdAmount > 0 && (
+                              <span className="order-hist-fulfilled-usd">${usdAmount.toFixed(2)}</span>
+                            )}
+                          </span>
+                        </div>
+                      );
+                    })()}
 
                     {/* (dead code — active orders return early above) */}
                     {status === 'active' && (

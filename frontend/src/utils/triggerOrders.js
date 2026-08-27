@@ -26,8 +26,32 @@ export async function fetchTokenDecimals(mint) {
   return 6;
 }
 
+// SOL per 1 USD. Prefers the token's own Dexscreener SOL pair so the rate matches the
+// pair the order fills against; falls back to a plain SOL/USD quote.
+async function fetchSolPerUsd(mint) {
+  try {
+    const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
+    if (res.ok) {
+      const data = await res.json();
+      const pair = (data.pairs || []).find(
+        (p) => p.quoteToken?.address === SOL_MINT && Number(p.priceNative) > 0 && Number(p.priceUsd) > 0
+      );
+      if (pair) return Number(pair.priceNative) / Number(pair.priceUsd);
+    }
+  } catch (_) { /* fall through */ }
+  try {
+    const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
+    const data = await res.json();
+    const solUsd = Number(data?.solana?.usd);
+    if (solUsd > 0) return 1 / solUsd;
+  } catch (_) { /* fall through */ }
+  return null;
+}
+
 /**
  * Create → sign → execute a Jupiter trigger (limit/stop) order.
+ * `triggerPrice` is USD per token by default (that's what the buy/sell drawer shows);
+ * pass priceCurrency: 'sol' if it's already SOL per token.
  * Returns { orderId, signature, decimals }.
  */
 export async function placeTriggerOrder({
@@ -37,6 +61,7 @@ export async function placeTriggerOrder({
   side,
   inputAmount,
   triggerPrice,
+  priceCurrency = 'usd',
   expiredAt = null,
   orderType = 'limit',
   tokenDecimals = null,
@@ -53,12 +78,21 @@ export async function placeTriggerOrder({
   const decimals = tokenDecimals ?? await fetchTokenDecimals(mintAddress);
   const tokenMultiplier = Math.pow(10, decimals);
 
+  // Jupiter orders are quoted in SOL per token, the drawer in USD per token.
+  let priceInSol = price;
+  if (priceCurrency === 'usd') {
+    const solPerUsd = await fetchSolPerUsd(mintAddress);
+    if (!solPerUsd) throw new Error('Could not fetch the SOL price right now — try again in a moment');
+    priceInSol = price * solPerUsd;
+  }
+  if (!Number.isFinite(priceInSol) || priceInSol <= 0) throw new Error('Please enter a valid trigger price');
+
   const inputMint = side === 'buy' ? SOL_MINT : mintAddress;
   const outputMint = side === 'buy' ? mintAddress : SOL_MINT;
   const makingAmount = (side === 'buy' ? amount * 1e9 : amount * tokenMultiplier).toFixed(0);
   const takingAmount = (side === 'buy'
-    ? (amount / price) * tokenMultiplier
-    : amount * price * 1e9
+    ? (amount / priceInSol) * tokenMultiplier
+    : amount * priceInSol * 1e9
   ).toFixed(0);
 
   const createRes = await fetch(getFullApiUrl('/api/trigger/create-order'), {
