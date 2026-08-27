@@ -23,6 +23,16 @@ export async function fetchTokenDecimals(mint) {
       if (typeof meta.decimals === 'number') return meta.decimals;
     }
   } catch (_) { /* fall through */ }
+  try {
+    const res = await fetch('https://api.mainnet-beta.solana.com', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getTokenSupply', params: [mint] }),
+    });
+    const json = await res.json();
+    const decimals = json?.result?.value?.decimals;
+    if (typeof decimals === 'number') return decimals;
+  } catch (_) { /* fall through */ }
   return 6;
 }
 

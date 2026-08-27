@@ -1916,6 +1916,11 @@
   font-weight: 700;
 }
 
+.order-hist-usd {
+  color: rgba(255, 255, 255, 0.55);
+  font-weight: 500;
+}
+
 .order-hist-date {
   font-size: 11px;
   color: rgba(255, 255, 255, 0.5);

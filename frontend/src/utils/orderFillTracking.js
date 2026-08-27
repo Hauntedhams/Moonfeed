@@ -45,7 +45,9 @@ export function computeFillStats(order, transactions, solUsdPrice = cachedSolUsd
   let percent = null;
   if (order.type === 'sell' && triggerPrice > 0) {
     const basis = avgBuyPrice(order.tokenMint, transactions);
-    if (basis > 0) {
+    // A basis orders of magnitude away from the fill price means the stored trade
+    // was recorded with bad decimals — better to show no % than a nonsense one.
+    if (basis > 0 && triggerPrice / basis < 100 && triggerPrice / basis > 0.01) {
       percent = ((triggerPrice - basis) / basis) * 100;
     }
   }

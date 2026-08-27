@@ -14,6 +14,8 @@ import { useSolanaTransactions } from '../hooks/useSolanaTransactions.jsx';
 import { useOnDemandPrice } from '../hooks/useOnDemandPrice.js';
 import { useWallet } from '../contexts/WalletContext';
 import { placeTriggerOrder, getExpiryTimestamp, EXPIRY_OPTIONS, fetchTokenDecimals } from '../utils/triggerOrders.js';
+import { getTransactions } from '../utils/transactionStorage';
+import { getSolUsdPrice } from '../utils/orderFillTracking';
 import { API_CONFIG } from '../config/api.js';
 import { 
   calculateGraduationPercentage, 
@@ -241,6 +243,38 @@ const CoinCard = memo(({
   const livePrice = liveData?.price;
   const fallbackPrice = coin.price_usd || coin.priceUsd || coin.price || 0;
   const displayPrice = rpcLivePrice || livePrice || onDemandPrice || fallbackPrice;
+
+  // The viewer's own average buy-in price for this coin (USD), drawn on the chart.
+  const [entryPrice, setEntryPrice] = useState(null);
+  useEffect(() => {
+    if (!walletAddress || !mintAddress) { setEntryPrice(null); return undefined; }
+    let cancelled = false;
+
+    const compute = async () => {
+      const buys = getTransactions(walletAddress).filter(
+        (tx) => tx.tokenMint === mintAddress && tx.type === 'buy' && Number(tx.outputAmount) > 0
+      );
+      if (!buys.length) { if (!cancelled) setEntryPrice(null); return; }
+      // Older records only stored the SOL price; convert them with the current rate.
+      const solUsd = buys.some((tx) => !(Number(tx.pricePerTokenUsd) > 0)) ? await getSolUsdPrice() : 0;
+      let tokens = 0;
+      let cost = 0;
+      for (const tx of buys) {
+        const usd = Number(tx.pricePerTokenUsd) > 0
+          ? Number(tx.pricePerTokenUsd)
+          : Number(tx.pricePerToken) * solUsd;
+        if (!(usd > 0)) continue;
+        tokens += Number(tx.outputAmount);
+        cost += Number(tx.outputAmount) * usd;
+      }
+      if (!cancelled) setEntryPrice(tokens > 0 ? cost / tokens : null);
+    };
+
+    compute();
+    const onSwap = () => compute();
+    window.addEventListener('moonfeed:swap-success', onSwap);
+    return () => { cancelled = true; window.removeEventListener('moonfeed:swap-success', onSwap); };
+  }, [walletAddress, mintAddress]);
 
   // 🆕 ON-VIEW ENRICHMENT: Trigger enrichment when coin becomes visible
   const [enrichmentRequested, setEnrichmentRequested] = useState(false);
@@ -3167,7 +3201,7 @@ const CoinCard = memo(({
               <span>{coin.symbol || coin.name || 'Chart'}</span>
               <button onClick={closeNativeChartFullscreen} aria-label="Close full chart">×</button>
             </div>
-            <NativeChart coin={coin} isActive={true} isExpanded={true} livePrice={displayPrice} />
+            <NativeChart coin={coin} isActive={true} isExpanded={true} livePrice={displayPrice} entryPrice={entryPrice} />
           </div>
         </div>
       )}
@@ -3207,6 +3241,7 @@ const CoinCard = memo(({
               targetPrice={orderChartFocused ? buyOrderPrice : null}
               targetLabel={orderTargetLabel}
               targetColor={buyDrawerOrderSide === 'sell' ? '#22d3ee' : '#4ade80'}
+              entryPrice={entryPrice}
             />,
             target
           );

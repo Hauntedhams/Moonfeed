@@ -51,6 +51,7 @@ export function storeTransaction(transactionData) {
       inputMint, // SOL mint for buys
       outputMint, // Token mint for buys
       pricePerToken, // Price paid per token
+      pricePerTokenUsd, // Same price in USD, for plotting against USD charts
       timestamp = Date.now(),
     } = transactionData;
 
@@ -93,6 +94,7 @@ export function storeTransaction(transactionData) {
       inputMint,
       outputMint,
       pricePerToken: pricePerToken || 0,
+      pricePerTokenUsd: pricePerTokenUsd || 0,
       timestamp,
       createdAt: new Date(timestamp).toISOString(),
     };

@@ -482,6 +482,8 @@ async function getTriggerOrders({
       // History orders may use inputAmount/outputAmount instead of makingAmount/takingAmount
       const makingAmount = account.makingAmount || order.makingAmount || account.inputAmount || order.inputAmount || '0';
       const takingAmount = account.takingAmount || order.takingAmount || account.outputAmount || order.outputAmount || '0';
+      const rawMakingAmount = account.rawMakingAmount || order.rawMakingAmount || account.rawInputAmount || order.rawInputAmount || null;
+      const rawTakingAmount = account.rawTakingAmount || order.rawTakingAmount || account.rawOutputAmount || order.rawOutputAmount || null;
       
       // Determine order type (buy/sell based on SOL vs token)
       const SOL_MINT = 'So11111111111111111111111111111111111111112';
@@ -651,9 +653,16 @@ async function getTriggerOrders({
         } catch (_) { /* silent */ }
       }
 
-      // Calculate amounts with correct decimals
-      const makingAmountNum = parseFloat(makingAmount) / Math.pow(10, isBuy ? 9 : tokenDecimals);
-      const takingAmountNum = parseFloat(takingAmount) / Math.pow(10, isBuy ? tokenDecimals : 9);
+      // Jupiter returns amounts already UI-formatted (makingAmount: "1735.397929272")
+      // alongside the integer versions (rawMakingAmount) — only the raw ones need decimals applied.
+      const toUiAmount = (uiValue, rawValue, decimals) => {
+        const ui = parseFloat(uiValue);
+        if (Number.isFinite(ui) && ui > 0) return ui;
+        const raw = parseFloat(rawValue);
+        return Number.isFinite(raw) ? raw / Math.pow(10, decimals) : 0;
+      };
+      const makingAmountNum = toUiAmount(makingAmount, rawMakingAmount, isBuy ? 9 : tokenDecimals);
+      const takingAmountNum = toUiAmount(takingAmount, rawTakingAmount, isBuy ? tokenDecimals : 9);
       
       // Calculate trigger price (in SOL per token)
       let triggerPrice;

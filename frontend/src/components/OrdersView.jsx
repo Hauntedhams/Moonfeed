@@ -545,9 +545,16 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
     return num.toFixed(2);
   };
 
+  // Token balances span huge ranges — keep them readable without losing small holdings.
+  const formatTokenAmount = (value) => {
+    const num = Number(value) || 0;
+    if (num >= 1000) return num.toLocaleString('en-US', { maximumFractionDigits: 0 });
+    if (num >= 1) return num.toFixed(2);
+    return num.toPrecision(3);
+  };
+
   const formatDate = (timestamp) => {
-    if (!timestamp) return 'N/A';
-    
+    if (!timestamp) return 'N/A';    
     try {
       const date = new Date(timestamp);
       
@@ -1353,12 +1360,21 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
                       <div className="order-hist-divider" />
                       <div className="order-hist-row">
                         <span className="order-hist-label">{orderType === 'sell' ? 'SELL PRICE' : 'BUY PRICE'}</span>
-                        <span className="order-hist-val order-hist-price">${formatPrice(triggerPrice)}</span>
+                        <span className="order-hist-val order-hist-price">${formatPrice(triggerPrice * solUsdPrice)}</span>
                       </div>
                       {amount > 0 && (
                         <div className="order-hist-row">
                           <span className="order-hist-label">AMOUNT</span>
-                          <span className="order-hist-val">{amount.toFixed(2)} {tokenSymbol}</span>
+                          <span className="order-hist-val">{formatTokenAmount(amount)} {tokenSymbol}</span>
+                        </div>
+                      )}
+                      {estimatedValue > 0 && (
+                        <div className="order-hist-row">
+                          <span className="order-hist-label">{orderType === 'sell' ? 'RECEIVED' : 'SPENT'}</span>
+                          <span className="order-hist-val">
+                            {estimatedValue.toFixed(4)} SOL
+                            <span className="order-hist-usd"> (${(estimatedValue * solUsdPrice).toFixed(2)})</span>
+                          </span>
                         </div>
                       )}
                       <div className="order-hist-row">

@@ -17,6 +17,8 @@ import ReferralTracker from './utils/ReferralTracker'
 import MobileOptimizer from './utils/mobileOptimizer'
 import { initializePerformanceMonitoring } from './utils/mobileOptimizations'
 import { storeTransaction } from './utils/transactionStorage'
+import { fetchTokenDecimals } from './utils/triggerOrders'
+import { getSolUsdPrice } from './utils/orderFillTracking'
 import useOrderFillNotifications from './hooks/useOrderFillNotifications'
 
 // Lazy load heavy components that aren't needed immediately
@@ -288,7 +290,7 @@ function App() {
   };
 
   // Handle Jupiter swap success
-  const handleSwapSuccess = ({ txid, swapResult, quoteResponseMeta, coin, walletAddress }) => {
+  const handleSwapSuccess = async ({ txid, swapResult, quoteResponseMeta, coin, walletAddress }) => {
     console.log('🎉 Swap successful for', coin.symbol, 'TX:', txid);
 
     // Lets a card that queued a follow-up action (e.g. the sell-at buy-in) react.
@@ -303,12 +305,18 @@ function App() {
         const inputAmount = swapResult?.inputAmount 
           ? parseFloat(swapResult.inputAmount) / 1e9 // Convert lamports to SOL
           : 0;
+        // A wrong decimals guess here silently corrupts the cost basis used for fill %.
+        const decimals = Number.isInteger(coin.decimals)
+          ? coin.decimals
+          : await fetchTokenDecimals(coin.mintAddress || coin.address);
         const outputAmount = swapResult?.outputAmount 
-          ? parseFloat(swapResult.outputAmount) / (10 ** (coin.decimals || 6))
+          ? parseFloat(swapResult.outputAmount) / (10 ** decimals)
           : 0;
         
         // Calculate price per token
         const pricePerToken = outputAmount > 0 ? inputAmount / outputAmount : 0;
+        // Charts are denominated in USD, so pin the entry to USD at buy time too.
+        const pricePerTokenUsd = pricePerToken * (await getSolUsdPrice());
         
         // Try to get wallet address from different sources
         const wallet = walletAddress || swapResult?.walletAddress || null;
@@ -327,6 +335,7 @@ function App() {
             inputMint: 'So11111111111111111111111111111111111111112', // SOL
             outputMint: coin.mintAddress || coin.address,
             pricePerToken,
+            pricePerTokenUsd,
           });
           console.log('📝 Transaction stored for history');
         } else {

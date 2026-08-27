@@ -62,6 +62,7 @@ const NativeChart = ({
   targetPrice = null,
   targetLabel = '',
   targetColor = '#22d3ee',
+  entryPrice = null,
 }) => {
   const { isDarkMode } = useDarkMode();
   const containerRef = useRef(null);
@@ -69,6 +70,7 @@ const NativeChart = ({
   const seriesRef = useRef(null);
   const seriesTypeRef = useRef(null); // 'candles' | 'area'
   const targetLineRef = useRef(null);
+  const entryLineRef = useRef(null);
   const dataLengthRef = useRef(0);
   const focusAnimationRef = useRef(null);
   const targetScaleAnimationRef = useRef(null);
@@ -150,6 +152,7 @@ const NativeChart = ({
       seriesRef.current = null;
       seriesTypeRef.current = null;
       targetLineRef.current = null;
+      entryLineRef.current = null;
       if (focusAnimationRef.current) cancelAnimationFrame(focusAnimationRef.current);
       if (targetScaleAnimationRef.current) cancelAnimationFrame(targetScaleAnimationRef.current);
     };
@@ -365,6 +368,32 @@ const NativeChart = ({
 
   }, [status, targetColor, targetLabel, targetPrice]);
 
+  // The viewer's own average buy price for this coin, so they can see where they got in.
+  useEffect(() => {
+    const series = seriesRef.current;
+    if (!series || status !== 'ready') return;
+
+    if (entryLineRef.current) {
+      try { series.removePriceLine(entryLineRef.current); } catch (e) { /* series changed */ }
+      entryLineRef.current = null;
+    }
+
+    const price = Number(entryPrice);
+    if (!Number.isFinite(price) || price <= 0) return;
+    try {
+      entryLineRef.current = series.createPriceLine({
+        price,
+        color: '#a78bfa',
+        lineWidth: 1,
+        lineStyle: 1,
+        axisLabelVisible: true,
+        title: 'Your buy in',
+      });
+    } catch (e) {
+      // Area fallback series may not support price lines in all chart builds.
+    }
+  }, [status, entryPrice, tfIndex]);
+
   // In order mode, draw a guide from the latest traded price to the selected
   // target instead of a full-width line that obscures the chart history.
   useEffect(() => {
@@ -383,18 +412,29 @@ const NativeChart = ({
       const height = canvas?.clientHeight || 0;
       const fromX = chart.timeScale().timeToCoordinate(current.time);
       const fromY = series.priceToCoordinate(current.close);
-      const toY = series.priceToCoordinate(target);
-      if (![width, height, fromX, fromY, toY].every(Number.isFinite)) return;
-      setOrderGuide({ width, height, fromX, fromY, toX: width - 10, toY });
+      const rawToY = series.priceToCoordinate(target);
+      if (![width, height, fromX, fromY, rawToY].every(Number.isFinite)) return;
+      // The price scale caps how far it expands, so keep the guide's tip on-canvas.
+      const toY = Math.min(Math.max(rawToY, 10), height - 10);
+      setOrderGuide((prev) => {
+        if (prev && Math.abs(prev.fromY - fromY) < 0.5 && Math.abs(prev.toY - toY) < 0.5
+          && prev.width === width && prev.height === height && Math.abs(prev.fromX - fromX) < 0.5) {
+          return prev;
+        }
+        return { width, height, fromX, fromY, toX: width - 10, toY };
+      });
     };
 
-    syncGuide();
-    const scale = chart.timeScale();
-    scale.subscribeVisibleLogicalRangeChange(syncGuide);
+    // The price scale eases toward the target over several frames, so follow it per
+    // frame instead of only on range changes — otherwise the guide lags the candles.
+    let raf = requestAnimationFrame(function tick() {
+      syncGuide();
+      raf = requestAnimationFrame(tick);
+    });
     const observer = new ResizeObserver(syncGuide);
     if (containerRef.current) observer.observe(containerRef.current);
     return () => {
-      scale.unsubscribeVisibleLogicalRangeChange(syncGuide);
+      cancelAnimationFrame(raf);
       observer.disconnect();
     };
   }, [focusOneMinute, status, targetPrice, tfIndex]);
@@ -420,9 +460,18 @@ const NativeChart = ({
       const baseRange = baseInfo?.priceRange;
       if (!baseRange || !Number.isFinite(target) || target <= 0) return baseInfo;
 
-      const low = Math.min(baseRange.minValue, target);
-      const high = Math.max(baseRange.maxValue, target);
-      const padding = Math.max((high - low) * 0.12, high * 0.002);
+      // Fitting a far target exactly would squash the candles into a flat line, so the
+      // range only grows to a few times the natural candle span and the target line
+      // parks against the edge beyond that.
+      const baseSpan = Math.max(baseRange.maxValue - baseRange.minValue, baseRange.maxValue * 0.0005);
+      const maxSpan = baseSpan * 2.5;
+      let low = Math.min(baseRange.minValue, target);
+      let high = Math.max(baseRange.maxValue, target);
+      if (high - low > maxSpan) {
+        if (target > baseRange.maxValue) high = low + maxSpan;
+        else low = high - maxSpan;
+      }
+      const padding = Math.max((high - low) * 0.08, high * 0.002);
       return {
         ...baseInfo,
         priceRange: { minValue: Math.max(0, low - padding), maxValue: high + padding },
@@ -432,7 +481,7 @@ const NativeChart = ({
     const animatePriceScale = () => {
       const target = targetPriceRef.current || currentPrice;
       const displayed = displayedTargetPriceRef.current || target;
-      displayedTargetPriceRef.current = displayed + (target - displayed) * 0.2;
+      displayedTargetPriceRef.current = displayed + (target - displayed) * 0.07;
       if (Math.abs(target - displayedTargetPriceRef.current) < Math.max(target * 0.0001, 0.00000001)) {
         displayedTargetPriceRef.current = target;
       }
@@ -464,10 +513,10 @@ const NativeChart = ({
     const currentPrice = Number(lastCandleRef.current?.close) || 0;
     const targetValue = Number(targetPrice) || currentPrice;
     const distance = currentPrice > 0 ? Math.abs(targetValue / currentPrice - 1) : 0;
-    const historyBars = Math.min(180, 100 + Math.ceil(distance * 220));
+    const historyBars = Math.min(180, 100 + Math.ceil(distance * 60));
     // Reserve a generous future area so the latest candle sits left of center,
     // giving the order guide room to extend toward its selected target.
-    const futureBars = Math.min(150, 110 + Math.ceil(distance * 150));
+    const futureBars = Math.min(150, 110 + Math.ceil(distance * 40));
     const target = { from: Math.max(0, last - historyBars), to: last + futureBars };
     const current = scale.getVisibleLogicalRange() || { from: Math.max(0, last - 150), to: last + 2 };
     const startedAt = performance.now();
