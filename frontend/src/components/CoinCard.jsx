@@ -2648,64 +2648,6 @@ const CoinCard = memo(({
             </div>
           </div>
 
-          {/* Volume Analysis */}
-          <div className="volume-analysis-section">
-            <h3 className="section-title">Volume Analysis</h3>
-            <div className="section-content">
-              {coin.dexscreener?.volumes ? (
-                <div>
-                  <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '12px', marginBottom: '16px', textAlign: 'center'}}>
-                    <div>
-                      <div style={{fontSize: '0.8rem', color: 'rgba(0,0,0,0.6)', marginBottom: '4px'}}>5m Volume</div>
-                      <div style={{fontSize: '0.95rem', fontWeight: '700'}}>${formatCompact(coin.dexscreener.volumes.volume5m)}</div>
-                    </div>
-                    <div>
-                      <div style={{fontSize: '0.8rem', color: 'rgba(0,0,0,0.6)', marginBottom: '4px'}}>1h Volume</div>
-                      <div style={{fontSize: '0.95rem', fontWeight: '700'}}>${formatCompact(coin.dexscreener.volumes.volume1h)}</div>
-                    </div>
-                    <div>
-                      <div style={{fontSize: '0.8rem', color: 'rgba(0,0,0,0.6)', marginBottom: '4px'}}>6h Volume</div>
-                      <div style={{fontSize: '0.95rem', fontWeight: '700'}}>${formatCompact(coin.dexscreener.volumes.volume6h)}</div>
-                    </div>
-                  </div>
-                  {/* Volume Trend Analysis */}
-                  {coin.dexscreener.volumes.volume24h > 0 && (
-                    <div style={{fontSize: '0.9rem', color: 'rgba(0,0,0,0.7)'}}>
-                      <div style={{marginBottom: '6px'}}>
-                        <strong>24h Trend:</strong> 
-                        {coin.dexscreener.volumes.volume6h > (coin.dexscreener.volumes.volume24h * 0.25) ? (
-                          <span style={{color: '#22c55e', marginLeft: '6px'}}>📈 Strong</span>
-                        ) : coin.dexscreener.volumes.volume6h > (coin.dexscreener.volumes.volume24h * 0.15) ? (
-                          <span style={{color: '#f59e0b', marginLeft: '6px'}}>📊 Moderate</span>
-                        ) : (
-                          <span style={{color: '#ef4444', marginLeft: '6px'}}>📉 Weak</span>
-                        )}
-                      </div>
-                      <div>
-                        <strong>Liquidity Ratio:</strong> 
-                        <span style={{marginLeft: '6px'}}>
-                          {liquidity > 0 ? `${(volume24h / liquidity).toFixed(2)}x` : 'N/A'}
-                        </span>
-                      </div>
-                      <div style={{marginTop: '8px', padding: '8px', background: 'rgba(0,0,0,0.05)', borderRadius: '6px'}}>
-                        <strong>Liquidity Security:</strong>
-                        <div style={{marginTop: '4px', display: 'flex', alignItems: 'center', gap: '8px'}}>
-                          <LiquidityLockIndicator coin={coin} size="medium" showText={true} />
-                          {coin.rugcheckVerified && coin.rugcheckScore && (
-                            <div style={{fontSize: '0.8rem', color: 'rgba(0,0,0,0.6)'}}>
-                              Score: {coin.rugcheckScore}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="content-placeholder">Volume analysis will appear when available</div>
-              )}
-            </div>
-          </div>
         </div>
       </div>
       </div> {/* Close coin-card-left-panel */}
