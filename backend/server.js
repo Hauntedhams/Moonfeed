@@ -409,6 +409,24 @@ function geckoOhlcvRequest(network, poolAddress, timeframe, params) {
   };
 }
 
+function coingeckoOnchainRequest(path, params = '') {
+  const cleanPath = path.startsWith('/') ? path.slice(1) : path;
+  const query = params ? `?${params}` : '';
+  if (COINGECKO_API_KEY) {
+    return {
+      url: `https://pro-api.coingecko.com/api/v3/onchain/${cleanPath}${query}`,
+      headers: { 'Accept': 'application/json', 'x-cg-pro-api-key': COINGECKO_API_KEY },
+    };
+  }
+  return {
+    url: `https://api.geckoterminal.com/api/v2/${cleanPath}${query}`,
+    headers: {
+      'Accept': 'application/json',
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+    },
+  };
+}
+
 // Global outbound throttle for GeckoTerminal/CoinGecko calls. The pendingGeckoRequests map
 // dedupes concurrent requests for the SAME pool/timeframe (see the proxy handler, which
 // now actually populates it). This limiter bounds how many DIFFERENT pools we hit at once
@@ -1858,6 +1876,109 @@ function formatDexscreenerPair(pair, meta = {}) {
   };
 }
 
+function parseCoinGeckoTokenId(id = '') {
+  const parts = String(id).split('_');
+  return parts.length > 1 ? parts.slice(1).join('_') : String(id);
+}
+
+function formatCoinGeckoPool(pool, includedTokens = new Map(), source = 'coingecko-onchain') {
+  const attrs = pool.attributes || {};
+  const baseRel = pool.relationships?.base_token?.data;
+  const baseToken = includedTokens.get(baseRel?.id) || {};
+  const mintAddress = baseToken.address || parseCoinGeckoTokenId(baseRel?.id || attrs.base_token_address || '');
+  if (!mintAddress || DEXTRENDING_EXCLUDED_MINTS.has(mintAddress)) return null;
+
+  const txns = attrs.transactions || {};
+  const h24Txns = txns.h24 || txns['24h'] || {};
+  const volume = attrs.volume_usd || {};
+  const priceChange = attrs.price_change_percentage || {};
+  const poolAddress = attrs.address || parseCoinGeckoTokenId(pool.id || '');
+  const createdAt = attrs.pool_created_at ? Date.parse(attrs.pool_created_at) : null;
+  const image = baseToken.image_url || baseToken.imageUrl || null;
+
+  return {
+    mintAddress,
+    name: baseToken.name || attrs.name?.split('/')[0]?.trim() || 'Unknown',
+    symbol: baseToken.symbol || attrs.name?.split('/')[0]?.trim() || 'UNKNOWN',
+    image,
+    profileImage: image,
+    logo: image,
+    price_usd: parseFloat(attrs.base_token_price_usd || attrs.token_price_usd || 0) || 0,
+    market_cap_usd: parseFloat(attrs.market_cap_usd || attrs.fdv_usd || 0) || 0,
+    volume_24h_usd: parseFloat(volume.h24 || volume['24h'] || 0) || 0,
+    liquidity_usd: parseFloat(attrs.reserve_in_usd || 0) || 0,
+    price_change_24h: parseFloat(priceChange.h24 || priceChange['24h'] || 0) || 0,
+    change_24h: parseFloat(priceChange.h24 || priceChange['24h'] || 0) || 0,
+    change24h: parseFloat(priceChange.h24 || priceChange['24h'] || 0) || 0,
+    priceChange24h: parseFloat(priceChange.h24 || priceChange['24h'] || 0) || 0,
+    price_change_1h: parseFloat(priceChange.h1 || 0) || 0,
+    volume_1h_usd: parseFloat(volume.h1 || 0) || 0,
+    volume_6h_usd: parseFloat(volume.h6 || 0) || 0,
+    txns_24h: (h24Txns.buys || 0) + (h24Txns.sells || 0),
+    buys_24h: h24Txns.buys || 0,
+    sells_24h: h24Txns.sells || 0,
+    pairAddress: poolAddress,
+    poolAddress,
+    pairCreatedAt: createdAt,
+    geckoPoolId: pool.id,
+    source,
+    sources: [source],
+  };
+}
+
+async function fetchCoinGeckoOnchainCandidates() {
+  const endpoints = [
+    { path: 'networks/solana/trending_pools', source: 'coingecko-trending' },
+    { path: 'networks/solana/new_pools', source: 'coingecko-new' },
+  ];
+  const candidates = [];
+
+  for (const endpoint of endpoints) {
+    try {
+      const params = new URLSearchParams({ include: 'base_token,quote_token', page: '1' }).toString();
+      const { url, headers } = coingeckoOnchainRequest(endpoint.path, params);
+      const response = await runThrottledGecko(() => fetch(url, { method: 'GET', headers, timeout: 12000 }));
+      if (!response.ok) {
+        console.warn(`⚠️ CoinGecko Onchain ${endpoint.source} failed: ${response.status}`);
+        continue;
+      }
+
+      const json = await response.json();
+      const includedTokens = new Map((json.included || []).map((item) => [item.id, item.attributes || {}]));
+      const pools = Array.isArray(json.data) ? json.data : [];
+      for (const pool of pools) {
+        const coin = formatCoinGeckoPool(pool, includedTokens, endpoint.source);
+        if (coin) candidates.push(coin);
+      }
+    } catch (error) {
+      console.warn(`⚠️ CoinGecko Onchain ${endpoint.source} error: ${error.message}`);
+    }
+  }
+
+  return candidates;
+}
+
+function mergeCandidateCoins(coins) {
+  const byMint = new Map();
+  for (const coin of coins) {
+    if (!coin?.mintAddress || DEXTRENDING_EXCLUDED_MINTS.has(coin.mintAddress)) continue;
+    const existing = byMint.get(coin.mintAddress);
+    if (!existing) {
+      byMint.set(coin.mintAddress, { ...coin, sources: coin.sources || [coin.source].filter(Boolean) });
+      continue;
+    }
+
+    const sources = [...new Set([...(existing.sources || []), ...(coin.sources || [coin.source].filter(Boolean))])];
+    const preferNew = (coin.liquidity_usd || 0) > (existing.liquidity_usd || 0);
+    const merged = preferNew ? { ...existing, ...coin } : { ...coin, ...existing };
+    merged.sources = sources;
+    merged.source = sources.includes('dexscreener-trending') ? 'multi-source' : (sources[0] || merged.source);
+    merged.sourceCount = sources.length;
+    byMint.set(coin.mintAddress, merged);
+  }
+  return [...byMint.values()];
+}
+
 // Fetch trending coins from Dexscreener boosts, profiles and search endpoints
 // Building the pool takes ~60s (search is rate limited), so concurrent callers share one build.
 let dextrendingBuildPromise = null;
@@ -1891,11 +2012,12 @@ async function buildDexscreenerTrendingBatch() {
   try {
     const now = Date.now();
 
-    console.log('🔥 Building Dexscreener candidate pool (boosts + profiles + search)...');
+    console.log('🔥 Building multi-source candidate pool (Dexscreener + CoinGecko Onchain)...');
 
-    const [metaByAddress, searchPairs] = await Promise.all([
+    const [metaByAddress, searchPairs, coinGeckoCandidates] = await Promise.all([
       fetchDexscreenerListedTokens(),
-      fetchDexscreenerSearchPairs()
+      fetchDexscreenerSearchPairs(),
+      fetchCoinGeckoOnchainCandidates()
     ]);
 
     const listedPairs = metaByAddress.size > 0
@@ -1903,7 +2025,7 @@ async function buildDexscreenerTrendingBatch() {
       : [];
 
     const allPairs = [...listedPairs, ...searchPairs];
-    console.log(`🌙 Candidate pool: ${metaByAddress.size} listed tokens, ${searchPairs.length} search pairs, ${allPairs.length} pairs total`);
+    console.log(`🌙 Candidate pool: ${metaByAddress.size} listed tokens, ${searchPairs.length} search pairs, ${coinGeckoCandidates.length} CoinGecko pools, ${allPairs.length} Dexscreener pairs total`);
 
     if (allPairs.length === 0) {
       console.log('⚠️ No Solana pairs found from Dexscreener');
@@ -1923,10 +2045,11 @@ async function buildDexscreenerTrendingBatch() {
       }
     }
 
-    const formattedTokens = [...bestPairByAddress.entries()]
+    const dexscreenerTokens = [...bestPairByAddress.entries()]
       .map(([address, pair]) => formatDexscreenerPair(pair, metaByAddress.get(address) || {}));
+    const formattedTokens = mergeCandidateCoins([...dexscreenerTokens, ...coinGeckoCandidates]);
 
-    console.log(`✅ Formatted ${formattedTokens.length} unique Dexscreener tokens`);
+    console.log(`✅ Formatted ${formattedTokens.length} unique multi-source tokens (${dexscreenerTokens.length} Dexscreener, ${coinGeckoCandidates.length} CoinGecko)`);
 
     // DEXtrending: fresh but solid coins (<=30d) lead, speculative appended behind
     const rankedTokens = rankDextrendingCoins(formattedTokens);
