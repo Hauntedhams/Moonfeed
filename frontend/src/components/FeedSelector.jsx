@@ -164,6 +164,9 @@ function FeedSelector({
   const [error, setError] = useState(null);
   const [searchResults, setSearchResults] = useState([]);
   const [expandedInfo, setExpandedInfo] = useState(null);
+  const [previewCoins, setPreviewCoins] = useState([]);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState(null);
   const rootRef = useRef(null);
 
   const feeds = hasCustomFilters ? [...BASE_FEEDS, CUSTOM_FEED] : BASE_FEEDS;
@@ -209,8 +212,46 @@ function FeedSelector({
       setSearchResults([]);
       setError(null);
       setExpandedInfo(null);
+      setPreviewCoins([]);
+      setPreviewError(null);
     }
   }, [open]);
+
+  useEffect(() => {
+    if (!expandedInfo) return;
+    const endpointByFeed = {
+      dextrending: '/api/coins/dextrending',
+      whalefeed: '/api/coins/whalefeed',
+      graduating: '/api/coins/graduating',
+      new: '/api/coins/new',
+      trending: '/api/coins/trending',
+      custom: '/api/coins/infinite',
+    };
+    const endpoint = endpointByFeed[expandedInfo];
+    if (!endpoint) return;
+
+    let cancelled = false;
+    setPreviewLoading(true);
+    setPreviewError(null);
+    setPreviewCoins([]);
+
+    fetch(`${API_ROOT}${endpoint}?limit=12&offset=0`)
+      .then((response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json();
+      })
+      .then((data) => {
+        if (!cancelled) setPreviewCoins(Array.isArray(data.coins) ? data.coins : []);
+      })
+      .catch(() => {
+        if (!cancelled) setPreviewError('Could not load this feed right now.');
+      })
+      .finally(() => {
+        if (!cancelled) setPreviewLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [API_ROOT, expandedInfo]);
 
   const handleSearch = async () => {
     const cleanQuery = searchQuery.trim();
@@ -319,7 +360,7 @@ function FeedSelector({
 
       {/* Dropdown */}
       {open && (
-        <div className="feed-selector-dropdown">
+        <div className={`feed-selector-dropdown ${expandedInfo ? 'feed-selector-dropdown--expanded' : ''}`}>
           {/* Search bar */}
           <div className="feed-selector-search">
             <svg
@@ -472,18 +513,52 @@ function FeedSelector({
                     </div>
                     {info && infoOpen && (
                       <div className="feed-selector-info-drawer">
-                        <p className="feed-selector-info-line">
-                          <span className="feed-selector-info-tag">What it is</span>
-                          {info.purpose}
-                        </p>
-                        <p className="feed-selector-info-line">
-                          <span className="feed-selector-info-tag">Sources</span>
-                          {info.sources}
-                        </p>
-                        <p className="feed-selector-info-line">
-                          <span className="feed-selector-info-tag">Why this preset</span>
-                          {info.reason}
-                        </p>
+                        <div className="feed-selector-info-copy">
+                          <p className="feed-selector-info-line">
+                            <span className="feed-selector-info-tag">What it is</span>
+                            {info.purpose}
+                          </p>
+                          <p className="feed-selector-info-line">
+                            <span className="feed-selector-info-tag">Sources</span>
+                            {info.sources}
+                          </p>
+                          <p className="feed-selector-info-line">
+                            <span className="feed-selector-info-tag">Why this preset</span>
+                            {info.reason}
+                          </p>
+                        </div>
+                        <div className="feed-selector-preview">
+                          <div className="feed-selector-preview-title">{feed.label} coins</div>
+                          {previewLoading ? (
+                            <div className="feed-selector-preview-loading"><span className="feed-selector-spinner" />Loading coins</div>
+                          ) : previewError ? (
+                            <div className="feed-selector-preview-empty">{previewError}</div>
+                          ) : previewCoins.length === 0 ? (
+                            <div className="feed-selector-preview-empty">No coins available yet.</div>
+                          ) : (
+                            <div className="feed-selector-preview-list">
+                              {previewCoins.map((coin, index) => (
+                                <button
+                                  key={coin.mintAddress || coin.address || coin.id || index}
+                                  className="feed-selector-preview-coin"
+                                  onClick={() => {
+                                    setOpen(false);
+                                    onCoinSelect?.(coin);
+                                  }}
+                                >
+                                  <TokenAvatar src={coin.image || coin.logo || coin.profileImage} alt={coin.symbol || coin.name} />
+                                  <span className="feed-selector-preview-coin-copy">
+                                    <span>{coin.symbol || coin.name || 'Unknown'}</span>
+                                    <small>{formatPrice(coin.price_usd || coin.priceUsd || coin.price)}</small>
+                                  </span>
+                                  <span className={(Number(coin.price_change_24h || coin.change_24h || coin.priceChange24h) || 0) >= 0 ? 'up' : 'down'}>
+                                    {(Number(coin.price_change_24h || coin.change_24h || coin.priceChange24h) || 0) >= 0 ? '+' : ''}{(Number(coin.price_change_24h || coin.change_24h || coin.priceChange24h) || 0).toFixed(1)}%
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>
