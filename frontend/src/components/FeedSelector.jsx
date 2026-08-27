@@ -4,27 +4,27 @@ import './FeedSelector.css';
 
 // Feed definitions (kept in sync with the old TopTabs base tabs)
 export const BASE_FEEDS = [
-  { id: 'dextrending', label: 'DEXtrending', icon: 'trending-up' },
-  { id: 'whalefeed', label: 'Whale', icon: 'whale' },
-  { id: 'graduating', label: 'Graduating', icon: 'graduation-cap' },
-  { id: 'new', label: 'New', icon: 'sparkles' },
-  { id: 'trending', label: 'Trending', icon: 'fire' }
+  { id: 'dextrending', label: 'DEXtrending', detail: 'Dexscreener + CoinGecko hot pools', icon: 'trending-up' },
+  { id: 'whalefeed', label: 'Whale', detail: 'Large, liquid multi-source picks', icon: 'whale' },
+  { id: 'graduating', label: 'Graduating', detail: 'Pump.fun bonding-curve launches', icon: 'graduation-cap' },
+  { id: 'new', label: 'New', detail: 'Fresh Solana Tracker launches', icon: 'sparkles' },
+  { id: 'trending', label: 'Trending', detail: 'Solana Tracker momentum leaders', icon: 'fire' }
 ];
 
 export const FEED_ORDER = BASE_FEEDS.map((feed) => feed.id);
 
-const CUSTOM_FEED = { id: 'custom', label: 'Custom', icon: 'filter' };
+const CUSTOM_FEED = { id: 'custom', label: 'Custom', detail: 'Your saved market filters', icon: 'filter' };
 
 // Per-feed explainer shown in the expandable info drawer.
 const FEED_INFO = {
   dextrending: {
-    purpose: 'The tokens getting the most attention and promotion across Solana DEXes right now. We pull from multiple sources on Dexscreener — one of the most trusted and widely used sites in the space — to build a wide, fresh-but-solid trending pool.',
-    sources: 'Dexscreener (boosted, latest & profile listings + hundreds of keyword searches), enriched with live price data.',
-    reason: 'A single boost list is pay-to-appear and tiny, so we widen it into a deduped pool and gate for real liquidity/volume/age to surface tokens that are both trending and legit.'
+    purpose: 'Hot Solana coins selected from a broader multi-source pool, with new and rising DEX activity prioritized.',
+    sources: 'Dexscreener (boosted, latest, profiles and keyword searches) plus CoinGecko Onchain trending and new Solana pools.',
+    reason: 'Candidates are deduped by mint and ranked by liquidity, volume, activity and age so a coin appearing across sources has a stronger signal.'
   },
   whalefeed: {
     purpose: 'The blue-chip meme coins — large, established tokens with deep liquidity and proven staying power.',
-    sources: 'Built from the same Dexscreener pool as DEXtrending, filtered to big established pairs.',
+    sources: 'Built from the same Dexscreener + CoinGecko Onchain candidate pool as DEXtrending, filtered to big established pairs.',
     reason: 'Preset gates for liquidity ≥ $250k, volume ≥ $200k, market cap ≥ $1M and age ≥ 24h (no upper age cap) so you only see coins that have survived and stayed liquid.'
   },
   graduating: {
@@ -168,6 +168,7 @@ function FeedSelector({
 
   const feeds = hasCustomFilters ? [...BASE_FEEDS, CUSTOM_FEED] : BASE_FEEDS;
   const activeFeed = feeds.find((f) => f.id === activeFilter) || BASE_FEEDS[0];
+  const orderedFeeds = [activeFeed, ...feeds.filter((feed) => feed.id !== activeFeed.id)];
 
   const API_ROOT = API_CONFIG.BASE_URL;
 
@@ -394,7 +395,7 @@ function FeedSelector({
           ) : (
             <div className="feed-selector-feeds">
               <div className="feed-selector-section-label">Feeds</div>
-              {feeds.map((feed) => {
+              {orderedFeeds.map((feed) => {
                 const info = FEED_INFO[feed.id];
                 const infoOpen = expandedInfo === feed.id;
                 return (
@@ -405,7 +406,10 @@ function FeedSelector({
                         onClick={() => handleFeedListOpen(feed.id)}
                       >
                         <span className="feed-selector-feed-icon">{renderIcon(feed.icon)}</span>
-                        <span className="feed-selector-feed-label">{feed.label}</span>
+                        <span className="feed-selector-feed-copy">
+                          <span className="feed-selector-feed-label">{feed.label}</span>
+                          <span className="feed-selector-feed-detail">{feed.detail}</span>
+                        </span>
                       </button>
                       <button
                         className="feed-selector-switch-feed"

@@ -204,7 +204,7 @@
   gap: 10px;
   flex: 1;
   min-width: 0;
-  padding: 10px 4px 10px 10px;
+  padding: 9px 4px 9px 10px;
   background: transparent;
   border: none;
   color: rgba(255, 255, 255, 0.85);
@@ -243,7 +243,33 @@
 }
 
 .feed-selector-feed-label {
+  display: block;
+  font-size: 14px;
+  line-height: 18px;
+}
+
+.feed-selector-feed-copy {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.feed-selector-feed-detail {
+  display: block;
+  margin-top: 1px;
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feed-selector-feed.active .feed-selector-feed-detail {
+  color: rgba(255, 255, 255, 0.62);
 }
 
 .feed-selector-check {
