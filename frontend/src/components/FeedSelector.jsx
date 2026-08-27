@@ -165,6 +165,7 @@ function FeedSelector({
   const [searchResults, setSearchResults] = useState([]);
   const [expandedInfo, setExpandedInfo] = useState(null);
   const [previewCoins, setPreviewCoins] = useState([]);
+  const [previewTotal, setPreviewTotal] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState(null);
   const rootRef = useRef(null);
@@ -213,6 +214,7 @@ function FeedSelector({
       setError(null);
       setExpandedInfo(null);
       setPreviewCoins([]);
+      setPreviewTotal(null);
       setPreviewError(null);
     }
   }, [open]);
@@ -234,6 +236,7 @@ function FeedSelector({
     setPreviewLoading(true);
     setPreviewError(null);
     setPreviewCoins([]);
+    setPreviewTotal(null);
 
     fetch(`${API_ROOT}${endpoint}?limit=12&offset=0`)
       .then((response) => {
@@ -241,7 +244,10 @@ function FeedSelector({
         return response.json();
       })
       .then((data) => {
-        if (!cancelled) setPreviewCoins(Array.isArray(data.coins) ? data.coins : []);
+        if (cancelled) return;
+        const coins = Array.isArray(data.coins) ? data.coins : [];
+        setPreviewCoins(coins);
+        setPreviewTotal(Number.isFinite(Number(data.total)) ? Number(data.total) : (Number.isFinite(Number(data.count)) ? Number(data.count) : coins.length));
       })
       .catch(() => {
         if (!cancelled) setPreviewError('Could not load this feed right now.');
@@ -528,7 +534,10 @@ function FeedSelector({
                           </p>
                         </div>
                         <div className="feed-selector-preview">
-                          <div className="feed-selector-preview-title">{feed.label} coins</div>
+                          <div className="feed-selector-preview-title">
+                            <span>{feed.label} coins</span>
+                            {!previewLoading && previewTotal !== null && <span>{previewCoins.length} / {previewTotal}</span>}
+                          </div>
                           {previewLoading ? (
                             <div className="feed-selector-preview-loading"><span className="feed-selector-spinner" />Loading coins</div>
                           ) : previewError ? (

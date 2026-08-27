@@ -358,11 +358,22 @@
 }
 
 .feed-selector-preview-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   margin-bottom: 7px;
   color: rgba(255, 255, 255, 0.76);
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
+}
+
+.feed-selector-preview-title span:last-child {
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 10px;
+  font-weight: 600;
 }
 
 .feed-selector-preview-list {
