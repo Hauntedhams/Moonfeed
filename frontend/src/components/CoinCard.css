@@ -296,10 +296,6 @@
 /* Native charts do not render TwelveDataChart's fixed expand control, so
    CoinCard restores it beneath the comments/copy action stack. */
 .native-chart-expand-card-btn {
-  position: fixed;
-  right: 14px;
-  bottom: calc(env(safe-area-inset-bottom) + 78px);
-  z-index: 9999;
   width: 44px;
   height: 44px;
   padding: 0;
@@ -330,6 +326,97 @@
 
 .native-chart-expand-card-btn:active {
   transform: scale(0.94);
+}
+
+.native-chart-mobile-right-actions {
+  position: fixed;
+  right: 14px;
+  bottom: calc(env(safe-area-inset-bottom) + 78px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.native-chart-action-btn {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  border-radius: 50%;
+  background: rgba(10, 10, 20, 0.82);
+  color: rgba(255, 255, 255, 0.95);
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(22px) scale(0.72);
+  transition: opacity 0.2s ease, transform 0.28s cubic-bezier(0.2, 0.85, 0.3, 1), background 0.18s ease, border-color 0.18s ease;
+}
+
+.native-chart-action-btn.visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0) scale(1);
+}
+
+.native-chart-action-btn:hover {
+  background: rgba(10, 10, 20, 0.95);
+  border-color: rgba(255, 255, 255, 0.85);
+}
+
+.native-chart-action-btn:active {
+  transform: scale(0.94);
+}
+
+.native-chart-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 10020;
+  display: flex;
+  align-items: stretch;
+  background: rgba(0, 0, 0, 0.92);
+}
+
+.native-chart-fullscreen-panel {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #080b13;
+}
+
+.native-chart-fullscreen-header {
+  height: calc(env(safe-area-inset-top) + 56px);
+  padding: env(safe-area-inset-top) 18px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.native-chart-fullscreen-header button {
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.native-chart-fullscreen-panel .native-chart {
+  flex: 1;
+  min-height: 0;
 }
 
 /* Active state — currently toggled on */

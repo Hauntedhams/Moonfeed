@@ -110,6 +110,7 @@ const CoinCard = memo(({
   const [chartHoveredPrice, setChartHoveredPrice] = useState(null); // Track hovered price from chart
   const [chartHoveredData, setChartHoveredData] = useState(null); // Track full crosshair data (price + time)
   const [chartFirstPrice, setChartFirstPrice] = useState(null); // Track first visible price for % calculation
+  const [nativeChartFullscreen, setNativeChartFullscreen] = useState(false);
   const [buyDrawerOpen, setBuyDrawerOpen] = useState(false);
   const [buyDrawerMode, setBuyDrawerMode] = useState('buy');
   const [buyDrawerOrderSide, setBuyDrawerOrderSide] = useState('buy');
@@ -561,6 +562,23 @@ const CoinCard = memo(({
     setBuyDrawerMode(requestedMode);
     setBuyOrderPrice((current) => current > 0 ? current : clampBuyOrderPrice(base * 0.94));
     setBuyDrawerOpen(true);
+  };
+
+  const openMobileTradeDrawer = (e) => {
+    e?.stopPropagation();
+    if (!isExpanded) handleExpandToggle(e);
+    openBuyDrawer('buy');
+  };
+
+  const openNativeChartFullscreen = (e) => {
+    e?.stopPropagation();
+    setNativeChartFullscreen(true);
+    onChartFullscreenChange?.(true);
+  };
+
+  const closeNativeChartFullscreen = () => {
+    setNativeChartFullscreen(false);
+    onChartFullscreenChange?.(false);
   };
 
   const adjustBuyOrderPrice = (direction) => {
@@ -3003,26 +3021,63 @@ const CoinCard = memo(({
         </button>
       </div>
       {USE_NATIVE_CHART && _mobilePortal && (
-        <button
-          className="native-chart-expand-card-btn"
-          onClick={handleExpandToggle}
-          title={isExpanded ? 'Collapse details' : 'Expand details'}
-          aria-label={isExpanded ? 'Collapse details' : 'Expand details'}
-        >
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
+        <div className="native-chart-mobile-right-actions">
+          <button
+            className={`native-chart-action-btn ${showActionButtons ? 'visible' : ''}`}
+            onClick={openMobileTradeDrawer}
+            title="Open trade window"
+            aria-label="Open trade window"
           >
-            <polyline points="18 15 12 9 6 15" />
-          </svg>
-        </button>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 20V4" />
+              <path d="M6 10l6-6 6 6" />
+              <path d="M5 20h14" />
+            </svg>
+          </button>
+          <button
+            className={`native-chart-action-btn ${showActionButtons ? 'visible' : ''}`}
+            onClick={openNativeChartFullscreen}
+            title="View full chart"
+            aria-label="View full chart"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="20" x2="18" y2="10" />
+              <line x1="12" y1="20" x2="12" y2="4" />
+              <line x1="6" y1="20" x2="6" y2="14" />
+            </svg>
+          </button>
+          <button
+            className="native-chart-expand-card-btn"
+            onClick={handleExpandToggle}
+            title={isExpanded ? 'Collapse details' : 'Expand details'}
+            aria-label={isExpanded ? 'Collapse details' : 'Expand details'}
+          >
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
+            >
+              <polyline points="18 15 12 9 6 15" />
+            </svg>
+          </button>
+        </div>
+      )}
+      {USE_NATIVE_CHART && _mobilePortal && nativeChartFullscreen && (
+        <div className="native-chart-fullscreen" onClick={closeNativeChartFullscreen}>
+          <div className="native-chart-fullscreen-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="native-chart-fullscreen-header">
+              <span>{coin.symbol || coin.name || 'Chart'}</span>
+              <button onClick={closeNativeChartFullscreen} aria-label="Close full chart">×</button>
+            </div>
+            <NativeChart coin={coin} isActive={true} isExpanded={true} livePrice={rpcLivePrice} />
+          </div>
+        </div>
       )}
       </>
         );
