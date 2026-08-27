@@ -25,6 +25,29 @@ const userSchema = new mongoose.Schema({
   alerts: {
     type: mongoose.Schema.Types.Mixed,
     default: {}
+  },
+  // Wallets this account is following for copy-trade/analytics, synced across devices.
+  trackedWallets: {
+    type: [{
+      address: { type: String, required: true },
+      label: { type: String, default: '' },
+      addedAt: { type: Number, default: Date.now },
+      lastViewed: { type: Number, default: Date.now },
+      copyTradeEnabled: { type: Boolean, default: true }
+    }],
+    default: []
+  },
+  // Coins this account has favorited/tracked, synced across devices (minimal fields —
+  // full coin data is re-fetched/enriched from the feed when displayed).
+  trackedCoins: {
+    type: [{
+      mintAddress: { type: String, required: true },
+      symbol: { type: String, default: '' },
+      name: { type: String, default: '' },
+      image: { type: String, default: '' },
+      addedAt: { type: Number, default: Date.now }
+    }],
+    default: []
   }
 }, {
   timestamps: true

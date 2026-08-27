@@ -147,4 +147,114 @@ router.put('/:walletAddress/alerts', async (req, res) => {
   }
 });
 
+// GET /api/users/:walletAddress/tracked-wallets — fetch synced tracked-wallet list
+router.get('/:walletAddress/tracked-wallets', async (req, res) => {
+  try {
+    const { walletAddress } = req.params;
+    if (!walletAddress || walletAddress.length < 32) {
+      return res.status(400).json({ error: 'Invalid wallet address' });
+    }
+    const user = await User.findOne({ walletAddress });
+    res.json({ walletAddress, trackedWallets: user?.trackedWallets || [] });
+  } catch (err) {
+    console.error('❌ Error fetching tracked wallets:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// PUT /api/users/:walletAddress/tracked-wallets — save synced tracked-wallet list.
+// Low-risk preference data keyed by wallet; no signature required (same as /alerts).
+router.put('/:walletAddress/tracked-wallets', async (req, res) => {
+  try {
+    const { walletAddress } = req.params;
+    const { trackedWallets } = req.body;
+
+    if (!walletAddress || walletAddress.length < 32) {
+      return res.status(400).json({ error: 'Invalid wallet address' });
+    }
+    if (!Array.isArray(trackedWallets)) {
+      return res.status(400).json({ error: 'trackedWallets must be an array' });
+    }
+    if (trackedWallets.length > 200) {
+      return res.status(400).json({ error: 'Too many tracked wallets (max 200)' });
+    }
+
+    const sanitized = trackedWallets
+      .filter(w => w && typeof w.address === 'string' && w.address.length >= 32)
+      .map(w => ({
+        address: w.address,
+        label: typeof w.label === 'string' ? w.label.slice(0, 64) : '',
+        addedAt: Number.isFinite(w.addedAt) ? w.addedAt : Date.now(),
+        lastViewed: Number.isFinite(w.lastViewed) ? w.lastViewed : Date.now(),
+        copyTradeEnabled: w.copyTradeEnabled !== false
+      }));
+
+    const user = await User.findOneAndUpdate(
+      { walletAddress },
+      { $set: { trackedWallets: sanitized } },
+      { upsert: true, new: true }
+    );
+
+    res.json({ walletAddress: user.walletAddress, trackedWallets: user.trackedWallets || [] });
+  } catch (err) {
+    console.error('❌ Error saving tracked wallets:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// GET /api/users/:walletAddress/tracked-coins — fetch synced tracked-coins (favorites) list
+router.get('/:walletAddress/tracked-coins', async (req, res) => {
+  try {
+    const { walletAddress } = req.params;
+    if (!walletAddress || walletAddress.length < 32) {
+      return res.status(400).json({ error: 'Invalid wallet address' });
+    }
+    const user = await User.findOne({ walletAddress });
+    res.json({ walletAddress, trackedCoins: user?.trackedCoins || [] });
+  } catch (err) {
+    console.error('❌ Error fetching tracked coins:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// PUT /api/users/:walletAddress/tracked-coins — save synced tracked-coins (favorites) list.
+// Low-risk preference data keyed by wallet; no signature required (same as /alerts).
+router.put('/:walletAddress/tracked-coins', async (req, res) => {
+  try {
+    const { walletAddress } = req.params;
+    const { trackedCoins } = req.body;
+
+    if (!walletAddress || walletAddress.length < 32) {
+      return res.status(400).json({ error: 'Invalid wallet address' });
+    }
+    if (!Array.isArray(trackedCoins)) {
+      return res.status(400).json({ error: 'trackedCoins must be an array' });
+    }
+    if (trackedCoins.length > 500) {
+      return res.status(400).json({ error: 'Too many tracked coins (max 500)' });
+    }
+
+    const sanitized = trackedCoins
+      .filter(c => c && typeof c.mintAddress === 'string' && c.mintAddress.length >= 32)
+      .map(c => ({
+        mintAddress: c.mintAddress,
+        symbol: typeof c.symbol === 'string' ? c.symbol.slice(0, 32) : '',
+        name: typeof c.name === 'string' ? c.name.slice(0, 64) : '',
+        image: typeof c.image === 'string' ? c.image.slice(0, 500) : '',
+        addedAt: Number.isFinite(c.addedAt) ? c.addedAt : Date.now()
+      }));
+
+    const user = await User.findOneAndUpdate(
+      { walletAddress },
+      { $set: { trackedCoins: sanitized } },
+      { upsert: true, new: true }
+    );
+
+    res.json({ walletAddress: user.walletAddress, trackedCoins: user.trackedCoins || [] });
+  } catch (err) {
+    console.error('❌ Error saving tracked coins:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 module.exports = router;
