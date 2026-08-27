@@ -369,9 +369,8 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   align-content: start;
-  flex: 1;
   gap: 5px;
-  min-height: 0;
+  max-height: 236px;
   overflow-y: auto;
   padding-right: 3px;
 }
