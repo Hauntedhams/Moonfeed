@@ -454,6 +454,82 @@
   min-height: 0;
 }
 
+.token-details-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.token-details-card {
+  min-width: 0;
+}
+
+.token-details-row {
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.token-details-address {
+  min-width: 0;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.token-details-labels-row {
+  align-items: center;
+}
+
+.token-details-labels {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.token-details-labels span {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 0.72rem;
+}
+
+.data-sources-detailed .sources-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.data-sources-detailed .source-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  min-width: 0;
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.data-sources-detailed .source-name {
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.62);
+  font-weight: 700;
+}
+
+.data-sources-detailed .source-info {
+  min-width: 0;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+@media (max-width: 700px) {
+  .token-details-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Active state — currently toggled on */
 .tiktok-action-btn.active .tiktok-action-icon svg {
   stroke: #c4b5fd;

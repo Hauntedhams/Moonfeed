@@ -2501,53 +2501,54 @@ const CoinCard = memo(({
           {/* Token Details */}
           <div className="token-details-section">
             <h3 className="section-title token-details-title">Token Details</h3>
-            <div className="section-content">
-              <div className="token-details-content">
-                <div style={{marginBottom: '8px'}}>
-                  <strong>Contract:</strong> <span style={{fontFamily: 'monospace', fontSize: '0.85rem'}}>{coin.mintAddress || coin.contract_address || coin.mint || coin.tokenAddress || 'N/A'}</span>
+            <div className="section-content token-details-grid">
+              <div className="info-card token-details-card">
+                <div className="info-card-header">Token Details</div>
+                <div className="info-card-content">
+                  <div className="info-row token-details-row">
+                    <span className="info-label">Contract:</span>
+                    <span className="info-value token-details-address">{coin.mintAddress || coin.contract_address || coin.mint || coin.tokenAddress || 'N/A'}</span>
+                  </div>
+                  <div className="info-row token-details-row">
+                    <span className="info-label">Chain:</span>
+                    <span className="info-value">{coin.chain || coin.chainId || 'Solana'}</span>
+                  </div>
+                  {coin.dexId && (
+                    <div className="info-row token-details-row">
+                      <span className="info-label">DEX:</span>
+                      <span className="info-value">{coin.dexId}</span>
+                    </div>
+                  )}
+                  {coin.pairAddress && (
+                    <div className="info-row token-details-row">
+                      <span className="info-label">Pair:</span>
+                      <span className="info-value token-details-address">{coin.pairAddress}</span>
+                    </div>
+                  )}
+                  {coin.dexscreener?.poolInfo?.createdAt && (
+                    <div className="info-row token-details-row">
+                      <span className="info-label">Pool Created:</span>
+                      <span className="info-value">{new Date(coin.dexscreener.poolInfo.createdAt * 1000).toLocaleDateString()}</span>
+                    </div>
+                  )}
+                  {coin.dexscreener?.marketMetrics?.fdvToMcapRatio && (
+                    <div className="info-row token-details-row">
+                      <span className="info-label">FDV/MC:</span>
+                      <span className="info-value">{coin.dexscreener.marketMetrics.fdvToMcapRatio.toFixed(2)}x</span>
+                    </div>
+                  )}
+                  {coin.dexscreener?.poolInfo?.labels?.length > 0 && (
+                    <div className="info-row token-details-row token-details-labels-row">
+                      <span className="info-label">Labels:</span>
+                      <span className="token-details-labels">{coin.dexscreener.poolInfo.labels.map(label => <span key={label}>{label}</span>)}</span>
+                    </div>
+                  )}
                 </div>
-                <div style={{marginBottom: '8px'}}>
-                  <strong>Chain:</strong> {coin.chain || coin.chainId || 'Solana'}
-                </div>
-                {coin.dexId && (
-                  <div style={{marginBottom: '8px'}}>
-                    <strong>DEX:</strong> {coin.dexId}
-                  </div>
-                )}
-                {coin.pairAddress && (
-                  <div style={{marginBottom: '8px'}}>
-                    <strong>Pair:</strong> <span style={{fontFamily: 'monospace', fontSize: '0.85rem'}}>{coin.pairAddress}</span>
-                  </div>
-                )}
-                {coin.dexscreener?.poolInfo?.createdAt && (
-                  <div style={{marginBottom: '8px'}}>
-                    <strong>Pool Created:</strong> {new Date(coin.dexscreener.poolInfo.createdAt * 1000).toLocaleDateString()}
-                  </div>
-                )}
-                {coin.dexscreener?.marketMetrics?.fdvToMcapRatio && (
-                  <div style={{marginBottom: '8px'}}>
-                    <strong>FDV/MC Ratio:</strong> {coin.dexscreener.marketMetrics.fdvToMcapRatio.toFixed(2)}x
-                  </div>
-                )}
-                {coin.dexscreener?.poolInfo?.labels?.length > 0 && (
-                  <div style={{marginBottom: '8px'}}>
-                    <strong>Labels:</strong> {coin.dexscreener.poolInfo.labels.map(label => (
-                      <span key={label} style={{
-                        display: 'inline-block',
-                        background: 'rgba(0,0,0,0.1)',
-                        padding: '2px 6px',
-                        borderRadius: '4px',
-                        fontSize: '0.8rem',
-                        margin: '0 4px 4px 0'
-                      }}>
-                        {label}
-                      </span>
-                    ))}
-                  </div>
-                )}
+              </div>
+
                 {/* Detailed Data Sources Section */}
-                <div className="data-sources-detailed">
-                  <div className="sources-title">Data Sources:</div>
+                <div className="info-card token-details-card data-sources-detailed">
+                  <div className="info-card-header">Data Sources</div>
                   <div className="sources-list">
                     {/* DexScreener - Always show since we use it for charts and trading data */}
                     <div className="source-item">
@@ -2639,7 +2640,6 @@ const CoinCard = memo(({
                     )}
                   </div>
                 </div>
-              </div>
             </div>
           </div>
 
