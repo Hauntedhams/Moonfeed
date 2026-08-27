@@ -164,6 +164,7 @@ function FeedSelector({
   const [error, setError] = useState(null);
   const [searchResults, setSearchResults] = useState([]);
   const [expandedInfo, setExpandedInfo] = useState(null);
+  const [collapsingInfo, setCollapsingInfo] = useState(null);
   const [previewCoins, setPreviewCoins] = useState([]);
   const [previewTotal, setPreviewTotal] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -213,6 +214,7 @@ function FeedSelector({
       setSearchResults([]);
       setError(null);
       setExpandedInfo(null);
+      setCollapsingInfo(null);
       setPreviewCoins([]);
       setPreviewTotal(null);
       setPreviewError(null);
@@ -339,6 +341,16 @@ function FeedSelector({
     setOpen(false);
   };
 
+  const toggleFeedInfo = (feedId) => {
+    if (expandedInfo === feedId) {
+      setCollapsingInfo(feedId);
+      setExpandedInfo(null);
+      return;
+    }
+    setCollapsingInfo(null);
+    setExpandedInfo(feedId);
+  };
+
   return (
     <div className="feed-selector" ref={rootRef}>
       {/* Search button */}
@@ -445,6 +457,7 @@ function FeedSelector({
               {orderedFeeds.map((feed) => {
                 const info = FEED_INFO[feed.id];
                 const infoOpen = expandedInfo === feed.id;
+                const infoClosing = collapsingInfo === feed.id;
                 return (
                   <div key={feed.id} className="feed-selector-feed-row">
                     <div className={`feed-selector-feed ${feed.id === activeFilter ? 'active' : ''}`}>
@@ -497,7 +510,7 @@ function FeedSelector({
                       {info && (
                         <button
                           className="feed-selector-info-toggle"
-                          onClick={() => setExpandedInfo(infoOpen ? null : feed.id)}
+                          onClick={() => toggleFeedInfo(feed.id)}
                           aria-label={`About ${feed.label} feed`}
                           aria-expanded={infoOpen}
                         >
@@ -517,8 +530,13 @@ function FeedSelector({
                         </button>
                       )}
                     </div>
-                    {info && infoOpen && (
-                      <div className="feed-selector-info-drawer">
+                    {info && (infoOpen || infoClosing) && (
+                      <div
+                        className={`feed-selector-info-drawer ${infoClosing ? 'closing' : ''}`}
+                        onTransitionEnd={(event) => {
+                          if (event.target === event.currentTarget && event.propertyName === 'max-height' && infoClosing) setCollapsingInfo(null);
+                        }}
+                      >
                         <div className="feed-selector-info-copy">
                           <p className="feed-selector-info-line">
                             <span className="feed-selector-info-tag">What it is</span>
