@@ -224,16 +224,18 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack }) => {
   }, [walletAddress]);
 
   const handleTrackWallet = () => {
-    if (!tracked) {
-      trackWallet(walletAddress);
+    if (!tracked && trackWallet(walletAddress)) {
       setTracked(true);
     }
   };
 
   // Opt into copying: tracking a wallet enables copy-trade prompts by default.
   const handleCopyToggle = () => {
-    if (!tracked) { trackWallet(walletAddress); setTracked(true); }
-    else { toggleCopyTrade(walletAddress); }
+    if (!tracked) {
+      if (trackWallet(walletAddress)) setTracked(true);
+      return;
+    }
+    toggleCopyTrade(walletAddress);
   };
 
   const handleUntrack = () => {

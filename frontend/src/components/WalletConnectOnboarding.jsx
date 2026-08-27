@@ -1,10 +1,18 @@
-import React, { useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useWallet as useJupiterWallet, useUnifiedWalletContext } from '@jup-ag/wallet-adapter';
 import { useDemoMode } from '../contexts/DemoModeContext';
 import './JupiterTradeModal.css';
 import './WalletConnectOnboarding.css';
 
-const WalletConnectOnboarding = ({ children }) => {
+const WalletConnectOnboardingContext = createContext(null);
+
+export const useWalletConnectOnboarding = () => {
+  const context = useContext(WalletConnectOnboardingContext);
+  if (!context) throw new Error('useWalletConnectOnboarding must be used within WalletConnectOnboardingProvider');
+  return context;
+};
+
+export const WalletConnectOnboardingProvider = ({ children }) => {
   const { enableDemoMode } = useDemoMode();
   const { setShowModal } = useUnifiedWalletContext();
   const wallet = useJupiterWallet();
@@ -34,17 +42,9 @@ const WalletConnectOnboarding = ({ children }) => {
     } catch (_) {}
   };
 
-  const openOnboarding = (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    setOpen(true);
-  };
-
   return (
-    <>
-      <div onClickCapture={openOnboarding}>
-        {React.cloneElement(children, { onClick: openOnboarding })}
-      </div>
+    <WalletConnectOnboardingContext.Provider value={{ openWalletConnect: () => setOpen(true) }}>
+      {children}
       {open && !wallet.connected && (
         <div className="wallet-onboarding-overlay" onClick={() => setOpen(false)}>
           <div className="wallet-onboarding-modal" onClick={(e) => e.stopPropagation()}>
@@ -121,7 +121,23 @@ const WalletConnectOnboarding = ({ children }) => {
           </div>
         </div>
       )}
-    </>
+    </WalletConnectOnboardingContext.Provider>
+  );
+};
+
+const WalletConnectOnboarding = ({ children }) => {
+  const { openWalletConnect } = useWalletConnectOnboarding();
+
+  const openOnboarding = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    openWalletConnect();
+  };
+
+  return (
+    <div onClickCapture={openOnboarding}>
+      {React.cloneElement(children, { onClick: openOnboarding })}
+    </div>
   );
 };
 

@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import TriggerOrderModal from './TriggerOrderModal';
 import { useWallet } from '../contexts/WalletContext';
-import { useWallet as useJupiterWallet, useUnifiedWalletContext } from '@jup-ag/wallet-adapter';
+import { useWallet as useJupiterWallet } from '@jup-ag/wallet-adapter';
+import { useWalletConnectOnboarding } from './WalletConnectOnboarding';
 import ReferralTracker from '../utils/ReferralTracker';
 import { getFullApiUrl } from '../config/api';
 import './JupiterTradeModal.css';
@@ -24,8 +25,7 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
 
   // Get the full Jupiter wallet adapter for passthrough to Terminal
   const jupiterWallet = useJupiterWallet();
-  // Lets us open the wallet-selection modal from inside the Jupiter Terminal
-  const { setShowModal } = useUnifiedWalletContext();
+  const { openWalletConnect } = useWalletConnectOnboarding();
 
   // Selecting a wallet only sets it as active; we must call connect() once the
   // adapter is selected (autoConnect is off on desktop) to trigger the wallet
@@ -54,6 +54,10 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
       setPendingWallet(null);
     }
   }, [pendingWallet, jupiterWallet.wallet, jupiterWallet.connected, jupiterWallet.connecting]);
+
+  useEffect(() => {
+    if (isOpen && !jupiterWallet.connected) openWalletConnect();
+  }, [isOpen, jupiterWallet.connected, openWalletConnect]);
 
   // Track trade with affiliate system
   const trackTradeWithAffiliate = async (txid, swapResult) => {
@@ -184,10 +188,10 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
 
         // Wallet passthrough — shares the app's connected wallet with the Plugin.
         // When no wallet is connected, the Terminal shows a "Connect Wallet"
-        // button that delegates to our unified wallet modal via onRequestConnectWallet.
+        // button that delegates to Moonfeed's shared onboarding modal.
         enableWalletPassthrough: true,
         passthroughWalletContextState: jupiterWallet,
-        onRequestConnectWallet: () => setShowModal(true),
+        onRequestConnectWallet: openWalletConnect,
 
         formProps: {
           initialInputMint: "So11111111111111111111111111111111111111112", // SOL
@@ -427,7 +431,7 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
 
           {/* Wallet gate: show the "How to use Moonfeed" onboarding until a
               wallet is connected, then reveal a swipeable swap ⇄ limit UI. */}
-          {!jupiterWallet.connected ? (
+          {!jupiterWallet.connected && false ? (
             <div className="jupiter-widget-wrapper">
                 <div className="mf-onboarding">
                   <button className="mf-onboarding-close" onClick={handleClose} aria-label="Close">✕</button>
@@ -506,7 +510,7 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
                       <button
                         type="button"
                         className="mf-wallet-option mf-wallet-option--full"
-                        onClick={() => setShowModal(true)}
+                        onClick={openWalletConnect}
                       >
                         <span className="mf-wallet-name">Connect Wallet</span>
                       </button>
@@ -516,7 +520,7 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
                   <button
                     type="button"
                     className="mf-wallets-more"
-                    onClick={() => setShowModal(true)}
+                    onClick={openWalletConnect}
                   >
                     More wallet options
                   </button>

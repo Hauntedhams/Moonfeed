@@ -69,6 +69,9 @@ const NativeChart = ({
   const targetLineRef = useRef(null);
   const dataLengthRef = useRef(0);
   const focusAnimationRef = useRef(null);
+  const targetScaleAnimationRef = useRef(null);
+  const targetPriceRef = useRef(null);
+  const displayedTargetPriceRef = useRef(null);
   // Most recent candle, kept in sync so live prices can fold into it in place.
   const lastCandleRef = useRef(null);
 
@@ -78,6 +81,7 @@ const NativeChart = ({
   const [poolResolved, setPoolResolved] = useState(() => !!resolvePool(coin));
   // Live price badge: value + last tick direction ('up'|'down') + counter to replay the flash.
   const [liveTick, setLiveTick] = useState({ price: null, dir: null, n: 0 });
+  const [orderGuide, setOrderGuide] = useState(null);
 
   const mint = coin?.mintAddress || coin?.tokenAddress || coin?.address;
 
@@ -105,15 +109,19 @@ const NativeChart = ({
     if (!chart) return null;
     if (seriesRef.current && seriesTypeRef.current === type) return seriesRef.current;
     if (seriesRef.current) { try { chart.removeSeries(seriesRef.current); } catch (e) { /* already gone */ } seriesRef.current = null; }
+    // Built-in last-value/price-line labels are pinned to the far-right edge of the
+    // chart, where they get hidden behind the floating action buttons and can lag the
+    // header price. Disabled in favor of the controlled .native-chart-live badge below.
     const series = type === 'area'
       ? chart.addSeries(AreaSeries, {
           lineColor: '#4f8cff', lineWidth: 2,
           topColor: 'rgba(79,140,255,0.35)', bottomColor: 'rgba(79,140,255,0.02)',
-          priceLineVisible: false, lastValueVisible: true,
+          priceLineVisible: false, lastValueVisible: false,
         })
       : chart.addSeries(CandlestickSeries, {
           upColor: '#26a69a', downColor: '#ef5350', borderVisible: false,
           wickUpColor: '#26a69a', wickDownColor: '#ef5350',
+          priceLineVisible: false, lastValueVisible: false,
         });
     seriesRef.current = series;
     seriesTypeRef.current = type;
@@ -141,6 +149,7 @@ const NativeChart = ({
       seriesTypeRef.current = null;
       targetLineRef.current = null;
       if (focusAnimationRef.current) cancelAnimationFrame(focusAnimationRef.current);
+      if (targetScaleAnimationRef.current) cancelAnimationFrame(targetScaleAnimationRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -212,6 +221,8 @@ const NativeChart = ({
       series.setData(deduped);
       dataLengthRef.current = deduped.length;
       lastCandleRef.current = deduped[deduped.length - 1] || null;
+      // Seed the price badge immediately so it never shows blank/stale before the first live tick.
+      if (lastCandleRef.current) setLiveTick((prev) => ({ price: lastCandleRef.current.close, dir: null, n: prev.n }));
       chartRef.current?.timeScale().fitContent();
       setStatus('ready');
       return;
@@ -259,6 +270,8 @@ const NativeChart = ({
       series.setData(deduped);
       dataLengthRef.current = deduped.length;
       if (deduped.length === 0) { setStatus('empty'); return; }
+      const lastPoint = deduped[deduped.length - 1];
+      setLiveTick((prev) => ({ price: lastPoint.value, dir: null, n: prev.n }));
       chartRef.current?.timeScale().fitContent();
       setStatus('ready');
       return;
@@ -294,7 +307,7 @@ const NativeChart = ({
     }
 
     const price = Number(targetPrice);
-    if (Number.isFinite(price) && price > 0) {
+    if (!focusOneMinute && Number.isFinite(price) && price > 0) {
       try {
         targetLineRef.current = series.createPriceLine({
           price,
@@ -311,6 +324,93 @@ const NativeChart = ({
 
   }, [status, targetColor, targetLabel, targetPrice]);
 
+  // In order mode, draw a guide from the latest traded price to the selected
+  // target instead of a full-width line that obscures the chart history.
+  useEffect(() => {
+    const chart = chartRef.current;
+    const series = seriesRef.current;
+    const current = lastCandleRef.current;
+    const target = Number(targetPrice);
+    if (!chart || !series || !current || !focusOneMinute || status !== 'ready' || !Number.isFinite(target) || target <= 0) {
+      setOrderGuide(null);
+      return undefined;
+    }
+
+    const syncGuide = () => {
+      const canvas = containerRef.current;
+      const width = canvas?.clientWidth || 0;
+      const height = canvas?.clientHeight || 0;
+      const fromX = chart.timeScale().timeToCoordinate(current.time);
+      const fromY = series.priceToCoordinate(current.close);
+      const toY = series.priceToCoordinate(target);
+      if (![width, height, fromX, fromY, toY].every(Number.isFinite)) return;
+      setOrderGuide({ width, height, fromX, fromY, toX: width - 10, toY });
+    };
+
+    syncGuide();
+    const scale = chart.timeScale();
+    scale.subscribeVisibleLogicalRangeChange(syncGuide);
+    const observer = new ResizeObserver(syncGuide);
+    if (containerRef.current) observer.observe(containerRef.current);
+    return () => {
+      scale.unsubscribeVisibleLogicalRangeChange(syncGuide);
+      observer.disconnect();
+    };
+  }, [focusOneMinute, status, targetPrice, tfIndex]);
+
+  // Keep the order target inside the chart's vertical range. Price lines do not
+  // participate in lightweight-charts autoscaling, so the provider expands the
+  // native candle range and eases toward the live target while the price wheel moves.
+  useEffect(() => {
+    const price = Number(targetPrice);
+    targetPriceRef.current = focusOneMinute && Number.isFinite(price) && price > 0 ? price : null;
+  }, [focusOneMinute, targetPrice]);
+
+  useEffect(() => {
+    const series = seriesRef.current;
+    if (!series || !focusOneMinute || tfIndex !== 0 || status !== 'ready') return undefined;
+
+    const currentPrice = Number(lastCandleRef.current?.close) || 0;
+    displayedTargetPriceRef.current = currentPrice;
+
+    const autoscaleInfoProvider = (original) => {
+      const baseInfo = original();
+      const target = displayedTargetPriceRef.current;
+      const baseRange = baseInfo?.priceRange;
+      if (!baseRange || !Number.isFinite(target) || target <= 0) return baseInfo;
+
+      const low = Math.min(baseRange.minValue, target);
+      const high = Math.max(baseRange.maxValue, target);
+      const padding = Math.max((high - low) * 0.12, high * 0.002);
+      return {
+        ...baseInfo,
+        priceRange: { minValue: Math.max(0, low - padding), maxValue: high + padding },
+      };
+    };
+
+    const animatePriceScale = () => {
+      const target = targetPriceRef.current || currentPrice;
+      const displayed = displayedTargetPriceRef.current || target;
+      displayedTargetPriceRef.current = displayed + (target - displayed) * 0.2;
+      if (Math.abs(target - displayedTargetPriceRef.current) < Math.max(target * 0.0001, 0.00000001)) {
+        displayedTargetPriceRef.current = target;
+      }
+      try {
+        series.applyOptions({ autoscaleInfoProvider });
+      } catch (error) {
+        return;
+      }
+      targetScaleAnimationRef.current = requestAnimationFrame(animatePriceScale);
+    };
+
+    targetScaleAnimationRef.current = requestAnimationFrame(animatePriceScale);
+    return () => {
+      if (targetScaleAnimationRef.current) cancelAnimationFrame(targetScaleAnimationRef.current);
+      targetScaleAnimationRef.current = null;
+      try { series.applyOptions({ autoscaleInfoProvider: undefined }); } catch (error) { /* chart disposed */ }
+    };
+  }, [focusOneMinute, status, tfIndex]);
+
   // Animate the order focus into a 1m view. As the target moves farther from
   // market price, reveal more history and future space so its line stays useful.
   useEffect(() => {
@@ -323,8 +423,10 @@ const NativeChart = ({
     const currentPrice = Number(lastCandleRef.current?.close) || 0;
     const targetValue = Number(targetPrice) || currentPrice;
     const distance = currentPrice > 0 ? Math.abs(targetValue / currentPrice - 1) : 0;
-    const historyBars = Math.min(180, 84 + Math.ceil(distance * 220));
-    const futureBars = Math.min(110, 34 + Math.ceil(distance * 150));
+    const historyBars = Math.min(180, 100 + Math.ceil(distance * 220));
+    // Reserve a generous future area so the latest candle sits left of center,
+    // giving the order guide room to extend toward its selected target.
+    const futureBars = Math.min(150, 110 + Math.ceil(distance * 150));
     const target = { from: Math.max(0, last - historyBars), to: last + futureBars };
     const current = scale.getVisibleLogicalRange() || { from: Math.max(0, last - 150), to: last + 2 };
     const startedAt = performance.now();
@@ -390,6 +492,13 @@ const NativeChart = ({
         ))}
       </div>
       <div className="native-chart-canvas" ref={containerRef} />
+      {orderGuide && (
+        <svg className="native-chart-order-guide" viewBox={`0 0 ${orderGuide.width} ${orderGuide.height}`} preserveAspectRatio="none" aria-hidden="true">
+          <line x1={orderGuide.fromX} y1={orderGuide.fromY} x2={orderGuide.toX} y2={orderGuide.toY} stroke={targetColor} strokeWidth="2" strokeDasharray="5 5" />
+          <circle cx={orderGuide.fromX} cy={orderGuide.fromY} r="3" fill={targetColor} />
+          <text x={orderGuide.toX - 4} y={orderGuide.toY - 8} textAnchor="end">{targetLabel}</text>
+        </svg>
+      )}
       {status === 'loading' && (
         <div className="native-chart-overlay">
           <div className="native-chart-spinner" />

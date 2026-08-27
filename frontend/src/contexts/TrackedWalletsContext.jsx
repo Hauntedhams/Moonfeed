@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { useWallet } from '@jup-ag/wallet-adapter';
 import { getFullApiUrl } from '../config/api';
+import { useWalletConnectOnboarding } from '../components/WalletConnectOnboarding';
 
 const TrackedWalletsContext = createContext();
 
@@ -15,23 +16,19 @@ export const useTrackedWallets = () => {
 export const TrackedWalletsProvider = ({ children }) => {
   const [trackedWallets, setTrackedWallets] = useState([]);
   const { publicKey, connected } = useWallet();
+  const { openWalletConnect } = useWalletConnectOnboarding();
   const walletAddress = publicKey?.toString() || null;
   const syncedWalletRef = useRef(null); // account address we've already pulled synced data for
   const skipNextSaveRef = useRef(false); // true right after loading remote data, to avoid an immediate re-save
 
-  // Load tracked wallets from localStorage on mount (instant, works for guests too)
+  // Tracking and copy-trade notifications require a connected account. Remove
+  // legacy guest records so they cannot appear or run notifications after logout.
   useEffect(() => {
-    const stored = localStorage.getItem('moonfeed_tracked_wallets');
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        setTrackedWallets(parsed);
-        console.log(`📋 Loaded ${parsed.length} tracked wallets from storage`);
-      } catch (err) {
-        console.error('Error loading tracked wallets:', err);
-      }
+    if (!connected || !walletAddress) {
+      setTrackedWallets([]);
+      localStorage.removeItem('moonfeed_tracked_wallets');
     }
-  }, []);
+  }, [connected, walletAddress]);
 
   // When a wallet signs in, pull this account's synced tracked-wallet list from the
   // backend so tracked wallets follow the user across devices.
@@ -47,23 +44,19 @@ export const TrackedWalletsProvider = ({ children }) => {
       .then(res => (res.ok ? res.json() : null))
       .then(data => {
         const remote = Array.isArray(data?.trackedWallets) ? data.trackedWallets : [];
-        if (remote.length > 0) {
-          skipNextSaveRef.current = true;
-          setTrackedWallets(remote);
-          console.log(`☁️ Synced ${remote.length} tracked wallets from account`);
-        }
-        // If the account has nothing saved yet, keep whatever is local (e.g. guest
-        // tracking before sign-in) — it'll get pushed up by the save effect below.
+        skipNextSaveRef.current = true;
+        setTrackedWallets(remote);
+        console.log(`☁️ Synced ${remote.length} tracked wallets from account`);
       })
       .catch(err => console.warn('Could not load tracked wallets from account:', err.message));
   }, [connected, walletAddress]);
 
-  // Save to localStorage whenever trackedWallets changes (guest cache / instant reload)
+  // Cache only the active account's list for a faster connected reload.
   useEffect(() => {
-    if (trackedWallets.length >= 0) {
+    if (connected && walletAddress) {
       localStorage.setItem('moonfeed_tracked_wallets', JSON.stringify(trackedWallets));
     }
-  }, [trackedWallets]);
+  }, [trackedWallets, connected, walletAddress]);
 
   // Save to the signed-in account whenever trackedWallets changes, so it syncs cross-device.
   useEffect(() => {
@@ -100,6 +93,11 @@ export const TrackedWalletsProvider = ({ children }) => {
   }, [trackedWallets]);
 
   const trackWallet = (walletAddress, label = null) => {
+    if (!connected) {
+      openWalletConnect();
+      return false;
+    }
+
     // Check if already tracked
     if (trackedWallets.some(w => w.address === walletAddress)) {
       console.log(`⚠️ Wallet ${walletAddress} is already tracked`);

@@ -92,6 +92,12 @@ export const useSolanaTransactions = (mintAddress, isActive) => {
                 if (!newTxs.length) return prev;
                 return [...newTxs, ...prev].slice(0, 50);
               });
+              // Tick the live price from the most recent priced trade — reflects
+              // each buy/sell immediately instead of waiting for the ~1.5s poll.
+              for (let i = msg.transactions.length - 1; i >= 0; i--) {
+                const p = Number(msg.transactions[i].priceUsd);
+                if (p > 0) { setLivePrice(p); break; }
+              }
             }
             break;
 

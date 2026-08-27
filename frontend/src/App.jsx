@@ -48,13 +48,7 @@ function App() {
 
 
   const [activeTab, setActiveTab] = useState('home');
-  const [favorites, setFavorites] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('favorites') || '[]');
-    } catch {
-      return [];
-    }
-  });
+  const [favorites, setFavorites] = useState([]);
   const { publicKey, connected } = useWallet();
   const walletAddress = publicKey?.toString() || null;
   const favoritesSyncedWalletRef = useRef(null); // account address we've already pulled synced favorites for
@@ -98,14 +92,14 @@ function App() {
     setFavorites(newFavs);
   };
 
-  // Save favorites to localStorage whenever they change
+  // Coin tracking belongs to the connected account. Clear legacy guest records
+  // so a signed-out user can never see or manage a tracked coin.
   useEffect(() => {
-    try {
-      localStorage.setItem('favorites', JSON.stringify(favorites));
-    } catch (error) {
-      console.error('Failed to save favorites to localStorage:', error);
+    if (!connected || !walletAddress) {
+      setFavorites([]);
+      localStorage.removeItem('favorites');
     }
-  }, [favorites]);
+  }, [connected, walletAddress]);
 
   // When a wallet signs in, pull this account's synced tracked-coins (favorites) list
   // from the backend so tracked coins follow the user across devices.
@@ -121,19 +115,15 @@ function App() {
       .then(res => (res.ok ? res.json() : null))
       .then(data => {
         const remote = Array.isArray(data?.trackedCoins) ? data.trackedCoins : [];
-        if (remote.length > 0) {
-          skipNextFavoritesSaveRef.current = true;
-          setFavorites(remote);
-          console.log(`☁️ Synced ${remote.length} tracked coins from account`);
-        }
-        // If the account has nothing saved yet, keep whatever is local (e.g. guest
-        // favorites before sign-in) — it'll get pushed up by the save effect below.
+        skipNextFavoritesSaveRef.current = true;
+        setFavorites(remote);
+        console.log(`☁️ Synced ${remote.length} tracked coins from account`);
       })
       .catch(err => console.warn('Could not load tracked coins from account:', err.message));
   }, [connected, walletAddress]);
 
-  // Save favorites to the signed-in account (minimal fields — full coin data is
-  // re-enriched from the feed when displayed) whenever they change.
+  // Save tracked coins to the signed-in account (minimal fields — full coin data
+  // is re-enriched from the feed when displayed) whenever they change.
   useEffect(() => {
     if (!connected || !walletAddress) return;
     if (skipNextFavoritesSaveRef.current) {

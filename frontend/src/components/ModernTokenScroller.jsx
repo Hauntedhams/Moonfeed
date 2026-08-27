@@ -3,6 +3,8 @@ import CoinCard from './CoinCard';
 import MoonfeedInfoButton from './MoonfeedInfoModal';
 import InteractiveTutorial from './InteractiveTutorial';
 import { API_CONFIG, getApiUrl } from '../config/api';
+import { useWallet } from '../contexts/WalletContext';
+import { useWalletConnectOnboarding } from './WalletConnectOnboarding';
 import './ModernTokenScroller.css';
 
 const SWIPE_HINT_SEEN_KEY = 'moonfeed_swipe_hint_seen';
@@ -36,6 +38,8 @@ const ModernTokenScroller = ({
   isAdvancedFilterActive = false,
   onSearchClick = null // Add search click handler
 }) => {
+  const { connected: walletConnected } = useWallet();
+  const { openWalletConnect } = useWalletConnectOnboarding();
   // Debug: Log if onSearchClick is passed
   useEffect(() => {
     console.log('🔍 ModernTokenScroller: onSearchClick prop =', !!onSearchClick);
@@ -1131,6 +1135,11 @@ const ModernTokenScroller = ({
   // useCallback keeps this reference stable across renders so it doesn't
   // defeat CoinCard's React.memo for every mounted (off-screen) card.
   const handleFavoriteToggle = useCallback((coin) => {
+    if (!walletConnected) {
+      openWalletConnect();
+      return;
+    }
+
     console.log('🔥 Favorite toggle called for:', coin.symbol, coin.mintAddress || coin.tokenAddress);
     
     const isFavorite = favorites.some(fav => 
@@ -1153,7 +1162,7 @@ const ModernTokenScroller = ({
     
     onFavoritesChange?.(newFavorites);
     console.log('🔥 onFavoritesChange called with:', newFavorites.length, 'favorites');
-  }, [favorites, onFavoritesChange]);
+  }, [favorites, onFavoritesChange, walletConnected, openWalletConnect]);
 
   // Stable handler for chart fullscreen changes (no per-coin data needed).
   const handleChartFullscreenChange = useCallback((isFs) => {

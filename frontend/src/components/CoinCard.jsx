@@ -548,7 +548,7 @@ const CoinCard = memo(({
   const clampBuyOrderPrice = (nextPrice) => {
     const base = Number(displayPrice) || Number(fallbackPrice) || 0;
     if (base <= 0) return Math.max(Number(nextPrice) || 0, 0.00000001);
-    return Math.min(Math.max(nextPrice, base * 0.2), base * 2.5);
+    return Math.min(Math.max(nextPrice, base * 0.2), base * 10);
   };
 
   const clampBuySolAmount = (nextAmount) => {
@@ -2164,6 +2164,17 @@ const CoinCard = memo(({
                 ✕
               </button>
             )}
+            <div className="transactions-section-header">
+              <span className="transactions-section-icon">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M17 3l4 4-4 4" />
+                  <path d="M3 7h18" />
+                  <path d="M7 21l-4-4 4-4" />
+                  <path d="M21 17H3" />
+                </svg>
+              </span>
+              Transactions
+            </div>
             <div className="live-transactions-content">
                   {txError && (
                     <div className="tx-error">
@@ -2340,6 +2351,15 @@ const CoinCard = memo(({
             style={{ cursor: isExpanded && !showInlineTopTraders ? 'pointer' : 'default' }}
           >
             <div className="top-traders-section-header">
+              <span className="top-traders-section-icon">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M8 21h8" />
+                  <path d="M12 17v4" />
+                  <path d="M7 4h10v5a5 5 0 0 1-10 0V4Z" />
+                  <path d="M17 4h3a2 2 0 0 1-2 4h-1" />
+                  <path d="M7 4H4a2 2 0 0 0 2 4h1" />
+                </svg>
+              </span>
               Top Traders
               {showInlineTopTraders && (
                 <button
@@ -2955,7 +2975,7 @@ const CoinCard = memo(({
            is already on document.body at z-index 60-70; putting buttons there at
            z-index 9999 guarantees they always paint on top.
            On desktop: rendered in-place (no chart z-index conflict). */}
-      {(function() {
+      {!buyDrawerOpen && (function() {
         const _mobilePortal = !isDesktopMode && isActiveCard;
         const _buttons = (
       <>
@@ -2995,12 +3015,10 @@ const CoinCard = memo(({
         >
           <span className="tiktok-action-icon">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M8 6h13" />
-              <path d="M8 12h13" />
-              <path d="M8 18h13" />
-              <path d="M3 6h.01" />
-              <path d="M3 12h.01" />
-              <path d="M3 18h.01" />
+              <path d="M17 3l4 4-4 4" />
+              <path d="M3 7h18" />
+              <path d="M7 21l-4-4 4-4" />
+              <path d="M21 17H3" />
             </svg>
           </span>
           <span className="tiktok-action-label">Trades</span>
@@ -3019,10 +3037,11 @@ const CoinCard = memo(({
         >
           <span className="tiktok-action-icon">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M4 20V10" />
-              <path d="M10 20V4" />
-              <path d="M16 20v-7" />
-              <path d="M22 20H2" />
+              <path d="M8 21h8" />
+              <path d="M12 17v4" />
+              <path d="M7 4h10v5a5 5 0 0 1-10 0V4Z" />
+              <path d="M17 4h3a2 2 0 0 1-2 4h-1" />
+              <path d="M7 4H4a2 2 0 0 0 2 4h1" />
             </svg>
           </span>
           <span className="tiktok-action-label">PnL</span>
@@ -3126,7 +3145,7 @@ const CoinCard = memo(({
               <span>{coin.symbol || coin.name || 'Chart'}</span>
               <button onClick={closeNativeChartFullscreen} aria-label="Close full chart">×</button>
             </div>
-            <NativeChart coin={coin} isActive={true} isExpanded={true} livePrice={rpcLivePrice} />
+            <NativeChart coin={coin} isActive={true} isExpanded={true} livePrice={displayPrice} />
           </div>
         </div>
       )}
@@ -3160,7 +3179,7 @@ const CoinCard = memo(({
               coin={coin}
               isActive={isCurrentCard}
               isExpanded={isDesktopMode ? true : isExpanded}
-              livePrice={rpcLivePrice}
+              livePrice={displayPrice}
               focusOneMinute={orderChartFocused}
               targetPrice={orderChartFocused ? buyOrderPrice : null}
               targetLabel={orderTargetLabel}
@@ -3410,7 +3429,16 @@ const CoinCard = memo(({
 
             {/* Header */}
             <div className="tiktok-sheet-header">
-              <span className="tiktok-sheet-title">🏆 Top PNL Traders</span>
+              <span className="tiktok-sheet-title tiktok-sheet-title--trophy">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M8 21h8" />
+                  <path d="M12 17v4" />
+                  <path d="M7 4h10v5a5 5 0 0 1-10 0V4Z" />
+                  <path d="M17 4h3a2 2 0 0 1-2 4h-1" />
+                  <path d="M7 4H4a2 2 0 0 0 2 4h1" />
+                </svg>
+                Top PNL Traders
+              </span>
               <button className="tiktok-sheet-close" onClick={() => setShowTopTraders(false)}>✕</button>
             </div>
 

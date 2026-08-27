@@ -3210,7 +3210,7 @@ html:not(.dark-mode) .twelve-chart-section {
 .transactions-section-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 6px;
 }
 
 .transactions-close-btn {
@@ -3245,12 +3245,11 @@ html:not(.dark-mode) .twelve-chart-section {
   text-transform: uppercase;
   letter-spacing: 0.3px;
   color: #667eea;
-  padding: 16px;
+  padding: 10px 16px;
   border-bottom: 1px solid rgba(79, 195, 247, 0.2);
   display: flex;
-  align-items: flex-start; /* Changed from center - align charts to top */
-  gap: 8px;
-  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
 }
 
 .auto-loaded-badge {
@@ -3749,6 +3748,14 @@ html:not(.dark-mode) .twelve-chart-section {
   color: rgba(255, 255, 255, 0.65);
   font-size: 14px;
   cursor: pointer;
+}
+
+.top-traders-section-icon,
+.transactions-section-icon {
+  display: inline-flex;
+  align-items: center;
+  color: #667eea;
+  flex-shrink: 0;
 }
 
 /* Button wrapper for top traders */
@@ -4616,6 +4623,13 @@ html.dark-mode .description-modal-body,
   font-size: 15px;
   font-weight: 700;
   color: #fff;
+}
+
+.tiktok-sheet-title--trophy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #ffc94d;
 }
 
 .tiktok-sheet-close {

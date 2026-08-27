@@ -29,7 +29,11 @@ class PriceWebSocketServer {
     
     this.monitor = new PureRpcMonitor();
     this.clients = new Map(); // clientWs -> Set of subscribed tokenAddresses
-    
+
+    // Let the tx streamer price each swap in USD from the same cached SOL price
+    // this monitor already maintains, so per-trade live price ticks are free.
+    heliusTxStreamer.setSolPriceGetter(() => this.monitor.solPrice);
+
     this.init();
   }
 

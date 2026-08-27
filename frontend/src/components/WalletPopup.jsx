@@ -159,8 +159,7 @@ const WalletPopup = ({ walletAddress, traderData, onClose }) => {
                 if (tracked) {
                   untrackWallet(walletAddress);
                   setTracked(false);
-                } else {
-                  trackWallet(walletAddress);
+                } else if (trackWallet(walletAddress)) {
                   setTracked(true);
                 }
               }}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { getFullApiUrl } from '../config/api';
 import { useWallet } from '../contexts/WalletContext';
+import { useWalletConnectOnboarding } from './WalletConnectOnboarding';
 import './TriggerOrderModal.css';
 
 const TriggerOrderModal = ({ 
@@ -14,7 +15,8 @@ const TriggerOrderModal = ({
   initialTriggerPrice,
   embedded = false, // When true, render inline (no overlay) as a swipeable page
 }) => {
-  const { walletAddress, connected, signTransaction, recheckConnection, connect } = useWallet();
+  const { walletAddress, connected, signTransaction, recheckConnection } = useWallet();
+  const { openWalletConnect } = useWalletConnectOnboarding();
   const [side, setSide] = useState('buy'); // 'buy' or 'sell'
   const [inputAmount, setInputAmount] = useState('');
   const [triggerPrice, setTriggerPrice] = useState('');
@@ -685,7 +687,7 @@ const TriggerOrderModal = ({
             {error && <div className="inline-error">{error}</div>}
             {!walletAddress && (
               <div className="inline-warning">
-                <button className="connect-wallet-link" onClick={connect}>
+                <button className="connect-wallet-link" onClick={openWalletConnect}>
                   Connect wallet
                 </button>
                 {' '}to create orders

@@ -3,6 +3,8 @@ import TopTabs from './TopTabs';
 import ModernTokenScroller from './ModernTokenScroller';
 import TrackedWalletCard from './TrackedWalletCard';
 import { useTrackedWallets } from '../contexts/TrackedWalletsContext';
+import { useWallet } from '../contexts/WalletContext';
+import WalletConnectOnboarding from './WalletConnectOnboarding';
 import './TrackedView.css';
 
 const TRACKED_TABS = [
@@ -24,6 +26,7 @@ function TrackedView({
 }) {
   const [activeFeed, setActiveFeed] = useState('wallets');
   const { trackedWallets, untrackWallet } = useTrackedWallets();
+  const { connected: walletConnected } = useWallet();
   const walletsRef = useRef(null);
   const [visibleIndex, setVisibleIndex] = useState(0);
 
@@ -45,9 +48,13 @@ function TrackedView({
       {activeFeed === 'wallets' ? (
         trackedWallets.length === 0 ? (
           <div className="tracked-empty">
-            <span className="tracked-empty-icon">👛</span>
             <h3>No tracked wallets</h3>
             <p>Tap a trader's wallet anywhere in the app and hit “Track Wallet” to follow their moves here.</p>
+            {!walletConnected && (
+              <WalletConnectOnboarding>
+                <button type="button" className="tracked-empty-connect">Connect wallet</button>
+              </WalletConnectOnboarding>
+            )}
           </div>
         ) : (
           <div className="tracked-wallets-scroller" ref={walletsRef} onScroll={handleWalletScroll}>
@@ -69,9 +76,13 @@ function TrackedView({
         )
       ) : favorites.length === 0 ? (
         <div className="tracked-empty">
-          <span className="tracked-empty-icon">⭐</span>
           <h3>No tracked coins</h3>
           <p>Hit “Track” on any coin card and it will show up in this feed.</p>
+          {!walletConnected && (
+            <WalletConnectOnboarding>
+              <button type="button" className="tracked-empty-connect">Connect wallet</button>
+            </WalletConnectOnboarding>
+          )}
         </div>
       ) : (
         <ModernTokenScroller

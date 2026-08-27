@@ -17,7 +17,8 @@ const solanaTransactionService = require('./solanaTransactionService');
 const { HELIUS_WS_URL, HELIUS_RPC_URL, PUBLIC_WS_URL, PUBLIC_RPC_URL } = require('./solanaRpcConfig');
 
 // Helius is primary (public mainnet-beta 429s hard and drops logsSubscribe).
-const FLUSH_DEBOUNCE_MS = 500; // Batch signatures for 500ms before parsing
+const FLUSH_DEBOUNCE_MS = 250;   // Batch signatures for 250ms of inactivity before parsing
+const MAX_WAIT_MS = 600;         // Force a flush at least this often during a continuous burst
 const MAX_BATCH_SIZE = 20;     // Max signatures per Helius Enhanced API call
 const PING_INTERVAL_MS = 30_000; // Send ping every 30s to keep Helius WS alive
 
@@ -25,6 +26,12 @@ class HeliusTxStreamer {
   constructor() {
     // mintAddress -> { ws, subscriptionId, clients: Set<ws>, sigQueue: [], flushTimer }
     this.streams = new Map();
+    this.solPriceGetter = null; // set via setSolPriceGetter() to price each swap in USD
+  }
+
+  /** Wire up a function returning the current cached SOL/USD price (no extra API calls). */
+  setSolPriceGetter(fn) {
+    this.solPriceGetter = fn;
   }
 
   /**
@@ -122,12 +129,19 @@ class HeliusTxStreamer {
 
             stream.sigQueue.push(signature);
 
-            // Debounce: flush after 500ms of inactivity
+            // Debounce: flush after a short quiet period, but never let a continuous
+            // burst of trades delay the flush past MAX_WAIT_MS.
             if (stream.flushTimer) clearTimeout(stream.flushTimer);
             stream.flushTimer = setTimeout(
               () => this._flushQueue(mintAddress, stream),
               FLUSH_DEBOUNCE_MS
             );
+            if (!stream.maxWaitTimer) {
+              stream.maxWaitTimer = setTimeout(
+                () => this._flushQueue(mintAddress, stream),
+                MAX_WAIT_MS
+              );
+            }
           }
         } catch (e) {
           // Ignore parse errors
@@ -165,7 +179,10 @@ class HeliusTxStreamer {
   }
 
   async _flushQueue(mintAddress, stream) {
+    if (stream.flushTimer) clearTimeout(stream.flushTimer);
+    if (stream.maxWaitTimer) clearTimeout(stream.maxWaitTimer);
     stream.flushTimer = null;
+    stream.maxWaitTimer = null;
     const sigs = stream.sigQueue.splice(0, MAX_BATCH_SIZE);
     if (!sigs.length || !stream.clients.size) return;
 
@@ -197,6 +214,17 @@ class HeliusTxStreamer {
 
     if (!swaps.length) return;
 
+    // Price each swap in USD from its own SOL/token ratio (per-trade price, not
+    // a periodic poll) so the frontend can tick the live price on every trade.
+    const solPrice = this.solPriceGetter?.();
+    if (solPrice > 0) {
+      for (const swap of swaps) {
+        if (swap.tokenAmount > 0 && swap.solAmount > 0) {
+          swap.priceUsd = (swap.solAmount / swap.tokenAmount) * solPrice;
+        }
+      }
+    }
+
     console.log(`[TxStreamer] Broadcasting ${swaps.length} new swaps for ${mintAddress.substring(0, 8)}`);
 
     const payload = JSON.stringify({
@@ -216,6 +244,10 @@ class HeliusTxStreamer {
     if (stream.flushTimer) {
       clearTimeout(stream.flushTimer);
       stream.flushTimer = null;
+    }
+    if (stream.maxWaitTimer) {
+      clearTimeout(stream.maxWaitTimer);
+      stream.maxWaitTimer = null;
     }
     if (stream.pingInterval) {
       clearInterval(stream.pingInterval);

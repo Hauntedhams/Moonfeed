@@ -2,6 +2,7 @@ import { StrictMode, useMemo } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
+import { WalletConnectOnboardingProvider } from './components/WalletConnectOnboarding.jsx'
 
 // Jupiter Wallet Kit imports
 import { UnifiedWalletProvider } from '@jup-ag/wallet-adapter';
@@ -107,11 +108,13 @@ function RootApp() {
   );
 
   const inner = (
-    <LiveDataProvider>
-      <UserProfileProvider>
-        <App />
-      </UserProfileProvider>
-    </LiveDataProvider>
+    <WalletConnectOnboardingProvider>
+      <LiveDataProvider>
+        <UserProfileProvider>
+          <App />
+        </UserProfileProvider>
+      </LiveDataProvider>
+    </WalletConnectOnboardingProvider>
   );
 
   // In extension mode: skip UnifiedWalletProvider entirely so plugin.jup.ag
