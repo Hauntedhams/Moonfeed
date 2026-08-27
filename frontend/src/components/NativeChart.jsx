@@ -67,6 +67,7 @@ const NativeChart = ({
   const seriesTypeRef = useRef(null); // 'candles' | 'area'
   const targetLineRef = useRef(null);
   const dataLengthRef = useRef(0);
+  const focusAnimationRef = useRef(null);
   // Most recent candle, kept in sync so live prices can fold into it in place.
   const lastCandleRef = useRef(null);
 
@@ -138,6 +139,7 @@ const NativeChart = ({
       seriesRef.current = null;
       seriesTypeRef.current = null;
       targetLineRef.current = null;
+      if (focusAnimationRef.current) cancelAnimationFrame(focusAnimationRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -306,11 +308,38 @@ const NativeChart = ({
       }
     }
 
-    if (focusOneMinute && tfIndex === 0 && dataLengthRef.current > 0) {
-      const to = dataLengthRef.current - 1;
-      chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, to - 80), to: to + 2 });
-    }
-  }, [focusOneMinute, status, targetLabel, targetPrice, tfIndex]);
+  }, [status, targetLabel, targetPrice]);
+
+  // Animate the sell-order focus into a tight 1m view. The extra future bars on
+  // the right make the target line readable without covering the last candles.
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart || !focusOneMinute || tfIndex !== 0 || status !== 'ready' || dataLengthRef.current === 0) return;
+
+    if (focusAnimationRef.current) cancelAnimationFrame(focusAnimationRef.current);
+    const scale = chart.timeScale();
+    const last = dataLengthRef.current - 1;
+    const target = { from: Math.max(0, last - 84), to: last + 34 };
+    const current = scale.getVisibleLogicalRange() || { from: Math.max(0, last - 150), to: last + 2 };
+    const startedAt = performance.now();
+    const duration = 420;
+
+    const animate = (now) => {
+      const progress = Math.min(1, (now - startedAt) / duration);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      scale.setVisibleLogicalRange({
+        from: current.from + (target.from - current.from) * eased,
+        to: current.to + (target.to - current.to) * eased,
+      });
+      if (progress < 1) focusAnimationRef.current = requestAnimationFrame(animate);
+      else focusAnimationRef.current = null;
+    };
+
+    focusAnimationRef.current = requestAnimationFrame(animate);
+    return () => {
+      if (focusAnimationRef.current) cancelAnimationFrame(focusAnimationRef.current);
+    };
+  }, [focusOneMinute, status, tfIndex]);
 
   // Fold the live price into the last candle in real time (O(1) series.update).
   useEffect(() => {
