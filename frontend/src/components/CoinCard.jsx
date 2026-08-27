@@ -581,6 +581,13 @@ const CoinCard = memo(({
     onChartFullscreenChange?.(false);
   };
 
+  const openFullscreenTradeDrawer = (e) => {
+    e?.stopPropagation();
+    closeNativeChartFullscreen();
+    if (!isExpanded) handleExpandToggle(e);
+    openBuyDrawer('buy');
+  };
+
   const adjustBuyOrderPrice = (direction) => {
     setBuyOrderPrice((current) => {
       const base = Number(displayPrice) || Number(fallbackPrice) || 0;
@@ -3071,6 +3078,16 @@ const CoinCard = memo(({
       {USE_NATIVE_CHART && _mobilePortal && nativeChartFullscreen && (
         <div className="native-chart-fullscreen" onClick={closeNativeChartFullscreen}>
           <div className="native-chart-fullscreen-panel" onClick={(e) => e.stopPropagation()}>
+            <button
+              className="native-chart-fullscreen-trade-handle"
+              onClick={openFullscreenTradeDrawer}
+              aria-label="Open trade window"
+              title="Open trade window"
+            >
+              <svg width="10" height="16" viewBox="0 0 10 16" fill="none" aria-hidden="true">
+                <path d="M2 2l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
             <div className="native-chart-fullscreen-header">
               <span>{coin.symbol || coin.name || 'Chart'}</span>
               <button onClick={closeNativeChartFullscreen} aria-label="Close full chart">×</button>

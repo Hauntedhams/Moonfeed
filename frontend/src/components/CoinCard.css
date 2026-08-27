@@ -405,13 +405,48 @@
 .native-chart-fullscreen-header button {
   width: 40px;
   height: 40px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.07);
+  border: none;
+  background: transparent;
   color: #fff;
-  font-size: 28px;
+  font-size: 36px;
+  font-weight: 300;
   line-height: 1;
   cursor: pointer;
+}
+
+.native-chart-fullscreen-trade-handle {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  left: 0;
+  width: 24px;
+  height: 56px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: translateY(-50%);
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(15, 23, 42, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-left: none;
+  border-radius: 0 12px 12px 0;
+  box-shadow: 2px 0 12px rgba(0, 0, 0, 0.38);
+  cursor: pointer;
+  animation: nativeChartTradeHint 2.4s ease-in-out infinite;
+}
+
+.native-chart-fullscreen-trade-handle:hover,
+.native-chart-fullscreen-trade-handle:active {
+  animation: none;
+  transform: translateY(-50%);
+  background: rgba(30, 41, 59, 0.95);
+  color: #fff;
+}
+
+@keyframes nativeChartTradeHint {
+  0%, 100% { transform: translateY(-50%) translateX(0); opacity: 0.72; }
+  50% { transform: translateY(-50%) translateX(3px); opacity: 1; }
 }
 
 .native-chart-fullscreen-panel .native-chart {
