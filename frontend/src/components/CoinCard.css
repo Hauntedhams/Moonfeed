@@ -748,7 +748,7 @@
 
 .coin-buy-price-wheel.compact {
   min-height: 142px;
-  grid-template-rows: 30px auto auto 30px;
+  grid-template-rows: 30px auto auto auto 30px;
   border-radius: 14px;
 }
 
@@ -894,6 +894,15 @@
   font-variant-numeric: tabular-nums;
 }
 
+.coin-buy-price-unit {
+  margin-top: -5px;
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
 .coin-buy-delta {
   font-size: 0.78rem;
   font-weight: 800;
@@ -928,6 +937,12 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.coin-buy-target-multiplier-scale span:nth-child(2) {
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 0.58rem;
+  text-align: center;
 }
 
 .coin-buy-target-multiplier-label strong {

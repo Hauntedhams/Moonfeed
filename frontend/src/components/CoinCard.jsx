@@ -538,6 +538,12 @@ const CoinCard = memo(({
   };
 
   const getOrderTargetStep = () => getBuyOrderStep() * orderStepMultiplier;
+  const formatOrderStepUsd = () => {
+    const step = getOrderTargetStep();
+    if (step < 0.0001) return `$${step.toPrecision(3)}`;
+    if (step < 1) return `$${step.toFixed(6)}`;
+    return `$${step.toFixed(2)}`;
+  };
 
   const clampBuyOrderPrice = (nextPrice) => {
     const base = Number(displayPrice) || Number(fallbackPrice) || 0;
@@ -2811,7 +2817,7 @@ const CoinCard = memo(({
                     )}
 
                     {buyDrawerOrderSide === 'sell' && (
-                      <span className="coin-buy-step-label">Step 1 · Sell price</span>
+                      <span className="coin-buy-step-label">Step 1 · Sell price in USD</span>
                     )}
 
                     <div
@@ -2830,6 +2836,7 @@ const CoinCard = memo(({
                     >
                       <button className="coin-buy-step" onClick={() => adjustBuyOrderPrice(1)} aria-label="Increase buy price">⌃</button>
                       <div className="coin-buy-price">{formatPrice(buyOrderPrice)}</div>
+                      <div className="coin-buy-price-unit">USD per {coin.symbol || 'token'}</div>
                       <div className={`coin-buy-delta ${buyOrderPrice >= displayPrice ? 'above' : 'below'}`}>
                         {displayPrice > 0 ? formatPercent(((buyOrderPrice - displayPrice) / displayPrice) * 100) : '0.00%'}
                       </div>
@@ -2868,7 +2875,7 @@ const CoinCard = memo(({
                         onChange={(e) => setOrderStepMultiplier(Number(e.target.value))}
                         aria-label="Target price step multiplier"
                       />
-                      <span className="coin-buy-target-multiplier-scale"><span>1x</span><span>100x</span></span>
+                      <span className="coin-buy-target-multiplier-scale"><span>1x</span><span>{formatOrderStepUsd()} per {coin.symbol || 'token'} / tick</span><span>100x</span></span>
                     </label>
 
                     <div className="coin-buy-expiry">

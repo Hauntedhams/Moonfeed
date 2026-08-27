@@ -311,8 +311,8 @@ const NativeChart = ({
 
   }, [status, targetColor, targetLabel, targetPrice]);
 
-  // Animate the sell-order focus into a tight 1m view. The extra future bars on
-  // the right make the target line readable without covering the last candles.
+  // Animate the order focus into a 1m view. As the target moves farther from
+  // market price, reveal more history and future space so its line stays useful.
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart || !focusOneMinute || tfIndex !== 0 || status !== 'ready' || dataLengthRef.current === 0) return;
@@ -320,7 +320,12 @@ const NativeChart = ({
     if (focusAnimationRef.current) cancelAnimationFrame(focusAnimationRef.current);
     const scale = chart.timeScale();
     const last = dataLengthRef.current - 1;
-    const target = { from: Math.max(0, last - 84), to: last + 34 };
+    const currentPrice = Number(lastCandleRef.current?.close) || 0;
+    const targetValue = Number(targetPrice) || currentPrice;
+    const distance = currentPrice > 0 ? Math.abs(targetValue / currentPrice - 1) : 0;
+    const historyBars = Math.min(180, 84 + Math.ceil(distance * 220));
+    const futureBars = Math.min(110, 34 + Math.ceil(distance * 150));
+    const target = { from: Math.max(0, last - historyBars), to: last + futureBars };
     const current = scale.getVisibleLogicalRange() || { from: Math.max(0, last - 150), to: last + 2 };
     const startedAt = performance.now();
     const duration = 420;
@@ -340,7 +345,7 @@ const NativeChart = ({
     return () => {
       if (focusAnimationRef.current) cancelAnimationFrame(focusAnimationRef.current);
     };
-  }, [focusOneMinute, status, tfIndex]);
+  }, [focusOneMinute, status, targetPrice, tfIndex]);
 
   // Fold the live price into the last candle in real time (O(1) series.update).
   useEffect(() => {
