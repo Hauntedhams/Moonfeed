@@ -1,4 +1,4 @@
-/* FeedSelector — single top-right pill combining feed switching + token search */
+/* FeedSelector — compact top-right search button for feed browsing + token search */
 
 .feed-selector {
   position: fixed;
@@ -19,17 +19,18 @@
   }
 }
 
-/* ---- Pill button ---- */
-.feed-selector-pill {
+/* ---- Search button ---- */
+.feed-selector-search-button {
   display: flex;
   align-items: center;
-  padding: 5px 12px;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  padding: 0;
   background: rgba(0, 0, 0, 0.45);
   border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 999px;
+  border-radius: 50%;
   color: #fff;
-  font-size: 12px;
-  font-weight: 600;
   cursor: pointer;
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
@@ -37,18 +38,14 @@
   transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
 }
 
-.feed-selector-pill:hover {
+.feed-selector-search-button:hover {
   background: rgba(255, 255, 255, 0.18);
   border-color: rgba(255, 255, 255, 0.3);
 }
 
-.feed-selector-pill.open {
+.feed-selector-search-button.open {
   background: rgba(255, 255, 255, 0.22);
   border-color: rgba(255, 255, 255, 0.35);
-}
-
-.feed-selector-pill-label {
-  white-space: nowrap;
 }
 
 /* ---- Dropdown ---- */
@@ -215,6 +212,23 @@
   font-weight: 500;
   cursor: pointer;
   text-align: left;
+}
+
+.feed-selector-switch-feed {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  align-self: stretch;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+}
+
+.feed-selector-switch-feed:hover {
+  color: #4ade80;
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .feed-selector-feed.active .feed-selector-feed-select {

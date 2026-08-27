@@ -155,7 +155,8 @@ function FeedSelector({
   onFilterChange,
   onCoinSelect,
   hasCustomFilters = false,
-  onAdvancedFilterClick
+  onAdvancedFilterClick,
+  onFeedListOpen
 }) {
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -285,15 +286,34 @@ function FeedSelector({
     setOpen(false);
   };
 
+  const handleFeedListOpen = (feedId) => {
+    onFeedListOpen?.(feedId);
+    setOpen(false);
+  };
+
   return (
     <div className="feed-selector" ref={rootRef}>
-      {/* Pill button */}
+      {/* Search button */}
       <button
-        className={`feed-selector-pill ${open ? 'open' : ''}`}
+        className={`feed-selector-search-button ${open ? 'open' : ''}`}
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
+        aria-label="Search tokens and browse feeds"
+        title="Search tokens and browse feeds"
       >
-        <span className="feed-selector-pill-label">{activeFeed.label}</span>
+        <svg
+          width="19"
+          height="19"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <circle cx="11" cy="11" r="8" />
+          <line x1="21" y1="21" x2="16.65" y2="16.65" />
+        </svg>
       </button>
 
       {/* Dropdown */}
@@ -382,11 +402,18 @@ function FeedSelector({
                     <div className={`feed-selector-feed ${feed.id === activeFilter ? 'active' : ''}`}>
                       <button
                         className="feed-selector-feed-select"
-                        onClick={() => handleFeedSelect(feed.id)}
+                        onClick={() => handleFeedListOpen(feed.id)}
                       >
                         <span className="feed-selector-feed-icon">{renderIcon(feed.icon)}</span>
                         <span className="feed-selector-feed-label">{feed.label}</span>
-                        {feed.id === activeFilter && (
+                      </button>
+                      <button
+                        className="feed-selector-switch-feed"
+                        onClick={() => handleFeedSelect(feed.id)}
+                        aria-label={`${feed.id === activeFilter ? `${feed.label} is selected` : `Switch to ${feed.label}`}`}
+                        title={feed.id === activeFilter ? `${feed.label} selected` : `Switch to ${feed.label}`}
+                      >
+                        {feed.id === activeFilter ? (
                           <svg
                             className="feed-selector-check"
                             width="16"
@@ -399,6 +426,20 @@ function FeedSelector({
                             strokeLinejoin="round"
                           >
                             <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                        ) : (
+                          <svg
+                            className="feed-selector-info-chevron"
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <polyline points="6 9 12 15 18 9" />
                           </svg>
                         )}
                       </button>

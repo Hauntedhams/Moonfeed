@@ -350,6 +350,7 @@ function App() {
             onFilterChange={handleTopTabFilterChange}
             onCoinSelect={handleCoinFound}
             hasCustomFilters={isAdvancedFilterActive}
+            onFeedListOpen={handleActiveTabClick}
             onAdvancedFilterClick={() => setAdvancedFilterModalOpen(true)}
           />
         )}
