@@ -23,36 +23,31 @@ export async function getSolUsdPrice() {
   return cachedSolUsd;
 }
 
-// Average per-token buy price for a mint, from the wallet's locally stored trade history.
-function avgBuyPrice(tokenMint, transactions) {
-  const buys = (transactions || []).filter(
-    (tx) => tx.tokenMint === tokenMint && tx.type === 'buy' && Number(tx.pricePerToken) > 0
-  );
-  if (!buys.length) return null;
-  const sum = buys.reduce((acc, tx) => acc + Number(tx.pricePerToken), 0);
-  return sum / buys.length;
+// Total SOL spent buying this mint before the order was placed. Comparing SOL in to
+// SOL out sidesteps token decimals entirely, unlike a per-token cost basis.
+function costInSol(tokenMint, transactions, before) {
+  return (transactions || [])
+    .filter((tx) => tx.tokenMint === tokenMint && tx.type === 'buy' && Number(tx.inputAmount) > 0)
+    .filter((tx) => !before || !tx.timestamp || tx.timestamp <= before)
+    .reduce((sum, tx) => sum + Number(tx.inputAmount), 0);
 }
 
-// Computes { percent, usdAmount } for a filled order.
-// percent = realized gain vs the wallet's own average buy price (sell orders only,
-// requires matching local buy history) — null when it can't be determined.
+// Computes { percent, usdAmount, costUsd } for a filled order.
+// percent = realized gain, SOL proceeds vs SOL spent (needs local buy history; null otherwise).
 // usdAmount = the SOL value that changed hands, converted to USD.
 export function computeFillStats(order, transactions, solUsdPrice = cachedSolUsd) {
-  const triggerPrice = Number(order.triggerPrice) || 0;
-  const estimatedValue = Number(order.estimatedValue) || 0;
-  const usdAmount = estimatedValue * solUsdPrice;
+  const proceedsSol = Number(order.estimatedValue) || 0;
+  const usdAmount = proceedsSol * solUsdPrice;
+
+  const createdAt = order.createdAt ? new Date(order.createdAt).getTime() : null;
+  const costSol = costInSol(order.tokenMint, transactions, createdAt);
 
   let percent = null;
-  if (order.type === 'sell' && triggerPrice > 0) {
-    const basis = avgBuyPrice(order.tokenMint, transactions);
-    // A basis orders of magnitude away from the fill price means the stored trade
-    // was recorded with bad decimals — better to show no % than a nonsense one.
-    if (basis > 0 && triggerPrice / basis < 100 && triggerPrice / basis > 0.01) {
-      percent = ((triggerPrice - basis) / basis) * 100;
-    }
+  if (order.type === 'sell' && costSol > 0 && proceedsSol > 0) {
+    percent = ((proceedsSol - costSol) / costSol) * 100;
   }
 
-  return { percent, usdAmount };
+  return { percent, usdAmount, costUsd: costSol * solUsdPrice };
 }
 
 const NOTIFIED_KEY_PREFIX = 'moonfeed_notified_fills_';

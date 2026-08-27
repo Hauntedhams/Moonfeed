@@ -651,6 +651,21 @@
   -webkit-overflow-scrolling: touch;
 }
 
+/* Finger-tracked peek: the inline transform drives it, so no entry animation. */
+.coin-buy-drawer.dragging {
+  animation: none;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.coin-buy-drawer.settling {
+  transition: transform 0.17s cubic-bezier(0.2, 0.9, 0.2, 1);
+}
+
+.coin-buy-drawer.no-anim {
+  animation: none;
+}
+
 .coin-buy-drawer::-webkit-scrollbar {
   width: 6px;
 }

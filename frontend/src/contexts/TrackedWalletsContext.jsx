@@ -5,6 +5,9 @@ import { useWalletConnectOnboarding } from '../components/WalletConnectOnboardin
 
 const TrackedWalletsContext = createContext();
 
+// Per-account cache so switching wallets never shows the previous account's list.
+const cacheKey = (address) => `moonfeed_tracked_wallets_${address}`;
+
 export const useTrackedWallets = () => {
   const context = useContext(TrackedWalletsContext);
   if (!context) {
@@ -20,6 +23,7 @@ export const TrackedWalletsProvider = ({ children }) => {
   const walletAddress = publicKey?.toString() || null;
   const syncedWalletRef = useRef(null); // account address we've already pulled synced data for
   const skipNextSaveRef = useRef(false); // true right after loading remote data, to avoid an immediate re-save
+  const hydratedRef = useRef(false); // blocks saving until the first remote read settles
 
   // Tracking and copy-trade notifications require a connected account. Remove
   // legacy guest records so they cannot appear or run notifications after logout.
@@ -35,32 +39,51 @@ export const TrackedWalletsProvider = ({ children }) => {
   useEffect(() => {
     if (!connected || !walletAddress) {
       syncedWalletRef.current = null;
+      hydratedRef.current = false;
       return;
     }
     if (syncedWalletRef.current === walletAddress) return;
     syncedWalletRef.current = walletAddress;
+    hydratedRef.current = false;
+
+    // Show the cached list immediately; the remote read reconciles it.
+    let cached = [];
+    try {
+      cached = JSON.parse(localStorage.getItem(cacheKey(walletAddress)) || '[]');
+    } catch (_) { /* ignore corrupt cache */ }
+    if (Array.isArray(cached) && cached.length) {
+      skipNextSaveRef.current = true;
+      setTrackedWallets(cached);
+    }
 
     fetch(getFullApiUrl(`/api/users/${walletAddress}/tracked-wallets`))
       .then(res => (res.ok ? res.json() : null))
       .then(data => {
         const remote = Array.isArray(data?.trackedWallets) ? data.trackedWallets : [];
-        skipNextSaveRef.current = true;
-        setTrackedWallets(remote);
+        // An empty account must not wipe a device that still holds the list — that
+        // local copy gets pushed up instead.
+        if (remote.length) {
+          skipNextSaveRef.current = true;
+          setTrackedWallets(remote);
+        }
         console.log(`☁️ Synced ${remote.length} tracked wallets from account`);
       })
-      .catch(err => console.warn('Could not load tracked wallets from account:', err.message));
+      .catch(err => console.warn('Could not load tracked wallets from account:', err.message))
+      .finally(() => { hydratedRef.current = true; });
   }, [connected, walletAddress]);
 
   // Cache only the active account's list for a faster connected reload.
   useEffect(() => {
     if (connected && walletAddress) {
-      localStorage.setItem('moonfeed_tracked_wallets', JSON.stringify(trackedWallets));
+      localStorage.setItem(cacheKey(walletAddress), JSON.stringify(trackedWallets));
     }
   }, [trackedWallets, connected, walletAddress]);
 
   // Save to the signed-in account whenever trackedWallets changes, so it syncs cross-device.
   useEffect(() => {
     if (!connected || !walletAddress) return;
+    // Saving before the remote read lands would push an empty list over real data.
+    if (!hydratedRef.current) return;
     if (skipNextSaveRef.current) {
       skipNextSaveRef.current = false;
       return;

@@ -1832,7 +1832,7 @@
   border: 1px solid rgba(251, 191, 36, 0.3);
 }
 
-/* "Fulfilled!" celebration banner shown on filled/executed orders */
+/* Banner shown on filled/executed orders */
 .order-hist-fulfilled-banner {
   position: relative;
   z-index: 2;
@@ -1841,6 +1841,12 @@
   border-radius: 10px;
   background: rgba(16, 185, 129, 0.14);
   border: 1px solid rgba(16, 185, 129, 0.3);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.order-hist-fulfilled-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1851,6 +1857,19 @@
   font-size: 13px;
   font-weight: 700;
   color: #10b981;
+}
+
+.order-hist-fulfilled-flow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.order-hist-fulfilled-arrow {
+  color: rgba(255, 255, 255, 0.4);
 }
 
 .order-hist-fulfilled-stats {

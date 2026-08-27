@@ -48,6 +48,7 @@ class HeliusTxStreamer {
         sigQueue: [],
         flushTimer: null,
         pingInterval: null,
+        reconnectAttempts: 0,
       };
       this.streams.set(mintAddress, stream);
       this._openStream(mintAddress, stream, false); // primary: Helius RPC
@@ -96,6 +97,7 @@ class HeliusTxStreamer {
 
       ws.on('open', () => {
         console.log(`[TxStreamer] Helius WS open for ${mintAddress.substring(0, 8)}`);
+        stream.reconnectAttempts = 0; // reset backoff on a successful connection
         ws.send(JSON.stringify({
           jsonrpc: '2.0',
           id: 1,
@@ -162,15 +164,19 @@ class HeliusTxStreamer {
           stream.pingInterval = null;
         }
 
-        // Reconnect if clients still subscribed
+        // Reconnect if clients still subscribed. Back off exponentially (capped) so a
+        // rate-limited (429) Helius connection doesn't get hammered every few seconds.
         if (this.streams.has(mintAddress) && stream.clients.size > 0) {
           const nextPublic = false; // prefer Helius (public RPC 429s)
-          console.log(`[TxStreamer] Reconnecting ${mintAddress.substring(0, 8)} in 3s (Helius RPC)...`);
+          const attempt = stream.reconnectAttempts || 0;
+          const delay = Math.min(30000, 3000 * Math.pow(2, attempt));
+          stream.reconnectAttempts = attempt + 1;
+          console.log(`[TxStreamer] Reconnecting ${mintAddress.substring(0, 8)} in ${delay}ms (Helius RPC, attempt ${attempt + 1})...`);
           setTimeout(() => {
             if (this.streams.has(mintAddress) && stream.clients.size > 0) {
               this._openStream(mintAddress, stream, nextPublic);
             }
-          }, 3000);
+          }, delay);
         }
       });
     } catch (e) {

@@ -9,6 +9,7 @@ import FeedSelector, { FEED_ORDER } from './components/FeedSelector'
 import ErrorBoundary from './components/ErrorBoundary'
 import { WalletProvider } from './contexts/WalletContext'
 import { TrackedWalletsProvider } from './contexts/TrackedWalletsContext'
+import { TrackedTradesProvider } from './contexts/TrackedTradesContext'
 import { DarkModeProvider } from './contexts/DarkModeContext'
 import { CopyTradeProvider } from './contexts/CopyTradeContext'
 import { AlertsProvider } from './contexts/AlertsContext'
@@ -38,6 +39,9 @@ const PositionDetailView = lazy(() => import('./components/PositionDetailView'))
 const IS_EXTENSION = import.meta.env.VITE_IS_EXTENSION === 'true';
 const openFullSite = (path = '') => window.open(`https://moonfeed.app${path}`, '_blank');
 
+// Per-account cache so switching wallets never shows the previous account's coins.
+const favoritesCacheKey = (address) => `moonfeed_tracked_coins_${address}`;
+
 function App() {
   // Build timestamp - only log once on initial load
   if (!window.__MOONFEED_LOGGED__) {
@@ -57,6 +61,7 @@ function App() {
   useOrderFillNotifications(); // background: notifies when a limit order fills
   const favoritesSyncedWalletRef = useRef(null); // account address we've already pulled synced favorites for
   const skipNextFavoritesSaveRef = useRef(false); // true right after loading remote data, to avoid an immediate re-save
+  const favoritesHydratedRef = useRef(false); // blocks saving until the first remote read settles
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [filters, setFilters] = useState({ type: 'dextrending' }); // Start with DEXtrending (fastest loading)
   const [advancedFilters, setAdvancedFilters] = useState(null); // For advanced filtering
@@ -93,7 +98,12 @@ function App() {
 
   // Listen for favorites changes from TokenScroller
   const handleFavoritesChange = (newFavs) => {
-    setFavorites(newFavs);
+    // Stamp the price at the moment tracking starts so the UI can show performance since then.
+    setFavorites(newFavs.map(c => (
+      Number(c.trackedAtPrice) > 0
+        ? c
+        : { ...c, trackedAtPrice: Number(c.price_usd) || Number(c.priceUsd) || Number(c.price) || 0 }
+    )));
   };
 
   // Coin tracking belongs to the connected account. Clear legacy guest records
@@ -110,26 +120,51 @@ function App() {
   useEffect(() => {
     if (!connected || !walletAddress) {
       favoritesSyncedWalletRef.current = null;
+      favoritesHydratedRef.current = false;
       return;
     }
     if (favoritesSyncedWalletRef.current === walletAddress) return;
     favoritesSyncedWalletRef.current = walletAddress;
+    favoritesHydratedRef.current = false;
+
+    // Show the cached list immediately; the remote read reconciles it.
+    let cached = [];
+    try {
+      cached = JSON.parse(localStorage.getItem(favoritesCacheKey(walletAddress)) || '[]');
+    } catch (_) { /* ignore corrupt cache */ }
+    if (Array.isArray(cached) && cached.length) {
+      skipNextFavoritesSaveRef.current = true;
+      setFavorites(cached);
+    }
 
     fetch(getFullApiUrl(`/api/users/${walletAddress}/tracked-coins`))
       .then(res => (res.ok ? res.json() : null))
       .then(data => {
         const remote = Array.isArray(data?.trackedCoins) ? data.trackedCoins : [];
-        skipNextFavoritesSaveRef.current = true;
-        setFavorites(remote);
+        // An empty account must not wipe a device that still holds the list.
+        if (remote.length) {
+          skipNextFavoritesSaveRef.current = true;
+          setFavorites(remote);
+        }
         console.log(`☁️ Synced ${remote.length} tracked coins from account`);
       })
-      .catch(err => console.warn('Could not load tracked coins from account:', err.message));
+      .catch(err => console.warn('Could not load tracked coins from account:', err.message))
+      .finally(() => { favoritesHydratedRef.current = true; });
   }, [connected, walletAddress]);
+
+  // Cache the active account's list for an instant reload before the remote read lands.
+  useEffect(() => {
+    if (connected && walletAddress) {
+      localStorage.setItem(favoritesCacheKey(walletAddress), JSON.stringify(favorites));
+    }
+  }, [favorites, connected, walletAddress]);
 
   // Save tracked coins to the signed-in account (minimal fields — full coin data
   // is re-enriched from the feed when displayed) whenever they change.
   useEffect(() => {
     if (!connected || !walletAddress) return;
+    // Saving before the remote read lands would push an empty list over real data.
+    if (!favoritesHydratedRef.current) return;
     if (skipNextFavoritesSaveRef.current) {
       skipNextFavoritesSaveRef.current = false;
       return;
@@ -141,6 +176,7 @@ function App() {
         name: c.name || '',
         image: c.image || c.logo || c.profileImage || '',
         addedAt: c.addedAt || Date.now(),
+        trackedAtPrice: Number(c.trackedAtPrice) || Number(c.price_usd) || Number(c.priceUsd) || 0,
       }));
       fetch(getFullApiUrl(`/api/users/${walletAddress}/tracked-coins`), {
         method: 'PUT',
@@ -395,6 +431,7 @@ function App() {
   return (
     <DarkModeProvider>
       <TrackedWalletsProvider>
+        <TrackedTradesProvider>
         <WalletProvider>
           <AlertsProvider>
           <CopyTradeProvider onCopyTrade={handleCopyTrade}>
@@ -620,6 +657,7 @@ function App() {
           </CopyTradeProvider>
           </AlertsProvider>
         </WalletProvider>
+        </TrackedTradesProvider>
     </TrackedWalletsProvider>
     </DarkModeProvider>
   )

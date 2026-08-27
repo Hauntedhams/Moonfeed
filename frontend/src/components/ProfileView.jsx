@@ -1170,20 +1170,22 @@ const ProfileView = ({ onTradeClick }) => {
                         </div>
 
                         {status === 'executed' && (() => {
-                          const { percent, usdAmount } = computeFillStats(order, transactions, solUsdPrice);
+                          const { percent, usdAmount, costUsd } = computeFillStats(order, transactions, solUsdPrice);
                           return (
                             <div className="order-hist-fulfilled-banner">
-                              <span className="order-hist-fulfilled-title">🎉 Fulfilled!</span>
-                              <span className="order-hist-fulfilled-stats">
+                              <div className="order-hist-fulfilled-row">
+                                <span className="order-hist-fulfilled-title">Fulfilled</span>
                                 {Number.isFinite(percent) && (
                                   <span className={`order-hist-fulfilled-pct${percent >= 0 ? ' positive' : ' negative'}`}>
                                     {percent >= 0 ? '+' : ''}{percent.toFixed(1)}%
                                   </span>
                                 )}
-                                {usdAmount > 0 && (
-                                  <span className="order-hist-fulfilled-usd">${usdAmount.toFixed(2)}</span>
-                                )}
-                              </span>
+                              </div>
+                              <div className="order-hist-fulfilled-flow">
+                                {costUsd > 0 && <span>Bought ${costUsd.toFixed(2)}</span>}
+                                {costUsd > 0 && usdAmount > 0 && <span className="order-hist-fulfilled-arrow">→</span>}
+                                {usdAmount > 0 && <span className="order-hist-fulfilled-usd">Sold ${usdAmount.toFixed(2)}</span>}
+                              </div>
                             </div>
                           );
                         })()}

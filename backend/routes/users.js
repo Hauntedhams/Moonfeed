@@ -241,7 +241,8 @@ router.put('/:walletAddress/tracked-coins', async (req, res) => {
         symbol: typeof c.symbol === 'string' ? c.symbol.slice(0, 32) : '',
         name: typeof c.name === 'string' ? c.name.slice(0, 64) : '',
         image: typeof c.image === 'string' ? c.image.slice(0, 500) : '',
-        addedAt: Number.isFinite(c.addedAt) ? c.addedAt : Date.now()
+        addedAt: Number.isFinite(c.addedAt) ? c.addedAt : Date.now(),
+        trackedAtPrice: Number.isFinite(c.trackedAtPrice) && c.trackedAtPrice > 0 ? c.trackedAtPrice : 0
       }));
 
     const user = await User.findOneAndUpdate(

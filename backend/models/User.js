@@ -45,7 +45,9 @@ const userSchema = new mongoose.Schema({
       symbol: { type: String, default: '' },
       name: { type: String, default: '' },
       image: { type: String, default: '' },
-      addedAt: { type: Number, default: Date.now }
+      addedAt: { type: Number, default: Date.now },
+      // USD price when tracking started, so the UI can show performance since then.
+      trackedAtPrice: { type: Number, default: 0 }
     }],
     default: []
   }

@@ -38,6 +38,25 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
     getSolUsdPrice().then(setSolUsdPrice);
   }, []);
 
+  // Horizontal swipe switches between the Active and History tabs.
+  const tabSwipeRef = React.useRef(null);
+
+  const handleTabSwipeStart = (e) => {
+    const touch = e.touches?.[0];
+    tabSwipeRef.current = touch ? { x: touch.clientX, y: touch.clientY } : null;
+  };
+
+  const handleTabSwipeEnd = (e) => {
+    const start = tabSwipeRef.current;
+    const touch = e.changedTouches?.[0];
+    tabSwipeRef.current = null;
+    if (!start || !touch) return;
+    const deltaX = touch.clientX - start.x;
+    const deltaY = touch.clientY - start.y;
+    if (Math.abs(deltaX) < 60 || Math.abs(deltaX) < Math.abs(deltaY) * 1.5) return;
+    setStatusFilter(deltaX < 0 ? 'history' : 'active');
+  };
+
 
   // Fetch orders when wallet connects or filter changes
   useEffect(() => {
@@ -625,7 +644,11 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
   }
 
   return (
-    <div className="orders-view">
+    <div
+      className="orders-view"
+      onTouchStart={handleTabSwipeStart}
+      onTouchEnd={handleTabSwipeEnd}
+    >
       <div className="orders-container">
         {/* Demo Mode banner */}
         {isDemoMode && (
@@ -1042,20 +1065,22 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
                     </div>
 
                     {(status === 'executed' || status === 'completed') && (() => {
-                      const { percent, usdAmount } = computeFillStats(order, transactions, solUsdPrice);
+                      const { percent, usdAmount, costUsd } = computeFillStats(order, transactions, solUsdPrice);
                       return (
                         <div className="order-hist-fulfilled-banner">
-                          <span className="order-hist-fulfilled-title">🎉 Fulfilled!</span>
-                          <span className="order-hist-fulfilled-stats">
+                          <div className="order-hist-fulfilled-row">
+                            <span className="order-hist-fulfilled-title">Fulfilled</span>
                             {Number.isFinite(percent) && (
                               <span className={`order-hist-fulfilled-pct${percent >= 0 ? ' positive' : ' negative'}`}>
                                 {percent >= 0 ? '+' : ''}{percent.toFixed(1)}%
                               </span>
                             )}
-                            {usdAmount > 0 && (
-                              <span className="order-hist-fulfilled-usd">${usdAmount.toFixed(2)}</span>
-                            )}
-                          </span>
+                          </div>
+                          <div className="order-hist-fulfilled-flow">
+                            {costUsd > 0 && <span>Bought ${costUsd.toFixed(2)}</span>}
+                            {costUsd > 0 && usdAmount > 0 && <span className="order-hist-fulfilled-arrow">→</span>}
+                            {usdAmount > 0 && <span className="order-hist-fulfilled-usd">Sold ${usdAmount.toFixed(2)}</span>}
+                          </div>
                         </div>
                       );
                     })()}
@@ -1370,7 +1395,11 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
                       )}
                       {estimatedValue > 0 && (
                         <div className="order-hist-row">
-                          <span className="order-hist-label">{orderType === 'sell' ? 'RECEIVED' : 'SPENT'}</span>
+                          <span className="order-hist-label">
+                            {status === 'executed' || status === 'completed'
+                              ? (orderType === 'sell' ? 'RECEIVED' : 'SPENT')
+                              : 'ORDER SIZE'}
+                          </span>
                           <span className="order-hist-val">
                             {estimatedValue.toFixed(4)} SOL
                             <span className="order-hist-usd"> (${(estimatedValue * solUsdPrice).toFixed(2)})</span>

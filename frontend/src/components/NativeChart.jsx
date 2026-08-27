@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { createChart, CandlestickSeries, AreaSeries } from 'lightweight-charts';
+import { createChart, CandlestickSeries, AreaSeries, createSeriesMarkers } from 'lightweight-charts';
 import { useDarkMode } from '../contexts/DarkModeContext';
 import { API_CONFIG } from '../config/api';
 import './NativeChart.css';
@@ -63,6 +63,7 @@ const NativeChart = ({
   targetLabel = '',
   targetColor = '#22d3ee',
   entryPrice = null,
+  trackedPrice = null,
 }) => {
   const { isDarkMode } = useDarkMode();
   const containerRef = useRef(null);
@@ -71,6 +72,8 @@ const NativeChart = ({
   const seriesTypeRef = useRef(null); // 'candles' | 'area'
   const targetLineRef = useRef(null);
   const entryLineRef = useRef(null);
+  const trackedLineRef = useRef(null);
+  const markersRef = useRef(null);
   const dataLengthRef = useRef(0);
   const focusAnimationRef = useRef(null);
   const targetScaleAnimationRef = useRef(null);
@@ -153,6 +156,8 @@ const NativeChart = ({
       seriesTypeRef.current = null;
       targetLineRef.current = null;
       entryLineRef.current = null;
+      trackedLineRef.current = null;
+      markersRef.current = null;
       if (focusAnimationRef.current) cancelAnimationFrame(focusAnimationRef.current);
       if (targetScaleAnimationRef.current) cancelAnimationFrame(targetScaleAnimationRef.current);
     };
@@ -329,12 +334,21 @@ const NativeChart = ({
   }, [focusTimelineFrom, status, tfIndex]);
 
   // Overlay caller-supplied markers (e.g. buy/sell points) once real candles are in.
+  // v5 moved markers off the series onto a plugin, so keep the primitive around.
   useEffect(() => {
     if (status !== 'ready' || !seriesRef.current) return;
+    const list = Array.isArray(markers) ? markers : [];
     try {
-      seriesRef.current.setMarkers(Array.isArray(markers) ? markers : []);
+      if (!markersRef.current || markersRef.current.series !== seriesRef.current) {
+        markersRef.current = {
+          series: seriesRef.current,
+          plugin: createSeriesMarkers(seriesRef.current, list),
+        };
+      } else {
+        markersRef.current.plugin.setMarkers(list);
+      }
     } catch (e) {
-      // series may not support markers (area mode) or may be mid-teardown — ignore
+      // series may be mid-teardown — ignore
     }
   }, [markers, status]);
 
@@ -393,6 +407,32 @@ const NativeChart = ({
       // Area fallback series may not support price lines in all chart builds.
     }
   }, [status, entryPrice, tfIndex]);
+
+  // Price when the user started tracking this coin.
+  useEffect(() => {
+    const series = seriesRef.current;
+    if (!series || status !== 'ready') return;
+
+    if (trackedLineRef.current) {
+      try { series.removePriceLine(trackedLineRef.current); } catch (e) { /* series changed */ }
+      trackedLineRef.current = null;
+    }
+
+    const price = Number(trackedPrice);
+    if (!Number.isFinite(price) || price <= 0) return;
+    try {
+      trackedLineRef.current = series.createPriceLine({
+        price,
+        color: '#fbbf24',
+        lineWidth: 1,
+        lineStyle: 1,
+        axisLabelVisible: true,
+        title: 'Tracked at',
+      });
+    } catch (e) {
+      // Area fallback series may not support price lines in all chart builds.
+    }
+  }, [status, trackedPrice, tfIndex]);
 
   // In order mode, draw a guide from the latest traded price to the selected
   // target instead of a full-width line that obscures the chart history.
@@ -458,23 +498,24 @@ const NativeChart = ({
       const baseInfo = original();
       const target = displayedTargetPriceRef.current;
       const baseRange = baseInfo?.priceRange;
-      if (!baseRange || !Number.isFinite(target) || target <= 0) return baseInfo;
+      const center = Number(lastCandleRef.current?.close) || currentPrice;
+      if (!baseRange || !center || !Number.isFinite(target) || target <= 0) return baseInfo;
 
-      // Fitting a far target exactly would squash the candles into a flat line, so the
-      // range only grows to a few times the natural candle span and the target line
-      // parks against the edge beyond that.
-      const baseSpan = Math.max(baseRange.maxValue - baseRange.minValue, baseRange.maxValue * 0.0005);
-      const maxSpan = baseSpan * 2.5;
-      let low = Math.min(baseRange.minValue, target);
-      let high = Math.max(baseRange.maxValue, target);
-      if (high - low > maxSpan) {
-        if (target > baseRange.maxValue) high = low + maxSpan;
-        else low = high - maxSpan;
-      }
-      const padding = Math.max((high - low) * 0.08, high * 0.002);
+      // Centre the view on the live price and zoom out symmetrically as the target
+      // moves away. The candles then stay put instead of sliding up the pane, and the
+      // target always lands ~3/4 of the way out rather than pinned to the edge.
+      const half = Math.max(
+        baseRange.maxValue - center,
+        center - baseRange.minValue,
+        Math.abs(target - center) * 1.3
+      );
+      const padding = half * 0.06;
       return {
         ...baseInfo,
-        priceRange: { minValue: Math.max(0, low - padding), maxValue: high + padding },
+        priceRange: {
+          minValue: Math.max(0, center - half - padding),
+          maxValue: center + half + padding,
+        },
       };
     };
 

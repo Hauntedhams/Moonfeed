@@ -16,6 +16,7 @@ import { useWallet } from '../contexts/WalletContext';
 import { placeTriggerOrder, getExpiryTimestamp, EXPIRY_OPTIONS, fetchTokenDecimals } from '../utils/triggerOrders.js';
 import { getTransactions } from '../utils/transactionStorage';
 import { getSolUsdPrice } from '../utils/orderFillTracking';
+import { useTrackedTrades } from '../contexts/TrackedTradesContext';
 import { API_CONFIG } from '../config/api.js';
 import { 
   calculateGraduationPercentage, 
@@ -114,6 +115,10 @@ const CoinCard = memo(({
   const [nativeChartFullscreen, setNativeChartFullscreen] = useState(false);
   const [nativeChartControlsVisible, setNativeChartControlsVisible] = useState(false);
   const [buyDrawerOpen, setBuyDrawerOpen] = useState(false);
+  // While the open-swipe is in progress: { mode, progress } with progress 0..1.
+  const [buyDrawerDrag, setBuyDrawerDrag] = useState(null);
+  // Set when the drawer was opened by a drag, so it doesn't replay the slide-in.
+  const [buyDrawerInstant, setBuyDrawerInstant] = useState(false);
   const [buyDrawerMode, setBuyDrawerMode] = useState('buy');
   const [buyDrawerOrderSide, setBuyDrawerOrderSide] = useState('buy');
   const [buySolAmount, setBuySolAmount] = useState(0.1);
@@ -151,7 +156,7 @@ const CoinCard = memo(({
   const _btnSwipeStartScrollTop = useRef(0); // scroller position when a swipe over the buttons begins
   const _btnScrollerRef = useRef(null); // cached scroller element during a button swipe
   const _btnDraggingRef = useRef(false); // true while finger is dragging the scroller via the buttons
-  const buySwipeRef = useRef({ startX: 0, startY: 0, startPrice: 0, tracking: false });
+  const buySwipeRef = useRef({ startX: 0, startY: 0, startPrice: 0, tracking: false, mode: null, progress: 0 });
 
   // Track if coin is enriched (has banner, socials, rugcheck, etc.)
   const isEnriched = !!(
@@ -243,6 +248,20 @@ const CoinCard = memo(({
   const livePrice = liveData?.price;
   const fallbackPrice = coin.price_usd || coin.priceUsd || coin.price || 0;
   const displayPrice = rpcLivePrice || livePrice || onDemandPrice || fallbackPrice;
+
+  // Trades on this coin by the wallets the user follows, drawn on the chart.
+  const { getTradesForMint } = useTrackedTrades();
+  const trackedMarkers = useMemo(() => {
+    const trades = getTradesForMint(mintAddress);
+    if (!trades.length) return null;
+    return trades.slice(-40).map((t) => ({
+      time: Math.floor(t.time / 1000),
+      position: t.type === 'buy' ? 'belowBar' : 'aboveBar',
+      color: t.type === 'buy' ? '#26a69a' : '#ef5350',
+      shape: t.type === 'buy' ? 'arrowUp' : 'arrowDown',
+      text: `${t.label} ${t.type === 'buy' ? 'bought' : 'sold'}`,
+    }));
+  }, [getTradesForMint, mintAddress]);
 
   // The viewer's own average buy-in price for this coin (USD), drawn on the chart.
   const [entryPrice, setEntryPrice] = useState(null);
@@ -619,7 +638,7 @@ const CoinCard = memo(({
     updateBuySolAmount(buySolAmountInput || buySolAmount);
   };
 
-  const openBuyDrawer = (mode = 'buy') => {
+  const prepareBuyDrawer = (mode = 'buy') => {
     // Swipe-right opens market buy ('buy'); swipe-left opens the limit order ('orders'),
     // defaulted to "sell at" since a left swipe is a take-profit/exit gesture.
     const requestedMode = mode === 'orders' ? 'orders' : 'buy';
@@ -632,6 +651,11 @@ const CoinCard = memo(({
     } else {
       setBuyOrderPrice((current) => current > 0 ? current : clampBuyOrderPrice(base * 0.94));
     }
+  };
+
+  const openBuyDrawer = (mode = 'buy') => {
+    prepareBuyDrawer(mode);
+    setBuyDrawerInstant(false);
     setBuyDrawerOpen(true);
   };
 
@@ -695,14 +719,23 @@ const CoinCard = memo(({
   const handleBuyTouchStart = (e) => {
     const touch = e.touches?.[0];
     if (!touch) return;
+    // Panning/zooming the expanded chart must not drag the trade drawer out.
+    if (e.target?.closest?.('.native-chart')) {
+      buySwipeRef.current = { ...buySwipeRef.current, tracking: false, mode: null, progress: 0 };
+      return;
+    }
     buySwipeRef.current = {
       startX: touch.clientX,
       startY: touch.clientY,
       startAmount: buySolAmount,
       startPrice: buyOrderPrice || displayPrice || fallbackPrice || 0,
       tracking: true,
+      mode: null,
+      progress: 0,
     };
   };
+
+  const drawerWidth = () => Math.min(window.innerWidth * 0.54, 280);
 
   const handleBuyTouchMove = (e) => {
     const touch = e.touches?.[0];
@@ -712,31 +745,30 @@ const CoinCard = memo(({
     const deltaX = touch.clientX - swipe.startX;
     const deltaY = touch.clientY - swipe.startY;
 
-    if (!buyDrawerOpen && deltaX > 56 && Math.abs(deltaX) > Math.abs(deltaY) * 1.35) {
+    // Opening drag: the drawer tracks the finger and only commits on release.
+    if (!buyDrawerOpen) {
+      if (!swipe.mode) {
+        if (Math.abs(deltaX) < 14 || Math.abs(deltaX) < Math.abs(deltaY) * 1.35) return;
+        // Swipe right opens the market buy; swipe left opens the limit order.
+        swipe.mode = deltaX > 0 ? 'buy' : 'orders';
+        prepareBuyDrawer(swipe.mode);
+      }
       e.preventDefault();
       e.stopPropagation();
-      openBuyDrawer('buy');
-      swipe.tracking = false;
+      const travelled = Math.max(0, Math.abs(deltaX) - 14);
+      swipe.progress = Math.min(1, travelled / drawerWidth());
+      setBuyDrawerDrag({ mode: swipe.mode, progress: swipe.progress });
       return;
     }
 
-    // Swipe LEFT opens the same order window but pre-set to the limit order.
-    if (!buyDrawerOpen && deltaX < -56 && Math.abs(deltaX) > Math.abs(deltaY) * 1.35) {
-      e.preventDefault();
-      e.stopPropagation();
-      openBuyDrawer('orders');
-      swipe.tracking = false;
-      return;
-    }
-
-    if (buyDrawerOpen && buyDrawerMode === 'buy' && Math.abs(deltaY) > 4) {
+    if (buyDrawerMode === 'buy' && Math.abs(deltaY) > 4) {
       e.preventDefault();
       e.stopPropagation();
       const nextAmount = swipe.startAmount - deltaY * BUY_AMOUNT_STEP * 0.28;
       updateBuySolAmount(nextAmount);
     }
 
-    if (buyDrawerOpen && buyDrawerMode === 'orders' && Math.abs(deltaY) > 4) {
+    if (buyDrawerMode === 'orders' && Math.abs(deltaY) > 4) {
       e.preventDefault();
       e.stopPropagation();
       const nextPrice = swipe.startPrice - deltaY * getOrderTargetStep() * 0.18;
@@ -745,7 +777,22 @@ const CoinCard = memo(({
   };
 
   const handleBuyTouchEnd = () => {
-    buySwipeRef.current.tracking = false;
+    const swipe = buySwipeRef.current;
+    swipe.tracking = false;
+    if (!swipe.mode) return;
+    const mode = swipe.mode;
+    const commit = swipe.progress >= 0.45;
+    swipe.mode = null;
+    swipe.progress = 0;
+    // Glide the remaining distance before handing over to the real drawer.
+    setBuyDrawerDrag({ mode, progress: commit ? 1 : 0, settling: true });
+    setTimeout(() => {
+      if (commit) {
+        openBuyDrawer(mode);
+        setBuyDrawerInstant(true);
+      }
+      setBuyDrawerDrag(null);
+    }, 170);
   };
 
   // Reads the wallet's balance of this token — used as a fallback when the swap
@@ -2774,19 +2821,21 @@ const CoinCard = memo(({
             </div>
           )}
 
-          {buyDrawerOpen && (
+          {(buyDrawerOpen || buyDrawerDrag) && (
             <>
               <button
                 className="coin-buy-drawer-backdrop"
                 onClick={() => setBuyDrawerOpen(false)}
                 aria-label="Close buy limit drawer"
+                style={buyDrawerDrag ? { opacity: buyDrawerDrag.progress, pointerEvents: 'none' } : undefined}
               />
               <aside
-                className="coin-buy-drawer"
+                className={`coin-buy-drawer${buyDrawerDrag ? ' dragging' : ''}${buyDrawerDrag?.settling ? ' settling' : ''}${!buyDrawerDrag && buyDrawerInstant ? ' no-anim' : ''}`}
                 aria-label={`Trade ${coin.symbol || coin.name || 'coin'}`}
                 onTouchStart={(e) => e.stopPropagation()}
                 onTouchMove={(e) => e.stopPropagation()}
                 onWheel={(e) => e.stopPropagation()}
+                style={buyDrawerDrag ? { transform: `translateX(${(buyDrawerDrag.progress - 1) * 100}%)` } : undefined}
               >
                 <div className="coin-buy-drawer-header">
                   <div className="coin-buy-mode-tabs" aria-label="Trade mode">
@@ -3201,7 +3250,7 @@ const CoinCard = memo(({
               <span>{coin.symbol || coin.name || 'Chart'}</span>
               <button onClick={closeNativeChartFullscreen} aria-label="Close full chart">×</button>
             </div>
-            <NativeChart coin={coin} isActive={true} isExpanded={true} livePrice={displayPrice} entryPrice={entryPrice} />
+            <NativeChart coin={coin} isActive={true} isExpanded={true} livePrice={displayPrice} entryPrice={entryPrice} trackedPrice={coin.trackedAtPrice} markers={trackedMarkers} />
           </div>
         </div>
       )}
@@ -3242,6 +3291,8 @@ const CoinCard = memo(({
               targetLabel={orderTargetLabel}
               targetColor={buyDrawerOrderSide === 'sell' ? '#22d3ee' : '#4ade80'}
               entryPrice={entryPrice}
+              trackedPrice={coin.trackedAtPrice}
+              markers={trackedMarkers}
             />,
             target
           );
