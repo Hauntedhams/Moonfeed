@@ -604,21 +604,15 @@
   box-shadow: 2px 0 12px rgba(0, 0, 0, 0.35);
   cursor: pointer;
   pointer-events: auto;
-  animation: coinBuySwipeHint 2.4s ease-in-out infinite;
 }
 
 /* Hold still while the user is pointing at it so it's easy to click */
 .coin-buy-swipe-handle:hover,
 .coin-buy-swipe-handle:active {
   animation: none;
-  transform: translateY(-50%);
+  transform: translateY(-50%) translateX(0);
   background: rgba(30, 41, 59, 0.9);
   color: #ffffff;
-}
-
-@keyframes coinBuySwipeHint {
-  0%, 100% { transform: translateY(-50%) translateX(0); opacity: 0.7; }
-  50% { transform: translateY(-50%) translateX(3px); opacity: 1; }
 }
 
 .coin-buy-drawer-backdrop {
