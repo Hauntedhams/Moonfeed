@@ -2945,6 +2945,7 @@ const CoinCard = memo(({
       {(function() {
         const _mobilePortal = !isDesktopMode && isActiveCard;
         const _buttons = (
+      <>
       <div
         ref={actionButtonsRef}
         className={`tiktok-action-buttons ${showActionButtons ? '' : 'collapsed'}`}
@@ -3001,6 +3002,29 @@ const CoinCard = memo(({
           <span className="tiktok-action-label">Copy</span>
         </button>
       </div>
+      {USE_NATIVE_CHART && _mobilePortal && (
+        <button
+          className="native-chart-expand-card-btn"
+          onClick={handleExpandToggle}
+          title={isExpanded ? 'Collapse details' : 'Expand details'}
+          aria-label={isExpanded ? 'Collapse details' : 'Expand details'}
+        >
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
+          >
+            <polyline points="18 15 12 9 6 15" />
+          </svg>
+        </button>
+      )}
+      </>
         );
         return _mobilePortal ? createPortal(_buttons, document.body) : _buttons;
       }())}
