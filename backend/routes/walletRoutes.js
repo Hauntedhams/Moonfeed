@@ -16,6 +16,7 @@ const BirdeyeWalletService = require('../services/birdeyeWalletService');
 const SolscanWalletService = require('../services/solscanWalletService');
 const HeliusWalletService = require('../services/heliusWalletService');
 const DexCheckWalletService = require('../services/dexcheckWalletService');
+const WalletCacheStore = require('../services/walletCacheStore');
 const router = express.Router();
 
 // Initialize services
@@ -27,6 +28,44 @@ const dexcheckService = new DexCheckWalletService();
 // Wallet data cache to prevent duplicate API calls
 const walletCache = new Map();
 const WALLET_CACHE_TTL = 3 * 60 * 1000; // 3 minutes
+const WALLET_STALE_CACHE_MAX = 24 * 60 * 60 * 1000;
+const walletCacheStore = new WalletCacheStore();
+
+walletCacheStore.initialize()
+  .then((persisted) => {
+    for (const [key, value] of persisted.entries()) walletCache.set(key, value);
+  })
+  .catch((error) => console.warn('⚠️ Wallet cache hydrate failed:', error.message));
+
+const setWalletCache = (key, value) => {
+  walletCache.set(key, value);
+  walletCacheStore.scheduleSave(walletCache);
+};
+
+const getFreshWalletCache = (key, ttl = WALLET_CACHE_TTL) => {
+  const cached = walletCache.get(key);
+  if (!cached || (Date.now() - cached.timestamp) >= ttl) return null;
+  return cached;
+};
+
+const getUsableWalletCache = (key) => {
+  const cached = walletCache.get(key);
+  if (!cached || !cached.timestamp || (Date.now() - cached.timestamp) >= WALLET_STALE_CACHE_MAX) return null;
+  return cached;
+};
+
+// Upstream calls must never hang the request indefinitely — bound every fetch.
+const FETCH_TIMEOUT_MS = 5000;
+const fetchWithTimeout = (url, options = {}, ms = FETCH_TIMEOUT_MS) => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timer));
+};
+
+const pendingWalletAnalytics = new Map();
+const warmQueue = [];
+const warmingWallets = new Set();
+let warmQueueActive = false;
 
 const buildHeliusAnalyticsResponse = (owner, heliusData) => {
   const trading = heliusData.trading || {};
@@ -67,6 +106,123 @@ const buildHeliusAnalyticsResponse = (owner, heliusData) => {
   };
 };
 
+const fetchWalletAnalyticsData = async (owner, { allowStale = true } = {}) => {
+  const SOLANA_TRACKER_API_KEY = process.env.SOLANA_TRACKER_API_KEY;
+  const cacheKey = `wallet-pnlv2-${owner}`;
+  const freshCached = getFreshWalletCache(cacheKey);
+  if (freshCached) return freshCached.data;
+
+  const staleCached = allowStale ? getUsableWalletCache(cacheKey) : null;
+  if (staleCached) {
+    setTimeout(() => {
+      fetchWalletAnalyticsData(owner, { allowStale: false }).catch((error) => {
+        console.warn(`⚠️ Stale wallet refresh failed for ${owner.slice(0, 4)}...: ${error.details || error.message}`);
+      });
+    }, 0);
+    return { ...staleCached.data, cached: true, stale: true };
+  }
+
+  const existing = pendingWalletAnalytics.get(owner);
+  if (existing) return existing;
+
+  const promise = (async () => {
+    console.log(`🔍 Fetching wallet analytics for: ${owner.slice(0, 4)}...${owner.slice(-4)}`);
+
+    const stData = SOLANA_TRACKER_API_KEY
+      ? await fetchWithTimeout(`https://data.solanatracker.io/v2/pnl/wallets/${owner}`, {
+          headers: { 'x-api-key': SOLANA_TRACKER_API_KEY, 'Content-Type': 'application/json' }
+        }).then(r => r.ok ? r.json() : null).catch(() => null)
+      : null;
+
+    if (!stData) {
+      console.warn(`⚠️ Solana Tracker unavailable; using Helius fallback for wallet ${owner.slice(0, 4)}...`);
+      const heliusData = await heliusService.getWalletAnalytics(owner);
+      if (!heliusData.success) {
+        const error = new Error('Failed to fetch wallet analytics');
+        error.details = heliusData.error;
+        throw error;
+      }
+
+      const fallbackData = buildHeliusAnalyticsResponse(owner, heliusData);
+      setWalletCache(cacheKey, { data: fallbackData, timestamp: Date.now() });
+      return fallbackData;
+    }
+
+    const summary = stData.summary || {};
+    const analysis = stData.analysis || {};
+    const stats = stData.stats || {};
+
+    const combinedData = {
+      success: true,
+      wallet: owner,
+      timestamp: new Date().toISOString(),
+      isSolanaTrackerData: true,
+      isHeliusData: true,
+      hasData: true,
+      identity: stData.identity || null,
+      winRate: analysis.winRate ?? 0,
+      totalProfit: summary.pnl?.realized ?? 0,
+      roi: summary.roi ?? 0,
+      avgHoldTimeSecs: summary.timing?.avgHoldTimeSecs ?? null,
+      trading: {
+        totalTrades: summary.counts?.trades ?? 0,
+        uniqueTokens: summary.counts?.tokensTraded ?? 0,
+        activePositions: stats.holding ?? 0,
+        closedPositions: stats.sold ?? 0,
+        winningPositions: analysis.tokens?.winning ?? 0,
+        losingPositions: analysis.tokens?.losing ?? 0,
+      },
+      pnl: {
+        realized: summary.pnl?.realized ?? 0,
+        unrealized: summary.pnl?.unrealized ?? 0,
+        total: summary.pnl?.total ?? 0,
+        invested: summary.invested ?? 0,
+        proceeds: summary.proceeds ?? 0,
+      },
+      dexcheck: null,
+      dataSources: {
+        solanaTracker: true,
+        dexcheck: false
+      }
+    };
+
+    setWalletCache(cacheKey, { data: combinedData, timestamp: Date.now() });
+    console.log(`✅ Wallet analytics ready — winRate: ${combinedData.winRate}%, trades: ${combinedData.trading.totalTrades}`);
+    return combinedData;
+  })();
+
+  pendingWalletAnalytics.set(owner, promise);
+  promise.catch(() => {}).finally(() => pendingWalletAnalytics.delete(owner));
+  return promise;
+};
+
+const processWarmQueue = async () => {
+  if (warmQueueActive) return;
+  warmQueueActive = true;
+
+  while (warmQueue.length) {
+    const item = warmQueue.shift();
+    const owner = item?.address;
+    if (!owner || warmingWallets.has(owner)) continue;
+
+    warmingWallets.add(owner);
+    try {
+      await fetchWalletAnalyticsData(owner, { allowStale: false });
+      if (item.includeTrades !== false) {
+        await callSolanaTrackerAPI(`/wallet/${owner}/trades`, `wallet-trades-${owner}`).catch((error) => {
+          console.warn(`⚠️ Warm wallet trades failed for ${owner.slice(0, 4)}...: ${error.message}`);
+        });
+      }
+    } catch (error) {
+      console.warn(`⚠️ Warm wallet analytics failed for ${owner.slice(0, 4)}...: ${error.details || error.message}`);
+    } finally {
+      warmingWallets.delete(owner);
+    }
+  }
+
+  warmQueueActive = false;
+};
+
 // Helper function to call Solana Tracker API
 const callSolanaTrackerAPI = async (endpoint, cacheKey) => {
   const SOLANA_TRACKER_API_KEY = process.env.SOLANA_TRACKER_API_KEY;
@@ -78,16 +234,17 @@ const callSolanaTrackerAPI = async (endpoint, cacheKey) => {
 
   // Check cache first
   const cached = walletCache.get(cacheKey);
-  if (cached && (Date.now() - cached.timestamp) < WALLET_CACHE_TTL) {
-    console.log(`💾 Returning cached data for: ${cacheKey} (age: ${Math.round((Date.now() - cached.timestamp) / 1000)}s)`);
-    return { data: cached.data, cached: true, timestamp: new Date(cached.timestamp).toISOString() };
+  const freshCached = getFreshWalletCache(cacheKey);
+  if (freshCached) {
+    console.log(`💾 Returning cached data for: ${cacheKey} (age: ${Math.round((Date.now() - freshCached.timestamp) / 1000)}s)`);
+    return { data: freshCached.data, cached: true, timestamp: new Date(freshCached.timestamp).toISOString() };
   }
 
   // Fetch from API
   const apiUrl = `${SOLANA_TRACKER_BASE_URL}${endpoint}`;
   console.log(`📡 API URL: ${apiUrl}`);
 
-  const response = await fetch(apiUrl, {
+  const response = await fetchWithTimeout(apiUrl, {
     method: 'GET',
     headers: {
       'x-api-key': SOLANA_TRACKER_API_KEY,
@@ -116,13 +273,124 @@ const callSolanaTrackerAPI = async (endpoint, cacheKey) => {
   console.log(`📊 Response keys:`, data ? Object.keys(data) : 'no data');
   
   // Cache the result
-  walletCache.set(cacheKey, {
+  setWalletCache(cacheKey, {
     data: data,
     timestamp: Date.now()
   });
 
   return { data, cached: false, timestamp: new Date().toISOString() };
 };
+
+const POSITION_CACHE_TTL = 60 * 1000; // 1 minute — position value moves with live price
+
+/**
+ * POST /api/wallet/warm
+ * Background-warm tracked wallets so repeat profile/trade loads come from the
+ * persistent cache instead of cold upstream wallet history calls.
+ */
+router.post('/warm', (req, res) => {
+  const wallets = Array.isArray(req.body?.wallets) ? req.body.wallets : [];
+  const includeTrades = req.body?.includeTrades !== false;
+
+  const queued = [];
+  for (const wallet of wallets.slice(0, 20)) {
+    const address = typeof wallet === 'string' ? wallet : wallet?.address;
+    if (!address || address.length < 32 || address.length > 60) continue;
+    if (warmingWallets.has(address) || warmQueue.some((item) => item.address === address)) continue;
+
+    const analyticsFresh = getFreshWalletCache(`wallet-pnlv2-${address}`);
+    const tradesFresh = getFreshWalletCache(`wallet-trades-${address}`);
+    if (analyticsFresh && (!includeTrades || tradesFresh)) continue;
+
+    warmQueue.push({ address, includeTrades });
+    queued.push(address);
+  }
+
+  processWarmQueue();
+  res.json({ success: true, queued: queued.length, pending: warmQueue.length, warming: warmingWallets.size });
+});
+
+/**
+ * GET /api/wallet/:owner/position/:mint
+ * Single wallet+token position (entry/exit price & market cap, PnL) — used for the
+ * FOMO-style "most recent trade" detail view. One lightweight upstream call, no
+ * need to fetch/parse the wallet's whole trade history.
+ */
+router.get('/:owner/position/:mint', async (req, res) => {
+  try {
+    const { owner, mint } = req.params;
+    if (!owner || !mint) {
+      return res.status(400).json({ success: false, error: 'Wallet address and token mint are required' });
+    }
+
+    const cacheKey = `wallet-position-${owner}-${mint}`;
+    const cached = walletCache.get(cacheKey);
+    const freshCached = getFreshWalletCache(cacheKey, POSITION_CACHE_TTL);
+    if (freshCached) {
+      return res.json(freshCached.data);
+    }
+
+    const SOLANA_TRACKER_API_KEY = process.env.SOLANA_TRACKER_API_KEY;
+    if (!SOLANA_TRACKER_API_KEY) {
+      return res.status(502).json({ success: false, error: 'SOLANA_TRACKER_API_KEY not configured' });
+    }
+
+    const response = await fetchWithTimeout(
+      `https://data.solanatracker.io/v2/pnl/wallets/${owner}/tokens/${mint}`,
+      { headers: { 'x-api-key': SOLANA_TRACKER_API_KEY, 'Content-Type': 'application/json' } }
+    );
+
+    if (!response.ok) {
+      if (cached) return res.json(cached.data);
+      return res.status(response.status === 404 ? 404 : 502).json({
+        success: false,
+        error: response.status === 404 ? 'No position found for this wallet/token' : 'Failed to fetch position data'
+      });
+    }
+
+    const d = await response.json();
+    const meta = d.meta || {};
+    const volume = d.volume || {};
+    const timing = d.timing || {};
+    const current = d.current || {};
+
+    // Derive per-token entry/exit price from $ volume, then scale to market cap
+    // using the current price:marketCap ratio (supply is constant).
+    const avgEntryPrice = volume.tokensBought ? volume.buyUsd / volume.tokensBought : null;
+    const avgExitPrice = volume.tokensSold ? volume.sellUsd / volume.tokensSold : null;
+    const supply = current.price ? meta.marketCap / current.price : null;
+    const avgEntryMarketCap = supply && avgEntryPrice ? avgEntryPrice * supply : null;
+    const avgExitMarketCap = supply && avgExitPrice ? avgExitPrice * supply : null;
+
+    const data = {
+      success: true,
+      wallet: owner,
+      mint,
+      symbol: meta.symbol || 'Unknown',
+      name: meta.name || meta.symbol || 'Unknown',
+      image: meta.image || null,
+      currentPrice: current.price ?? meta.price ?? null,
+      currentMarketCap: meta.marketCap ?? null,
+      pnl: d.pnl || { realized: 0, unrealized: 0, total: 0 },
+      invested: d.invested ?? 0,
+      proceeds: d.proceeds ?? 0,
+      roi: d.roi ?? 0,
+      avgEntryPrice,
+      avgExitPrice,
+      avgEntryMarketCap,
+      avgExitMarketCap,
+      counts: d.counts || { buys: 0, sells: 0, total: 0 },
+      timing,
+      timestamp: new Date().toISOString()
+    };
+
+    setWalletCache(cacheKey, { data, timestamp: Date.now() });
+    res.json(data);
+  } catch (error) {
+    console.error('❌ Error fetching wallet position:', error.message);
+    res.status(500).json({ success: false, error: 'Failed to fetch wallet position', details: error.message });
+  }
+});
 
 /**
  * GET /api/wallet/:owner
@@ -135,90 +403,7 @@ router.get('/:owner', async (req, res) => {
     if (!owner) {
       return res.status(400).json({ success: false, error: 'Wallet address is required' });
     }
-
-    const SOLANA_TRACKER_API_KEY = process.env.SOLANA_TRACKER_API_KEY;
-
-    console.log(`🔍 Fetching wallet analytics for: ${owner.slice(0, 4)}...${owner.slice(-4)}`);
-
-    const cacheKey = `wallet-pnlv2-${owner}`;
-    const cached = walletCache.get(cacheKey);
-    if (cached && (Date.now() - cached.timestamp) < WALLET_CACHE_TTL) {
-      console.log(`💾 Returning cached wallet data`);
-      return res.json(cached.data);
-    }
-
-    // Try the fast precomputed source first.
-    const stPnlPromise = SOLANA_TRACKER_API_KEY
-      ? fetch(`https://data.solanatracker.io/v2/pnl/wallets/${owner}`, {
-          headers: { 'x-api-key': SOLANA_TRACKER_API_KEY, 'Content-Type': 'application/json' }
-        }).then(r => r.ok ? r.json() : null).catch(() => null)
-      : Promise.resolve(null);
-    const stData = await stPnlPromise;
-
-    if (!stData) {
-      console.warn(`⚠️ Solana Tracker unavailable; using Helius fallback for wallet ${owner.slice(0, 4)}...`);
-      const heliusData = await heliusService.getWalletAnalytics(owner);
-      if (!heliusData.success) {
-        return res.status(502).json({ success: false, error: 'Failed to fetch wallet analytics', details: heliusData.error });
-      }
-
-      const fallbackData = buildHeliusAnalyticsResponse(owner, heliusData);
-      walletCache.set(cacheKey, { data: fallbackData, timestamp: Date.now() });
-      return res.json(fallbackData);
-    }
-
-    const summary = stData.summary || {};
-    const analysis = stData.analysis || {};
-    const stats = stData.stats || {};
-
-    const dexcheckData = await Promise.race([
-      dexcheckService.getComprehensiveAnalytics(owner),
-      new Promise(resolve => setTimeout(() => resolve({ success: false, error: 'timeout' }), 6000))
-    ]);
-
-    const combinedData = {
-      success: true,
-      wallet: owner,
-      timestamp: new Date().toISOString(),
-      isSolanaTrackerData: true,
-      isHeliusData: true, // kept for WalletPopup backward compat
-      hasData: true,
-      identity: stData.identity || null,
-      winRate: analysis.winRate ?? 0,
-      totalProfit: summary.pnl?.realized ?? 0,
-      roi: summary.roi ?? 0,
-      avgHoldTimeSecs: summary.timing?.avgHoldTimeSecs ?? null,
-      trading: {
-        totalTrades: summary.counts?.trades ?? 0,
-        uniqueTokens: summary.counts?.tokensTraded ?? 0,
-        activePositions: stats.holding ?? 0,
-        closedPositions: stats.sold ?? 0,
-        winningPositions: analysis.tokens?.winning ?? 0,
-        losingPositions: analysis.tokens?.losing ?? 0,
-      },
-      pnl: {
-        realized: summary.pnl?.realized ?? 0,
-        unrealized: summary.pnl?.unrealized ?? 0,
-        total: summary.pnl?.total ?? 0,
-        invested: summary.invested ?? 0,
-        proceeds: summary.proceeds ?? 0,
-      },
-      dexcheck: dexcheckData.success ? {
-        trading: dexcheckData.trading,
-        whale: dexcheckData.whale,
-        topTrader: dexcheckData.topTrader,
-        recentActivity: dexcheckData.recentActivity
-      } : null,
-      dataSources: {
-        solanaTracker: true,
-        dexcheck: dexcheckData.success
-      }
-    };
-
-    walletCache.set(cacheKey, { data: combinedData, timestamp: Date.now() });
-
-    console.log(`✅ Wallet analytics ready — winRate: ${combinedData.winRate}%, trades: ${combinedData.trading.totalTrades}`);
-    res.json(combinedData);
+    res.json(await fetchWalletAnalyticsData(owner));
 
   } catch (error) {
     console.error('❌ Error fetching wallet data:', error.message);

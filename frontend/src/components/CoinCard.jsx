@@ -83,13 +83,6 @@ const CoinCard = memo(({
   isActiveCard = false, // True ONLY for the single card visually in view (not preload) — used to portal action buttons
   onEnrichmentComplete = null // Callback when enrichment completes
 }) => {
-  // Route a wallet click to the full profile overlay when available, else the popup
-  const handleWalletClick = React.useCallback((address) => {
-    if (!address || address === 'Unknown') return;
-    if (onWalletClick) onWalletClick(address);
-    else setSelectedWallet(address);
-  }, [onWalletClick]);
-
   // Generate unique component ID for cleanup tracking
   const componentId = useRef(`coincard-${coin.mintAddress || coin.address || Math.random()}`).current;
   
@@ -205,6 +198,20 @@ const CoinCard = memo(({
   
   // Solana RPC live transactions - backend handles the heavy lifting now (works on mobile too)
   const mintAddress = coin.mintAddress || coin.mint || coin.address || coin.contract_address || coin.contractAddress || coin.tokenAddress;
+
+  // Route a wallet click to the full profile overlay when available, else the popup
+  const handleWalletClick = React.useCallback((address, profileHint = {}) => {
+    if (!address || address === 'Unknown') return;
+    if (onWalletClick) onWalletClick(address, {
+      ...profileHint,
+      mint: mintAddress,
+      tokenSymbol: coin.symbol || coin.name || null,
+      tokenName: coin.name || coin.symbol || null,
+      tokenImage: coin.image || coin.profileImage || coin.logo || null,
+      currentMarketCap: coin.market_cap_usd || coin.marketCap || coin.marketCapUsd || coin.mcap || null,
+    });
+    else setSelectedWallet(address);
+  }, [coin.image, coin.logo, coin.marketCap, coin.marketCapUsd, coin.market_cap_usd, coin.mcap, coin.name, coin.profileImage, coin.symbol, mintAddress, onWalletClick]);
   
   // 🔥 NEW: On-demand price fetching from Solana blockchain
   // Fetches price ONLY when coin is visible - no batch fetching!
@@ -3379,7 +3386,12 @@ const CoinCard = memo(({
                     <div className="tiktok-comment-header">
                       <span
                         className="tiktok-comment-wallet"
-                        onClick={(e) => { e.stopPropagation(); comment.walletAddress && handleWalletClick(comment.walletAddress); }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          comment.walletAddress && handleWalletClick(comment.walletAddress, {
+                            displayName: comment.username || comment.name || comment.handle || null,
+                          });
+                        }}
                         style={{ cursor: comment.walletAddress ? 'pointer' : 'default' }}
                         title={comment.walletAddress ? 'Click to view wallet stats' : undefined}
                       >

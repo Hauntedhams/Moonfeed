@@ -25,6 +25,7 @@ const OrdersView = lazy(() => import('./components/OrdersView'))
 const JupiterTradeModal = lazy(() => import('./components/JupiterTradeModal'))
 const AdvancedFilter = lazy(() => import('./components/AdvancedFilter'))
 const WalletProfileView = lazy(() => import('./components/WalletProfileView'))
+const PositionDetailView = lazy(() => import('./components/PositionDetailView'))
 
 // CommentsSection now integrated into CoinCard's TikTok action bar
 
@@ -68,7 +69,8 @@ function App() {
   const [currentCoinIndex, setCurrentCoinIndex] = useState(0); // Current coin index in scroller
   const [totalCoinsInList, setTotalCoinsInList] = useState(0); // Total coins in current list
   const [previousTab, setPreviousTab] = useState('home'); // Tab to go back to from coin-detail
-  const [walletProfileAddr, setWalletProfileAddr] = useState(null); // Wallet address to show a full profile for
+  const [walletProfile, setWalletProfile] = useState(null); // Wallet profile overlay state: { address, displayName? }
+  const [positionDetail, setPositionDetail] = useState(null); // { wallet, mint } to show a single position's entry/exit detail
 
   // Initialize referral tracking, mobile optimizer, and performance monitoring on app load
   useEffect(() => {
@@ -319,8 +321,18 @@ function App() {
   };
 
   // Open a full-screen profile view for any wallet address (from tx / PNL clicks)
-  const handleWalletClick = (address) => {
-    if (address) setWalletProfileAddr(address);
+  const handleWalletClick = (address, profileHint = {}) => {
+    if (!address) return;
+    if (profileHint.mint) {
+      setPositionDetail({ wallet: address, mint: profileHint.mint, profileHint });
+      return;
+    }
+    setWalletProfile({ address, ...profileHint });
+  };
+
+  // Open the FOMO-style entry/exit position detail for a wallet's specific trade
+  const handleOpenPosition = (wallet, mint) => {
+    if (wallet && mint) setPositionDetail({ wallet, mint });
   };
 
   return (
@@ -349,6 +361,7 @@ function App() {
           onFavoritesChange={handleFavoritesChange}
           onTradeClick={handleTradeClick}
           onWalletClick={handleWalletClick}
+          onOpenPosition={handleOpenPosition}
           onCurrentCoinChange={handleCurrentCoinChange}
         />
       ) : activeTab === 'profile' ? (
@@ -475,11 +488,29 @@ function App() {
       </Suspense>
 
       {/* Wallet Profile overlay — shows a full profile page for any wallet */}
-      {walletProfileAddr && (
+      {walletProfile?.address && (
         <Suspense fallback={null}>
           <WalletProfileView
-            walletAddress={walletProfileAddr}
-            onBack={() => setWalletProfileAddr(null)}
+            walletAddress={walletProfile.address}
+            profileHint={walletProfile}
+            onBack={() => setWalletProfile(null)}
+          />
+        </Suspense>
+      )}
+
+      {/* Position Detail overlay — FOMO-style entry/exit chart for one wallet+token trade */}
+      {positionDetail && (
+        <Suspense fallback={null}>
+          <PositionDetailView
+            walletAddress={positionDetail.wallet}
+            mint={positionDetail.mint}
+            profileHint={positionDetail.profileHint}
+            onBack={() => setPositionDetail(null)}
+            onOpenProfile={(profileHint = {}) => {
+              setWalletProfile({ address: positionDetail.wallet, ...profileHint });
+              setPositionDetail(null);
+            }}
+            onMimicTrade={(coin) => { setPositionDetail(null); handleTradeClick(coin); }}
           />
         </Suspense>
       )}

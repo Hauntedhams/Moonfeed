@@ -211,7 +211,11 @@ const TopTradersList = ({ coinAddress, isExpanded, isOpen = true, previewLimit =
                     onClick={() => {
                       if (!isOpen) return;
                       if (onWalletClick) {
-                        onWalletClick(trader.wallet);
+                        onWalletClick(trader.wallet, {
+                          displayName: trader.username || trader.name || trader.handle || trader.label || null,
+                          mint: coinAddress,
+                          traderData: trader,
+                        });
                       } else {
                         setSelectedWallet(trader.wallet);
                         setSelectedTraderData(trader); // Pass full trader data

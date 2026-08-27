@@ -38,6 +38,16 @@ export const getFullApiUrl = (path) => {
   return `${API_CONFIG.BASE_URL}${path}`;
 };
 
+// fetch() has no built-in timeout — without this a slow/hung backend leaves
+// UI spinners spinning forever. Aborts and rejects after `ms`.
+export const fetchJsonWithTimeout = (url, { timeoutMs = 8000, ...options } = {}) => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { ...options, signal: controller.signal })
+    .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+    .finally(() => clearTimeout(timer));
+};
+
 console.log('🌐 API Config initialized:', {
   environment: window.location.hostname === 'localhost' ? 'development' : 'production',
   baseUrl: API_CONFIG.BASE_URL,

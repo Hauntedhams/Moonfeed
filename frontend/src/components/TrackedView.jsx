@@ -19,6 +19,7 @@ function TrackedView({
   onFavoritesChange,
   onTradeClick,
   onWalletClick,
+  onOpenPosition,
   onCurrentCoinChange,
 }) {
   const [activeFeed, setActiveFeed] = useState('wallets');
@@ -56,6 +57,7 @@ function TrackedView({
                   wallet={wallet}
                   shouldLoad={Math.abs(index - visibleIndex) <= 1}
                   onOpenProfile={onWalletClick}
+                  onOpenPosition={onOpenPosition}
                   onMimicTrade={(coin, trade) =>
                     onTradeClick?.(coin, trade?.type === 'sell' ? { side: 'sell' } : {})
                   }

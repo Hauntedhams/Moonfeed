@@ -1,0 +1,343 @@
+/* Position Detail View — FOMO-style full-screen entry/exit position card */
+
+.pdv-root {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  background: linear-gradient(135deg, #0b1220 0%, #0e1426 50%, #0b1220 100%);
+  color: #f5f5f5;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 70px 16px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+html:not(.dark-mode) .pdv-root {
+  background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 50%, #f8f9fa 100%);
+  color: #111827;
+}
+
+.pdv-back {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 4010;
+  width: 42px;
+  height: 42px;
+  border: none;
+  background: none;
+  color: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+
+.pdv-loading, .pdv-error {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 14px;
+}
+
+html:not(.dark-mode) .pdv-loading, html:not(.dark-mode) .pdv-error {
+  color: rgba(0, 0, 0, 0.5);
+}
+
+.pdv-spinner {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.15);
+  border-top-color: #4f8cff;
+  animation: pdv-spin 0.8s linear infinite;
+}
+
+@keyframes pdv-spin {
+  to { transform: rotate(360deg); }
+}
+
+.pdv-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pdv-wallet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: -4px -4px 2px;
+  padding: 12px 4px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+html:not(.dark-mode) .pdv-wallet-header {
+  border-bottom-color: rgba(0, 0, 0, 0.08);
+}
+
+.pdv-wallet-profile {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pdv-wallet-avatar {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 10px 28px rgba(0, 0, 0, 0.28);
+}
+
+.pdv-animal-avatar {
+  width: 66%;
+  height: 66%;
+  fill: rgba(255, 255, 255, 0.88);
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.34));
+}
+
+.pdv-wallet-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.pdv-wallet-name {
+  font-size: 20px;
+  font-weight: 850;
+  letter-spacing: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pdv-wallet-sub {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.52);
+}
+
+html:not(.dark-mode) .pdv-wallet-sub {
+  color: rgba(0, 0, 0, 0.52);
+}
+
+.pdv-wallet-chevron {
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.38);
+  font-size: 28px;
+  line-height: 1;
+}
+
+.pdv-follow-btn {
+  flex-shrink: 0;
+  min-width: 86px;
+  height: 40px;
+  border: none;
+  border-radius: 9px;
+  background: #4867ff;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(72, 103, 255, 0.26);
+}
+
+.pdv-token-img {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.pdv-token-img--ph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.1);
+  font-weight: 700;
+  font-size: 18px;
+}
+
+.pdv-token-symbol {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.pdv-token-mcap {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+html:not(.dark-mode) .pdv-token-mcap {
+  color: rgba(0, 0, 0, 0.55);
+}
+
+.pdv-token-mcap-label {
+  opacity: 0.7;
+}
+
+.pdv-pnl-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.pdv-pnl-amount {
+  font-size: 32px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.pdv-pnl-pct {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.pdv-pnl-amount.pos, .pdv-pnl-pct.pos { color: #26d07c; }
+.pdv-pnl-amount.neg, .pdv-pnl-pct.neg { color: #ff5c5c; }
+
+.pdv-pnl-amount.loading {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.pdv-pnl-pct.loading {
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.pdv-inline-error,
+.pdv-inline-note {
+  margin-top: -4px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 12px;
+}
+
+.pdv-inline-error {
+  border: 1px solid rgba(255, 91, 53, 0.2);
+  background: rgba(255, 91, 53, 0.08);
+}
+
+.pdv-inline-note {
+  border: 1px solid rgba(72, 103, 255, 0.16);
+  background: rgba(72, 103, 255, 0.08);
+}
+
+html:not(.dark-mode) .pdv-pnl-amount.loading,
+html:not(.dark-mode) .pdv-pnl-pct.loading,
+html:not(.dark-mode) .pdv-inline-error,
+html:not(.dark-mode) .pdv-inline-note {
+  color: rgba(0, 0, 0, 0.56);
+}
+
+.pdv-chart-wrap {
+  height: 320px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+html:not(.dark-mode) .pdv-chart-wrap {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.pdv-entryexit {
+  display: flex;
+  gap: 12px;
+}
+
+.pdv-entryexit-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+html:not(.dark-mode) .pdv-entryexit-item {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.pdv-entryexit-label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+html:not(.dark-mode) .pdv-entryexit-label {
+  color: rgba(0, 0, 0, 0.5);
+}
+
+.pdv-entryexit-value {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.pdv-footer-stats {
+  display: flex;
+  gap: 12px;
+}
+
+.pdv-footer-stat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+html:not(.dark-mode) .pdv-footer-stat {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.pdv-footer-stat-value {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.pdv-footer-stat-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+html:not(.dark-mode) .pdv-footer-stat-label {
+  color: rgba(0, 0, 0, 0.5);
+}
+
+.pdv-mimic-btn {
+  margin-top: auto;
+  padding: 14px;
+  border: none;
+  border-radius: 14px;
+  background: #4f8cff;
+  color: #fff;
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+}

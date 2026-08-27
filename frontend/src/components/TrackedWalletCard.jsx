@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getFullApiUrl } from '../config/api';
+import { getFullApiUrl, fetchJsonWithTimeout } from '../config/api';
 import './TrackedWalletCard.css';
 
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
@@ -108,7 +108,7 @@ const parseTrade = (t) => {
  * One full-screen slide in the tracked-wallets feed: wallet analytics plus the
  * wallet's most recent trade with a one-tap mimic action.
  */
-function TrackedWalletCard({ wallet, shouldLoad = true, onOpenProfile, onMimicTrade, onUntrack }) {
+function TrackedWalletCard({ wallet, shouldLoad = true, onOpenProfile, onOpenPosition, onMimicTrade, onUntrack }) {
   const address = wallet?.address;
   const [stats, setStats] = useState(null);
   const [statsLoading, setStatsLoading] = useState(true);
@@ -119,8 +119,7 @@ function TrackedWalletCard({ wallet, shouldLoad = true, onOpenProfile, onMimicTr
     if (!address || !shouldLoad) return;
     let cancelled = false;
     setStatsLoading(true);
-    fetch(getFullApiUrl(`/api/wallet/${address}`))
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+    fetchJsonWithTimeout(getFullApiUrl(`/api/wallet/${address}`))
       .then((d) => { if (!cancelled && d.success) setStats(d); })
       .catch(() => {})
       .finally(() => { if (!cancelled) setStatsLoading(false); });
@@ -131,8 +130,7 @@ function TrackedWalletCard({ wallet, shouldLoad = true, onOpenProfile, onMimicTr
     if (!address || !shouldLoad) return;
     let cancelled = false;
     setTradeLoading(true);
-    fetch(getFullApiUrl(`/api/wallet/${address}/trades`))
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+    fetchJsonWithTimeout(getFullApiUrl(`/api/wallet/${address}/trades`))
       .then((d) => {
         if (cancelled) return;
         const raw = d?.data?.trades || d?.trades || d?.data || [];
@@ -227,7 +225,12 @@ function TrackedWalletCard({ wallet, shouldLoad = true, onOpenProfile, onMimicTr
         ) : !lastTrade ? (
           <div className="twc-trade-empty">No recent trades found</div>
         ) : (
-          <div className="twc-trade">
+          <div
+            className="twc-trade twc-trade--tappable"
+            onClick={() => onOpenPosition?.(address, lastTrade.mint)}
+            role="button"
+            title="View position detail"
+          >
             <div className="twc-trade-row">
               {lastTrade.image ? (
                 <img className="twc-trade-img" src={lastTrade.image} alt={lastTrade.symbol} />
@@ -249,13 +252,16 @@ function TrackedWalletCard({ wallet, shouldLoad = true, onOpenProfile, onMimicTr
             </div>
             <button
               className="twc-mimic-btn"
-              onClick={() => onMimicTrade?.({
-                mintAddress: lastTrade.mint,
-                address: lastTrade.mint,
-                symbol: lastTrade.symbol,
-                name: lastTrade.name || lastTrade.symbol,
-                image: lastTrade.image,
-              }, lastTrade)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onMimicTrade?.({
+                  mintAddress: lastTrade.mint,
+                  address: lastTrade.mint,
+                  symbol: lastTrade.symbol,
+                  name: lastTrade.name || lastTrade.symbol,
+                  image: lastTrade.image,
+                }, lastTrade);
+              }}
             >
               {lastTrade.type === 'sell' ? 'Mimic Sell' : 'Mimic Buy'} {lastTrade.symbol}
             </button>

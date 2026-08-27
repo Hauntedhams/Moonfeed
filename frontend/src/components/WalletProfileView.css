@@ -80,6 +80,13 @@ html:not(.dark-mode) .wpv-header {
   text-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
 }
 
+.wpv-animal-avatar {
+  width: 68%;
+  height: 68%;
+  fill: rgba(255, 255, 255, 0.86);
+  filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.36));
+}
+
 .wpv-stats {
   display: flex;
   flex: 1;
@@ -264,6 +271,200 @@ html:not(.dark-mode) .wpv-copy-untrack {
   background: rgba(255, 255, 255, 0.08);
   padding: 2px 8px;
   border-radius: 6px;
+}
+
+.wpv-fast-card {
+  margin-top: 14px;
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(8, 7, 18, 0.82);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+html:not(.dark-mode) .wpv-fast-card {
+  background: rgba(255, 255, 255, 0.78);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+.wpv-fast-user-row,
+.wpv-fast-token-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.wpv-fast-user-row {
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+html:not(.dark-mode) .wpv-fast-user-row {
+  border-bottom-color: rgba(0, 0, 0, 0.07);
+}
+
+.wpv-fast-mini-avatar,
+.wpv-fast-token-img {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.wpv-fast-mini-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wpv-fast-mini-avatar .wpv-animal-avatar {
+  width: 64%;
+  height: 64%;
+}
+
+.wpv-fast-user-copy,
+.wpv-fast-token-copy {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.wpv-fast-name,
+.wpv-fast-token-symbol {
+  font-size: 17px;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wpv-fast-sub,
+.wpv-fast-token-meta {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.52);
+}
+
+html:not(.dark-mode) .wpv-fast-sub,
+html:not(.dark-mode) .wpv-fast-token-meta {
+  color: rgba(0, 0, 0, 0.52);
+}
+
+.wpv-fast-follow {
+  flex-shrink: 0;
+  min-width: 86px;
+  height: 38px;
+  border: none;
+  border-radius: 9px;
+  background: #4867ff;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.wpv-fast-follow:disabled {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.7);
+  cursor: default;
+}
+
+.wpv-fast-position {
+  padding: 16px;
+}
+
+.wpv-fast-token-img {
+  object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.wpv-fast-token-img--ph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.wpv-fast-side {
+  flex-shrink: 0;
+  padding: 5px 9px;
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.wpv-fast-side--buy {
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.14);
+}
+
+.wpv-fast-side--sell {
+  color: #ff5b35;
+  background: rgba(255, 91, 53, 0.14);
+}
+
+.wpv-fast-pnl-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 16px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+html:not(.dark-mode) .wpv-fast-pnl-card {
+  background: rgba(0, 0, 0, 0.035);
+  border-color: rgba(0, 0, 0, 0.06);
+}
+
+.wpv-fast-pnl-label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.48);
+}
+
+html:not(.dark-mode) .wpv-fast-pnl-label {
+  color: rgba(0, 0, 0, 0.5);
+}
+
+.wpv-fast-pnl-value {
+  font-size: 20px;
+  font-weight: 900;
+  color: #ff6740;
+}
+
+.wpv-fast-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.wpv-fast-skeleton span {
+  height: 16px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.06));
+  background-size: 220% 100%;
+  animation: wpvShimmer 1.1s linear infinite;
+}
+
+.wpv-fast-skeleton span:nth-child(1) { width: 72%; }
+.wpv-fast-skeleton span:nth-child(2) { width: 48%; }
+.wpv-fast-skeleton span:nth-child(3) { width: 88%; }
+
+.wpv-fast-empty {
+  padding: 10px 0;
+  color: rgba(255, 255, 255, 0.52);
+  font-size: 13px;
+}
+
+@keyframes wpvShimmer {
+  to { background-position: -220% 0; }
 }
 
 /* Metrics */

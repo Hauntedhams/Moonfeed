@@ -266,7 +266,12 @@ const CommentsSection = ({ coinAddress, coinSymbol, onWalletClick }) => {
                     <div className="comment-header-row">
                       <div
                         className="comment-wallet"
-                        onClick={(e) => { e.stopPropagation(); comment.walletAddress && onWalletClick && onWalletClick(comment.walletAddress); }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          comment.walletAddress && onWalletClick && onWalletClick(comment.walletAddress, {
+                            displayName: comment.username || comment.name || comment.handle || null,
+                          });
+                        }}
                         style={{ cursor: comment.walletAddress && onWalletClick ? 'pointer' : 'default' }}
                         title={comment.walletAddress && onWalletClick ? 'Click to view wallet stats' : comment.walletAddress}
                       >

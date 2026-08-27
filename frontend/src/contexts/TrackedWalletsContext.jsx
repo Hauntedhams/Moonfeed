@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { getFullApiUrl } from '../config/api';
 
 const TrackedWalletsContext = createContext();
 
@@ -32,6 +33,23 @@ export const TrackedWalletsProvider = ({ children }) => {
     if (trackedWallets.length >= 0) {
       localStorage.setItem('moonfeed_tracked_wallets', JSON.stringify(trackedWallets));
     }
+  }, [trackedWallets]);
+
+  // Ask the backend to warm analytics/trades for tracked wallets in the background.
+  useEffect(() => {
+    if (trackedWallets.length === 0) return;
+
+    const timer = setTimeout(() => {
+      fetch(getFullApiUrl('/api/wallet/warm'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wallets: trackedWallets.slice(0, 20), includeTrades: true }),
+      }).catch((err) => {
+        console.warn('Wallet warm request failed:', err.message);
+      });
+    }, 1000);
+
+    return () => clearTimeout(timer);
   }, [trackedWallets]);
 
   const trackWallet = (walletAddress, label = null) => {

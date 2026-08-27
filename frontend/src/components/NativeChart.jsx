@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { createChart, CandlestickSeries } from 'lightweight-charts';
+import { createChart, CandlestickSeries, AreaSeries } from 'lightweight-charts';
 import { useDarkMode } from '../contexts/DarkModeContext';
 import { API_CONFIG } from '../config/api';
 import './NativeChart.css';
@@ -49,36 +49,65 @@ function themeOptions(isDarkMode) {
   };
 }
 
-const NativeChart = ({ coin, isActive = false, isExpanded = false, livePrice = null }) => {
+const NativeChart = ({ coin, isActive = false, isExpanded = false, livePrice = null, markers = null, initialTfIndex = null }) => {
   const { isDarkMode } = useDarkMode();
   const containerRef = useRef(null);
   const chartRef = useRef(null);
   const seriesRef = useRef(null);
+  const seriesTypeRef = useRef(null); // 'candles' | 'area'
   // Most recent candle, kept in sync so live prices can fold into it in place.
   const lastCandleRef = useRef(null);
 
-  const [tfIndex, setTfIndex] = useState(DEFAULT_TF_INDEX);
+  const [tfIndex, setTfIndex] = useState(initialTfIndex ?? DEFAULT_TF_INDEX);
   const [status, setStatus] = useState('idle'); // idle | loading | ready | empty | error
   const [pool, setPool] = useState(() => resolvePool(coin));
+  const [poolResolved, setPoolResolved] = useState(() => !!resolvePool(coin));
   // Live price badge: value + last tick direction ('up'|'down') + counter to replay the flash.
   const [liveTick, setLiveTick] = useState({ price: null, dir: null, n: 0 });
 
   const mint = coin?.mintAddress || coin?.tokenAddress || coin?.address;
 
   // Resolve a pool address if the coin doesn't carry one (pre-DEX pump.fun tokens).
+  // poolResolved flips true once we know the answer (pool found OR none exists), so
+  // load() can then fall back to the line-chart source for pool-less coins ($MOO).
   useEffect(() => {
     const existing = resolvePool(coin);
-    if (existing) { setPool(existing); return; }
-    if (!mint) return;
+    if (existing) { setPool(existing); setPoolResolved(true); return; }
+    if (!mint) { setPoolResolved(true); return; }
     let cancelled = false;
+    setPool(null);
+    setPoolResolved(false);
     fetch(`${API_CONFIG.BASE_URL}/api/resolve-pool/${mint}`)
       .then((r) => r.json())
-      .then((d) => { if (!cancelled && d?.poolAddress) setPool(d.poolAddress); })
-      .catch(() => {});
+      .then((d) => { if (!cancelled) { if (d?.poolAddress) setPool(d.poolAddress); setPoolResolved(true); } })
+      .catch(() => { if (!cancelled) setPoolResolved(true); });
     return () => { cancelled = true; };
   }, [coin, mint]);
 
-  // Create the chart + candlestick series once.
+  // Lazily create/swap the series so we can switch between candlesticks (DEX pools)
+  // and an area line (pool-less coins fed by /api/chart-data).
+  const ensureSeries = useCallback((type) => {
+    const chart = chartRef.current;
+    if (!chart) return null;
+    if (seriesRef.current && seriesTypeRef.current === type) return seriesRef.current;
+    if (seriesRef.current) { try { chart.removeSeries(seriesRef.current); } catch (e) { /* already gone */ } seriesRef.current = null; }
+    const series = type === 'area'
+      ? chart.addSeries(AreaSeries, {
+          lineColor: '#4f8cff', lineWidth: 2,
+          topColor: 'rgba(79,140,255,0.35)', bottomColor: 'rgba(79,140,255,0.02)',
+          priceLineVisible: false, lastValueVisible: true,
+        })
+      : chart.addSeries(CandlestickSeries, {
+          upColor: '#26a69a', downColor: '#ef5350', borderVisible: false,
+          wickUpColor: '#26a69a', wickDownColor: '#ef5350',
+        });
+    seriesRef.current = series;
+    seriesTypeRef.current = type;
+    return series;
+  }, []);
+
+  // Create the chart once. The series is created lazily by ensureSeries() so it can
+  // switch between candlestick (DEX pool) and area (pool-less /api/chart-data) modes.
   useEffect(() => {
     if (!containerRef.current) return undefined;
     const chart = createChart(containerRef.current, {
@@ -90,19 +119,12 @@ const NativeChart = ({ coin, isActive = false, isExpanded = false, livePrice = n
       handleScroll: isExpanded,
       handleScale: isExpanded,
     });
-    const series = chart.addSeries(CandlestickSeries, {
-      upColor: '#26a69a',
-      downColor: '#ef5350',
-      borderVisible: false,
-      wickUpColor: '#26a69a',
-      wickDownColor: '#ef5350',
-    });
     chartRef.current = chart;
-    seriesRef.current = series;
     return () => {
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
+      seriesTypeRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -120,62 +142,120 @@ const NativeChart = ({ coin, isActive = false, isExpanded = false, livePrice = n
   }, [isExpanded]);
 
   const load = useCallback(async () => {
-    if (!pool || !seriesRef.current) return;
+    if (!chartRef.current || !poolResolved) return;
     const tf = TIMEFRAMES[tfIndex];
     setStatus('loading');
     lastCandleRef.current = null; // block live folding until fresh data lands
-    const url = `${API_CONFIG.BASE_URL}/api/geckoterminal/ohlcv/solana/${pool}/${tf.interval}?aggregate=${tf.aggregate}&limit=200`;
-    // The backend can transiently 503 a cold (uncached) pool if GeckoTerminal's own
-    // rate limit is hit — retry a couple of times before treating it as empty/error.
-    const RETRY_DELAYS_MS = [0, 900, 2000];
-    let list = null;
-    let hadError = false;
-    for (const delay of RETRY_DELAYS_MS) {
-      if (delay) await new Promise((r) => setTimeout(r, delay));
-      try {
-        const res = await fetch(url);
-        if (!res.ok) { hadError = true; continue; } // transient — retry
-        const json = await res.json();
-        list = json?.data?.attributes?.ohlcv_list || [];
-        hadError = false;
-        break;
-      } catch (e) {
-        hadError = true;
+
+    // Candlestick mode: coin has a DEX pool → GeckoTerminal OHLCV.
+    if (pool) {
+      const url = `${API_CONFIG.BASE_URL}/api/geckoterminal/ohlcv/solana/${pool}/${tf.interval}?aggregate=${tf.aggregate}&limit=200`;
+      // The backend can transiently 503 a cold (uncached) pool if the provider's own
+      // rate limit is hit — retry a couple of times before treating it as empty/error.
+      const RETRY_DELAYS_MS = [0, 900, 2000];
+      let list = null;
+      let hadError = false;
+      for (const delay of RETRY_DELAYS_MS) {
+        if (delay) await new Promise((r) => setTimeout(r, delay));
+        try {
+          const res = await fetch(url);
+          if (!res.ok) { hadError = true; continue; } // transient — retry
+          const json = await res.json();
+          list = json?.data?.attributes?.ohlcv_list || [];
+          hadError = false;
+          break;
+        } catch (e) {
+          hadError = true;
+        }
       }
-    }
-    if (!seriesRef.current) return; // unmounted mid-fetch
-    if (hadError) {
-      setStatus('error');
+      if (!chartRef.current) return; // unmounted mid-fetch
+      if (hadError) { setStatus('error'); return; }
+      if (!Array.isArray(list) || list.length === 0) {
+        ensureSeries('candles')?.setData([]);
+        setStatus('empty');
+        return;
+      }
+      // GeckoTerminal returns [ts, open, high, low, close, volume], newest-first.
+      const candles = list
+        .map(([t, o, h, l, c]) => ({ time: t, open: +o, high: +h, low: +l, close: +c }))
+        .filter((c) => Number.isFinite(c.time) && Number.isFinite(c.close))
+        .sort((a, b) => a.time - b.time);
+      const deduped = [];
+      for (const c of candles) {
+        if (deduped.length && deduped[deduped.length - 1].time === c.time) deduped[deduped.length - 1] = c;
+        else deduped.push(c);
+      }
+      const series = ensureSeries('candles');
+      if (!series) return;
+      series.setData(deduped);
+      lastCandleRef.current = deduped[deduped.length - 1] || null;
+      chartRef.current?.timeScale().fitContent();
+      setStatus('ready');
       return;
     }
-    if (!Array.isArray(list) || list.length === 0) {
-      seriesRef.current.setData([]);
-      setStatus('empty');
+
+    // No DEX pool (e.g. Moonfeed-native $MOO): fall back to on-chain swap history from
+    // /api/chart-data (returns {time, value}), rendered as an area line. The endpoint
+    // builds candles from Helius on a cold call, which can transiently return empty —
+    // retry a couple of times before treating it as genuinely empty.
+    if (mint) {
+      const RETRY_DELAYS_MS = [0, 1200, 2500];
+      let points = null;
+      let hadError = false;
+      for (const delay of RETRY_DELAYS_MS) {
+        if (delay) await new Promise((r) => setTimeout(r, delay));
+        try {
+          const res = await fetch(`${API_CONFIG.BASE_URL}/api/chart-data/${mint}?timeframe=${tf.label}`);
+          if (res.ok) {
+            const json = await res.json();
+            points = json?.data || [];
+            hadError = false;
+            if (points.length > 0) break; // got data — done
+          } else if (res.status === 404) {
+            points = []; hadError = false; // endpoint says no data
+          } else {
+            hadError = true;
+          }
+        } catch (e) {
+          hadError = true;
+        }
+      }
+      if (!chartRef.current) return;
+      if (hadError) { setStatus('error'); return; }
+      const cleaned = (points || [])
+        .map((d) => ({ time: d.time, value: +d.value }))
+        .filter((d) => Number.isFinite(d.time) && Number.isFinite(d.value))
+        .sort((a, b) => a.time - b.time);
+      const deduped = [];
+      for (const d of cleaned) {
+        if (deduped.length && deduped[deduped.length - 1].time === d.time) deduped[deduped.length - 1] = d;
+        else deduped.push(d);
+      }
+      const series = ensureSeries('area');
+      if (!series) return;
+      series.setData(deduped);
+      if (deduped.length === 0) { setStatus('empty'); return; }
+      chartRef.current?.timeScale().fitContent();
+      setStatus('ready');
       return;
     }
-    // GeckoTerminal returns [ts, open, high, low, close, volume], newest-first.
-    const candles = list
-      .map(([t, o, h, l, c]) => ({ time: t, open: +o, high: +h, low: +l, close: +c }))
-      .filter((c) => Number.isFinite(c.time) && Number.isFinite(c.close))
-      .sort((a, b) => a.time - b.time);
-    // lightweight-charts requires strictly ascending, unique timestamps.
-    const deduped = [];
-    for (const c of candles) {
-      if (deduped.length && deduped[deduped.length - 1].time === c.time) {
-        deduped[deduped.length - 1] = c;
-      } else {
-        deduped.push(c);
-      }
-    }
-    seriesRef.current.setData(deduped);
-    lastCandleRef.current = deduped[deduped.length - 1] || null;
-    chartRef.current?.timeScale().fitContent();
-    setStatus('ready');
-  }, [pool, tfIndex]);
+
+    setStatus('empty');
+  }, [pool, poolResolved, tfIndex, mint, ensureSeries]);
 
   useEffect(() => {
     if (isActive) load();
   }, [isActive, load]);
+
+  // Overlay caller-supplied markers (e.g. buy/sell points) once real candles are in.
+  useEffect(() => {
+    if (status !== 'ready' || !seriesRef.current) return;
+    try {
+      seriesRef.current.setMarkers(Array.isArray(markers) ? markers : []);
+    } catch (e) {
+      // series may not support markers (area mode) or may be mid-teardown — ignore
+    }
+  }, [markers, status]);
 
   // Fold the live price into the last candle in real time (O(1) series.update).
   useEffect(() => {
