@@ -111,6 +111,7 @@ const CoinCard = memo(({
   const [chartHoveredData, setChartHoveredData] = useState(null); // Track full crosshair data (price + time)
   const [chartFirstPrice, setChartFirstPrice] = useState(null); // Track first visible price for % calculation
   const [nativeChartFullscreen, setNativeChartFullscreen] = useState(false);
+  const [nativeChartControlsVisible, setNativeChartControlsVisible] = useState(false);
   const [buyDrawerOpen, setBuyDrawerOpen] = useState(false);
   const [buyDrawerMode, setBuyDrawerMode] = useState('buy');
   const [buyDrawerOrderSide, setBuyDrawerOrderSide] = useState('buy');
@@ -1199,9 +1200,13 @@ const CoinCard = memo(({
     
     if (next) {
       setShowActionButtons(false);
-      requestAnimationFrame(() => setShowActionButtons(true));
+      requestAnimationFrame(() => {
+        setShowActionButtons(true);
+        setNativeChartControlsVisible(true);
+      });
     } else {
       setShowActionButtons(false);
+      setNativeChartControlsVisible(false);
       setShowInlineTopTraders(false);
     }
     setHasToggledActions(true); // Mark that user has interacted (enables animation)
@@ -3030,7 +3035,7 @@ const CoinCard = memo(({
       {USE_NATIVE_CHART && _mobilePortal && (
         <div className="native-chart-mobile-right-actions">
           <button
-            className={`native-chart-action-btn ${showActionButtons ? 'visible' : ''}`}
+            className={`native-chart-action-btn ${nativeChartControlsVisible ? 'visible' : ''}`}
             onClick={openMobileTradeDrawer}
             title="Open trade window"
             aria-label="Open trade window"
@@ -3042,7 +3047,7 @@ const CoinCard = memo(({
             </svg>
           </button>
           <button
-            className={`native-chart-action-btn ${showActionButtons ? 'visible' : ''}`}
+            className={`native-chart-action-btn ${nativeChartControlsVisible ? 'visible' : ''}`}
             onClick={openNativeChartFullscreen}
             title="View full chart"
             aria-label="View full chart"

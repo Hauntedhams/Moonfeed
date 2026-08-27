@@ -355,7 +355,7 @@
   -webkit-backdrop-filter: blur(10px);
   opacity: 0;
   pointer-events: none;
-  transform: translateX(22px) scale(0.72);
+  transform: translateX(26px) scale(0.72);
   transition: opacity 0.2s ease, transform 0.28s cubic-bezier(0.2, 0.85, 0.3, 1), background 0.18s ease, border-color 0.18s ease;
 }
 
@@ -363,6 +363,14 @@
   opacity: 1;
   pointer-events: auto;
   transform: translateX(0) scale(1);
+}
+
+.native-chart-action-btn:first-child {
+  transition-delay: 0.06s, 0.06s, 0s, 0s;
+}
+
+.native-chart-action-btn.visible:first-child {
+  transition-delay: 0.12s, 0.12s, 0s, 0s;
 }
 
 .native-chart-action-btn:hover {
