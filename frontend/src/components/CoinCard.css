@@ -293,6 +293,29 @@
   transform: scale(0.9);
 }
 
+/* Give every item in the vertical action stack the same circular glass control
+   treatment used by the native chart's trade, full-chart and expand buttons. */
+.tiktok-action-buttons .tiktok-action-btn {
+  width: 44px;
+  height: 44px;
+  border: 2px solid rgba(255, 255, 255, 0.55) !important;
+  border-radius: 50%;
+  background: rgba(10, 10, 20, 0.82) !important;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.tiktok-action-buttons .tiktok-action-btn:hover {
+  background: rgba(10, 10, 20, 0.95) !important;
+  border-color: rgba(255, 255, 255, 0.85) !important;
+}
+
+.tiktok-action-buttons .tiktok-action-btn.active {
+  border-color: rgba(196, 181, 253, 0.88) !important;
+  background: rgba(91, 73, 150, 0.4) !important;
+}
+
 /* Native charts do not render TwelveDataChart's fixed expand control, so
    CoinCard restores it beneath the comments/copy action stack. */
 .native-chart-expand-card-btn {
