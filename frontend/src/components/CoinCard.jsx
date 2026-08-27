@@ -2999,6 +2999,52 @@ const CoinCard = memo(({
           transition: isScrolling ? 'none' : 'opacity 0.15s ease',
         } : undefined}
       >
+        {/* Live transaction window */}
+        <button
+          className={`tiktok-action-btn ${showLiveTransactions ? 'active' : ''}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowTopTraders(false);
+            setShowLiveTransactions(true);
+          }}
+          title="Live transactions"
+          aria-label="Open live transactions"
+        >
+          <span className="tiktok-action-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M8 6h13" />
+              <path d="M8 12h13" />
+              <path d="M8 18h13" />
+              <path d="M3 6h.01" />
+              <path d="M3 12h.01" />
+              <path d="M3 18h.01" />
+            </svg>
+          </span>
+          <span className="tiktok-action-label">Trades</span>
+        </button>
+
+        {/* Top PnL traders window */}
+        <button
+          className={`tiktok-action-btn ${showTopTraders ? 'active' : ''}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowLiveTransactions(false);
+            setShowTopTraders(true);
+          }}
+          title="Top PnL traders"
+          aria-label="Open top PnL traders"
+        >
+          <span className="tiktok-action-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 20V10" />
+              <path d="M10 20V4" />
+              <path d="M16 20v-7" />
+              <path d="M22 20H2" />
+            </svg>
+          </span>
+          <span className="tiktok-action-label">PnL</span>
+        </button>
+
         {/* Comments */}
         <button 
           className={`tiktok-action-btn ${showComments ? 'active' : ''}`}
