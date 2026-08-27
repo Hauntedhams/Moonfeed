@@ -428,6 +428,16 @@ const CoinCard = memo(({
     };
   }, [showLiveTransactions]);
 
+  // The transaction window lives below the chart inside the expanded card. Bring
+  // it into view when opened from the floating action stack.
+  useEffect(() => {
+    if (!showLiveTransactions || !txSectionRef.current) return;
+    const frame = requestAnimationFrame(() => {
+      txSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [showLiveTransactions]);
+
   // Fetch comment count when card is visible (lightweight — just the count)
   useEffect(() => {
     if (!isVisible || !mintAddress) return;
