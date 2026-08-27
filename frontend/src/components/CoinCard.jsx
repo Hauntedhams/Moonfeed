@@ -578,9 +578,9 @@ const CoinCard = memo(({
     setBuyDrawerOpen(true);
   };
 
-  const orderChartFocused = buyDrawerOpen && buyDrawerMode === 'orders' && buyDrawerOrderSide === 'sell';
+  const orderChartFocused = buyDrawerOpen && buyDrawerMode === 'orders';
   const orderTargetPercent = displayPrice > 0 ? ((buyOrderPrice - displayPrice) / displayPrice) * 100 : 0;
-  const orderTargetLabel = `Sell ${orderTargetPercent >= 0 ? '+' : ''}${orderTargetPercent.toFixed(2)}%`;
+  const orderTargetLabel = `${buyDrawerOrderSide === 'sell' ? 'Sell' : 'Buy'} ${orderTargetPercent >= 0 ? '+' : ''}${orderTargetPercent.toFixed(2)}%`;
 
   const openMobileTradeDrawer = (e) => {
     e?.stopPropagation();
@@ -3157,6 +3157,7 @@ const CoinCard = memo(({
               focusOneMinute={orderChartFocused}
               targetPrice={orderChartFocused ? buyOrderPrice : null}
               targetLabel={orderTargetLabel}
+              targetColor={buyDrawerOrderSide === 'sell' ? '#22d3ee' : '#4ade80'}
             />,
             target
           );

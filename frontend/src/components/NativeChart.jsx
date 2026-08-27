@@ -59,6 +59,7 @@ const NativeChart = ({
   focusOneMinute = false,
   targetPrice = null,
   targetLabel = '',
+  targetColor = '#22d3ee',
 }) => {
   const { isDarkMode } = useDarkMode();
   const containerRef = useRef(null);
@@ -297,7 +298,7 @@ const NativeChart = ({
       try {
         targetLineRef.current = series.createPriceLine({
           price,
-          color: '#22d3ee',
+          color: targetColor,
           lineWidth: 2,
           lineStyle: 2,
           axisLabelVisible: true,
@@ -308,7 +309,7 @@ const NativeChart = ({
       }
     }
 
-  }, [status, targetLabel, targetPrice]);
+  }, [status, targetColor, targetLabel, targetPrice]);
 
   // Animate the sell-order focus into a tight 1m view. The extra future bars on
   // the right make the target line readable without covering the last candles.
