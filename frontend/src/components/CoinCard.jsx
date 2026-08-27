@@ -575,6 +575,10 @@ const CoinCard = memo(({
     setBuyDrawerOpen(true);
   };
 
+  const orderChartFocused = buyDrawerOpen && buyDrawerMode === 'orders' && buyDrawerOrderSide === 'sell';
+  const orderTargetPercent = displayPrice > 0 ? ((buyOrderPrice - displayPrice) / displayPrice) * 100 : 0;
+  const orderTargetLabel = `Sell ${orderTargetPercent >= 0 ? '+' : ''}${orderTargetPercent.toFixed(2)}%`;
+
   const openMobileTradeDrawer = (e) => {
     e?.stopPropagation();
     if (!isExpanded) handleExpandToggle(e);
@@ -3130,6 +3134,9 @@ const CoinCard = memo(({
               isActive={isCurrentCard}
               isExpanded={isDesktopMode ? true : isExpanded}
               livePrice={rpcLivePrice}
+              focusOneMinute={orderChartFocused}
+              targetPrice={orderChartFocused ? buyOrderPrice : null}
+              targetLabel={orderTargetLabel}
             />,
             target
           );

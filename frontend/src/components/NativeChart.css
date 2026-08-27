@@ -94,6 +94,16 @@
   pointer-events: auto;
 }
 
+.native-chart.order-focus .native-chart-canvas {
+  animation: native-chart-order-focus 0.4s cubic-bezier(0.2, 0.85, 0.3, 1);
+  transform-origin: center;
+}
+
+@keyframes native-chart-order-focus {
+  0% { opacity: 0.55; transform: scale(0.975); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
 .native-chart-overlay {
   position: absolute;
   inset: 34px 0 0 0; /* below the timeframe bar */

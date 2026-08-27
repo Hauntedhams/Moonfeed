@@ -49,12 +49,24 @@ function themeOptions(isDarkMode) {
   };
 }
 
-const NativeChart = ({ coin, isActive = false, isExpanded = false, livePrice = null, markers = null, initialTfIndex = null }) => {
+const NativeChart = ({
+  coin,
+  isActive = false,
+  isExpanded = false,
+  livePrice = null,
+  markers = null,
+  initialTfIndex = null,
+  focusOneMinute = false,
+  targetPrice = null,
+  targetLabel = '',
+}) => {
   const { isDarkMode } = useDarkMode();
   const containerRef = useRef(null);
   const chartRef = useRef(null);
   const seriesRef = useRef(null);
   const seriesTypeRef = useRef(null); // 'candles' | 'area'
+  const targetLineRef = useRef(null);
+  const dataLengthRef = useRef(0);
   // Most recent candle, kept in sync so live prices can fold into it in place.
   const lastCandleRef = useRef(null);
 
@@ -125,6 +137,7 @@ const NativeChart = ({ coin, isActive = false, isExpanded = false, livePrice = n
       chartRef.current = null;
       seriesRef.current = null;
       seriesTypeRef.current = null;
+      targetLineRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -140,6 +153,12 @@ const NativeChart = ({ coin, isActive = false, isExpanded = false, livePrice = n
       chartRef.current.applyOptions({ handleScroll: isExpanded, handleScale: isExpanded });
     }
   }, [isExpanded]);
+
+  // Limit-order sell mode always works from a tight one-minute view of the
+  // current coin, even if the user was previously looking at a wider chart.
+  useEffect(() => {
+    if (focusOneMinute && tfIndex !== 0) setTfIndex(0);
+  }, [focusOneMinute, tfIndex]);
 
   const load = useCallback(async () => {
     if (!chartRef.current || !poolResolved) return;
@@ -188,6 +207,7 @@ const NativeChart = ({ coin, isActive = false, isExpanded = false, livePrice = n
       const series = ensureSeries('candles');
       if (!series) return;
       series.setData(deduped);
+      dataLengthRef.current = deduped.length;
       lastCandleRef.current = deduped[deduped.length - 1] || null;
       chartRef.current?.timeScale().fitContent();
       setStatus('ready');
@@ -234,6 +254,7 @@ const NativeChart = ({ coin, isActive = false, isExpanded = false, livePrice = n
       const series = ensureSeries('area');
       if (!series) return;
       series.setData(deduped);
+      dataLengthRef.current = deduped.length;
       if (deduped.length === 0) { setStatus('empty'); return; }
       chartRef.current?.timeScale().fitContent();
       setStatus('ready');
@@ -256,6 +277,40 @@ const NativeChart = ({ coin, isActive = false, isExpanded = false, livePrice = n
       // series may not support markers (area mode) or may be mid-teardown — ignore
     }
   }, [markers, status]);
+
+  // Draw the active sell target directly on the chart and zoom to the recent
+  // one-minute candles when the order drawer is in sell mode.
+  useEffect(() => {
+    const chart = chartRef.current;
+    const series = seriesRef.current;
+    if (!chart || !series || status !== 'ready') return;
+
+    if (targetLineRef.current) {
+      try { series.removePriceLine(targetLineRef.current); } catch (e) { /* series changed */ }
+      targetLineRef.current = null;
+    }
+
+    const price = Number(targetPrice);
+    if (Number.isFinite(price) && price > 0) {
+      try {
+        targetLineRef.current = series.createPriceLine({
+          price,
+          color: '#22d3ee',
+          lineWidth: 2,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: targetLabel || 'Sell target',
+        });
+      } catch (e) {
+        // Area fallback series may not support price lines in all chart builds.
+      }
+    }
+
+    if (focusOneMinute && tfIndex === 0 && dataLengthRef.current > 0) {
+      const to = dataLengthRef.current - 1;
+      chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, to - 80), to: to + 2 });
+    }
+  }, [focusOneMinute, status, targetLabel, targetPrice, tfIndex]);
 
   // Fold the live price into the last candle in real time (O(1) series.update).
   useEffect(() => {
@@ -281,7 +336,7 @@ const NativeChart = ({ coin, isActive = false, isExpanded = false, livePrice = n
   }, [livePrice, isActive, tfIndex]);
 
   return (
-    <div className={`native-chart ${isDarkMode ? 'dark' : 'light'} ${isExpanded ? 'expanded' : ''}`}>
+    <div className={`native-chart ${isDarkMode ? 'dark' : 'light'} ${isExpanded ? 'expanded' : ''} ${focusOneMinute ? 'order-focus' : ''}`}>
       <div className="native-chart-tfs">
         {liveTick.price != null && (
           <span key={liveTick.n} className={`native-chart-live ${liveTick.dir || ''}`}>
