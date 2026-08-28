@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { createChart, CandlestickSeries, AreaSeries, createSeriesMarkers } from 'lightweight-charts';
 import { useDarkMode } from '../contexts/DarkModeContext';
 import { API_CONFIG } from '../config/api';
+import { AnimalSilhouetteAvatar, gradientForWallet } from '../utils/walletIdentity';
 import './NativeChart.css';
 
 // Phase 1 native candlestick chart. Renders lightweight-charts fed by the
@@ -58,6 +59,15 @@ function formatPrice(p) {
   return '$' + p.toPrecision(4);
 }
 
+function formatDotTime(sec) {
+  if (!Number.isFinite(sec)) return '';
+  const d = new Date(sec * 1000);
+  const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  return sameDay ? time : `${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}, ${time}`;
+}
+
 function themeOptions(isDarkMode) {
   return {
     layout: {
@@ -78,6 +88,7 @@ const NativeChart = ({
   isExpanded = false,
   livePrice = null,
   markers = null,
+  tradeDots = null, // raw {time,price,type,wallet,label}[] — rendered as clustered avatar chips, not lightweight-charts markers
   onCrosshairMove = null,
   initialTfIndex = null,
   focusOneMinute = false,
@@ -124,6 +135,10 @@ const NativeChart = ({
   // Live price badge: value + last tick direction ('up'|'down') + counter to replay the flash.
   const [liveTick, setLiveTick] = useState({ price: null, dir: null, n: 0 });
   const [orderGuide, setOrderGuide] = useState(null);
+  // Wallet-buy/sell dots clustered by on-screen proximity (avoids stacking
+  // separate arrows/labels when several trades land close together in time).
+  const [dotClusters, setDotClusters] = useState([]);
+  const [openCluster, setOpenCluster] = useState(null);
 
   const mint = coin?.mintAddress || coin?.tokenAddress || coin?.address;
 
@@ -257,8 +272,11 @@ const NativeChart = ({
   // Touch gestures on the plot — expanded only. Dragging a finger left/right
   // scrubs the crosshair and reads out the price at that point in time (the
   // touch equivalent of the desktop cursor hover). A touch on the bottom
-  // time-axis strip or right price-axis strip is handed to lightweight-charts
-  // instead (native pan/rescale), and multi-touch is left alone for pinch zoom.
+  // time-axis strip drags to pan the timeline; a touch on the right
+  // price-axis strip drags to rescale the price range — implemented manually
+  // (not relying on lightweight-charts' own mouse-only axis-drag handling,
+  // which doesn't react to touch) so these work on mobile the same way they
+  // already do with a mouse on desktop. Multi-touch is left alone for pinch zoom.
   //
   // Collapsed (feed) mode: the canvas stays the default pointer-events:none
   // (see .native-chart-canvas in NativeChart.css) so a swipe anywhere on the
@@ -272,7 +290,7 @@ const NativeChart = ({
     try { chart.applyOptions({ handleScroll: true, handleScale: true }); } catch (_) { /* disposed */ }
 
     const AXIS_FALLBACK = { bottom: 28, right: 56 };
-    const inAxisZone = (touch) => {
+    const axisZoneOf = (touch) => {
       const rect = el.getBoundingClientRect();
       const x = touch.clientX - rect.left;
       const y = touch.clientY - rect.top;
@@ -280,14 +298,20 @@ const NativeChart = ({
       let rightW = AXIS_FALLBACK.right;
       try { bottomH = chart.timeScale().height() || bottomH; } catch (_) { /* ignore */ }
       try { rightW = chart.priceScale('right').width() || rightW; } catch (_) { /* ignore */ }
-      return y >= rect.height - bottomH || x >= rect.width - rightW;
+      if (y >= rect.height - bottomH) return 'time';
+      if (x >= rect.width - rightW) return 'price';
+      return null;
     };
 
-    let mode = null; // axis | multi | pending | scrub | pass
+    let mode = null; // time-axis | price-axis | multi | pending | scrub | pass
     let startX = 0;
     let startY = 0;
+    let lastX = 0;
+    let lastY = 0;
     let rafId = 0;
     let pendingX = null;
+    // Manual vertical price-zoom state, seeded from the live range at drag start.
+    let priceRange = null; // { min, max }
 
     const applyScrub = () => {
       rafId = 0;
@@ -318,13 +342,59 @@ const NativeChart = ({
       onCrosshairMove?.(null);
     };
 
+    const panTime = (dxPixels) => {
+      try {
+        const ts = chart.timeScale();
+        const range = ts.getVisibleLogicalRange();
+        const rect = el.getBoundingClientRect();
+        if (!range || !rect.width) return;
+        const barsPerPixel = (range.to - range.from) / rect.width;
+        const shift = -dxPixels * barsPerPixel;
+        ts.setVisibleLogicalRange({ from: range.from + shift, to: range.to + shift });
+      } catch (_) { /* chart disposed mid-gesture */ }
+    };
+
+    const zoomPrice = (dyPixels, rect) => {
+      const series = seriesRef.current;
+      if (!series || !priceRange || !rect.height) return;
+      // Drag down = zoom out (wider range), drag up = zoom in (tighter range),
+      // anchored around the range's own midpoint so it feels like grabbing the axis.
+      const factor = Math.exp(dyPixels / rect.height);
+      const mid = (priceRange.min + priceRange.max) / 2;
+      const half = Math.max(1e-12, ((priceRange.max - priceRange.min) / 2) * factor);
+      const minValue = Math.max(0, mid - half);
+      const maxValue = mid + half;
+      try {
+        series.applyOptions({ autoscaleInfoProvider: () => ({ priceRange: { minValue, maxValue } }) });
+      } catch (_) { /* chart disposed mid-gesture */ }
+    };
+
     const onTouchStartCapture = (e) => {
       if (e.touches.length > 1) { mode = 'multi'; endScrub(); return; }
       const touch = e.touches[0];
       if (!touch) return;
       startX = touch.clientX;
       startY = touch.clientY;
-      if (inAxisZone(touch)) { mode = 'axis'; return; }
+      lastX = touch.clientX;
+      lastY = touch.clientY;
+      const zone = axisZoneOf(touch);
+      if (zone === 'time') { mode = 'time-axis'; e.stopImmediatePropagation(); return; }
+      if (zone === 'price') {
+        mode = 'price-axis';
+        e.stopImmediatePropagation();
+        const series = seriesRef.current;
+        const rect = el.getBoundingClientRect();
+        try {
+          const top = series?.coordinateToPrice(0);
+          const bottom = series?.coordinateToPrice(rect.height);
+          if (Number.isFinite(top) && Number.isFinite(bottom)) {
+            priceRange = { min: Math.min(top, bottom), max: Math.max(top, bottom) };
+          } else {
+            priceRange = null;
+          }
+        } catch (_) { priceRange = null; }
+        return;
+      }
       mode = 'pending';
       // Keep lightweight-charts' own handler on this node from claiming the
       // gesture: a plot drag is a price scrub, not a pan, and letting the
@@ -333,10 +403,20 @@ const NativeChart = ({
     };
 
     const onTouchMoveCapture = (e) => {
-      if (mode === 'axis') { e.stopPropagation(); return; }
       if (mode === 'multi' || mode === 'pass') return;
       const touch = e.touches[0];
       if (!touch) return;
+      if (mode === 'time-axis') {
+        e.stopPropagation();
+        panTime(touch.clientX - lastX);
+        lastX = touch.clientX;
+        return;
+      }
+      if (mode === 'price-axis') {
+        e.stopPropagation();
+        zoomPrice(touch.clientY - startY, el.getBoundingClientRect());
+        return;
+      }
       const dx = touch.clientX - startX;
       const dy = touch.clientY - startY;
       if (mode === 'pending') {
@@ -351,6 +431,7 @@ const NativeChart = ({
 
     const onTouchEndCapture = () => {
       if (mode === 'scrub') endScrub();
+      priceRange = null;
       mode = null;
     };
 
@@ -796,8 +877,70 @@ const NativeChart = ({
     };
   }, [focusOneMinute, status, targetPrice, tfIndex]);
 
-  // Keep the order target inside the chart's vertical range. Price lines do not
-  // participate in lightweight-charts autoscaling, so the provider expands the
+  // Wallet buys/sells shown on the chart: cluster dots that land within ~22px
+  // of each other on screen (instead of stacking a separate arrow+label per
+  // trade, which becomes unreadable when several trades happen close together).
+  useEffect(() => {
+    const chart = chartRef.current;
+    const series = seriesRef.current;
+    if (!chart || !series || status !== 'ready' || !tradeDots?.length) {
+      setDotClusters([]);
+      return undefined;
+    }
+
+    const CLUSTER_PX = 22;
+    const recompute = () => {
+      const canvas = containerRef.current;
+      const width = canvas?.clientWidth || 0;
+      if (!width) return;
+      const pts = [];
+      for (const d of tradeDots) {
+        let x, y;
+        try {
+          x = chart.timeScale().timeToCoordinate(d.time);
+          y = series.priceToCoordinate(d.price);
+        } catch (_) { continue; } // chart/series disposed mid-loop
+        if (!Number.isFinite(x) || !Number.isFinite(y) || x < -10 || x > width + 10) continue;
+        pts.push({ ...d, x, y });
+      }
+      pts.sort((a, b) => a.x - b.x);
+      const clusters = [];
+      for (const p of pts) {
+        const last = clusters[clusters.length - 1];
+        if (last && p.x - last.x <= CLUSTER_PX) {
+          const n = last.items.length;
+          last.x = (last.x * n + p.x) / (n + 1);
+          last.y = (last.y * n + p.y) / (n + 1);
+          last.items.push(p);
+        } else {
+          clusters.push({ x: p.x, y: p.y, items: [p] });
+        }
+      }
+      setDotClusters((prev) => {
+        if (prev.length === clusters.length
+          && prev.every((c, i) => Math.abs(c.x - clusters[i].x) < 0.5 && Math.abs(c.y - clusters[i].y) < 0.5 && c.items.length === clusters[i].items.length)) {
+          return prev;
+        }
+        return clusters;
+      });
+    };
+
+    let raf = requestAnimationFrame(function tick() {
+      recompute();
+      raf = requestAnimationFrame(tick);
+    });
+    const observer = new ResizeObserver(recompute);
+    if (containerRef.current) observer.observe(containerRef.current);
+    return () => {
+      cancelAnimationFrame(raf);
+      observer.disconnect();
+    };
+  }, [tradeDots, status, tfIndex]);
+
+  // A fresh coin/dataset invalidates any open cluster popup.
+  useEffect(() => { setOpenCluster(null); }, [mint]);
+
+
   // native candle range and eases toward the live target while the price wheel moves.
   useEffect(() => {
     const price = Number(targetPrice);
@@ -1024,6 +1167,58 @@ const NativeChart = ({
         <svg className="native-chart-order-guide" viewBox={`0 0 ${orderGuide.width} ${orderGuide.height}`} preserveAspectRatio="none" aria-hidden="true">
           <text x={orderGuide.toX - 4} y={orderGuide.toY - 8} textAnchor="end">{targetLabel}</text>
         </svg>
+      )}
+      {dotClusters.length > 0 && (
+        <div className="native-chart-trade-dots" aria-hidden={openCluster ? 'true' : undefined}>
+          {dotClusters.map((c, i) => (
+            <button
+              key={i}
+              type="button"
+              className="native-chart-dot-cluster"
+              style={{ left: c.x, top: c.y }}
+              onClick={(e) => { e.stopPropagation(); setOpenCluster(c); }}
+              title={`${c.items.length} trade${c.items.length > 1 ? 's' : ''}`}
+            >
+              {c.items.slice(0, 3).map((d, j) => (
+                <span
+                  key={j}
+                  className={`native-chart-dot native-chart-dot--${d.type}`}
+                  style={{ zIndex: 3 - j, marginLeft: j === 0 ? 0 : -12, background: gradientForWallet(d.wallet) }}
+                >
+                  <AnimalSilhouetteAvatar address={d.wallet} className="native-chart-dot-avatar" />
+                </span>
+              ))}
+              {c.items.length > 3 && (
+                <span className="native-chart-dot-more">+{c.items.length - 3}</span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+      {openCluster && (
+        <div className="native-chart-dot-modal-backdrop" onClick={(e) => { e.stopPropagation(); setOpenCluster(null); }}>
+          <div className="native-chart-dot-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="native-chart-dot-modal-header">
+              <span>{openCluster.items.length} trade{openCluster.items.length > 1 ? 's' : ''}</span>
+              <button type="button" className="native-chart-dot-modal-close" onClick={() => setOpenCluster(null)} aria-label="Close">×</button>
+            </div>
+            <div className="native-chart-dot-modal-list">
+              {[...openCluster.items].sort((a, b) => b.time - a.time).map((d, i) => (
+                <div key={i} className="native-chart-dot-modal-row">
+                  <span className="native-chart-dot-modal-avatar" style={{ background: gradientForWallet(d.wallet) }}>
+                    <AnimalSilhouetteAvatar address={d.wallet} />
+                  </span>
+                  <span className="native-chart-dot-modal-label">{d.label}</span>
+                  <span className={`native-chart-dot-modal-type native-chart-dot-modal-type--${d.type}`}>
+                    {d.type === 'buy' ? 'Bought' : 'Sold'}
+                  </span>
+                  <span className="native-chart-dot-modal-price">{formatPrice(d.price)}</span>
+                  <span className="native-chart-dot-modal-time">{formatDotTime(d.time)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
       {status === 'loading' && (
         <div className="native-chart-overlay">

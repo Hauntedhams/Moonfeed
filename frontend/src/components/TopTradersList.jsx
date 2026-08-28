@@ -218,8 +218,8 @@ const TopTradersList = ({ coinAddress, isExpanded, isOpen = true, previewLimit =
             {/* Column Headers */}
             <div className="table-header">
               <div className="col-rank">#</div>
-              <div className="col-pnl">PnL</div>
               <div className="col-wallet">Wallet</div>
+              <div className="col-pnl">PnL</div>
               <div className="col-buy">Buy</div>
               <div className="col-sell">Sell</div>
             </div>
@@ -227,9 +227,6 @@ const TopTradersList = ({ coinAddress, isExpanded, isOpen = true, previewLimit =
               {visibleTraders.map((trader, index) => (
                 <div key={trader.wallet || index} className="table-row">
                   <div className="col-rank">#{index + 1}</div>
-                  <div className={`col-pnl ${trader.total >= 0 ? 'positive' : 'negative'}`}>
-                    {formatCurrency(trader.total)}
-                  </div>
                   <div 
                     className={`col-wallet ${isOpen ? 'clickable' : ''}`}
                     onClick={() => {
@@ -248,6 +245,9 @@ const TopTradersList = ({ coinAddress, isExpanded, isOpen = true, previewLimit =
                     title={isOpen ? 'Click to view wallet details' : 'Open top traders to interact'}
                   >
                     <WalletChip address={trader.wallet} size={30} />
+                  </div>
+                  <div className={`col-pnl ${trader.total >= 0 ? 'positive' : 'negative'}`}>
+                    {formatCurrency(trader.total)}
                   </div>
                   <div className="col-buy">{formatCurrency(trader.total_invested || 0)}</div>
                   <div className="col-sell">{formatCurrency(trader.realized || 0)}</div>

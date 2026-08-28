@@ -269,32 +269,24 @@ const CoinCard = memo(({
     return (ratio > 50 || ratio < 1 / 50) ? fallbackPrice : rawLivePrice;
   })();
 
-  // Trades on this coin by the wallets the user follows, drawn on the chart.
-  // Bursts of same-wallet buys/sells within a few minutes are collapsed into a
-  // single marker (with a ×N count) instead of stacking repeated labels.
+  // Trades on this coin by the wallets the user follows, drawn on the chart as
+  // clustered avatar chips (NativeChart groups ones that land close together
+  // on screen) instead of separate lightweight-charts arrow markers, which
+  // used to stack unreadable overlapping labels when trades were close in time.
   const { getTradesForMint } = useTrackedTrades();
-  const trackedMarkers = useMemo(() => {
+  const tradeDots = useMemo(() => {
     const trades = getTradesForMint(mintAddress);
     if (!trades.length) return null;
-    const GROUP_WINDOW_MS = 5 * 60 * 1000;
-    const groups = [];
-    for (const t of trades.slice(-60)) {
-      const last = groups[groups.length - 1];
-      if (last && last.type === t.type && last.label === t.label && (t.time - last.time) <= GROUP_WINDOW_MS) {
-        last.count += 1;
-        last.time = t.time;
-      } else {
-        groups.push({ type: t.type, label: t.label, count: 1, time: t.time });
-      }
-    }
-    return groups.slice(-40).map((g) => ({
-      time: Math.floor(g.time / 1000),
-      position: g.type === 'buy' ? 'belowBar' : 'aboveBar',
-      color: g.type === 'buy' ? '#26a69a' : '#ef5350',
-      shape: g.type === 'buy' ? 'arrowUp' : 'arrowDown',
-      size: 0.8,
-      text: g.count > 1 ? `${g.label} ×${g.count}` : g.label,
-    }));
+    return trades
+      .slice(-80)
+      .filter((t) => t.priceUsd > 0)
+      .map((t) => ({
+        time: Math.floor(t.time / 1000),
+        price: t.priceUsd,
+        type: t.type,
+        wallet: t.walletAddress,
+        label: t.label,
+      }));
   }, [getTradesForMint, mintAddress]);
 
   // The viewer's own average buy-in price for this coin (USD), drawn on the chart.
@@ -3401,7 +3393,7 @@ const CoinCard = memo(({
               <span>{coin.symbol || coin.name || 'Chart'}</span>
               <button onClick={closeNativeChartFullscreen} aria-label="Close full chart">×</button>
             </div>
-            <NativeChart coin={coin} isActive={true} isExpanded={true} livePrice={displayPrice} entryPrice={entryPrice} trackedPrice={effectiveTrackedPrice} markers={trackedMarkers} resetViewSignal={chartResetSignal} />
+            <NativeChart coin={coin} isActive={true} isExpanded={true} livePrice={displayPrice} entryPrice={entryPrice} trackedPrice={effectiveTrackedPrice} tradeDots={tradeDots} resetViewSignal={chartResetSignal} />
           </div>
         </div>
       )}
@@ -3443,7 +3435,7 @@ const CoinCard = memo(({
               targetColor={buyDrawerOrderSide === 'sell' ? '#22d3ee' : '#4ade80'}
               entryPrice={entryPrice}
               trackedPrice={effectiveTrackedPrice}
-              markers={trackedMarkers}
+              tradeDots={tradeDots}
               resetViewSignal={chartResetSignal}
             />,
             target
