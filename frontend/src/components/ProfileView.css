@@ -1779,7 +1779,9 @@
   border-radius: 8px;
   padding: 7px 10px;
   color: var(--text-primary);
-  font-size: 14px;
+  /* iOS Safari/WKWebView auto-zooms the viewport on focus for inputs with
+     font-size below 16px, and the zoom can get stuck — keep this >=16px. */
+  font-size: 16px;
   width: 100%;
   resize: none;
 }

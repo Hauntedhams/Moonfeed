@@ -859,6 +859,7 @@ html:not(.dark-mode) .wpv-feed-title {
   text-decoration: none;
   display: block;
   border: 1px solid rgba(255, 255, 255, 0.06);
+  cursor: pointer;
 }
 
 .wpv-card-bg {

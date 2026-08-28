@@ -62,6 +62,8 @@ function App() {
   const favoritesSyncedWalletRef = useRef(null); // account address we've already pulled synced favorites for
   const skipNextFavoritesSaveRef = useRef(false); // true right after loading remote data, to avoid an immediate re-save
   const favoritesHydratedRef = useRef(false); // blocks saving until the first remote read settles
+  const pendingFavoritesSaveTimerRef = useRef(null); // debounce timer for the backend save, flushable on backgrounding
+  const latestFavoritesSaveRef = useRef({ walletAddress: null, favorites: [] }); // always up to date for the flush handler
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [filters, setFilters] = useState({ type: 'dextrending' }); // Start with DEXtrending (fastest loading)
   const [advancedFilters, setAdvancedFilters] = useState(null); // For advanced filtering
@@ -159,6 +161,29 @@ function App() {
     }
   }, [favorites, connected, walletAddress]);
 
+  // Keep the latest values available to the background-flush handler below.
+  useEffect(() => {
+    latestFavoritesSaveRef.current = { walletAddress, favorites };
+  }, [walletAddress, favorites]);
+
+  const toMinimalTrackedCoins = (favs) => favs.slice(0, 500).map(c => ({
+    mintAddress: c.mintAddress || c.address,
+    symbol: c.symbol || '',
+    name: c.name || '',
+    image: c.image || c.logo || c.profileImage || '',
+    addedAt: c.addedAt || Date.now(),
+    trackedAtPrice: Number(c.trackedAtPrice) || Number(c.price_usd) || Number(c.priceUsd) || 0,
+  }));
+
+  const saveTrackedCoinsNow = (addr, favs) => {
+    fetch(getFullApiUrl(`/api/users/${addr}/tracked-coins`), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ trackedCoins: toMinimalTrackedCoins(favs) }),
+      keepalive: true, // lets the request finish even if the tab/app is closing
+    }).catch(err => console.warn('Could not save tracked coins to account:', err.message));
+  };
+
   // Save tracked coins to the signed-in account (minimal fields — full coin data
   // is re-enriched from the feed when displayed) whenever they change.
   useEffect(() => {
@@ -169,23 +194,35 @@ function App() {
       skipNextFavoritesSaveRef.current = false;
       return;
     }
-    const timer = setTimeout(() => {
-      const minimal = favorites.slice(0, 500).map(c => ({
-        mintAddress: c.mintAddress || c.address,
-        symbol: c.symbol || '',
-        name: c.name || '',
-        image: c.image || c.logo || c.profileImage || '',
-        addedAt: c.addedAt || Date.now(),
-        trackedAtPrice: Number(c.trackedAtPrice) || Number(c.price_usd) || Number(c.priceUsd) || 0,
-      }));
-      fetch(getFullApiUrl(`/api/users/${walletAddress}/tracked-coins`), {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trackedCoins: minimal }),
-      }).catch(err => console.warn('Could not save tracked coins to account:', err.message));
+    pendingFavoritesSaveTimerRef.current = setTimeout(() => {
+      pendingFavoritesSaveTimerRef.current = null;
+      saveTrackedCoinsNow(walletAddress, favorites);
     }, 800);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(pendingFavoritesSaveTimerRef.current);
+      pendingFavoritesSaveTimerRef.current = null;
+    };
   }, [favorites, connected, walletAddress]);
+
+  // A debounced save can be silently lost if the app is backgrounded/closed before
+  // the timer fires (e.g. tracking a coin then immediately switching apps) — flush
+  // any pending save the instant the app is hidden so nothing gets dropped.
+  useEffect(() => {
+    const flush = () => {
+      if (!pendingFavoritesSaveTimerRef.current) return;
+      clearTimeout(pendingFavoritesSaveTimerRef.current);
+      pendingFavoritesSaveTimerRef.current = null;
+      const { walletAddress: addr, favorites: favs } = latestFavoritesSaveRef.current;
+      if (addr) saveTrackedCoinsNow(addr, favs);
+    };
+    const onVisibilityChange = () => { if (document.visibilityState === 'hidden') flush(); };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('pagehide', flush);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('pagehide', flush);
+    };
+  }, []);
 
   // Handle coin click from favorites grid
   const handleCoinClick = (coin) => {

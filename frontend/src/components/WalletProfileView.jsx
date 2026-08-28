@@ -487,12 +487,18 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
         ) : (
           <div className="wpv-grid">
             {coins.map((c) => (
-              <a
+              <div
                 key={c.tx}
                 className={`wpv-card wpv-card--${c.type}`}
-                href={`https://solscan.io/token/${c.mint}`}
-                target="_blank"
-                rel="noopener noreferrer"
+                onClick={() => onCoinClick?.({
+                  mintAddress: c.mint,
+                  address: c.mint,
+                  symbol: c.symbol,
+                  name: c.name || c.symbol,
+                  image: c.image,
+                })}
+                role="button"
+                tabIndex={0}
               >
                 {c.image ? (
                   <img src={c.image} alt={c.symbol} className="wpv-card-bg" onError={(e) => { e.target.style.display = 'none'; }} />
@@ -514,7 +520,7 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
                     {c.time && <span className="wpv-card-time">{timeAgo(c.time)}</span>}
                   </div>
                 </div>
-              </a>
+              </div>
             ))}
           </div>
         )}

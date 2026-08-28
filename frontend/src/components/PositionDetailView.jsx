@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getFullApiUrl, fetchJsonWithTimeout } from '../config/api';
 import NativeChart from './NativeChart';
+import { useTrackedWallets } from '../contexts/TrackedWalletsContext';
 import { AnimalSilhouetteAvatar, buildWalletName, gradientForWallet, shortWalletAddress } from '../utils/walletIdentity';
 import './PositionDetailView.css';
 
@@ -48,6 +49,16 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [chartPrice, setChartPrice] = useState(null);
+  const { trackWallet, isTracked } = useTrackedWallets();
+  const [tracked, setTracked] = useState(false);
+
+  useEffect(() => {
+    setTracked(isTracked(walletAddress));
+  }, [walletAddress, isTracked]);
+
+  const handleFollow = () => {
+    if (!tracked && trackWallet(walletAddress)) setTracked(true);
+  };
   // Coalesce the chart's crosshair callback (fires dozens of times/sec during a
   // fast swipe) into at most one state update per animation frame.
   const pendingChartPointRef = useRef(null);
@@ -163,14 +174,47 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
     }
   };
 
+  // Dragging the pull handle down past a threshold dismisses the sheet, like a
+  // native bottom sheet.
+  const [dragY, setDragY] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const dragStartYRef = useRef(null);
+  const handleHandleTouchStart = (e) => {
+    const t = e.touches?.[0];
+    dragStartYRef.current = t ? t.clientY : null;
+    setDragging(true);
+  };
+  const handleHandleTouchMove = (e) => {
+    if (dragStartYRef.current == null) return;
+    const t = e.touches?.[0];
+    if (!t) return;
+    const dy = t.clientY - dragStartYRef.current;
+    if (dy > 0) setDragY(dy);
+  };
+  const handleHandleTouchEnd = () => {
+    dragStartYRef.current = null;
+    setDragging(false);
+    if (dragY > 90) {
+      onBack?.();
+    }
+    setDragY(0);
+  };
+
   return (
     <div className="pdv-backdrop" onClick={onBack}>
     <div
       className="pdv-root"
+      style={dragY ? { transform: `translateY(${dragY}px)`, transition: dragging ? 'none' : undefined } : undefined}
       onClick={(event) => event.stopPropagation()}
       onTouchStart={handleSwipeTouchStart}
       onTouchEnd={handleSwipeTouchEnd}
     >
+      <div
+        className="pdv-drag-handle"
+        onTouchStart={handleHandleTouchStart}
+        onTouchMove={handleHandleTouchMove}
+        onTouchEnd={handleHandleTouchEnd}
+      />
       <button className="pdv-back" onClick={onBack} title="Back" aria-label="Back">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="15 18 9 12 15 6" />
@@ -193,7 +237,7 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
           </span>
           <span className="pdv-wallet-chevron">›</span>
         </button>
-        <button className="pdv-follow-btn" type="button" onClick={() => onOpenProfile?.({ displayName, ...profileHint })}>Follow</button>
+        <button className="pdv-follow-btn" type="button" onClick={handleFollow} disabled={tracked}>{tracked ? 'Following' : 'Follow'}</button>
       </div>
 
       {error && !position && (

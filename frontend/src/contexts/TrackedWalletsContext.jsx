@@ -24,6 +24,8 @@ export const TrackedWalletsProvider = ({ children }) => {
   const syncedWalletRef = useRef(null); // account address we've already pulled synced data for
   const skipNextSaveRef = useRef(false); // true right after loading remote data, to avoid an immediate re-save
   const hydratedRef = useRef(false); // blocks saving until the first remote read settles
+  const pendingSaveTimerRef = useRef(null); // debounce timer for the backend save, flushable on backgrounding
+  const latestSaveRef = useRef({ walletAddress: null, trackedWallets: [] }); // always up to date for the flush handler
 
   // Tracking and copy-trade notifications require a connected account. Remove
   // legacy guest records so they cannot appear or run notifications after logout.
@@ -79,6 +81,20 @@ export const TrackedWalletsProvider = ({ children }) => {
     }
   }, [trackedWallets, connected, walletAddress]);
 
+  // Keep the latest values available to the background-flush handler below.
+  useEffect(() => {
+    latestSaveRef.current = { walletAddress, trackedWallets };
+  }, [walletAddress, trackedWallets]);
+
+  const saveTrackedWalletsNow = (addr, list) => {
+    fetch(getFullApiUrl(`/api/users/${addr}/tracked-wallets`), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ trackedWallets: list }),
+      keepalive: true, // lets the request finish even if the tab/app is closing
+    }).catch(err => console.warn('Could not save tracked wallets to account:', err.message));
+  };
+
   // Save to the signed-in account whenever trackedWallets changes, so it syncs cross-device.
   useEffect(() => {
     if (!connected || !walletAddress) return;
@@ -88,15 +104,35 @@ export const TrackedWalletsProvider = ({ children }) => {
       skipNextSaveRef.current = false;
       return;
     }
-    const timer = setTimeout(() => {
-      fetch(getFullApiUrl(`/api/users/${walletAddress}/tracked-wallets`), {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trackedWallets }),
-      }).catch(err => console.warn('Could not save tracked wallets to account:', err.message));
+    pendingSaveTimerRef.current = setTimeout(() => {
+      pendingSaveTimerRef.current = null;
+      saveTrackedWalletsNow(walletAddress, trackedWallets);
     }, 800);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(pendingSaveTimerRef.current);
+      pendingSaveTimerRef.current = null;
+    };
   }, [trackedWallets, connected, walletAddress]);
+
+  // A debounced save can be silently lost if the app is backgrounded/closed before
+  // the timer fires (e.g. tracking a wallet then immediately switching apps) — flush
+  // any pending save the instant the app is hidden so nothing gets dropped.
+  useEffect(() => {
+    const flush = () => {
+      if (!pendingSaveTimerRef.current) return;
+      clearTimeout(pendingSaveTimerRef.current);
+      pendingSaveTimerRef.current = null;
+      const { walletAddress: addr, trackedWallets: list } = latestSaveRef.current;
+      if (addr) saveTrackedWalletsNow(addr, list);
+    };
+    const onVisibilityChange = () => { if (document.visibilityState === 'hidden') flush(); };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('pagehide', flush);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('pagehide', flush);
+    };
+  }, []);
 
   // Ask the backend to warm analytics/trades for tracked wallets in the background.
   useEffect(() => {
