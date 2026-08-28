@@ -153,17 +153,23 @@ const NativeChart = ({
     // Built-in last-value/price-line labels are pinned to the far-right edge of the
     // chart, where they get hidden behind the floating action buttons and can lag the
     // header price. Disabled in favor of the controlled .native-chart-live badge below.
-    const series = type === 'area'
-      ? chart.addSeries(AreaSeries, {
-          lineColor: '#4f8cff', lineWidth: 2,
-          topColor: 'rgba(79,140,255,0.35)', bottomColor: 'rgba(79,140,255,0.02)',
-          priceLineVisible: false, lastValueVisible: false,
-        })
-      : chart.addSeries(CandlestickSeries, {
-          upColor: '#26a69a', downColor: '#ef5350', borderVisible: false,
-          wickUpColor: '#26a69a', wickDownColor: '#ef5350',
-          priceLineVisible: false, lastValueVisible: false,
-        });
+    let series;
+    try {
+      series = type === 'area'
+        ? chart.addSeries(AreaSeries, {
+            lineColor: '#4f8cff', lineWidth: 2,
+            topColor: 'rgba(79,140,255,0.35)', bottomColor: 'rgba(79,140,255,0.02)',
+            priceLineVisible: false, lastValueVisible: false,
+          })
+        : chart.addSeries(CandlestickSeries, {
+            upColor: '#26a69a', downColor: '#ef5350', borderVisible: false,
+            wickUpColor: '#26a69a', wickDownColor: '#ef5350',
+            priceLineVisible: false, lastValueVisible: false,
+          });
+    } catch (e) {
+      // Chart disposed (e.g. card unmounted) between the ref check above and now.
+      return null;
+    }
     seriesRef.current = series;
     seriesTypeRef.current = type;
     return series;
@@ -337,7 +343,7 @@ const NativeChart = ({
       if (!chartRef.current) return; // unmounted mid-fetch
       if (hadError) { setStatus('error'); return; }
       if (!Array.isArray(list) || list.length === 0) {
-        ensureSeries('candles')?.setData([]);
+        try { ensureSeries('candles')?.setData([]); } catch (e) { /* chart disposed mid-fetch */ }
         setStatus('empty');
         return;
       }
@@ -353,16 +359,21 @@ const NativeChart = ({
       }
       const series = ensureSeries('candles');
       if (!series) return;
-      series.setData(deduped);
-      dataLengthRef.current = deduped.length;
-      lastCandleRef.current = deduped[deduped.length - 1] || null;
-      // Typical bar range, used to size the projection's wobble realistically.
-      const recent = deduped.slice(-20);
-      const vols = recent.map((c) => (c.high - c.low) / (c.close || 1)).filter(Number.isFinite);
-      recentVolRef.current = vols.length ? vols.reduce((a, b) => a + b, 0) / vols.length : 0;
-      // Seed the price badge immediately so it never shows blank/stale before the first live tick.
-      if (lastCandleRef.current) setLiveTick((prev) => ({ price: lastCandleRef.current.close, dir: null, n: prev.n }));
-      chartRef.current?.timeScale().fitContent();
+      try {
+        series.setData(deduped);
+        dataLengthRef.current = deduped.length;
+        lastCandleRef.current = deduped[deduped.length - 1] || null;
+        // Typical bar range, used to size the projection's wobble realistically.
+        const recent = deduped.slice(-20);
+        const vols = recent.map((c) => (c.high - c.low) / (c.close || 1)).filter(Number.isFinite);
+        recentVolRef.current = vols.length ? vols.reduce((a, b) => a + b, 0) / vols.length : 0;
+        // Seed the price badge immediately so it never shows blank/stale before the first live tick.
+        if (lastCandleRef.current) setLiveTick((prev) => ({ price: lastCandleRef.current.close, dir: null, n: prev.n }));
+        chartRef.current?.timeScale().fitContent();
+      } catch (e) {
+        // Chart/series disposed mid-fetch (e.g. card scrolled away and unmounted) — nothing to draw into anymore.
+        return;
+      }
       setStatus('ready');
       return;
     }
@@ -406,12 +417,17 @@ const NativeChart = ({
       }
       const series = ensureSeries('area');
       if (!series) return;
-      series.setData(deduped);
-      dataLengthRef.current = deduped.length;
-      if (deduped.length === 0) { setStatus('empty'); return; }
-      const lastPoint = deduped[deduped.length - 1];
-      setLiveTick((prev) => ({ price: lastPoint.value, dir: null, n: prev.n }));
-      chartRef.current?.timeScale().fitContent();
+      try {
+        series.setData(deduped);
+        dataLengthRef.current = deduped.length;
+        if (deduped.length === 0) { setStatus('empty'); return; }
+        const lastPoint = deduped[deduped.length - 1];
+        setLiveTick((prev) => ({ price: lastPoint.value, dir: null, n: prev.n }));
+        chartRef.current?.timeScale().fitContent();
+      } catch (e) {
+        // Chart/series disposed mid-fetch — nothing to draw into anymore.
+        return;
+      }
       setStatus('ready');
       return;
     }

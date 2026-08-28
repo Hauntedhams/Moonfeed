@@ -8,7 +8,18 @@
          failures (e.g. an old WebView that can't run the bundle). -->
     <script>
       (function () {
+        // Only take over the whole screen for errors during the initial boot
+        // window — once the app has been running a few seconds, a stray
+        // runtime error (e.g. a chart race condition) shouldn't nuke the UI
+        // the user is actively using. Still logged to the console either way.
+        var bootWindowPassed = false;
+        setTimeout(function () { bootWindowPassed = true; }, 6000);
+
         function show(title, detail) {
+          if (bootWindowPassed) {
+            console.error(title, detail);
+            return;
+          }
           try {
             var el = document.getElementById('startup-error');
             if (!el) {
