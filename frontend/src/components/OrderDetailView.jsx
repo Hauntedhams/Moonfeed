@@ -20,6 +20,14 @@ const formatUsd = (n) => {
 function OrderDetailView({ order, walletAddress, solUsdPrice = 150, cancelling, onCancel, onBack, jupiterLink }) {
   const [entryPriceUsd, setEntryPriceUsd] = useState(null);
   const [entryTime, setEntryTime] = useState(null);
+  const [refocusSignal, setRefocusSignal] = useState(0);
+
+  // Hide the feed's floating buttons (comment, transactions, swipe hint, etc.)
+  // while this full-screen chart is open.
+  useEffect(() => {
+    document.body.classList.add('odv-open');
+    return () => document.body.classList.remove('odv-open');
+  }, []);
 
   useEffect(() => {
     if (!walletAddress || !order?.tokenMint) { setEntryPriceUsd(null); setEntryTime(null); return; }
@@ -111,7 +119,23 @@ function OrderDetailView({ order, walletAddress, solUsdPrice = 150, cancelling, 
             targetPrice={triggerPriceUsd}
             targetLabel={`${isSell ? 'Sell' : 'Buy'} target ${formatUsd(triggerPriceUsd)}`}
             targetColor={isSell ? '#ef5350' : '#26a69a'}
+            focusTimelineFrom={entryTime ? entryTime * 1000 : null}
+            refocusSignal={refocusSignal}
           />
+          {entryTime && (
+            <button
+              className="odv-recenter-btn"
+              onClick={() => setRefocusSignal((n) => n + 1)}
+              title="Show buy-in & target on chart"
+              aria-label="Show buy-in & target on chart"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="7" />
+                <line x1="21" y1="21" x2="16.6" y2="16.6" />
+              </svg>
+              View entry &amp; target
+            </button>
+          )}
         </div>
 
         <div className="odv-prices">

@@ -4,6 +4,11 @@ import WalletPopup from './WalletPopup';
 import { WalletChip } from '../utils/walletIdentity';
 import './TopTradersList.css';
 
+// Remembers each coin's scroll position across opens/closes (and even a full
+// remount) so tapping a wallet to view its profile and coming back drops the
+// user back at the same row instead of resetting to the top.
+const scrollPositions = new Map();
+
 const TopTradersList = ({ coinAddress, isExpanded, isOpen = true, previewLimit = 3, onWalletClick = null }) => {
   const [traders, setTraders] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -12,6 +17,7 @@ const TopTradersList = ({ coinAddress, isExpanded, isOpen = true, previewLimit =
   const [selectedWallet, setSelectedWallet] = useState(null);
   const [selectedTraderData, setSelectedTraderData] = useState(null);
   const loadingRef = useRef(false); // Prevent duplicate calls
+  const scrollWindowRef = useRef(null);
 
   // Load top traders only when card is expanded
   useEffect(() => {
@@ -128,6 +134,20 @@ const TopTradersList = ({ coinAddress, isExpanded, isOpen = true, previewLimit =
     }
   };
 
+  // Restore the saved scroll position once the list is open and populated —
+  // e.g. after tapping a wallet's profile and coming back.
+  useEffect(() => {
+    if (!isOpen || !traders.length) return;
+    const saved = scrollPositions.get(coinAddress);
+    if (saved && scrollWindowRef.current) {
+      scrollWindowRef.current.scrollTop = saved;
+    }
+  }, [isOpen, traders.length, coinAddress]);
+
+  const handleScrollWindowScroll = (e) => {
+    scrollPositions.set(coinAddress, e.currentTarget.scrollTop);
+  };
+
   const formatWallet = (wallet) => {
     if (!wallet) return 'Unknown';
     // Short format: F8..dt (2 chars + .. + 2 chars)
@@ -203,7 +223,7 @@ const TopTradersList = ({ coinAddress, isExpanded, isOpen = true, previewLimit =
               <div className="col-sell">Sell</div>
               <div className="col-pnl">PnL</div>
             </div>
-            <div className="traders-scroll-window">
+            <div className="traders-scroll-window" ref={scrollWindowRef} onScroll={handleScrollWindowScroll}>
               {visibleTraders.map((trader, index) => (
                 <div key={trader.wallet || index} className="table-row">
                   <div className="col-rank">#{index + 1}</div>

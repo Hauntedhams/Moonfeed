@@ -188,9 +188,88 @@ body.wpv-open .coin-buy-swipe-hotzone {
   display: none !important;
 }
 
+/* Also hide the feed's floating chart action cluster (upload/full-chart/expand) —
+   it's position:fixed and would otherwise bleed through here too. A Follow
+   button next to the address chip replaces the "expand" action for this page. */
+body.wpv-open .native-chart-mobile-right-actions {
+  display: none !important;
+}
+
+.wpv-addr-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 /* Stats sit in the name/bio slot — tighten spacing to match ProfileView rhythm */
 .wpv-metrics--inheader {
   padding: 14px 0 4px;
+}
+
+/* Tapping Trades/Tokens/Win Rate opens the full analytics modal */
+.pv-ig-stats--clickable {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.wpv-analytics-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 4200;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(3, 7, 16, 0.55);
+  backdrop-filter: blur(8px);
+}
+
+.wpv-analytics-modal {
+  width: 100%;
+  max-height: 80dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background: #0e1426;
+  border-radius: 20px 20px 0 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: none;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+html:not(.dark-mode) .wpv-analytics-modal {
+  background: #ffffff;
+}
+
+.wpv-analytics-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 18px;
+  font-size: 15px;
+  font-weight: 800;
+  background: inherit;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+html:not(.dark-mode) .wpv-analytics-header {
+  border-bottom-color: rgba(0, 0, 0, 0.08);
+}
+
+.wpv-analytics-close {
+  width: 30px;
+  height: 30px;
+  border: none;
+  background: none;
+  color: inherit;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
 }
 
 .wpv-track-btn {
@@ -368,6 +447,10 @@ html:not(.dark-mode) .wpv-copy-untrack {
 html:not(.dark-mode) .wpv-chart-identity-name {
   background: rgba(255, 255, 255, 0.75);
   color: #111;
+}
+
+.wpv-chart-identity-name--clickable {
+  cursor: pointer;
 }
 
 /* Same green/red as the chart's own up/down candles, so the badge reads as

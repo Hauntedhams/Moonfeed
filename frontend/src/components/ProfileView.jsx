@@ -786,7 +786,7 @@ const ProfileView = ({ onTradeClick }) => {
           </p>
         )}
 
-        {profileSaveError && <p className="pv-ig-save-error">⚠️ {profileSaveError}</p>}
+        {profileSaveError && <p className="pv-ig-save-error">{profileSaveError}</p>}
 
         <div className="pv-ig-actions">
           <button className="pv-ig-btn pv-ig-btn--edit" onClick={() => setEditingName(true)}>Edit Profile</button>
@@ -936,7 +936,7 @@ const ProfileView = ({ onTradeClick }) => {
               </div>
             ) : ordersError ? (
               <div className="orders-error">
-                <p>⚠️ {ordersError}</p>
+                <p>{ordersError}</p>
                 <button onClick={fetchOrders} className="retry-btn">Retry</button>
               </div>
             ) : orders.length === 0 ? (
@@ -1089,10 +1089,10 @@ const ProfileView = ({ onTradeClick }) => {
                   
                   if (expiryParseError && expiresAtRaw) {
                     // Show that we received expiry data but couldn't parse it
-                    expiryText = '⚠️ Invalid format';
+                    expiryText = 'Invalid format';
                     expiryWarning = true;
                   } else if (isExpired) {
-                    expiryText = '⚠️ EXPIRED';
+                    expiryText = 'EXPIRED';
                     expiryWarning = true;
                   } else if (daysUntilExpiry !== null && daysUntilExpiry > 0) {
                     // Show days for expiry > 24 hours
@@ -1111,7 +1111,7 @@ const ProfileView = ({ onTradeClick }) => {
                     expiryWarning = hoursUntilExpiry === 0 && minutesUntilExpiry < 60;
                   } else if (expiresAt && !expiresAtDate) {
                     // We have expiry data but couldn't parse it
-                    expiryText = '⚠️ Parse error';
+                    expiryText = 'Parse error';
                     expiryWarning = true;
                   }
                   // else: expiryText stays as 'No expiry' (genuinely no expiry set)
@@ -1252,7 +1252,7 @@ const ProfileView = ({ onTradeClick }) => {
                         <div className="order-token">
                           <span className="token-symbol" title={tokenName}>{tokenSymbol}</span>
                           <span className={`order-type ${orderType}`}>
-                            {orderType === 'buy' ? '🟢 Buy' : '🔴 Sell'}
+                            {orderType === 'buy' ? 'Buy' : 'Sell'}
                           </span>
                         </div>
                         <div className={`order-status ${status}`}>
@@ -1275,7 +1275,6 @@ const ProfileView = ({ onTradeClick }) => {
                               boxShadow: '0 4px 15px rgba(255, 107, 107, 0.3)'
                             }}>
                               <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
-                                <span style={{ fontSize: '24px', marginRight: '10px' }}>⚠️</span>
                                 <strong style={{ fontSize: '16px' }}>ORDER EXPIRED - FUNDS LOCKED IN ESCROW</strong>
                               </div>
                               <p style={{ margin: '0 0 12px 0', fontSize: '14px', lineHeight: '1.4' }}>
@@ -1290,7 +1289,7 @@ const ProfileView = ({ onTradeClick }) => {
                                 fontFamily: 'monospace'
                               }}>
                                 <div style={{ marginBottom: '6px' }}>
-                                  <strong>🔒 Escrow Program:</strong>
+                                  <strong>Escrow Program:</strong>
                                   <br />
                                   <a 
                                     href="https://solscan.io/account/jupoNjAxXgZ4rjzxzPMP4oxduvQsQtZzyknqvzYNrNu"
@@ -1303,7 +1302,7 @@ const ProfileView = ({ onTradeClick }) => {
                                 </div>
                                 {orderId && orderId !== 'unknown' && (
                                   <div>
-                                    <strong>📦 Order Account:</strong>
+                                    <strong>Order Account:</strong>
                                     <br />
                                     <a 
                                       href={`https://solscan.io/account/${orderId}`}
@@ -1324,7 +1323,7 @@ const ProfileView = ({ onTradeClick }) => {
                                 fontSize: '13px'
                               }}>
                                 <div style={{ fontWeight: '700', marginBottom: '8px' }}>
-                                  🔧 TO RECOVER YOUR FUNDS:
+                                  TO RECOVER YOUR FUNDS:
                                 </div>
                                 <div style={{ marginBottom: '10px', lineHeight: '1.5' }}>
                                   <strong>Option 1:</strong> Click the "Cancel Order" button below
@@ -1350,13 +1349,13 @@ const ProfileView = ({ onTradeClick }) => {
                                         border: '1px solid rgba(255, 255, 255, 0.3)'
                                       }}
                                     >
-                                      🔗 Open Jupiter Limit Orders ↗
+                                      Open Jupiter Limit Orders ↗
                                     </a>
                                   </div>
                                 </div>
                               </div>
                               <p style={{ margin: '12px 0 0 0', fontSize: '14px', fontWeight: '700', lineHeight: '1.4', textAlign: 'center' }}>
-                                ⚡ Your {estimatedValue > 0 ? `${estimatedValue.toFixed(4)} SOL` : 'funds'} won't be returned automatically - you must cancel manually!
+                                Your {estimatedValue > 0 ? `${estimatedValue.toFixed(4)} SOL` : 'funds'} won't be returned automatically - you must cancel manually!
                               </p>
                             </div>
                           )}
@@ -1373,7 +1372,6 @@ const ProfileView = ({ onTradeClick }) => {
                               alignItems: 'flex-start',
                               gap: '12px'
                             }}>
-                              <div style={{ fontSize: '24px', flexShrink: 0 }}>🔒</div>
                               <div style={{ flex: 1 }}>
                                 <div style={{ 
                                   fontSize: '14px', 
@@ -1410,7 +1408,7 @@ const ProfileView = ({ onTradeClick }) => {
                                       fontWeight: '500'
                                     }}
                                   >
-                                    📋 View Escrow Program ↗
+                                    View Escrow Program ↗
                                   </a>
                                   {orderId && orderId !== 'unknown' && (
                                     <a 
@@ -1426,7 +1424,7 @@ const ProfileView = ({ onTradeClick }) => {
                                         fontWeight: '500'
                                       }}
                                     >
-                                      📦 View Order Account ↗
+                                      View Order Account ↗
                                     </a>
                                   )}
                                 </div>
@@ -1440,7 +1438,7 @@ const ProfileView = ({ onTradeClick }) => {
                                   lineHeight: '1.6'
                                 }}>
                                   <div style={{ marginBottom: '6px' }}>
-                                    <strong>ℹ️ Important:</strong> If this order expires, your funds will remain in escrow. You must manually cancel the order to retrieve them.
+                                    <strong>Important:</strong> If this order expires, your funds will remain in escrow. You must manually cancel the order to retrieve them.
                                   </div>
                                   <div style={{ 
                                     display: 'flex', 
@@ -1468,7 +1466,7 @@ const ProfileView = ({ onTradeClick }) => {
                                         gap: '4px'
                                       }}
                                     >
-                                      🔗 Jupiter Interface ↗
+                                      Jupiter Interface ↗
                                     </a>
                                   </div>
                                 </div>
@@ -1491,7 +1489,7 @@ const ProfileView = ({ onTradeClick }) => {
                                     marginTop: '2px',
                                     fontWeight: '600'
                                   }}>
-                                    ✓ Live Price
+                                    Live Price
                                   </div>
                                 )}
                                 {order.currentPriceSource === 'fallback-trigger' && (
@@ -1501,7 +1499,7 @@ const ProfileView = ({ onTradeClick }) => {
                                     marginTop: '2px',
                                     fontWeight: '600'
                                   }} title="Price API unavailable - showing trigger price">
-                                    ⚠️ Using Trigger
+                                    Using Trigger
                                   </div>
                                 )}
                               </div>
@@ -1537,7 +1535,6 @@ const ProfileView = ({ onTradeClick }) => {
                           {/* Order Details Grid */}
                           <div className="order-details-grid">
                             <div className="detail-card">
-                              <div className="detail-icon">💰</div>
                               <div className="detail-content">
                                 <div className="detail-label">Amount</div>
                                 <div className="detail-value-large">
@@ -1550,7 +1547,6 @@ const ProfileView = ({ onTradeClick }) => {
                             </div>
                             
                             <div className="detail-card">
-                              <div className="detail-icon">⏱️</div>
                               <div className="detail-content">
                                 <div className="detail-label">Created</div>
                                 <div className="detail-value-large">{timeAgo}</div>
@@ -1558,7 +1554,6 @@ const ProfileView = ({ onTradeClick }) => {
                             </div>
                             
                             <div className="detail-card">
-                              <div className="detail-icon">⏰</div>
                               <div className="detail-content">
                                 <div className="detail-label">Expires In</div>
                                 <div className={`detail-value-large ${expiryWarning ? 'expiry-warning' : ''}`} style={{
@@ -1571,7 +1566,6 @@ const ProfileView = ({ onTradeClick }) => {
                             </div>
                             
                             <div className="detail-card">
-                              <div className="detail-icon">💵</div>
                               <div className="detail-content">
                                 <div className="detail-label">Est. Value</div>
                                 <div className="detail-value-large">
@@ -1584,19 +1578,16 @@ const ProfileView = ({ onTradeClick }) => {
                           {/* Additional Info */}
                           <div className="order-additional-info">
                             <div className="info-row">
-                              <span className="info-icon">📅</span>
                               <span className="info-text">Created on {formatDate(createdAt)}</span>
                             </div>
                             {orderId && orderId !== 'unknown' && (
                               <div className="info-row">
-                                <span className="info-icon">🔑</span>
                                 <span className="info-text">Order ID: {orderId.slice(0, 8)}...{orderId.slice(-6)}</span>
                               </div>
                             )}
                             {/* Transaction Signatures with Solscan Links */}
                             {order.createTxSignature && (
                               <div className="info-row">
-                                <span className="info-icon">📝</span>
                                 <span className="info-text">
                                   Create TX:{' '}
                                   <a 
@@ -1613,7 +1604,6 @@ const ProfileView = ({ onTradeClick }) => {
                             )}
                             {order.updateTxSignature && (
                               <div className="info-row">
-                                <span className="info-icon">🔄</span>
                                 <span className="info-text">
                                   Update TX:{' '}
                                   <a 
@@ -1648,10 +1638,10 @@ const ProfileView = ({ onTradeClick }) => {
                               } : {}}
                             >
                               {cancellingOrder === orderId 
-                                ? '⏳ Cancelling...' 
+                                ? 'Cancelling...' 
                                 : isExpired 
-                                  ? '⚡ CANCEL & RETRIEVE FUNDS' 
-                                  : '🗑️ Cancel Order'}
+                                  ? 'CANCEL & RETRIEVE FUNDS' 
+                                  : 'Cancel Order'}
                             </button>
                             
                             {/* Always show Jupiter link as backup option */}
@@ -1703,7 +1693,6 @@ const ProfileView = ({ onTradeClick }) => {
                               boxShadow: '0 4px 12px rgba(255, 107, 107, 0.3)'
                             }}>
                               <div style={{ marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                                <span style={{ fontSize: '16px' }}>⚠️</span>
                                 <span>This order expired - Retrieve your funds now!</span>
                               </div>
                               <div style={{ fontSize: '11px', opacity: 0.9, marginBottom: '12px', lineHeight: '1.4' }}>
@@ -1741,7 +1730,7 @@ const ProfileView = ({ onTradeClick }) => {
                                     e.target.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
                                   }}
                                 >
-                                  {cancellingOrder === orderId ? '⏳ Cancelling...' : '💰 Cancel & Retrieve'}
+                                  {cancellingOrder === orderId ? 'Cancelling...' : 'Cancel & Retrieve'}
                                 </button>
                                 <a
                                   href={`https://jup.ag/limit/${publicKey?.toString() || ''}`}
@@ -2045,9 +2034,9 @@ const ProfileView = ({ onTradeClick }) => {
                       <div className="chs-wl-bar-fill" style={{ width: `${winRate}%` }} />
                     </div>
                     <div className="chs-wl-counts">
-                      <span className="chs-win-label">✅ {wins} Win{wins !== 1 ? 's' : ''}</span>
+                      <span className="chs-win-label">{wins} Win{wins !== 1 ? 's' : ''}</span>
                       <span className="chs-wl-rate">{winRate}% Win Rate</span>
-                      <span className="chs-loss-label">{losses} Loss{losses !== 1 ? 'es' : ''} ❌</span>
+                      <span className="chs-loss-label">{losses} Loss{losses !== 1 ? 'es' : ''}</span>
                     </div>
                   </>
                 ) : (

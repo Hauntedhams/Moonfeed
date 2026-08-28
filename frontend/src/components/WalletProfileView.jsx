@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { getFullApiUrl, fetchJsonWithTimeout } from '../config/api';
 import { useTrackedWallets } from '../contexts/TrackedWalletsContext';
 import NativeChart from './NativeChart';
@@ -165,12 +165,27 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
   const [statsError, setStatsError] = useState(null);
   const [coins, setCoins] = useState([]);
   const [coinsLoading, setCoinsLoading] = useState(true);
+  const [showAnalyticsModal, setShowAnalyticsModal] = useState(false);
   const { trackWallet, untrackWallet, isTracked, trackedWallets, toggleCopyTrade } = useTrackedWallets();
   const [tracked, setTracked] = useState(false);
   const [copyHintDismissed, setCopyHintDismissed] = useState(false);
   const [showChartInfo, setShowChartInfo] = useState(false);
   const [chartPosition, setChartPosition] = useState(null);
   const [chartPrice, setChartPrice] = useState(null);
+  // A fast mobile swipe fires the chart's crosshair callback dozens of times a
+  // second — coalesce those into at most one state update (and re-render) per
+  // animation frame instead of one per touch-move event.
+  const pendingChartPointRef = useRef(null);
+  const chartPriceRafRef = useRef(false);
+  const handleChartCrosshairMove = useCallback((point) => {
+    pendingChartPointRef.current = point;
+    if (chartPriceRafRef.current) return;
+    chartPriceRafRef.current = true;
+    requestAnimationFrame(() => {
+      chartPriceRafRef.current = false;
+      setChartPrice(pendingChartPointRef.current?.price ?? null);
+    });
+  }, []);
 
   useEffect(() => {
     setTracked(isTracked(walletAddress));
@@ -328,7 +343,11 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
               <AnimalSilhouetteAvatar address={walletAddress} />
             </div>
           </div>
-          <div className="pv-ig-stats">
+          <button
+            className="pv-ig-stats pv-ig-stats--clickable"
+            onClick={() => setShowAnalyticsModal(true)}
+            title="View full wallet analytics"
+          >
             <div className="pv-ig-stat">
               <span className="pv-ig-stat-num">{statsLoading ? '—' : formatNumber(trading.totalTrades)}</span>
               <span className="pv-ig-stat-label">Trades</span>
@@ -341,18 +360,23 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
               <span className="pv-ig-stat-num">{statsLoading ? '—' : formatPercent(stats?.winRate)}</span>
               <span className="pv-ig-stat-label">Win Rate</span>
             </div>
-          </div>
+          </button>
         </div>
 
-        <a
-          className="pv-ig-addr-chip"
-          href={`https://solscan.io/account/${walletAddress}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          title="View on Solscan"
-        >
-          {shortAddr(walletAddress)} ↗
-        </a>
+        <div className="wpv-addr-row">
+          <a
+            className="pv-ig-addr-chip"
+            href={`https://solscan.io/account/${walletAddress}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="View on Solscan"
+          >
+            {shortAddr(walletAddress)} ↗
+          </a>
+          <button className="wpv-fast-follow" onClick={handleTrackWallet} disabled={tracked}>
+            {tracked ? 'Tracked' : 'Follow'}
+          </button>
+        </div>
 
         {chartCoin && (
           <div className="wpv-chart-section">
@@ -376,7 +400,20 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
             <div className="wpv-chart-wrap">
               <div className="wpv-chart-identity-overlay">
                 <span className="wpv-chart-identity-left">
-                  <span className="wpv-chart-identity-name">{latestCoin.symbol}</span>
+                  <span
+                    className="wpv-chart-identity-name wpv-chart-identity-name--clickable"
+                    onClick={() => onCoinClick?.({
+                      mintAddress: latestCoin.mint,
+                      address: latestCoin.mint,
+                      symbol: latestCoin.symbol,
+                      name: latestCoin.name || latestCoin.symbol,
+                      image: latestCoin.image,
+                    })}
+                    role="button"
+                    title="View coin"
+                  >
+                    {latestCoin.symbol}
+                  </span>
                   {Number.isFinite(coinPnl) && (
                     <span className={`wpv-chart-roi-badge ${coinPnl >= 0 ? 'pos' : 'neg'}`}>
                       {formatCurrency(coinPnl)}
@@ -389,116 +426,13 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
                 isActive={true}
                 isExpanded={true}
                 markers={chartMarkers}
-                onCrosshairMove={(point) => setChartPrice(point?.price ?? null)}
+                onCrosshairMove={handleChartCrosshairMove}
               />
               <div className="wpv-chart-caption">
                 {latestCoin.symbol} — {latestCoin.type === 'sell' ? 'last sold' : 'last bought'} {timeAgo(latestCoin.time)} ago
               </div>
             </div>
           </div>
-        )}
-
-        <div className="wpv-fast-card">
-          <div className="wpv-fast-position">
-            {coinsLoading ? (
-              <div className="wpv-fast-skeleton">
-                <span />
-                <span />
-                <span />
-              </div>
-            ) : latestCoin ? (
-              <>
-                <div className="wpv-fast-section-title">Most Recent Trade</div>
-                <div
-                  className="wpv-fast-token-row wpv-fast-token-row--clickable"
-                  onClick={() => onCoinClick?.({
-                    mintAddress: latestCoin.mint,
-                    address: latestCoin.mint,
-                    symbol: latestCoin.symbol,
-                    name: latestCoin.name || latestCoin.symbol,
-                    image: latestCoin.image,
-                  })}
-                  role="button"
-                  title="View coin"
-                >
-                  {latestCoin.image ? (
-                    <img className="wpv-fast-token-img" src={latestCoin.image} alt={latestCoin.symbol} onError={(e) => { e.target.style.display = 'none'; }} />
-                  ) : (
-                    <div className="wpv-fast-token-img wpv-fast-token-img--ph" style={{ background: gradientFor(latestCoin.mint) }}>
-                      {(latestCoin.symbol || '?').slice(0, 2)}
-                    </div>
-                  )}
-                  <div className="wpv-fast-token-copy">
-                    <span className="wpv-fast-token-symbol">{latestCoin.symbol}</span>
-                    <span className="wpv-fast-token-meta">
-                      {latestCoin.type === 'sell' ? 'Closed' : 'Opened'} {timeAgo(latestCoin.time)} ago
-                    </span>
-                  </div>
-                  <span className={`wpv-fast-side wpv-fast-side--${latestCoin.type}`}>{latestCoin.type === 'sell' ? 'Sell' : 'Buy'}</span>
-                </div>
-              </>
-            ) : (
-              <div className="wpv-fast-empty">No recent wallet trades yet</div>
-            )}
-          </div>
-        </div>
-
-        {/* Statistics occupy the name/bio slot of the profile layout */}
-        {statsLoading ? (
-          <div className="wpv-metrics-loading">
-            <div className="wpv-spinner" />
-            <span>Loading analytics…</span>
-          </div>
-        ) : stats ? (
-          <div className="wpv-metrics wpv-metrics--inheader">
-            <div className="wpv-metric-group">
-              <div className="wpv-metric-group-title">Performance</div>
-              <div className="wpv-metric-grid">
-                <div className="wpv-metric">
-                  <span className="wpv-metric-label">Realized PnL</span>
-                  <span className={`wpv-metric-value ${(pnl.realized ?? 0) >= 0 ? 'pos' : 'neg'}`}>{formatCurrency(pnl.realized)}</span>
-                </div>
-                <div className="wpv-metric">
-                  <span className="wpv-metric-label">Win Rate</span>
-                  <span className="wpv-metric-value">{formatPercent(stats.winRate)}</span>
-                </div>
-                <div className="wpv-metric">
-                  <span className="wpv-metric-label">ROI</span>
-                  <span className={`wpv-metric-value ${(stats.roi ?? 0) >= 0 ? 'pos' : 'neg'}`}>{formatPercent(stats.roi)}</span>
-                </div>
-                <div className="wpv-metric">
-                  <span className="wpv-metric-label">Avg Hold</span>
-                  <span className="wpv-metric-value">{formatHold(stats.avgHoldTimeSecs)}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="wpv-metric-group">
-              <div className="wpv-metric-group-title">PnL Overview</div>
-              <div className="wpv-metric-grid">
-                <div className="wpv-metric">
-                  <span className="wpv-metric-label">Invested</span>
-                  <span className="wpv-metric-value">{formatCurrency(pnl.invested)}</span>
-                </div>
-                <div className="wpv-metric">
-                  <span className="wpv-metric-label">Proceeds</span>
-                  <span className="wpv-metric-value">{formatCurrency(pnl.proceeds)}</span>
-                </div>
-                <div className="wpv-metric">
-                  <span className="wpv-metric-label">Unrealized</span>
-                  <span className={`wpv-metric-value ${(pnl.unrealized ?? 0) >= 0 ? 'pos' : 'neg'}`}>{formatCurrency(pnl.unrealized)}</span>
-                </div>
-                <div className="wpv-metric">
-                  <span className="wpv-metric-label">Open / Closed</span>
-                  <span className="wpv-metric-value">{formatNumber(trading.activePositions)} / {formatNumber(trading.closedPositions)}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : null}
-
-        {statsError && !statsLoading && (
-          <div className="wpv-error">Couldn't load full analytics for this wallet.</div>
         )}
 
         {/* Actions row — mirrors ProfileView's Edit/Disconnect row */}
@@ -587,6 +521,81 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
       </div>
 
       <div className="wpv-footer">Data from Solana Tracker</div>
+
+      {/* Full wallet analytics — opened by tapping the Trades/Tokens/Win Rate stats. */}
+      {showAnalyticsModal && (
+        <div className="wpv-analytics-backdrop" onClick={() => setShowAnalyticsModal(false)}>
+          <div className="wpv-analytics-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="wpv-analytics-header">
+              <span>Wallet Analytics</span>
+              <button
+                className="wpv-analytics-close"
+                onClick={() => setShowAnalyticsModal(false)}
+                title="Close"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            {statsLoading ? (
+              <div className="wpv-metrics-loading">
+                <div className="wpv-spinner" />
+                <span>Loading analytics…</span>
+              </div>
+            ) : stats ? (
+              <div className="wpv-metrics">
+                <div className="wpv-metric-group">
+                  <div className="wpv-metric-group-title">Performance</div>
+                  <div className="wpv-metric-grid">
+                    <div className="wpv-metric">
+                      <span className="wpv-metric-label">Realized PnL</span>
+                      <span className={`wpv-metric-value ${(pnl.realized ?? 0) >= 0 ? 'pos' : 'neg'}`}>{formatCurrency(pnl.realized)}</span>
+                    </div>
+                    <div className="wpv-metric">
+                      <span className="wpv-metric-label">Win Rate</span>
+                      <span className="wpv-metric-value">{formatPercent(stats.winRate)}</span>
+                    </div>
+                    <div className="wpv-metric">
+                      <span className="wpv-metric-label">ROI</span>
+                      <span className={`wpv-metric-value ${(stats.roi ?? 0) >= 0 ? 'pos' : 'neg'}`}>{formatPercent(stats.roi)}</span>
+                    </div>
+                    <div className="wpv-metric">
+                      <span className="wpv-metric-label">Avg Hold</span>
+                      <span className="wpv-metric-value">{formatHold(stats.avgHoldTimeSecs)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="wpv-metric-group">
+                  <div className="wpv-metric-group-title">PnL Overview</div>
+                  <div className="wpv-metric-grid">
+                    <div className="wpv-metric">
+                      <span className="wpv-metric-label">Invested</span>
+                      <span className="wpv-metric-value">{formatCurrency(pnl.invested)}</span>
+                    </div>
+                    <div className="wpv-metric">
+                      <span className="wpv-metric-label">Proceeds</span>
+                      <span className="wpv-metric-value">{formatCurrency(pnl.proceeds)}</span>
+                    </div>
+                    <div className="wpv-metric">
+                      <span className="wpv-metric-label">Unrealized</span>
+                      <span className={`wpv-metric-value ${(pnl.unrealized ?? 0) >= 0 ? 'pos' : 'neg'}`}>{formatCurrency(pnl.unrealized)}</span>
+                    </div>
+                    <div className="wpv-metric">
+                      <span className="wpv-metric-label">Open / Closed</span>
+                      <span className="wpv-metric-value">{formatNumber(trading.activePositions)} / {formatNumber(trading.closedPositions)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {statsError && !statsLoading && (
+              <div className="wpv-error">Couldn't load full analytics for this wallet.</div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

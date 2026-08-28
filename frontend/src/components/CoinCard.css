@@ -643,6 +643,37 @@
   pointer-events: none;
 }
 
+/* Resets the target price/step/expiry/amount without closing the drawer —
+   sits over the top-right corner of the chart, which order mode leaves visible/pannable. */
+.coin-buy-order-reset-btn {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 14px);
+  right: 14px;
+  z-index: 9985;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 20px;
+  background: rgba(10, 14, 26, 0.78);
+  backdrop-filter: blur(8px);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.coin-buy-order-reset-btn:active {
+  background: rgba(30, 41, 59, 0.9);
+}
+
+html:not(.dark-mode) .coin-buy-order-reset-btn {
+  background: rgba(255, 255, 255, 0.85);
+  border-color: rgba(0, 0, 0, 0.1);
+  color: #111;
+}
+
 .coin-buy-drawer {
   position: fixed;
   top: 80px;

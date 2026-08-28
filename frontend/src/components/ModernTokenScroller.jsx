@@ -1134,7 +1134,7 @@ const ModernTokenScroller = ({
   // Handle favorite toggle
   // useCallback keeps this reference stable across renders so it doesn't
   // defeat CoinCard's React.memo for every mounted (off-screen) card.
-  const handleFavoriteToggle = useCallback((coin) => {
+  const handleFavoriteToggle = useCallback((coin, priceAtToggle) => {
     if (!walletConnected) {
       openWalletConnect();
       return;
@@ -1156,7 +1156,10 @@ const ModernTokenScroller = ({
       );
       console.log('🔥 Removing from favorites, new count:', newFavorites.length);
     } else {
-      newFavorites = [...favorites, { ...coin, savedAt: Date.now() }];
+      // Stamp the exact price shown on the card at the moment of tracking —
+      // more reliable than re-deriving it later from a possibly-stale coin.price_usd.
+      const trackedAtPrice = Number(priceAtToggle) || Number(coin.price_usd) || Number(coin.priceUsd) || Number(coin.price) || 0;
+      newFavorites = [...favorites, { ...coin, savedAt: Date.now(), trackedAtPrice }];
       console.log('🔥 Adding to favorites, new count:', newFavorites.length);
     }
     
@@ -1232,6 +1235,16 @@ const ModernTokenScroller = ({
       (fav.mintAddress || fav.tokenAddress) === (coin.mintAddress || coin.tokenAddress)
     );
   };
+
+  // The price the coin was tracked at lives on the favorites entry (persisted
+  // to the account), not on the feed's own coin object — look it up so it
+  // survives remounts/reloads instead of relying on local component state.
+  const getTrackedAtPrice = (coin) => {
+    const fav = favorites.find(f =>
+      (f.mintAddress || f.tokenAddress) === (coin.mintAddress || coin.tokenAddress)
+    );
+    return Number(fav?.trackedAtPrice) || 0;
+  };
   
   // Get DexScreener chart for current and nearby coins
   const renderCoinWithChart = (coin, index) => {
@@ -1269,6 +1282,7 @@ const ModernTokenScroller = ({
         <CoinCard
           coin={enrichedCoin}
           isFavorite={isFavorite(coin)}
+          trackedAtPrice={getTrackedAtPrice(coin)}
           onFavoriteToggle={handleFavoriteToggle}
           onTradeClick={onTradeClick}
           onWalletClick={onWalletClick}

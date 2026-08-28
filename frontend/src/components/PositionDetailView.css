@@ -6,6 +6,16 @@ body.pdv-open .coin-buy-swipe-hotzone {
   display: none !important;
 }
 
+/* Hide the feed's floating action buttons (comment, transactions, etc.) while
+   the position detail chart is open so nothing distracts from/overlaps it. */
+body.pdv-open .tiktok-action-buttons {
+  display: none !important;
+}
+
+body.pdv-open .native-chart-mobile-right-actions {
+  display: none !important;
+}
+
 .pdv-backdrop {
   position: fixed;
   inset: 0;

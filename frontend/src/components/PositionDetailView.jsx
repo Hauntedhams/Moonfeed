@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getFullApiUrl, fetchJsonWithTimeout } from '../config/api';
 import NativeChart from './NativeChart';
 import { AnimalSilhouetteAvatar, buildWalletName, gradientForWallet, shortWalletAddress } from '../utils/walletIdentity';
@@ -48,6 +48,19 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [chartPrice, setChartPrice] = useState(null);
+  // Coalesce the chart's crosshair callback (fires dozens of times/sec during a
+  // fast swipe) into at most one state update per animation frame.
+  const pendingChartPointRef = useRef(null);
+  const chartPriceRafRef = useRef(false);
+  const handleChartCrosshairMove = useCallback((point) => {
+    pendingChartPointRef.current = point;
+    if (chartPriceRafRef.current) return;
+    chartPriceRafRef.current = true;
+    requestAnimationFrame(() => {
+      chartPriceRafRef.current = false;
+      setChartPrice(pendingChartPointRef.current?.price ?? null);
+    });
+  }, []);
 
   // Hide the feed's fixed-position buy-drawer swipe hint while this full-screen
   // overlay is open — it would otherwise bleed through on top of it.
@@ -130,9 +143,34 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
   const chartCoin = mint ? { mintAddress: mint } : null;
   const displayName = profileHint?.displayName || profileHint?.name || buildWalletName(walletAddress);
 
+  // Swipe right anywhere on the page (except the interactive chart, which owns
+  // its own horizontal drag-to-pan) opens this wallet's full profile.
+  const swipeStartRef = useRef(null);
+  const handleSwipeTouchStart = (e) => {
+    if (e.target.closest?.('.native-chart')) { swipeStartRef.current = null; return; }
+    const t = e.touches?.[0];
+    swipeStartRef.current = t ? { x: t.clientX, y: t.clientY } : null;
+  };
+  const handleSwipeTouchEnd = (e) => {
+    const start = swipeStartRef.current;
+    swipeStartRef.current = null;
+    const t = e.changedTouches?.[0];
+    if (!start || !t) return;
+    const dx = t.clientX - start.x;
+    const dy = t.clientY - start.y;
+    if (dx > 70 && dx > Math.abs(dy) * 1.4) {
+      onOpenProfile?.({ displayName, ...profileHint });
+    }
+  };
+
   return (
     <div className="pdv-backdrop" onClick={onBack}>
-    <div className="pdv-root" onClick={(event) => event.stopPropagation()}>
+    <div
+      className="pdv-root"
+      onClick={(event) => event.stopPropagation()}
+      onTouchStart={handleSwipeTouchStart}
+      onTouchEnd={handleSwipeTouchEnd}
+    >
       <button className="pdv-back" onClick={onBack} title="Back" aria-label="Back">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="15 18 9 12 15 6" />
@@ -195,7 +233,7 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
           markers={markers}
           initialTfIndex={tfIndexForHold(position?.timing?.holdTimeSecs)}
           focusTimelineFrom={position?.timing?.firstBuy}
-          onCrosshairMove={(point) => setChartPrice(point?.price ?? null)}
+          onCrosshairMove={handleChartCrosshairMove}
         />
       </div>
 

@@ -82,6 +82,7 @@ const NativeChart = ({
   initialTfIndex = null,
   focusOneMinute = false,
   focusTimelineFrom = null,
+  refocusSignal = 0,
   targetPrice = null,
   targetLabel = '',
   targetColor = '#22d3ee',
@@ -110,6 +111,10 @@ const NativeChart = ({
   const displayedTargetPriceRef = useRef(null);
   // Most recent candle, kept in sync so live prices can fold into it in place.
   const lastCandleRef = useRef(null);
+  // Direct DOM handle for the price badge — hover/drag scrubbing writes to this
+  // node's textContent instead of calling setState, so a fast mobile swipe
+  // doesn't force a React re-render on every touchmove tick.
+  const liveBadgeRef = useRef(null);
 
   const [tfIndex, setTfIndex] = useState(initialTfIndex ?? DEFAULT_TF_INDEX);
   const [status, setStatus] = useState('idle'); // idle | loading | ready | empty | error
@@ -229,7 +234,8 @@ const NativeChart = ({
   // crosshair, and scrub the chart's own price badge to match — so hovering
   // or dragging through the chart shows the price at that point in time the
   // same way every other chart view does. Clearing the pointer restores the
-  // live/last-candle price.
+  // live/last-candle price. Written directly to the DOM (not React state) so
+  // a fast mobile swipe doesn't trigger a re-render on every touchmove.
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return undefined;
@@ -239,11 +245,11 @@ const NativeChart = ({
       const price = Number(candle?.close ?? candle?.value);
       if (param.time && Number.isFinite(price) && price > 0) {
         onCrosshairMove?.({ price, time: param.time });
-        setLiveTick((prev) => ({ price, dir: null, n: prev.n }));
+        if (liveBadgeRef.current) liveBadgeRef.current.textContent = formatPrice(price);
       } else {
         onCrosshairMove?.(null);
         const last = lastCandleRef.current;
-        setLiveTick((prev) => ({ price: last ? last.close : prev.price, dir: null, n: prev.n }));
+        if (liveBadgeRef.current && last) liveBadgeRef.current.textContent = formatPrice(last.close);
       }
     };
     chart.subscribeCrosshairMove(handleMove);
@@ -421,6 +427,8 @@ const NativeChart = ({
   // price action visible and scrollable instead of always fitting all history.
   // The entry sits ~20% in from the left edge (proportional to the total span)
   // rather than jammed against it with only a fixed few-candle buffer.
+  // `refocusSignal` lets a caller re-run this on demand (e.g. a "recenter"
+  // button) after the user has panned/zoomed away from the entry point.
   useEffect(() => {
     const chart = chartRef.current;
     const last = lastCandleRef.current;
@@ -440,7 +448,35 @@ const NativeChart = ({
       // The selected timeframe may not retain an old entry candle; fitContent
       // from load() remains a useful fallback until the user changes timeframe.
     }
-  }, [focusTimelineFrom, status, tfIndex]);
+  }, [focusTimelineFrom, status, tfIndex, refocusSignal]);
+
+  // Keep the price axis wide enough to always include the entry/target lines
+  // (e.g. a placed order's buy-in and trigger price), not just the candles
+  // currently in view. Order-placement mode (focusOneMinute) has its own
+  // animated version of this, so this one steps aside for that.
+  useEffect(() => {
+    const series = seriesRef.current;
+    if (!series || focusOneMinute || status !== 'ready') return undefined;
+    const entry = Number(entryPrice);
+    const target = Number(targetPrice);
+    if (!(entry > 0) && !(target > 0)) return undefined;
+
+    const autoscaleInfoProvider = (original) => {
+      const baseInfo = original();
+      const baseRange = baseInfo?.priceRange;
+      if (!baseRange) return baseInfo;
+      let min = baseRange.minValue;
+      let max = baseRange.maxValue;
+      if (entry > 0) { min = Math.min(min, entry); max = Math.max(max, entry); }
+      if (target > 0) { min = Math.min(min, target); max = Math.max(max, target); }
+      const pad = (max - min) * 0.12 || max * 0.05;
+      return { ...baseInfo, priceRange: { minValue: Math.max(0, min - pad), maxValue: max + pad } };
+    };
+    try { series.applyOptions({ autoscaleInfoProvider }); } catch (_) { /* chart disposed */ }
+    return () => {
+      try { series.applyOptions({ autoscaleInfoProvider: undefined }); } catch (_) { /* chart disposed */ }
+    };
+  }, [focusOneMinute, status, entryPrice, targetPrice, refocusSignal]);
 
   // Overlay caller-supplied markers (e.g. buy/sell points) once real candles are in.
   // v5 moved markers off the series onto a plugin, so keep the primitive around.
@@ -779,7 +815,7 @@ const NativeChart = ({
     <div className={`native-chart ${isDarkMode ? 'dark' : 'light'} ${isExpanded ? 'expanded' : ''} ${focusOneMinute ? 'order-focus' : ''}`}>
       <div className="native-chart-tfs">
         {liveTick.price != null && (
-          <span key={liveTick.n} className={`native-chart-live ${liveTick.dir || ''}`}>
+          <span key={liveTick.n} ref={liveBadgeRef} className={`native-chart-live ${liveTick.dir || ''}`}>
             {formatPrice(liveTick.price)}
           </span>
         )}

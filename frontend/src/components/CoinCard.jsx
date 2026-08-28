@@ -74,6 +74,7 @@ function formatCompactNumber(num) {
 const CoinCard = memo(({ 
   coin, 
   isFavorite, 
+  trackedAtPrice = 0, // Persisted price captured when this coin was tracked (survives remounts)
   onFavoriteToggle, 
   onTradeClick, 
   onWalletClick = null, // Open a full profile page for a clicked wallet address
@@ -107,6 +108,10 @@ const CoinCard = memo(({
   const [selectedWallet, setSelectedWallet] = useState(null);
   const [showDescriptionModal, setShowDescriptionModal] = useState(false);
   const [trackedPrice, setTrackedPrice] = useState(null);
+  // Local state gives instant feedback on tap; once the persisted value (from
+  // the account's tracked-coins list) arrives it takes over so the "Tracked
+  // at" price survives reloads/remounts instead of resetting to nothing.
+  const effectiveTrackedPrice = trackedPrice || Number(trackedAtPrice) || Number(coin?.trackedAtPrice) || 0;
   const [bannerError, setBannerError] = useState(false); // Track banner image load failure
   const [profileSrcIndex, setProfileSrcIndex] = useState(0); // Index into ordered list of profile image URLs to try
   const [profileLoaded, setProfileLoaded] = useState(false); // True once the winning profile img fires onLoad
@@ -662,6 +667,18 @@ const CoinCard = memo(({
     setBuyDrawerOpen(true);
   };
 
+  // Puts the limit-order picker (target price, step multiplier, expiry, wager
+  // amount) back to its defaults without closing the drawer.
+  const resetOrderDrawer = () => {
+    const base = Number(displayPrice) || Number(fallbackPrice) || 0;
+    setBuyOrderPrice(clampBuyOrderPrice(buyDrawerOrderSide === 'sell' ? base * 1.06 : base * 0.94));
+    setOrderStepMultiplier(1);
+    setOrderExpiry('7d');
+    setOrderAmountInput('0.10');
+    setSellFundingSolInput('0.10');
+    setSellFundingUsdInput('');
+  };
+
   const orderChartFocused = buyDrawerOpen && buyDrawerMode === 'orders';
   const orderTargetPercent = displayPrice > 0 ? ((buyOrderPrice - displayPrice) / displayPrice) * 100 : 0;
 
@@ -783,6 +800,10 @@ const CoinCard = memo(({
       startY: touch.clientY,
       startAmount: buySolAmount,
       startPrice: buyOrderPrice || displayPrice || fallbackPrice || 0,
+      // Vertical drag-to-adjust the order price only engages when the gesture
+      // starts inside the price wheel itself — elsewhere on the card (chart,
+      // target-step slider, expiry buttons, etc.) must not move the target.
+      startedInPriceWheel: !!e.target?.closest?.('.coin-buy-price-wheel'),
       tracking: true,
       mode: null,
       progress: 0,
@@ -822,7 +843,7 @@ const CoinCard = memo(({
       updateBuySolAmount(nextAmount);
     }
 
-    if (buyDrawerMode === 'orders' && Math.abs(deltaY) > 4) {
+    if (buyDrawerMode === 'orders' && swipe.startedInPriceWheel && Math.abs(deltaY) > 4) {
       e.preventDefault();
       e.stopPropagation();
       const nextPrice = swipe.startPrice - deltaY * getOrderTargetStep() * 0.18;
@@ -2116,14 +2137,14 @@ const CoinCard = memo(({
                       onClick={(e) => {
                         e.stopPropagation();
                         setTrackedPrice(isFavorite ? null : displayPrice);
-                        onFavoriteToggle?.(coin);
+                        onFavoriteToggle?.(coin, displayPrice);
                       }}
                       title={isFavorite ? 'Stop tracking this coin' : 'Track this coin'}
                     >
                       <span className="follow-label">{isFavorite ? 'Tracking' : 'Track'}</span>
                     </button>
-                    {isFavorite && trackedPrice > 0 && (
-                      <span className="tracked-price">Tracked at {formatPrice(trackedPrice)}</span>
+                    {isFavorite && effectiveTrackedPrice > 0 && (
+                      <span className="tracked-price">Tracked at {formatPrice(effectiveTrackedPrice)}</span>
                     )}
                   </div>
                 </div>
@@ -2866,6 +2887,20 @@ const CoinCard = memo(({
                 aria-label="Close buy limit drawer"
                 style={buyDrawerDrag ? { opacity: buyDrawerDrag.progress, pointerEvents: 'none' } : undefined}
               />
+              {orderChartFocused && (
+                <button
+                  className="coin-buy-order-reset-btn"
+                  onClick={resetOrderDrawer}
+                  title="Reset target, expiry & amount"
+                  aria-label="Reset target, expiry & amount"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="1 4 1 10 7 10" />
+                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                  </svg>
+                  Reset
+                </button>
+              )}
               <aside
                 className={`coin-buy-drawer${buyDrawerDrag ? ' dragging' : ''}${buyDrawerDrag?.settling ? ' settling' : ''}${!buyDrawerDrag && buyDrawerInstant ? ' no-anim' : ''}`}
                 aria-label={`Trade ${coin.symbol || coin.name || 'coin'}`}
@@ -3329,7 +3364,7 @@ const CoinCard = memo(({
               <span>{coin.symbol || coin.name || 'Chart'}</span>
               <button onClick={closeNativeChartFullscreen} aria-label="Close full chart">×</button>
             </div>
-            <NativeChart coin={coin} isActive={true} isExpanded={true} livePrice={displayPrice} entryPrice={entryPrice} trackedPrice={coin.trackedAtPrice} markers={trackedMarkers} />
+            <NativeChart coin={coin} isActive={true} isExpanded={true} livePrice={displayPrice} entryPrice={entryPrice} trackedPrice={effectiveTrackedPrice} markers={trackedMarkers} />
           </div>
         </div>
       )}
@@ -3370,7 +3405,7 @@ const CoinCard = memo(({
               targetLabel={orderTargetLabel}
               targetColor={buyDrawerOrderSide === 'sell' ? '#22d3ee' : '#4ade80'}
               entryPrice={entryPrice}
-              trackedPrice={coin.trackedAtPrice}
+              trackedPrice={effectiveTrackedPrice}
               markers={trackedMarkers}
             />,
             target
