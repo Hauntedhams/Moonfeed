@@ -1,5 +1,11 @@
 /* Position Detail View — FOMO-style position sheet over the current feed. */
 
+/* The feed's fixed-position buy-drawer swipe hint would otherwise bleed
+   through on top of this full-screen overlay. */
+body.pdv-open .coin-buy-swipe-hotzone {
+  display: none !important;
+}
+
 .pdv-backdrop {
   position: fixed;
   inset: 0;

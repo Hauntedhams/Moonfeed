@@ -81,6 +81,217 @@
   animation: feed-selector-panel-expand 0.32s cubic-bezier(0.2, 0.85, 0.3, 1);
 }
 
+/* ---- Split layout: feeds on the left, that feed's coins on the right ---- */
+.feed-selector-dropdown--split {
+  width: min(680px, calc(100vw - 24px));
+  max-height: min(58dvh, 440px);
+}
+
+.feed-selector-body {
+  display: grid;
+  grid-template-columns: 128px minmax(0, 1fr);
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.feed-selector-feed-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 6px 10px;
+  border-right: 1px solid rgba(255, 255, 255, 0.09);
+  overflow-y: auto;
+}
+
+.feed-selector-feed-chip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 8px 8px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.feed-selector-feed-chip:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+}
+
+.feed-selector-feed-chip.active {
+  background: rgba(99, 102, 241, 0.2);
+  color: #fff;
+}
+
+.feed-selector-feed-chip .feed-selector-check {
+  margin-left: auto;
+  color: #4ade80;
+  flex: 0 0 auto;
+}
+
+.feed-selector-feed-chip .feed-selector-feed-label {
+  min-width: 0;
+  font-size: 0.78rem;
+  line-height: 1.2;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.feed-selector-coin-col {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.feed-selector-coin-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(18, 18, 22, 0.95);
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.feed-selector-coin-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  overflow: hidden;
+}
+
+/* Coin art blurred behind the row, same treatment as the order history cards. */
+.feed-selector-coin-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(14px) saturate(1.5);
+  transform: scale(1.15);
+  opacity: 0.5;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.feed-selector-coin-bg-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(100deg, rgba(10, 12, 20, 0.86) 0%, rgba(10, 12, 20, 0.6) 100%);
+  pointer-events: none;
+}
+
+.feed-selector-coin-row:hover .feed-selector-coin-bg {
+  opacity: 0.68;
+}
+
+.feed-selector-coin-row .feed-selector-result-img {
+  position: relative;
+  z-index: 2;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+}
+
+.feed-selector-coin-meta {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.feed-selector-coin-title {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.feed-selector-coin-title strong {
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.feed-selector-coin-title em {
+  font-style: normal;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.feed-selector-coin-title em.up { color: #4ade80; }
+.feed-selector-coin-title em.down { color: #fb7185; }
+
+.feed-selector-coin-stats {
+  display: flex;
+  gap: 5px;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 0.64rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.feed-selector-coin-stats .dot {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+/* Scrollbars tuned to the panel's palette. */
+.feed-selector-coin-col::-webkit-scrollbar,
+.feed-selector-feed-col::-webkit-scrollbar {
+  width: 6px;
+}
+
+.feed-selector-coin-col::-webkit-scrollbar-track,
+.feed-selector-feed-col::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.feed-selector-coin-col::-webkit-scrollbar-thumb,
+.feed-selector-feed-col::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+}
+
+.feed-selector-coin-col::-webkit-scrollbar-thumb:hover,
+.feed-selector-feed-col::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.26);
+}
+
+.feed-selector-coin-col,
+.feed-selector-feed-col {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+
 @keyframes feed-selector-panel-open {
   from {
     opacity: 0;

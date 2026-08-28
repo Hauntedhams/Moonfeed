@@ -72,8 +72,8 @@
 /* Column Headers */
 .table-header {
   display: grid;
-  grid-template-columns: minmax(24px, 28px) minmax(52px, 1fr) minmax(52px, 64px) minmax(52px, 64px) minmax(52px, 64px);
-  gap: 3px;
+  grid-template-columns: minmax(20px, 24px) minmax(110px, 1fr) minmax(50px, 60px) minmax(50px, 60px) minmax(58px, 72px);
+  gap: 6px;
   align-items: center;
   padding: 8px 4px 12px 4px;
   border-bottom: 2px solid rgba(0, 0, 0, 0.1);
@@ -146,10 +146,10 @@
 /* Table row - 5 clean columns layout */
 .table-row {
   display: grid;
-  grid-template-columns: minmax(24px, 28px) minmax(52px, 1fr) minmax(52px, 64px) minmax(52px, 64px) minmax(52px, 64px);
-  gap: 3px;
+  grid-template-columns: minmax(20px, 24px) minmax(110px, 1fr) minmax(50px, 60px) minmax(50px, 60px) minmax(58px, 72px);
+  gap: 6px;
   align-items: center;
-  padding: 10px 4px;
+  padding: 14px 4px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.06);
   transition: all 0.2s ease;
 }
@@ -185,61 +185,56 @@
   font-size: 0.7rem;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 /* Clickable wallet styling */
 .col-wallet.clickable {
   cursor: pointer;
   transition: all 0.2s ease;
-  color: #667eea;
-  font-weight: 600;
 }
 
-.col-wallet.clickable:hover {
-  color: #764ba2;
-  background: rgba(102, 126, 234, 0.1);
-  border-radius: 4px;
-  padding: 2px 6px;
-  margin: -2px -6px;
+.col-wallet.clickable:hover .wallet-chip-name {
   text-decoration: underline;
 }
 
 /* Column 3: Buy */
 .col-buy {
-  color: #22c55e !important;
-  font-size: 0.7rem;
+  color: rgba(34, 197, 94, 0.85) !important;
+  font-size: 0.68rem;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  font-weight: 700;
+  font-weight: 600;
   text-align: right;
 }
 
 /* Column 4: Sell */
 .col-sell {
-  color: #ef4444 !important;
-  font-size: 0.7rem;
+  color: rgba(239, 68, 68, 0.85) !important;
+  font-size: 0.68rem;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  font-weight: 700;
+  font-weight: 600;
   text-align: right;
 }
 
-/* Column 5: PnL (far right) */
+/* Column 5: PnL (far right) — highlighted, USD equivalent */
 .col-pnl {
-  font-size: 0.7rem;
+  font-size: 0.78rem;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  font-weight: 700;
+  font-weight: 800;
   text-align: right;
+  padding: 4px 7px;
+  border-radius: 8px;
   color: #22c55e !important; /* Default to green (positive) */
 }
 
 .col-pnl.positive {
   color: #22c55e !important;
+  background: rgba(34, 197, 94, 0.12);
 }
 
 .col-pnl.negative {
   color: #ef4444 !important;
+  background: rgba(239, 68, 68, 0.12);
 }
 
 /* Placeholder, loading and error states */
@@ -542,13 +537,8 @@
   color: var(--text-primary);
 }
 
-.dark-mode .col-wallet.clickable {
-  color: #8b9bff;
-}
-
-.dark-mode .col-wallet.clickable:hover {
-  color: #a5b3ff;
-  background: rgba(139, 155, 255, 0.1);
+.dark-mode .col-wallet.clickable:hover .wallet-chip-name {
+  text-decoration: underline;
 }
 
 .dark-mode .traders-placeholder {

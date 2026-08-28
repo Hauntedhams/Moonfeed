@@ -163,8 +163,7 @@ function FeedSelector({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [searchResults, setSearchResults] = useState([]);
-  const [expandedInfo, setExpandedInfo] = useState(null);
-  const [collapsingInfo, setCollapsingInfo] = useState(null);
+  const [browseFeed, setBrowseFeed] = useState(activeFilter);
   const [previewCoins, setPreviewCoins] = useState([]);
   const [previewTotal, setPreviewTotal] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -213,16 +212,15 @@ function FeedSelector({
       setSearchQuery('');
       setSearchResults([]);
       setError(null);
-      setExpandedInfo(null);
-      setCollapsingInfo(null);
-      setPreviewCoins([]);
-      setPreviewTotal(null);
       setPreviewError(null);
+    } else {
+      setBrowseFeed(activeFilter);
     }
-  }, [open]);
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Load the browsed feed's coins for the right-hand column.
   useEffect(() => {
-    if (!expandedInfo) return;
+    if (!open || !browseFeed) return undefined;
     const endpointByFeed = {
       dextrending: '/api/coins/dextrending',
       whalefeed: '/api/coins/whalefeed',
@@ -231,8 +229,8 @@ function FeedSelector({
       trending: '/api/coins/trending',
       custom: '/api/coins/infinite',
     };
-    const endpoint = endpointByFeed[expandedInfo];
-    if (!endpoint) return;
+    const endpoint = endpointByFeed[browseFeed];
+    if (!endpoint) return undefined;
 
     let cancelled = false;
     setPreviewLoading(true);
@@ -240,7 +238,7 @@ function FeedSelector({
     setPreviewCoins([]);
     setPreviewTotal(null);
 
-    fetch(`${API_ROOT}${endpoint}?limit=12&offset=0`)
+    fetch(`${API_ROOT}${endpoint}?limit=40&offset=0`)
       .then((response) => {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         return response.json();
@@ -259,7 +257,7 @@ function FeedSelector({
       });
 
     return () => { cancelled = true; };
-  }, [API_ROOT, expandedInfo]);
+  }, [API_ROOT, browseFeed, open]);
 
   const handleSearch = async () => {
     const cleanQuery = searchQuery.trim();
@@ -329,26 +327,13 @@ function FeedSelector({
     }
   };
 
+  // Picking a feed on the left switches the app's feed but keeps the panel open so
+  // the user can keep browsing its coins.
   const handleFeedSelect = (feedId) => {
+    setBrowseFeed(feedId);
     if (feedId !== activeFilter) {
       onFilterChange({ type: feedId });
     }
-    setOpen(false);
-  };
-
-  const handleFeedListOpen = (feedId) => {
-    onFeedListOpen?.(feedId);
-    setOpen(false);
-  };
-
-  const toggleFeedInfo = (feedId) => {
-    if (expandedInfo === feedId) {
-      setCollapsingInfo(feedId);
-      setExpandedInfo(null);
-      return;
-    }
-    setCollapsingInfo(null);
-    setExpandedInfo(feedId);
   };
 
   return (
@@ -358,8 +343,8 @@ function FeedSelector({
         className={`feed-selector-search-button ${open ? 'open' : ''}`}
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        aria-label="Search tokens and browse feeds"
-        title="Search tokens and browse feeds"
+        aria-label={open ? 'Close search and feeds' : 'Search tokens and browse feeds'}
+        title={open ? 'Close' : 'Search tokens and browse feeds'}
       >
         <svg
           width="19"
@@ -371,14 +356,23 @@ function FeedSelector({
           strokeLinecap="round"
           strokeLinejoin="round"
         >
-          <circle cx="11" cy="11" r="8" />
-          <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          {open ? (
+            <>
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </>
+          ) : (
+            <>
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </>
+          )}
         </svg>
       </button>
 
       {/* Dropdown */}
       {open && (
-        <div className={`feed-selector-dropdown ${expandedInfo ? 'feed-selector-dropdown--expanded' : ''}`}>
+        <div className="feed-selector-dropdown feed-selector-dropdown--split">
           {/* Search bar */}
           <div className="feed-selector-search">
             <svg
@@ -424,8 +418,39 @@ function FeedSelector({
 
           {error && <div className="feed-selector-error">{error}</div>}
 
-          {/* Search results OR feed list */}
-          {searchQuery.trim().length >= 2 ? (
+          {/* Left: feeds. Right: the selected feed's coins (or search results). */}
+          <div className="feed-selector-body">
+            <div className="feed-selector-feed-col">
+              <div className="feed-selector-section-label">Feeds</div>
+              {feeds.map((feed) => (
+                <button
+                  key={feed.id}
+                  className={`feed-selector-feed-chip ${feed.id === browseFeed ? 'active' : ''}`}
+                  onClick={() => handleFeedSelect(feed.id)}
+                  title={feed.detail}
+                >
+                  <span className="feed-selector-feed-icon">{renderIcon(feed.icon)}</span>
+                  <span className="feed-selector-feed-label">{feed.label}</span>
+                  {feed.id === activeFilter && (
+                    <svg className="feed-selector-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  )}
+                </button>
+              ))}
+              {onAdvancedFilterClick && (
+                <button
+                  className="feed-selector-feed-chip"
+                  onClick={() => { onAdvancedFilterClick(); setOpen(false); }}
+                >
+                  <span className="feed-selector-feed-icon">{renderIcon('filter')}</span>
+                  <span className="feed-selector-feed-label">Custom</span>
+                </button>
+              )}
+            </div>
+
+            <div className="feed-selector-coin-col">
+            {searchQuery.trim().length >= 2 ? (
             <div className="feed-selector-results">
               {searchResults.map((token, index) => (
                 <button
@@ -451,161 +476,51 @@ function FeedSelector({
                 </button>
               ))}
             </div>
-          ) : (
-            <div className="feed-selector-feeds">
-              <div className="feed-selector-section-label">Feeds</div>
-              {orderedFeeds.map((feed) => {
-                const info = FEED_INFO[feed.id];
-                const infoOpen = expandedInfo === feed.id;
-                const infoClosing = collapsingInfo === feed.id;
-                return (
-                  <div key={feed.id} className="feed-selector-feed-row">
-                    <div className={`feed-selector-feed ${feed.id === activeFilter ? 'active' : ''}`}>
-                      <button
-                        className="feed-selector-feed-select"
-                        onClick={() => handleFeedListOpen(feed.id)}
-                      >
-                        <span className="feed-selector-feed-icon">{renderIcon(feed.icon)}</span>
-                        <span className="feed-selector-feed-copy">
-                          <span className="feed-selector-feed-label">{feed.label}</span>
-                          <span className="feed-selector-feed-detail">{feed.detail}</span>
+            ) : previewLoading ? (
+              <div className="feed-selector-preview-loading"><span className="feed-selector-spinner" />Loading coins</div>
+            ) : previewError ? (
+              <div className="feed-selector-preview-empty">{previewError}</div>
+            ) : previewCoins.length === 0 ? (
+              <div className="feed-selector-preview-empty">No coins available yet.</div>
+            ) : (
+              <div className="feed-selector-coin-list">
+                <div className="feed-selector-coin-head">
+                  <span>{(feeds.find((f) => f.id === browseFeed) || activeFeed).label}</span>
+                  {previewTotal !== null && <span>{previewCoins.length} of {previewTotal}</span>}
+                </div>
+                {previewCoins.map((coin, index) => {
+                  const change = Number(coin.price_change_24h || coin.change_24h || coin.priceChange24h) || 0;
+                  const art = coin.banner || coin.bannerImage || coin.header || coin.headerImage
+                    || coin.image || coin.logo || coin.profileImage || null;
+                  return (
+                    <button
+                      key={coin.mintAddress || coin.address || coin.id || index}
+                      className="feed-selector-coin-row"
+                      onClick={() => { setOpen(false); onCoinSelect?.(coin); }}
+                    >
+                      {art && <img src={art} alt="" className="feed-selector-coin-bg" loading="lazy" />}
+                      <span className="feed-selector-coin-bg-overlay" />
+                      <TokenAvatar src={coin.image || coin.logo || coin.profileImage} alt={coin.symbol || coin.name} />
+                      <span className="feed-selector-coin-meta">
+                        <span className="feed-selector-coin-title">
+                          <strong>{coin.symbol || coin.name || 'Unknown'}</strong>
+                          <em className={change >= 0 ? 'up' : 'down'}>{change >= 0 ? '+' : ''}{change.toFixed(1)}%</em>
                         </span>
-                      </button>
-                      <button
-                        className="feed-selector-switch-feed"
-                        onClick={() => handleFeedSelect(feed.id)}
-                        aria-label={`${feed.id === activeFilter ? `${feed.label} is selected` : `Switch to ${feed.label}`}`}
-                        title={feed.id === activeFilter ? `${feed.label} selected` : `Switch to ${feed.label}`}
-                      >
-                        {feed.id === activeFilter ? (
-                          <svg
-                            className="feed-selector-check"
-                            width="16"
-                            height="16"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2.5"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          >
-                            <polyline points="20 6 9 17 4 12" />
-                          </svg>
-                        ) : (
-                          <svg
-                            className="feed-selector-info-chevron"
-                            width="16"
-                            height="16"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          >
-                            <polyline points="6 9 12 15 18 9" />
-                          </svg>
-                        )}
-                      </button>
-                      {info && (
-                        <button
-                          className="feed-selector-info-toggle"
-                          onClick={() => toggleFeedInfo(feed.id)}
-                          aria-label={`About ${feed.label} feed`}
-                          aria-expanded={infoOpen}
-                        >
-                          <svg
-                            className={`feed-selector-info-chevron ${infoOpen ? 'up' : ''}`}
-                            width="16"
-                            height="16"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          >
-                            <polyline points="6 9 12 15 18 9" />
-                          </svg>
-                        </button>
-                      )}
-                    </div>
-                    {info && (infoOpen || infoClosing) && (
-                      <div
-                        className={`feed-selector-info-drawer ${infoClosing ? 'closing' : ''}`}
-                        onTransitionEnd={(event) => {
-                          if (event.target === event.currentTarget && event.propertyName === 'max-height' && infoClosing) setCollapsingInfo(null);
-                        }}
-                      >
-                        <div className="feed-selector-info-copy">
-                          <p className="feed-selector-info-line">
-                            <span className="feed-selector-info-tag">What it is</span>
-                            {info.purpose}
-                          </p>
-                          <p className="feed-selector-info-line">
-                            <span className="feed-selector-info-tag">Sources</span>
-                            {info.sources}
-                          </p>
-                          <p className="feed-selector-info-line">
-                            <span className="feed-selector-info-tag">Why this preset</span>
-                            {info.reason}
-                          </p>
-                        </div>
-                        <div className="feed-selector-preview">
-                          <div className="feed-selector-preview-title">
-                            <span>{feed.label} coins</span>
-                            {!previewLoading && previewTotal !== null && <span>{previewCoins.length} / {previewTotal}</span>}
-                          </div>
-                          {previewLoading ? (
-                            <div className="feed-selector-preview-loading"><span className="feed-selector-spinner" />Loading coins</div>
-                          ) : previewError ? (
-                            <div className="feed-selector-preview-empty">{previewError}</div>
-                          ) : previewCoins.length === 0 ? (
-                            <div className="feed-selector-preview-empty">No coins available yet.</div>
-                          ) : (
-                            <div className="feed-selector-preview-list">
-                              {previewCoins.map((coin, index) => (
-                                <button
-                                  key={coin.mintAddress || coin.address || coin.id || index}
-                                  className="feed-selector-preview-coin"
-                                  onClick={() => {
-                                    setOpen(false);
-                                    onCoinSelect?.(coin);
-                                  }}
-                                >
-                                  <TokenAvatar src={coin.image || coin.logo || coin.profileImage} alt={coin.symbol || coin.name} />
-                                  <span className="feed-selector-preview-coin-copy">
-                                    <span>{coin.symbol || coin.name || 'Unknown'}</span>
-                                    <small>{formatPrice(coin.price_usd || coin.priceUsd || coin.price)}</small>
-                                  </span>
-                                  <span className={(Number(coin.price_change_24h || coin.change_24h || coin.priceChange24h) || 0) >= 0 ? 'up' : 'down'}>
-                                    {(Number(coin.price_change_24h || coin.change_24h || coin.priceChange24h) || 0) >= 0 ? '+' : ''}{(Number(coin.price_change_24h || coin.change_24h || coin.priceChange24h) || 0).toFixed(1)}%
-                                  </span>
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-
-              {onAdvancedFilterClick && (
-                <button
-                  className="feed-selector-feed feed-selector-filter-row"
-                  onClick={() => {
-                    onAdvancedFilterClick();
-                    setOpen(false);
-                  }}
-                >
-                  <span className="feed-selector-feed-icon">{renderIcon('filter')}</span>
-                  <span className="feed-selector-feed-label">Custom Filters</span>
-                </button>
-              )}
+                        <span className="feed-selector-coin-stats">
+                          <span>{formatPrice(coin.price_usd || coin.priceUsd || coin.price)}</span>
+                          <span className="dot">·</span>
+                          <span>MC {formatNumber(coin.market_cap_usd || coin.marketCap)}</span>
+                          <span className="dot">·</span>
+                          <span>Vol {formatNumber(coin.volume_24h_usd || coin.volume24h)}</span>
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
             </div>
-          )}
+          </div>
         </div>
       )}
     </div>

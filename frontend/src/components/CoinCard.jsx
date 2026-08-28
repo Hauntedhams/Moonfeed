@@ -16,6 +16,7 @@ import { useWallet } from '../contexts/WalletContext';
 import { placeTriggerOrder, getExpiryTimestamp, EXPIRY_OPTIONS, fetchTokenDecimals } from '../utils/triggerOrders.js';
 import { getTransactions } from '../utils/transactionStorage';
 import { getSolUsdPrice } from '../utils/orderFillTracking';
+import { WalletChip } from '../utils/walletIdentity';
 import { useTrackedTrades } from '../contexts/TrackedTradesContext';
 import { API_CONFIG } from '../config/api.js';
 import { 
@@ -127,6 +128,8 @@ const CoinCard = memo(({
   const [orderStepMultiplier, setOrderStepMultiplier] = useState(1);
   const [orderAmountInput, setOrderAmountInput] = useState('0.10');
   const [sellFundingSolInput, setSellFundingSolInput] = useState('0.10');
+  const [sellFundingUsdInput, setSellFundingUsdInput] = useState('');
+  const [solUsd, setSolUsd] = useState(0);
   const [sellOrderPending, setSellOrderPending] = useState(false);
   const pendingSellOrderRef = useRef(null);
   const [orderExpiry, setOrderExpiry] = useState('7d');
@@ -661,7 +664,58 @@ const CoinCard = memo(({
 
   const orderChartFocused = buyDrawerOpen && buyDrawerMode === 'orders';
   const orderTargetPercent = displayPrice > 0 ? ((buyOrderPrice - displayPrice) / displayPrice) * 100 : 0;
-  const orderTargetLabel = `${buyDrawerOrderSide === 'sell' ? 'Sell' : 'Buy'} ${orderTargetPercent >= 0 ? '+' : ''}${orderTargetPercent.toFixed(2)}%`;
+
+  // The sell flow is framed in dollars: you wager USD and the wheel picks what the
+  // whole position cashes out for, with the per-token trigger price derived from it.
+  const sellFundingSol = Math.max(0, parseFloat(sellFundingSolInput) || 0);
+  const wageredUsd = solUsd > 0 ? sellFundingSol * solUsd : 0;
+  const sellProceedsUsd = displayPrice > 0 && wageredUsd > 0
+    ? wageredUsd * (buyOrderPrice / displayPrice)
+    : 0;
+
+  useEffect(() => {
+    if ((buyDrawerOpen || transactions.length > 0) && !solUsd) getSolUsdPrice().then(setSolUsd);
+  }, [buyDrawerOpen, solUsd, transactions.length]);
+
+  // Keep the dollar field in step with the SOL amount it represents.
+  useEffect(() => {
+    if (solUsd > 0) setSellFundingUsdInput((sellFundingSol * solUsd).toFixed(2));
+  }, [solUsd]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleSellFundingUsdChange = (value) => {
+    setSellFundingUsdInput(value);
+    const usd = parseFloat(value);
+    if (solUsd > 0 && Number.isFinite(usd) && usd > 0) {
+      setSellFundingSolInput((usd / solUsd).toFixed(4));
+    }
+  };
+
+  const orderTargetLabel = buyDrawerOrderSide === 'sell' && sellProceedsUsd > 0
+    ? `Sell $${sellProceedsUsd.toFixed(2)} (${orderTargetPercent >= 0 ? '+' : ''}${orderTargetPercent.toFixed(2)}%)`
+    : `${buyDrawerOrderSide === 'sell' ? 'Sell' : 'Buy'} ${orderTargetPercent >= 0 ? '+' : ''}${orderTargetPercent.toFixed(2)}%`;
+
+  // The wheel's big number doubles as a text field: in sell mode you type the total
+  // cash-out, otherwise the per-token trigger price.
+  const sellProceedsMode = buyDrawerOrderSide === 'sell' && sellProceedsUsd > 0;
+  const [priceEditing, setPriceEditing] = useState(false);
+  const [priceEditValue, setPriceEditValue] = useState('');
+
+  const beginPriceEdit = () => {
+    setPriceEditValue(sellProceedsMode ? sellProceedsUsd.toFixed(2) : String(buyOrderPrice));
+    setPriceEditing(true);
+  };
+
+  const commitPriceEdit = () => {
+    const value = parseFloat(priceEditValue);
+    if (Number.isFinite(value) && value > 0) {
+      setBuyOrderPrice(clampBuyOrderPrice(
+        sellProceedsMode && wageredUsd > 0 && displayPrice > 0
+          ? displayPrice * (value / wageredUsd)
+          : value
+      ));
+    }
+    setPriceEditing(false);
+  };
 
   const openMobileTradeDrawer = (e) => {
     e?.stopPropagation();
@@ -2285,8 +2339,8 @@ const CoinCard = memo(({
 
                   <div className="tx-table-header" onClick={(e) => { e.stopPropagation(); setShowLiveTransactions(false); }} style={{
                     display: 'grid',
-                    gridTemplateColumns: 'minmax(34px, 42px) minmax(42px, 52px) minmax(0, 1fr) minmax(46px, 62px) minmax(52px, 64px) minmax(30px, 34px)',
-                    gap: '3px',
+                    gridTemplateColumns: 'minmax(40px, 48px) minmax(0, 1fr) minmax(76px, 100px) minmax(32px, 40px)',
+                    gap: '8px',
                     padding: '6px 8px',
                     fontSize: '10px',
                     fontWeight: '600',
@@ -2297,10 +2351,8 @@ const CoinCard = memo(({
                     cursor: 'pointer',
                   }}>
                     <span>Type</span>
-                    <span>DEX</span>
                     <span>Wallet</span>
-                    <span style={{ textAlign: 'right' }}>SOL</span>
-                    <span style={{ textAlign: 'right' }}>Tokens</span>
+                    <span style={{ textAlign: 'right' }}>Amount</span>
                     <span style={{ textAlign: 'right' }}>Time</span>
                   </div>
 
@@ -2335,9 +2387,11 @@ const CoinCard = memo(({
                             const wallet = tx.wallet || tx.feePayer || 'Unknown';
                             const solAmt = tx.solAmount || 0;
                             const tokenAmt = tx.tokenAmount || tx.amount || 0;
+                            const usdAmt = Number(tx.priceUsd) > 0
+                              ? tokenAmt * Number(tx.priceUsd)
+                              : (solUsd > 0 ? solAmt * solUsd : 0);
                             const age = tx.timestamp ? getTimeAgo(tx.timestamp) : '';
                             const dexName = tx.dex || '';
-                            const dexShort = dexName.replace(' V4', '').replace(' V2', '').replace(' V3', '').substring(0, 6);
 
                             return (
                               <div
@@ -2345,69 +2399,52 @@ const CoinCard = memo(({
                                 className="transaction-item"
                                 style={{
                                   display: 'grid',
-                                  gridTemplateColumns: 'minmax(34px, 42px) minmax(42px, 52px) minmax(0, 1fr) minmax(46px, 62px) minmax(52px, 64px) minmax(30px, 34px)',
-                                  gap: '3px',
-                                  padding: '7px 8px',
+                                  gridTemplateColumns: 'minmax(40px, 48px) minmax(0, 1fr) minmax(76px, 100px) minmax(32px, 40px)',
+                                  gap: '8px',
+                                  padding: '11px 8px',
                                   alignItems: 'center',
                                   borderBottom: '1px solid rgba(255,255,255,0.04)',
                                 }}
                               >
-                                <span style={{
-                                  fontSize: '11px',
-                                  fontWeight: '700',
-                                  color: sideColor,
-                                  textTransform: 'uppercase',
-                                }}>
-                                  {isBuy ? 'Buy' : 'Sell'}
-                                </span>
-
-                                <span style={{
-                                  fontSize: '9px',
-                                  fontWeight: '600',
-                                  color: 'rgba(255,255,255,0.45)',
-                                  background: 'rgba(255,255,255,0.06)',
-                                  borderRadius: '3px',
-                                  padding: '1px 4px',
-                                  textAlign: 'center',
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                  whiteSpace: 'nowrap',
-                                }} title={dexName}>
-                                  {dexShort || '—'}
-                                </span>
-
-                                <span
-                                  onClick={isOpen ? (e) => { e.stopPropagation(); wallet !== 'Unknown' && handleWalletClick(wallet); } : undefined}
-                                  style={{
+                                <span style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                  <span style={{
                                     fontSize: '11px',
-                                    color: '#4FC3F7',
-                                    cursor: isOpen && wallet !== 'Unknown' ? 'pointer' : 'default',
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis',
-                                    whiteSpace: 'nowrap',
-                                  }} title={wallet}>
-                                  {wallet !== 'Unknown' ? `${wallet.substring(0, 4)}...${wallet.substring(wallet.length - 4)}` : 'Unknown'}
+                                    fontWeight: '700',
+                                    color: sideColor,
+                                    textTransform: 'uppercase',
+                                  }}>
+                                    {isBuy ? 'Buy' : 'Sell'}
+                                  </span>
+                                  {dexName && (
+                                    <span style={{ fontSize: '9px', color: 'rgba(255,255,255,0.35)' }} title={dexName}>
+                                      {dexName.replace(' V4', '').replace(' V2', '').replace(' V3', '').substring(0, 6)}
+                                    </span>
+                                  )}
                                 </span>
 
-                                <span style={{
-                                  fontSize: '11px',
-                                  fontWeight: '600',
-                                  color: sideColor,
-                                  textAlign: 'right',
-                                  fontFamily: 'monospace',
-                                }}>
-                                  {solAmt > 0 ? `${solAmt < 0.01 ? solAmt.toFixed(4) : solAmt.toFixed(2)}` : '—'}
-                                </span>
+                                <WalletChip
+                                  address={wallet !== 'Unknown' ? wallet : null}
+                                  size={30}
+                                  onClick={isOpen && wallet !== 'Unknown' ? (e) => { e.stopPropagation(); handleWalletClick(wallet); } : undefined}
+                                />
 
-                                <span style={{
-                                  fontSize: '11px',
-                                  color: 'rgba(255,255,255,0.6)',
-                                  textAlign: 'right',
-                                  fontFamily: 'monospace',
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                }}>
-                                  {tokenAmt > 0 ? formatCompactNumber(tokenAmt) : '—'}
+                                <span style={{ display: 'flex', flexDirection: 'column', gap: '1px', alignItems: 'flex-end' }}>
+                                  <span style={{
+                                    fontSize: '12px',
+                                    fontWeight: '800',
+                                    color: sideColor,
+                                    textAlign: 'right',
+                                  }}>
+                                    {usdAmt > 0 ? `$${formatCompact(usdAmt)}` : '—'}
+                                  </span>
+                                  <span style={{
+                                    fontSize: '9.5px',
+                                    color: 'rgba(255,255,255,0.4)',
+                                    textAlign: 'right',
+                                    fontFamily: 'monospace',
+                                  }}>
+                                    {solAmt > 0 ? `${solAmt < 0.01 ? solAmt.toFixed(4) : solAmt.toFixed(2)} SOL` : ''}
+                                  </span>
                                 </span>
 
                                 {isOpen ? (
@@ -2824,7 +2861,7 @@ const CoinCard = memo(({
           {(buyDrawerOpen || buyDrawerDrag) && (
             <>
               <button
-                className="coin-buy-drawer-backdrop"
+                className={`coin-buy-drawer-backdrop${buyDrawerMode === 'orders' ? ' passthrough' : ''}`}
                 onClick={() => setBuyDrawerOpen(false)}
                 aria-label="Close buy limit drawer"
                 style={buyDrawerDrag ? { opacity: buyDrawerDrag.progress, pointerEvents: 'none' } : undefined}
@@ -2929,19 +2966,12 @@ const CoinCard = memo(({
                           setOrderSuccess(null);
                         }}
                       >
-                        Sell at*
+                        Sell at
                       </button>
                     </div>
 
                     {buyDrawerOrderSide === 'sell' && (
-                      <div className="coin-buy-order-side-note">
-                        * Sell at needs a buy-in first. Pick your sell price, then how much SOL to put in —
-                        the sell order is placed automatically once the buy confirms.
-                      </div>
-                    )}
-
-                    {buyDrawerOrderSide === 'sell' && (
-                      <span className="coin-buy-step-label">Step 1 · Sell price in USD</span>
+                      <span className="coin-buy-step-label">Step 1 · Sell for</span>
                     )}
 
                     <div
@@ -2959,8 +2989,43 @@ const CoinCard = memo(({
                       }}
                     >
                       <button className="coin-buy-step" onClick={() => adjustBuyOrderPrice(1)} aria-label="Increase buy price">⌃</button>
-                      <div className="coin-buy-price">{formatPrice(buyOrderPrice)}</div>
-                      <div className="coin-buy-price-unit">USD per {coin.symbol || 'token'}</div>
+                      {priceEditing ? (
+                        <>
+                          <input
+                            className="coin-buy-price coin-buy-price-input"
+                            type="number"
+                            min="0"
+                            step="any"
+                            autoFocus
+                            value={priceEditValue}
+                            onChange={(e) => setPriceEditValue(e.target.value)}
+                            onBlur={commitPriceEdit}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') e.currentTarget.blur();
+                              if (e.key === 'Escape') setPriceEditing(false);
+                              e.stopPropagation();
+                            }}
+                            onTouchStart={(e) => e.stopPropagation()}
+                            onTouchMove={(e) => e.stopPropagation()}
+                            aria-label={sellProceedsMode ? 'Sell for, in US dollars' : 'Trigger price in US dollars'}
+                          />
+                          <div className="coin-buy-price-unit">
+                            {sellProceedsMode ? 'total in USD' : `USD per ${coin.symbol || 'token'}`}
+                          </div>
+                        </>
+                      ) : sellProceedsMode ? (
+                        <>
+                          <div className="coin-buy-price" onClick={beginPriceEdit} title="Tap to type an amount">${sellProceedsUsd.toFixed(2)}</div>
+                          <div className="coin-buy-price-unit">
+                            for all your {coin.symbol || 'tokens'} at {formatPrice(buyOrderPrice)}
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="coin-buy-price" onClick={beginPriceEdit} title="Tap to type a price">{formatPrice(buyOrderPrice)}</div>
+                          <div className="coin-buy-price-unit">USD per {coin.symbol || 'token'}</div>
+                        </>
+                      )}
                       <div className={`coin-buy-delta ${buyOrderPrice >= displayPrice ? 'above' : 'below'}`}>
                         {displayPrice > 0 ? formatPercent(((buyOrderPrice - displayPrice) / displayPrice) * 100) : '0.00%'}
                       </div>
@@ -2999,7 +3064,15 @@ const CoinCard = memo(({
                         onChange={(e) => setOrderStepMultiplier(Number(e.target.value))}
                         aria-label="Target price step multiplier"
                       />
-                      <span className="coin-buy-target-multiplier-scale"><span>1x</span><span>{formatOrderStepUsd()} per {coin.symbol || 'token'} / tick</span><span>100x</span></span>
+                      <span className="coin-buy-target-multiplier-scale">
+                        <span>1x</span>
+                        <span>
+                          {buyDrawerOrderSide === 'sell' && sellProceedsUsd > 0 && displayPrice > 0
+                            ? `$${(wageredUsd * getOrderTargetStep() / displayPrice).toFixed(2)} / tick`
+                            : `${formatOrderStepUsd()} per ${coin.symbol || 'token'} / tick`}
+                        </span>
+                        <span>100x</span>
+                      </span>
                     </label>
 
                     <div className="coin-buy-expiry">
@@ -3018,19 +3091,24 @@ const CoinCard = memo(({
                     </div>
 
                     {buyDrawerOrderSide === 'sell' && (
+                      <>
+                      <div className="coin-buy-order-side-note">
+                        Sell at buys in first — the sell order is placed automatically once the buy confirms.
+                      </div>
                       <label className="coin-buy-custom-amount">
-                        <span>Step 2 · SOL to put in</span>
+                        <span>Step 2 · Amount to wager</span>
                         <div className="coin-buy-custom-input-wrap">
+                          <strong>$</strong>
                           <input
                             type="number"
                             min="0"
                             step="any"
-                            value={sellFundingSolInput}
-                            onChange={(e) => setSellFundingSolInput(e.target.value)}
+                            value={sellFundingUsdInput}
+                            onChange={(e) => handleSellFundingUsdChange(e.target.value)}
                             onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-                            aria-label="Amount of SOL to buy in with"
+                            aria-label="Amount to buy in with, in US dollars"
                           />
-                          <strong>SOL</strong>
+                          <strong>{sellFundingSol > 0 ? `${sellFundingSol.toFixed(3)} SOL` : 'USD'}</strong>
                         </div>
                         <div className="coin-buy-balance-line">
                           {sellOrderPending
@@ -3038,6 +3116,7 @@ const CoinCard = memo(({
                             : `Buys ~${formatPrice(displayPrice)} entry, then sells everything you get at ${formatPrice(buyOrderPrice)}.`}
                         </div>
                       </label>
+                      </>
                     )}
 
                     {orderError && <div className="coin-buy-order-status error">{orderError}</div>}

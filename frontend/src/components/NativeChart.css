@@ -1,7 +1,11 @@
 /* Phase 1 native candlestick chart. Fills the same slot as the old iframe
    (.mobile-chart-target, 380px). Collapsed: canvas ignores pointer events so
-   the feed scrolls as one unit. Expanded: interactive pan/zoom. */
-
+   the feed scrolls as one unit. Expanded: interactive pan/zoom.
+   Default height is a fixed 380px to match the main feed's chart slot (whose
+   wrapper resolves to `height: auto`, so a percentage height here would
+   collapse to 0). Smaller embed contexts (wallet profile, tracked wallet
+   card, position/order detail) override this to 100% since their wraps
+   already establish a definite height. */
 .native-chart {
   position: relative;
   display: flex;
@@ -107,8 +111,20 @@
   font-weight: 700;
 }
 
+/* Smaller embed contexts whose wrapper already establishes a definite height
+   (or a flex-resolved one) — let the chart fill it instead of the 380px default. */
+.wpv-chart-wrap .native-chart,
+.twc-chart-wrap .native-chart,
+.pdv-chart-wrap .native-chart,
+.odv-chart-wrap .native-chart {
+  height: 100%;
+}
+
 .native-chart.expanded .native-chart-canvas {
   pointer-events: auto;
+  /* Let lightweight-charts own pan/pinch fully — stops the browser from also
+     scrolling/zooming the page underneath while the chart is being dragged. */
+  touch-action: none;
 }
 
 .native-chart.order-focus .native-chart-canvas {

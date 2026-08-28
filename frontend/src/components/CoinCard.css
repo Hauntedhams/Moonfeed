@@ -495,6 +495,19 @@
   min-width: 0;
 }
 
+/* Token Details / Data Sources — neutral card, no light blue tint */
+.token-details-card,
+.data-sources-detailed {
+  background: rgba(255, 255, 255, 0.03) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.token-details-card:hover,
+.data-sources-detailed:hover {
+  box-shadow: none !important;
+  border-color: rgba(255, 255, 255, 0.16) !important;
+}
+
 .token-details-row {
   align-items: flex-start;
   gap: 14px;
@@ -623,6 +636,11 @@
   padding: 0;
   background: rgba(0, 0, 0, 0.18);
   pointer-events: auto;
+}
+
+/* Order mode: let taps reach the chart so it stays pannable while picking a price. */
+.coin-buy-drawer-backdrop.passthrough {
+  pointer-events: none;
 }
 
 .coin-buy-drawer {
@@ -867,6 +885,7 @@
   color: rgba(255, 255, 255, 0.68);
   font-size: 0.82rem;
   font-weight: 900;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -875,15 +894,12 @@
   background: linear-gradient(135deg, #22c55e, #14b8a6);
 }
 
+/* Small hint sitting directly above the wager field. */
 .coin-buy-order-side-note {
-  margin-top: -4px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: rgba(251, 191, 36, 0.1);
-  border: 1px solid rgba(251, 191, 36, 0.22);
-  color: rgba(254, 243, 199, 0.86);
-  font-size: 0.7rem;
-  font-weight: 800;
+  margin: -4px 0 -6px;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 0.62rem;
+  font-weight: 600;
   line-height: 1.35;
 }
 
@@ -907,6 +923,24 @@
   text-align: center;
   overflow-wrap: anywhere;
   font-variant-numeric: tabular-nums;
+  cursor: text;
+}
+
+/* Same look as the rendered number so tapping to type doesn't shift the layout. */
+.coin-buy-price-input {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid rgba(34, 197, 94, 0.5);
+  background: transparent;
+  color: #ffffff;
+  outline: none;
+  -moz-appearance: textfield;
+}
+
+.coin-buy-price-input::-webkit-outer-spin-button,
+.coin-buy-price-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 .coin-buy-price-unit {
@@ -3337,8 +3371,8 @@ html:not(.dark-mode) .twelve-chart-section {
 .live-transactions-content {
   position: relative;
   color: rgba(0, 0, 0, 0.8);
-  min-height: 150px;
-  max-height: 220px;
+  min-height: 190px;
+  max-height: 280px;
   padding: 16px;
   overflow: hidden;
   overflow-x: hidden;
@@ -3445,7 +3479,7 @@ html:not(.dark-mode) .twelve-chart-section {
 
 /* ---- Rolling marquee preview (constant motion before opening) ---- */
 .transactions-marquee-window {
-  height: 102px; /* ~3 rows tall */
+  height: 168px; /* ~3 taller rows */
   overflow: hidden;
   position: relative;
   -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 14%, #000 86%, transparent 100%);
@@ -4211,11 +4245,19 @@ html.dark-mode .charts-section-header,
   color: rgba(255, 255, 255, 0.9) !important;
 }
 
-/* Token Details Section - Dark Mode */
+/* Token Details Section - Dark Mode (no extra blue wrapper tint) */
 html.dark-mode .token-details-section,
 .dark-mode .token-details-section {
-  background: linear-gradient(135deg, rgba(79, 195, 247, 0.08) 0%, rgba(103, 126, 234, 0.08) 100%) !important;
-  border-color: rgba(79, 195, 247, 0.25) !important;
+  background: transparent !important;
+  border-color: transparent !important;
+}
+
+html.dark-mode .token-details-card,
+.dark-mode .token-details-card,
+html.dark-mode .data-sources-detailed,
+.dark-mode .data-sources-detailed {
+  background: rgba(255, 255, 255, 0.03) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
 }
 
 html.dark-mode .token-details-header,

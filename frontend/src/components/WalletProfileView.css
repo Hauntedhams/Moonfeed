@@ -9,11 +9,41 @@
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   padding: 0 0 90px; /* clear the bottom nav */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
 }
 
 html:not(.dark-mode) .wpv-root {
   background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 50%, #f8f9fa 100%);
   color: #111827;
+  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+}
+
+/* Thin, unobtrusive scrollbar matching the rest of the app instead of the
+   browser's default full-width bar. */
+.wpv-root::-webkit-scrollbar {
+  width: 8px;
+}
+
+.wpv-root::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.wpv-root::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+}
+
+.wpv-root::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.32);
+}
+
+html:not(.dark-mode) .wpv-root::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+html:not(.dark-mode) .wpv-root::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.32);
 }
 
 /* Back button — top-left, plain white arrow, no background */
@@ -152,6 +182,12 @@ body.wpv-open .tiktok-action-buttons {
   display: none !important;
 }
 
+/* Also hide the feed's buy-drawer swipe hint — it's position:fixed so it would
+   otherwise bleed through on top of this full-screen overlay. */
+body.wpv-open .coin-buy-swipe-hotzone {
+  display: none !important;
+}
+
 /* Stats sit in the name/bio slot — tighten spacing to match ProfileView rhythm */
 .wpv-metrics--inheader {
   padding: 14px 0 4px;
@@ -273,6 +309,133 @@ html:not(.dark-mode) .wpv-copy-untrack {
   border-radius: 6px;
 }
 
+.wpv-chart-section {
+  margin-top: 14px;
+}
+
+.wpv-chart-header-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 6px;
+}
+
+.wpv-chart-wrap {
+  position: relative;
+  height: 260px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* Coin name + PnL sit below the chart's own timeframe button row so they
+   never overlap it. */
+.wpv-chart-identity-overlay {
+  position: absolute;
+  top: 40px;
+  left: 8px;
+  right: 8px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+}
+
+.wpv-chart-identity-overlay > * {
+  pointer-events: auto;
+}
+
+.wpv-chart-identity-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.wpv-chart-identity-name {
+  padding: 5px 10px;
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(6px);
+  font-size: 13px;
+  font-weight: 800;
+  color: #fff;
+  max-width: 55vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+html:not(.dark-mode) .wpv-chart-identity-name {
+  background: rgba(255, 255, 255, 0.75);
+  color: #111;
+}
+
+/* Same green/red as the chart's own up/down candles, so the badge reads as
+   part of the chart rather than a mismatched UI color. */
+.wpv-chart-roi-badge {
+  padding: 5px 8px;
+  border-radius: 9px;
+  backdrop-filter: blur(6px);
+  font-size: 12.5px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.wpv-chart-roi-badge.pos {
+  color: #26a69a;
+  background: rgba(38, 166, 154, 0.18);
+}
+
+.wpv-chart-roi-badge.neg {
+  color: #ef5350;
+  background: rgba(239, 83, 80, 0.18);
+}
+
+.wpv-chart-info-btn {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+html:not(.dark-mode) .wpv-chart-info-btn {
+  background: rgba(0, 0, 0, 0.06);
+  color: rgba(0, 0, 0, 0.7);
+}
+
+.wpv-chart-info-tooltip {
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(10, 10, 18, 0.92);
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 12px;
+  line-height: 1.45;
+  cursor: pointer;
+}
+
+html:not(.dark-mode) .wpv-chart-info-tooltip {
+  background: rgba(255, 255, 255, 0.95);
+  color: rgba(0, 0, 0, 0.82);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.wpv-chart-caption {
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.5);
+  text-align: center;
+}
+
 .wpv-fast-card {
   margin-top: 14px;
   overflow: hidden;
@@ -372,6 +535,37 @@ html:not(.dark-mode) .wpv-fast-token-meta {
 
 .wpv-fast-position {
   padding: 16px;
+}
+
+.wpv-fast-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.45);
+  margin-bottom: 10px;
+}
+
+html:not(.dark-mode) .wpv-fast-section-title {
+  color: rgba(0, 0, 0, 0.45);
+}
+
+.wpv-fast-token-row--clickable {
+  cursor: pointer;
+  transition: background 0.15s ease;
+  margin: -8px;
+  padding: 8px;
+  border-radius: 12px;
+}
+
+.wpv-fast-token-row--clickable:hover,
+.wpv-fast-token-row--clickable:active {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+html:not(.dark-mode) .wpv-fast-token-row--clickable:hover,
+html:not(.dark-mode) .wpv-fast-token-row--clickable:active {
+  background: rgba(0, 0, 0, 0.04);
 }
 
 .wpv-fast-token-img {

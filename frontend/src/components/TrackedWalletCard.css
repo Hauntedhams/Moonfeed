@@ -1,16 +1,101 @@
 .twc-card {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
   width: 100%;
+  height: 100%;
   max-width: 520px;
   margin: 0 auto;
-  padding: 18px;
+  padding: 14px;
   border-radius: 20px;
   background: rgba(18, 24, 40, 0.92);
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
   color: #fff;
+  overflow: hidden;
+}
+
+/* Chart is the primary content, like CoinCard's collapsed chart */
+.twc-chart-wrap {
+  flex: 1 1 auto;
+  min-height: 240px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.twc-chart-placeholder {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 13px;
+}
+
+.twc-chart-caption {
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.5);
+  text-align: center;
+}
+
+.twc-top-overlay {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.twc-bottom-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.twc-bottom-pnl {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.twc-bottom-pnl-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.twc-bottom-pnl-value {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.twc-bottom-pnl-value.pos { color: #34d399; }
+.twc-bottom-pnl-value.neg { color: #f87171; }
+
+.twc-expand-btn {
+  flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.twc-details-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: 46vh;
+  overflow-y: auto;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .twc-header {
@@ -191,8 +276,8 @@
 }
 
 .twc-mimic-btn {
-  width: 100%;
-  padding: 12px;
+  flex-shrink: 0;
+  padding: 12px 16px;
   border: none;
   border-radius: 12px;
   background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
@@ -200,6 +285,7 @@
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .twc-mimic-btn:active { transform: scale(0.98); }

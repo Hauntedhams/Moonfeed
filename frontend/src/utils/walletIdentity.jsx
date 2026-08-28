@@ -1,4 +1,5 @@
 import React from 'react';
+import './walletIdentity.css';
 
 export const ANON_ANIMALS = [
   { name: 'Wolf', body: 'M12 4.2 17.5 7.8 20 5.8 18.7 13.2 21 16.5 16.7 16.2 14.2 19.8 12 17 9.8 19.8 7.3 16.2 3 16.5 5.3 13.2 4 5.8 6.5 7.8z' },
@@ -71,5 +72,33 @@ export const AnimalSilhouetteAvatar = ({ address, className = 'wallet-animal-ava
     <svg className={className} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
       <path d={animal.body} />
     </svg>
+  );
+};
+
+/**
+ * Shared identity chip (avatar + generated name + short address) used anywhere
+ * a wallet needs to be highlighted the same way — e.g. Top Traders and the
+ * live Transactions list.
+ */
+export const WalletChip = ({ address, size = 30, onClick = null, className = '' }) => {
+  const known = !!address;
+  return (
+    <span
+      className={`wallet-chip ${onClick ? 'wallet-chip--clickable' : ''} ${className}`}
+      onClick={known ? onClick : undefined}
+      role={onClick ? 'button' : undefined}
+      title={known ? address : 'Unknown wallet'}
+    >
+      <span
+        className="wallet-chip-avatar"
+        style={{ width: size, height: size, background: known ? gradientForWallet(address) : 'rgba(255,255,255,0.12)' }}
+      >
+        {known ? <AnimalSilhouetteAvatar address={address} className="wallet-chip-animal" /> : '?'}
+      </span>
+      <span className="wallet-chip-copy">
+        <span className="wallet-chip-name">{known ? buildWalletName(address) : 'Unknown'}</span>
+        {known && <span className="wallet-chip-addr">{shortWalletAddress(address)}</span>}
+      </span>
+    </span>
   );
 };

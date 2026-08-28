@@ -6,6 +6,7 @@ import { getFullApiUrl } from '../config/api';
 import { getTransactions, deleteTransaction, storeTransaction, clearTransactions } from '../utils/transactionStorage';
 import { useDemoMode } from '../contexts/DemoModeContext';
 import { computeFillStats, getSolUsdPrice } from '../utils/orderFillTracking';
+import OrderDetailView from './OrderDetailView';
 import './OrdersView.css';
 
 const OrdersView = ({ onCoinClick, onTradeClick }) => {
@@ -26,7 +27,8 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
   const [cancellingOrder, setCancellingOrder] = useState(null);
   const [showLimitOrderInfo, setShowLimitOrderInfo] = useState(false);
   const [activeSection, setActiveSection] = useState('orders'); // 'orders' or 'transactions'
-  const [selectedOrder, setSelectedOrder] = useState(null); // order clicked for action popup
+  const [selectedOrder, setSelectedOrder] = useState(null); // history order clicked for action popup
+  const [orderDetailOrder, setOrderDetailOrder] = useState(null); // active order clicked -> full chart+cancel page
   // Map of tokenMint -> banner URL fetched directly from Dexscreener
   const [coinBanners, setCoinBanners] = useState(new Map());
   // Map of tokenMint -> { symbol, name } for client-side enrichment of address-like symbols
@@ -859,7 +861,7 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
                     <div
                       key={orderId}
                       className={`order-card-visual${isExpired ? ' order-card-expired' : ''}`}
-                      onClick={() => setSelectedOrder({
+                      onClick={() => setOrderDetailOrder({
                         orderId,
                         tokenSymbol,
                         tokenName,
@@ -1665,6 +1667,22 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
             </button>
           </div>
         </div>
+      )}
+
+      {/* Active order detail: chart with buy/sell markers + primary cancel-and-cashout button */}
+      {orderDetailOrder && (
+        <OrderDetailView
+          order={orderDetailOrder}
+          walletAddress={publicKey?.toString()}
+          solUsdPrice={solUsdPrice}
+          cancelling={cancellingOrder === orderDetailOrder.orderId}
+          onCancel={(id) => {
+            setOrderDetailOrder(null);
+            handleCancelOrder(id);
+          }}
+          onBack={() => setOrderDetailOrder(null)}
+          jupiterLink={`https://jup.ag/limit/${publicKey?.toString() || ''}`}
+        />
       )}
     </div>
   );

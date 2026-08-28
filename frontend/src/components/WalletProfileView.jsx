@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { getFullApiUrl, fetchJsonWithTimeout } from '../config/api';
 import { useTrackedWallets } from '../contexts/TrackedWalletsContext';
+import NativeChart from './NativeChart';
 import './ProfileView.css';
 import './WalletProfileView.css';
 
@@ -158,7 +159,7 @@ const parseTrade = (t) => {
   };
 };
 
-const WalletProfileView = ({ walletAddress, profileHint = {}, onBack }) => {
+const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClick }) => {
   const [stats, setStats] = useState(null);
   const [statsLoading, setStatsLoading] = useState(true);
   const [statsError, setStatsError] = useState(null);
@@ -167,6 +168,9 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack }) => {
   const { trackWallet, untrackWallet, isTracked, trackedWallets, toggleCopyTrade } = useTrackedWallets();
   const [tracked, setTracked] = useState(false);
   const [copyHintDismissed, setCopyHintDismissed] = useState(false);
+  const [showChartInfo, setShowChartInfo] = useState(false);
+  const [chartPosition, setChartPosition] = useState(null);
+  const [chartPrice, setChartPrice] = useState(null);
 
   useEffect(() => {
     setTracked(isTracked(walletAddress));
@@ -250,6 +254,64 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack }) => {
   const displayName = identity?.name || profileHint?.displayName || profileHint?.name || buildWalletName(walletAddress);
   const latestCoin = coins[0] || null;
 
+  // Entry price + realized ROI for the charted coin, so the chart can show how
+  // far above/below the wallet's own buy-in the price currently is.
+  useEffect(() => {
+    if (!walletAddress || !latestCoin?.mint) { setChartPosition(null); return; }
+    let cancelled = false;
+    setChartPosition(null);
+    fetchJsonWithTimeout(getFullApiUrl(`/api/wallet/${walletAddress}/position/${latestCoin.mint}`))
+      .then((d) => { if (!cancelled && d?.success) setChartPosition(d); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [walletAddress, latestCoin?.mint]);
+
+  // Chart of the wallet's most recently traded coin, marked with when the
+  // viewer started following this wallet (if tracked).
+  const chartCoin = useMemo(
+    () => (latestCoin?.mint ? { mintAddress: latestCoin.mint } : null),
+    [latestCoin?.mint]
+  );
+  const trackedMarker = useMemo(() => {
+    if (!trackedWallet?.addedAt) return null;
+    return [{
+      time: Math.floor(trackedWallet.addedAt / 1000),
+      position: 'belowBar',
+      color: '#fbbf24',
+      shape: 'arrowUp',
+      text: 'Tracked wallet here',
+    }];
+  }, [trackedWallet?.addedAt]);
+
+  // Marks the wallet's own buy-in point on the chart, same shape/color language as
+  // the tracked-trades markers elsewhere in the app (green up-arrow = entry).
+  const entryMarker = useMemo(() => {
+    const firstBuy = chartPosition?.timing?.firstBuy;
+    const entryPrice = Number(chartPosition?.avgEntryPrice);
+    if (!firstBuy || !(entryPrice > 0)) return null;
+    return [{
+      time: Math.floor(firstBuy / 1000),
+      position: 'belowBar',
+      color: '#26a69a',
+      shape: 'arrowUp',
+      text: `Entry $${entryPrice < 1 ? entryPrice.toPrecision(4) : entryPrice.toFixed(2)}`,
+    }];
+  }, [chartPosition?.timing?.firstBuy, chartPosition?.avgEntryPrice]);
+
+  const chartMarkers = useMemo(
+    () => [...(entryMarker || []), ...(trackedMarker || [])],
+    [entryMarker, trackedMarker]
+  );
+
+  // Live PnL $ for this coin vs. the wallet's entry — recomputed from a hovered
+  // historical price when available, otherwise the position's realized PnL.
+  const entryPrice = Number(chartPosition?.avgEntryPrice);
+  const invested = Number(chartPosition?.invested);
+  const hasLivePrice = Number.isFinite(chartPrice) && chartPrice > 0 && entryPrice > 0 && invested > 0;
+  const coinPnl = hasLivePrice
+    ? invested * ((chartPrice - entryPrice) / entryPrice)
+    : chartPosition?.pnl?.total;
+
   return (
     <div className="wpv-root">
       <button className="wpv-back" onClick={onBack} title="Back" aria-label="Back">
@@ -292,25 +354,51 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack }) => {
           {shortAddr(walletAddress)} ↗
         </a>
 
-        <div className="wpv-identity-name">
-          <span>{displayName}</span>
-          <span className="wpv-identity-type">{identity?.type || anonAnimal.name}</span>
-        </div>
+        {chartCoin && (
+          <div className="wpv-chart-section">
+            {/* Sits above the chart, not overlapping it \u2014 just aligned to its top-right. */}
+            <div className="wpv-chart-header-row">
+              <button
+                className="wpv-chart-info-btn"
+                onClick={() => setShowChartInfo((v) => !v)}
+                title="About this chart"
+                aria-label="About this chart"
+              >
+                ?
+              </button>
+            </div>
+            {showChartInfo && (
+              <div className="wpv-chart-info-tooltip" onClick={() => setShowChartInfo(false)}>
+                This is the price chart for <strong>{latestCoin.symbol}</strong>, the last coin {displayName} traded.
+                The green marker shows their entry price{trackedWallet?.addedAt && ', and the amber marker shows when you started following this wallet'}.
+              </div>
+            )}
+            <div className="wpv-chart-wrap">
+              <div className="wpv-chart-identity-overlay">
+                <span className="wpv-chart-identity-left">
+                  <span className="wpv-chart-identity-name">{latestCoin.symbol}</span>
+                  {Number.isFinite(coinPnl) && (
+                    <span className={`wpv-chart-roi-badge ${coinPnl >= 0 ? 'pos' : 'neg'}`}>
+                      {formatCurrency(coinPnl)}
+                    </span>
+                  )}
+                </span>
+              </div>
+              <NativeChart
+                coin={chartCoin}
+                isActive={true}
+                isExpanded={true}
+                markers={chartMarkers}
+                onCrosshairMove={(point) => setChartPrice(point?.price ?? null)}
+              />
+              <div className="wpv-chart-caption">
+                {latestCoin.symbol} — {latestCoin.type === 'sell' ? 'last sold' : 'last bought'} {timeAgo(latestCoin.time)} ago
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="wpv-fast-card">
-          <div className="wpv-fast-user-row">
-            <div className="wpv-fast-mini-avatar" style={{ background: gradientFor(walletAddress) }}>
-              <AnimalSilhouetteAvatar address={walletAddress} />
-            </div>
-            <div className="wpv-fast-user-copy">
-              <span className="wpv-fast-name">{displayName}</span>
-              <span className="wpv-fast-sub">{shortAddr(walletAddress)}</span>
-            </div>
-            <button className="wpv-fast-follow" onClick={handleTrackWallet} disabled={tracked}>
-              {tracked ? 'Tracked' : 'Follow'}
-            </button>
-          </div>
-
           <div className="wpv-fast-position">
             {coinsLoading ? (
               <div className="wpv-fast-skeleton">
@@ -320,7 +408,19 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack }) => {
               </div>
             ) : latestCoin ? (
               <>
-                <div className="wpv-fast-token-row">
+                <div className="wpv-fast-section-title">Most Recent Trade</div>
+                <div
+                  className="wpv-fast-token-row wpv-fast-token-row--clickable"
+                  onClick={() => onCoinClick?.({
+                    mintAddress: latestCoin.mint,
+                    address: latestCoin.mint,
+                    symbol: latestCoin.symbol,
+                    name: latestCoin.name || latestCoin.symbol,
+                    image: latestCoin.image,
+                  })}
+                  role="button"
+                  title="View coin"
+                >
                   {latestCoin.image ? (
                     <img className="wpv-fast-token-img" src={latestCoin.image} alt={latestCoin.symbol} onError={(e) => { e.target.style.display = 'none'; }} />
                   ) : (
@@ -335,10 +435,6 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack }) => {
                     </span>
                   </div>
                   <span className={`wpv-fast-side wpv-fast-side--${latestCoin.type}`}>{latestCoin.type === 'sell' ? 'Sell' : 'Buy'}</span>
-                </div>
-                <div className="wpv-fast-pnl-card">
-                  <span className="wpv-fast-pnl-label">Deep PnL</span>
-                  <span className="wpv-fast-pnl-value">{statsLoading ? 'Calculating...' : formatCurrency(pnl.realized)}</span>
                 </div>
               </>
             ) : (

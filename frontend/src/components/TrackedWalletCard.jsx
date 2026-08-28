@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { getFullApiUrl, fetchJsonWithTimeout } from '../config/api';
+import NativeChart from './NativeChart';
 import './TrackedWalletCard.css';
 
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
@@ -105,8 +106,10 @@ const parseTrade = (t) => {
 };
 
 /**
- * One full-screen slide in the tracked-wallets feed: wallet analytics plus the
- * wallet's most recent trade with a one-tap mimic action.
+ * One full-screen slide in the tracked-wallets feed: the wallet's most recently
+ * traded coin chart (marked with when you started tracking) is the primary
+ * content, mirroring CoinCard; analytics + most recent trade live behind an
+ * expand button like CoinCard's expand-details chevron.
  */
 function TrackedWalletCard({ wallet, shouldLoad = true, onOpenProfile, onOpenPosition, onMimicTrade, onUntrack }) {
   const address = wallet?.address;
@@ -114,6 +117,7 @@ function TrackedWalletCard({ wallet, shouldLoad = true, onOpenProfile, onOpenPos
   const [statsLoading, setStatsLoading] = useState(true);
   const [lastTrade, setLastTrade] = useState(null);
   const [tradeLoading, setTradeLoading] = useState(true);
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
 
   useEffect(() => {
     if (!address || !shouldLoad) return;
@@ -146,9 +150,42 @@ function TrackedWalletCard({ wallet, shouldLoad = true, onOpenProfile, onOpenPos
   const trading = stats?.trading || {};
   const pnl = stats?.pnl || {};
 
+  // Chart the coin behind the wallet's most recent trade; NativeChart resolves
+  // its own pool from the mint if we don't have a pairAddress handy here.
+  const chartCoin = useMemo(
+    () => (lastTrade?.mint ? { mintAddress: lastTrade.mint } : null),
+    [lastTrade?.mint]
+  );
+
+  // Marks the point on the chart's timeline where the user started following this wallet.
+  const trackedMarker = useMemo(() => {
+    if (!wallet?.addedAt) return null;
+    return [{
+      time: Math.floor(wallet.addedAt / 1000),
+      position: 'belowBar',
+      color: '#fbbf24',
+      shape: 'arrowUp',
+      text: 'Tracked wallet here',
+    }];
+  }, [wallet?.addedAt]);
+
   return (
     <div className="twc-card">
-      <div className="twc-header">
+      <div className="twc-chart-wrap">
+        {chartCoin ? (
+          <NativeChart coin={chartCoin} isActive={shouldLoad} isExpanded={false} markers={trackedMarker} />
+        ) : (
+          <div className="twc-chart-placeholder">
+            {tradeLoading ? (
+              <><div className="twc-spinner" /><span>Loading chart…</span></>
+            ) : (
+              <span>No recent trades to chart</span>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="twc-top-overlay">
         <div className="twc-avatar" style={{ background: gradientFor(address) }}>
           <span role="img" aria-label="wallet">🥚</span>
         </div>
@@ -168,110 +205,142 @@ function TrackedWalletCard({ wallet, shouldLoad = true, onOpenProfile, onOpenPos
         </button>
       </div>
 
-      <div className="twc-topstats">
-        <div className="twc-topstat">
-          <span className="twc-topstat-num">{statsLoading ? '—' : formatNumber(trading.totalTrades)}</span>
-          <span className="twc-topstat-label">Trades</span>
+      {lastTrade && (
+        <div className="twc-chart-caption">
+          Chart: {lastTrade.symbol} ({lastTrade.type === 'sell' ? 'last sold' : 'last bought'} {timeAgo(lastTrade.time)})
         </div>
-        <div className="twc-topstat">
-          <span className="twc-topstat-num">{statsLoading ? '—' : formatNumber(trading.uniqueTokens)}</span>
-          <span className="twc-topstat-label">Tokens</span>
-        </div>
-        <div className="twc-topstat">
-          <span className="twc-topstat-num">{statsLoading ? '—' : formatPercent(stats?.winRate)}</span>
-          <span className="twc-topstat-label">Win Rate</span>
-        </div>
-      </div>
+      )}
 
-      <div className="twc-metrics">
-        <div className="twc-metric">
-          <span className="twc-metric-label">Realized PnL</span>
-          <span className={`twc-metric-value ${(pnl.realized ?? 0) >= 0 ? 'pos' : 'neg'}`}>
+      <div className="twc-bottom-bar">
+        <div className="twc-bottom-pnl">
+          <span className="twc-bottom-pnl-label">Realized PnL</span>
+          <span className={`twc-bottom-pnl-value ${(pnl.realized ?? 0) >= 0 ? 'pos' : 'neg'}`}>
             {statsLoading ? '—' : formatCurrency(pnl.realized)}
           </span>
         </div>
-        <div className="twc-metric">
-          <span className="twc-metric-label">ROI</span>
-          <span className={`twc-metric-value ${(stats?.roi ?? 0) >= 0 ? 'pos' : 'neg'}`}>
-            {statsLoading ? '—' : formatPercent(stats?.roi)}
-          </span>
-        </div>
-        <div className="twc-metric">
-          <span className="twc-metric-label">Unrealized</span>
-          <span className={`twc-metric-value ${(pnl.unrealized ?? 0) >= 0 ? 'pos' : 'neg'}`}>
-            {statsLoading ? '—' : formatCurrency(pnl.unrealized)}
-          </span>
-        </div>
-        <div className="twc-metric">
-          <span className="twc-metric-label">Avg Hold</span>
-          <span className="twc-metric-value">{statsLoading ? '—' : formatHold(stats?.avgHoldTimeSecs)}</span>
-        </div>
-        <div className="twc-metric">
-          <span className="twc-metric-label">Invested</span>
-          <span className="twc-metric-value">{statsLoading ? '—' : formatCurrency(pnl.invested)}</span>
-        </div>
-        <div className="twc-metric">
-          <span className="twc-metric-label">Open / Closed</span>
-          <span className="twc-metric-value">
-            {statsLoading ? '—' : `${formatNumber(trading.activePositions)} / ${formatNumber(trading.closedPositions)}`}
-          </span>
-        </div>
+        {lastTrade && (
+          <button
+            className="twc-mimic-btn"
+            onClick={() => onMimicTrade?.({
+              mintAddress: lastTrade.mint,
+              address: lastTrade.mint,
+              symbol: lastTrade.symbol,
+              name: lastTrade.name || lastTrade.symbol,
+              image: lastTrade.image,
+            }, lastTrade)}
+          >
+            {lastTrade.type === 'sell' ? 'Mimic Sell' : 'Mimic Buy'}
+          </button>
+        )}
+        <button
+          className="twc-expand-btn"
+          onClick={() => setDetailsExpanded((v) => !v)}
+          title={detailsExpanded ? 'Collapse details' : 'Expand details'}
+          aria-label={detailsExpanded ? 'Collapse details' : 'Expand details'}
+        >
+          <svg
+            width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+            style={{ transform: detailsExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
+          >
+            <polyline points="18 15 12 9 6 15" />
+          </svg>
+        </button>
       </div>
 
-      <div className="twc-trade-section">
-        <div className="twc-section-title">Most Recent Trade</div>
-        {tradeLoading ? (
-          <div className="twc-trade-loading"><div className="twc-spinner" /><span>Loading trade…</span></div>
-        ) : !lastTrade ? (
-          <div className="twc-trade-empty">No recent trades found</div>
-        ) : (
-          <div
-            className="twc-trade twc-trade--tappable"
-            onClick={() => onOpenPosition?.(address, lastTrade.mint)}
-            role="button"
-            title="View position detail"
-          >
-            <div className="twc-trade-row">
-              {lastTrade.image ? (
-                <img className="twc-trade-img" src={lastTrade.image} alt={lastTrade.symbol} />
-              ) : (
-                <div className="twc-trade-img twc-trade-img--ph">{lastTrade.symbol?.[0] || '?'}</div>
-              )}
-              <div className="twc-trade-info">
-                <div className="twc-trade-symbol">
-                  {lastTrade.symbol}
-                  <span className={`twc-trade-type twc-trade-type--${lastTrade.type}`}>
-                    {lastTrade.type === 'sell' ? 'SELL' : 'BUY'}
-                  </span>
-                </div>
-                <div className="twc-trade-meta">
-                  {lastTrade.solAmount ? `${Number(lastTrade.solAmount).toFixed(3)} SOL · ` : ''}
-                  {timeAgo(lastTrade.time)}
+      {detailsExpanded && (
+        <div className="twc-details-panel">
+          <div className="twc-topstats">
+            <div className="twc-topstat">
+              <span className="twc-topstat-num">{statsLoading ? '—' : formatNumber(trading.totalTrades)}</span>
+              <span className="twc-topstat-label">Trades</span>
+            </div>
+            <div className="twc-topstat">
+              <span className="twc-topstat-num">{statsLoading ? '—' : formatNumber(trading.uniqueTokens)}</span>
+              <span className="twc-topstat-label">Tokens</span>
+            </div>
+            <div className="twc-topstat">
+              <span className="twc-topstat-num">{statsLoading ? '—' : formatPercent(stats?.winRate)}</span>
+              <span className="twc-topstat-label">Win Rate</span>
+            </div>
+          </div>
+
+          <div className="twc-metrics">
+            <div className="twc-metric">
+              <span className="twc-metric-label">Realized PnL</span>
+              <span className={`twc-metric-value ${(pnl.realized ?? 0) >= 0 ? 'pos' : 'neg'}`}>
+                {statsLoading ? '—' : formatCurrency(pnl.realized)}
+              </span>
+            </div>
+            <div className="twc-metric">
+              <span className="twc-metric-label">ROI</span>
+              <span className={`twc-metric-value ${(stats?.roi ?? 0) >= 0 ? 'pos' : 'neg'}`}>
+                {statsLoading ? '—' : formatPercent(stats?.roi)}
+              </span>
+            </div>
+            <div className="twc-metric">
+              <span className="twc-metric-label">Unrealized</span>
+              <span className={`twc-metric-value ${(pnl.unrealized ?? 0) >= 0 ? 'pos' : 'neg'}`}>
+                {statsLoading ? '—' : formatCurrency(pnl.unrealized)}
+              </span>
+            </div>
+            <div className="twc-metric">
+              <span className="twc-metric-label">Avg Hold</span>
+              <span className="twc-metric-value">{statsLoading ? '—' : formatHold(stats?.avgHoldTimeSecs)}</span>
+            </div>
+            <div className="twc-metric">
+              <span className="twc-metric-label">Invested</span>
+              <span className="twc-metric-value">{statsLoading ? '—' : formatCurrency(pnl.invested)}</span>
+            </div>
+            <div className="twc-metric">
+              <span className="twc-metric-label">Open / Closed</span>
+              <span className="twc-metric-value">
+                {statsLoading ? '—' : `${formatNumber(trading.activePositions)} / ${formatNumber(trading.closedPositions)}`}
+              </span>
+            </div>
+          </div>
+
+          <div className="twc-trade-section">
+            <div className="twc-section-title">Most Recent Trade</div>
+            {tradeLoading ? (
+              <div className="twc-trade-loading"><div className="twc-spinner" /><span>Loading trade…</span></div>
+            ) : !lastTrade ? (
+              <div className="twc-trade-empty">No recent trades found</div>
+            ) : (
+              <div
+                className="twc-trade twc-trade--tappable"
+                onClick={() => onOpenPosition?.(address, lastTrade.mint)}
+                role="button"
+                title="View position detail"
+              >
+                <div className="twc-trade-row">
+                  {lastTrade.image ? (
+                    <img className="twc-trade-img" src={lastTrade.image} alt={lastTrade.symbol} />
+                  ) : (
+                    <div className="twc-trade-img twc-trade-img--ph">{lastTrade.symbol?.[0] || '?'}</div>
+                  )}
+                  <div className="twc-trade-info">
+                    <div className="twc-trade-symbol">
+                      {lastTrade.symbol}
+                      <span className={`twc-trade-type twc-trade-type--${lastTrade.type}`}>
+                        {lastTrade.type === 'sell' ? 'SELL' : 'BUY'}
+                      </span>
+                    </div>
+                    <div className="twc-trade-meta">
+                      {lastTrade.solAmount ? `${Number(lastTrade.solAmount).toFixed(3)} SOL · ` : ''}
+                      {timeAgo(lastTrade.time)}
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-            <button
-              className="twc-mimic-btn"
-              onClick={(e) => {
-                e.stopPropagation();
-                onMimicTrade?.({
-                  mintAddress: lastTrade.mint,
-                  address: lastTrade.mint,
-                  symbol: lastTrade.symbol,
-                  name: lastTrade.name || lastTrade.symbol,
-                  image: lastTrade.image,
-                }, lastTrade);
-              }}
-            >
-              {lastTrade.type === 'sell' ? 'Mimic Sell' : 'Mimic Buy'} {lastTrade.symbol}
-            </button>
+            )}
           </div>
-        )}
-      </div>
 
-      <button className="twc-profile-btn" onClick={() => onOpenProfile?.(address)}>
-        View Full Wallet Profile
-      </button>
+          <button className="twc-profile-btn" onClick={() => onOpenProfile?.(address)}>
+            View Full Wallet Profile
+          </button>
+        </div>
+      )}
     </div>
   );
 }

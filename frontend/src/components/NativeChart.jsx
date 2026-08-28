@@ -19,6 +19,29 @@ const TIMEFRAMES = [
 
 const DEFAULT_TF_INDEX = 2; // 15m — matches the old iframe's resolution
 
+// How many "what it'd take to get there" candles are drawn ahead of the live price
+// while an order target is being chosen.
+const PROJECTION_BARS = 24;
+
+function mulberry32(seed) {
+  let a = seed;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function hashString(str) {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
 function resolvePool(coin) {
   return coin?.pairAddress || coin?.poolAddress || coin?.ammAccount || null;
 }
@@ -74,6 +97,12 @@ const NativeChart = ({
   const entryLineRef = useRef(null);
   const trackedLineRef = useRef(null);
   const markersRef = useRef(null);
+  const projSeriesRef = useRef(null);
+  const projShapeRef = useRef(null); // stable noise so scrolling stretches one path, not a new one
+  const recentVolRef = useRef(0);
+  const manualTfRef = useRef(false); // user picked a timeframe; auto-framing stands down
+  const lastOrderTargetRef = useRef(null);
+  const lastFocusTimelineRef = useRef(null);
   const dataLengthRef = useRef(0);
   const focusAnimationRef = useRef(null);
   const targetScaleAnimationRef = useRef(null);
@@ -143,7 +172,8 @@ const NativeChart = ({
       autoSize: true,
       ...themeOptions(isDarkMode),
       rightPriceScale: { borderVisible: false },
-      timeScale: { borderVisible: false, timeVisible: true, secondsVisible: false },
+      // fixLeftEdge stops panning past the oldest candle into a blank pane.
+      timeScale: { borderVisible: false, timeVisible: true, secondsVisible: false, fixLeftEdge: true },
       crosshair: { mode: 0 },
       handleScroll: isExpanded,
       handleScale: isExpanded,
@@ -158,6 +188,7 @@ const NativeChart = ({
       entryLineRef.current = null;
       trackedLineRef.current = null;
       markersRef.current = null;
+      projSeriesRef.current = null;
       if (focusAnimationRef.current) cancelAnimationFrame(focusAnimationRef.current);
       if (targetScaleAnimationRef.current) cancelAnimationFrame(targetScaleAnimationRef.current);
     };
@@ -176,30 +207,99 @@ const NativeChart = ({
     }
   }, [isExpanded]);
 
+  // When expanded/interactive, the chart usually sits inside a scrollable sheet
+  // (PositionDetailView, OrderDetailView, fullscreen panel). Wheel/touch events
+  // over the canvas would otherwise bubble up and scroll that ancestor at the
+  // same time lightweight-charts pans/zooms, producing a jittery double-move.
+  // Stopping propagation (not the default action) keeps the gesture contained
+  // to the chart for both mouse-wheel and touch/trackpad scrolling.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || !isExpanded) return undefined;
+    const stop = (e) => e.stopPropagation();
+    el.addEventListener('wheel', stop, { passive: true });
+    el.addEventListener('touchmove', stop, { passive: true });
+    return () => {
+      el.removeEventListener('wheel', stop);
+      el.removeEventListener('touchmove', stop);
+    };
+  }, [isExpanded]);
+
   // Feed the parent card's header with the historical candle under the
-  // crosshair. Clearing the pointer restores its live price indicator.
+  // crosshair, and scrub the chart's own price badge to match — so hovering
+  // or dragging through the chart shows the price at that point in time the
+  // same way every other chart view does. Clearing the pointer restores the
+  // live/last-candle price.
   useEffect(() => {
     const chart = chartRef.current;
-    if (!chart || !onCrosshairMove) return undefined;
+    if (!chart) return undefined;
     const handleMove = (param) => {
       const series = seriesRef.current;
       const candle = series ? param.seriesData?.get(series) : null;
       const price = Number(candle?.close ?? candle?.value);
       if (param.time && Number.isFinite(price) && price > 0) {
-        onCrosshairMove({ price, time: param.time });
+        onCrosshairMove?.({ price, time: param.time });
+        setLiveTick((prev) => ({ price, dir: null, n: prev.n }));
       } else {
-        onCrosshairMove(null);
+        onCrosshairMove?.(null);
+        const last = lastCandleRef.current;
+        setLiveTick((prev) => ({ price: last ? last.close : prev.price, dir: null, n: prev.n }));
       }
     };
     chart.subscribeCrosshairMove(handleMove);
     return () => chart.unsubscribeCrosshairMove(handleMove);
   }, [onCrosshairMove, status, tfIndex]);
 
-  // Limit-order sell mode always works from a tight one-minute view of the
-  // current coin, even if the user was previously looking at a wider chart.
+  // Limit-order mode picks a timeframe that actually contains the move being asked
+  // for — a +50% target is meaningless on a 1m chart.
   useEffect(() => {
-    if (focusOneMinute && tfIndex !== 0) setTfIndex(0);
-  }, [focusOneMinute, tfIndex]);
+    if (!focusOneMinute) {
+      manualTfRef.current = false;
+      lastOrderTargetRef.current = null;
+      return undefined;
+    }
+    // Moving the price wheel hands control back to the auto-framing.
+    if (lastOrderTargetRef.current !== targetPrice) {
+      lastOrderTargetRef.current = targetPrice;
+      manualTfRef.current = false;
+    } else if (manualTfRef.current) {
+      return undefined;
+    }
+    const current = Number(lastCandleRef.current?.close) || 0;
+    const target = Number(targetPrice) || 0;
+    if (!(current > 0) || !(target > 0)) return undefined;
+    const distance = Math.abs(target / current - 1);
+    const desired = distance < 0.02 ? 0
+      : distance < 0.06 ? 1
+      : distance < 0.15 ? 2
+      : distance < 0.40 ? 3
+      : distance < 1 ? 4
+      : 5;
+    if (desired === tfIndex) return undefined;
+    // Debounced so dragging the price wheel doesn't refetch on every tick.
+    const timer = setTimeout(() => setTfIndex(desired), 400);
+    return () => clearTimeout(timer);
+  }, [focusOneMinute, targetPrice, tfIndex]);
+
+  // Position/profile mode: pick a timeframe wide enough that the entry candle
+  // actually exists in the fetched window (~1000 candles). Otherwise the entry
+  // simply isn't loaded and looks "stuck" off-screen with nowhere to pan to.
+  useEffect(() => {
+    if (!focusTimelineFrom) { lastFocusTimelineRef.current = null; return undefined; }
+    if (lastFocusTimelineRef.current === focusTimelineFrom) {
+      if (manualTfRef.current) return undefined;
+    } else {
+      lastFocusTimelineRef.current = focusTimelineFrom;
+      manualTfRef.current = false;
+    }
+    const holdSecs = (Date.now() - Number(focusTimelineFrom)) / 1000;
+    if (!(holdSecs > 0)) return undefined;
+    let desired = TIMEFRAMES.length - 1;
+    for (let i = 0; i < TIMEFRAMES.length; i++) {
+      if (holdSecs / tfSeconds(TIMEFRAMES[i]) <= 700) { desired = i; break; }
+    }
+    if (desired !== tfIndex) setTfIndex(desired);
+  }, [focusTimelineFrom, tfIndex]);
 
   const load = useCallback(async () => {
     if (!chartRef.current || !poolResolved) return;
@@ -209,7 +309,7 @@ const NativeChart = ({
 
     // Candlestick mode: coin has a DEX pool → GeckoTerminal OHLCV.
     if (pool) {
-      const url = `${API_CONFIG.BASE_URL}/api/geckoterminal/ohlcv/solana/${pool}/${tf.interval}?aggregate=${tf.aggregate}&limit=200`;
+      const url = `${API_CONFIG.BASE_URL}/api/geckoterminal/ohlcv/solana/${pool}/${tf.interval}?aggregate=${tf.aggregate}&limit=1000`;
       // The backend can transiently 503 a cold (uncached) pool if the provider's own
       // rate limit is hit — retry a couple of times before treating it as empty/error.
       const RETRY_DELAYS_MS = [0, 900, 2000];
@@ -250,6 +350,10 @@ const NativeChart = ({
       series.setData(deduped);
       dataLengthRef.current = deduped.length;
       lastCandleRef.current = deduped[deduped.length - 1] || null;
+      // Typical bar range, used to size the projection's wobble realistically.
+      const recent = deduped.slice(-20);
+      const vols = recent.map((c) => (c.high - c.low) / (c.close || 1)).filter(Number.isFinite);
+      recentVolRef.current = vols.length ? vols.reduce((a, b) => a + b, 0) / vols.length : 0;
       // Seed the price badge immediately so it never shows blank/stale before the first live tick.
       if (lastCandleRef.current) setLiveTick((prev) => ({ price: lastCandleRef.current.close, dir: null, n: prev.n }));
       chartRef.current?.timeScale().fitContent();
@@ -315,6 +419,8 @@ const NativeChart = ({
 
   // Position detail opens at the trader's entry point, leaving the subsequent
   // price action visible and scrollable instead of always fitting all history.
+  // The entry sits ~20% in from the left edge (proportional to the total span)
+  // rather than jammed against it with only a fixed few-candle buffer.
   useEffect(() => {
     const chart = chartRef.current;
     const last = lastCandleRef.current;
@@ -323,8 +429,11 @@ const NativeChart = ({
 
     const entry = Math.floor(entryMs / 1000);
     const interval = tfSeconds(TIMEFRAMES[tfIndex]);
-    const from = Math.max(0, entry - interval * 3);
     const to = last.time + interval * 6;
+    const targetFraction = 0.2;
+    let from = (entry - targetFraction * to) / (1 - targetFraction);
+    from = Math.min(from, entry - interval);
+    from = Math.max(0, from);
     try {
       chart.timeScale().setVisibleRange({ from, to });
     } catch (_) {
@@ -489,7 +598,9 @@ const NativeChart = ({
 
   useEffect(() => {
     const series = seriesRef.current;
-    if (!series || !focusOneMinute || tfIndex !== 0 || status !== 'ready') return undefined;
+    // Candlestick mode gets projection candles instead, and those already pull the
+    // price scale toward the target on their own.
+    if (!series || !focusOneMinute || status !== 'ready' || seriesTypeRef.current === 'candles') return undefined;
 
     const currentPrice = Number(lastCandleRef.current?.close) || 0;
     displayedTargetPriceRef.current = currentPrice;
@@ -542,22 +653,17 @@ const NativeChart = ({
     };
   }, [focusOneMinute, status, tfIndex]);
 
-  // Animate the order focus into a 1m view. As the target moves farther from
-  // market price, reveal more history and future space so its line stays useful.
+  // Zoom the order view onto the live price plus the projected path to the target.
   useEffect(() => {
     const chart = chartRef.current;
-    if (!chart || !focusOneMinute || tfIndex !== 0 || status !== 'ready' || dataLengthRef.current === 0) return;
+    if (!chart || !focusOneMinute || status !== 'ready' || dataLengthRef.current === 0) return;
 
     if (focusAnimationRef.current) cancelAnimationFrame(focusAnimationRef.current);
     const scale = chart.timeScale();
     const last = dataLengthRef.current - 1;
-    const currentPrice = Number(lastCandleRef.current?.close) || 0;
-    const targetValue = Number(targetPrice) || currentPrice;
-    const distance = currentPrice > 0 ? Math.abs(targetValue / currentPrice - 1) : 0;
-    const historyBars = Math.min(180, 100 + Math.ceil(distance * 60));
-    // Reserve a generous future area so the latest candle sits left of center,
-    // giving the order guide room to extend toward its selected target.
-    const futureBars = Math.min(150, 110 + Math.ceil(distance * 40));
+    const historyBars = 30;
+    // Reserve exactly enough room for the projected path to the target.
+    const futureBars = PROJECTION_BARS + 3;
     const target = { from: Math.max(0, last - historyBars), to: last + futureBars };
     const current = scale.getVisibleLogicalRange() || { from: Math.max(0, last - 150), to: last + 2 };
     const startedAt = performance.now();
@@ -579,6 +685,72 @@ const NativeChart = ({
       if (focusAnimationRef.current) cancelAnimationFrame(focusAnimationRef.current);
     };
   }, [focusOneMinute, status, targetPrice, tfIndex]);
+
+  // Draw a plausible path of candles from the live price to the chosen order target,
+  // so the user sees what "getting there" looks like instead of an abstract line.
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    const last = lastCandleRef.current;
+    const target = Number(targetPrice);
+    const active = focusOneMinute && status === 'ready' && seriesTypeRef.current === 'candles'
+      && last && Number.isFinite(target) && target > 0;
+
+    if (!active) {
+      if (projSeriesRef.current) {
+        try { chart.removeSeries(projSeriesRef.current); } catch (e) { /* already gone */ }
+        projSeriesRef.current = null;
+      }
+      return;
+    }
+
+    if (!projSeriesRef.current) {
+      projSeriesRef.current = chart.addSeries(CandlestickSeries, {
+        upColor: 'rgba(38,166,154,0.38)', downColor: 'rgba(239,83,80,0.38)',
+        borderVisible: false,
+        wickUpColor: 'rgba(38,166,154,0.3)', wickDownColor: 'rgba(239,83,80,0.3)',
+        priceLineVisible: false, lastValueVisible: false,
+      });
+    }
+
+    const seedKey = `${mint}-${tfIndex}`;
+    if (projShapeRef.current?.key !== seedKey) {
+      const rand = mulberry32(hashString(seedKey));
+      projShapeRef.current = {
+        key: seedKey,
+        noise: Array.from({ length: PROJECTION_BARS * 3 }, () => rand() * 2 - 1),
+      };
+    }
+    const { noise } = projShapeRef.current;
+
+    const interval = tfSeconds(TIMEFRAMES[tfIndex]);
+    const start = last.close;
+    const span = target - start;
+    const vol = Math.max(recentVolRef.current, 0.002);
+    const wobble = Math.abs(span) * 0.16 + start * vol * 0.6;
+
+    const candles = [];
+    let prevClose = start;
+    for (let i = 0; i < PROJECTION_BARS; i++) {
+      const p = (i + 1) / PROJECTION_BARS;
+      const drift = start + span * (p * p * (3 - 2 * p)); // smoothstep, not a straight line
+      const isLast = i === PROJECTION_BARS - 1;
+      const close = isLast ? target : drift + wobble * noise[i];
+      const open = prevClose;
+      const high = Math.max(open, close) + wobble * Math.abs(noise[PROJECTION_BARS + i]) * 0.45;
+      const low = Math.min(open, close) - wobble * Math.abs(noise[PROJECTION_BARS * 2 + i]) * 0.45;
+      candles.push({
+        time: last.time + interval * (i + 1),
+        open,
+        high,
+        low: Math.max(low, start * 0.01),
+        close,
+      });
+      prevClose = close;
+    }
+
+    try { projSeriesRef.current.setData(candles); } catch (e) { /* mid-teardown */ }
+  }, [focusOneMinute, targetPrice, status, tfIndex, mint]);
 
   // Fold the live price into the last candle in real time (O(1) series.update).
   useEffect(() => {
@@ -616,7 +788,7 @@ const NativeChart = ({
             key={tf.label}
             type="button"
             className={`native-chart-tf ${i === tfIndex ? 'active' : ''}`}
-            onClick={(e) => { e.stopPropagation(); setTfIndex(i); }}
+            onClick={(e) => { e.stopPropagation(); manualTfRef.current = true; setTfIndex(i); }}
           >
             {tf.label}
           </button>
@@ -625,8 +797,6 @@ const NativeChart = ({
       <div className="native-chart-canvas" ref={containerRef} />
       {orderGuide && (
         <svg className="native-chart-order-guide" viewBox={`0 0 ${orderGuide.width} ${orderGuide.height}`} preserveAspectRatio="none" aria-hidden="true">
-          <line x1={orderGuide.fromX} y1={orderGuide.fromY} x2={orderGuide.toX} y2={orderGuide.toY} stroke={targetColor} strokeWidth="2" strokeDasharray="5 5" />
-          <circle cx={orderGuide.fromX} cy={orderGuide.fromY} r="3" fill={targetColor} />
           <text x={orderGuide.toX - 4} y={orderGuide.toY - 8} textAnchor="end">{targetLabel}</text>
         </svg>
       )}

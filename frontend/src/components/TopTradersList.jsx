@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { getFullApiUrl } from '../config/api';
 import WalletPopup from './WalletPopup';
+import { WalletChip } from '../utils/walletIdentity';
 import './TopTradersList.css';
 
 const TopTradersList = ({ coinAddress, isExpanded, isOpen = true, previewLimit = 3, onWalletClick = null }) => {
@@ -223,7 +224,7 @@ const TopTradersList = ({ coinAddress, isExpanded, isOpen = true, previewLimit =
                     }}
                     title={isOpen ? 'Click to view wallet details' : 'Open top traders to interact'}
                   >
-                    {formatWallet(trader.wallet)}
+                    <WalletChip address={trader.wallet} size={30} />
                   </div>
                   <div className="col-buy">{formatCurrency(trader.total_invested || 0)}</div>
                   <div className="col-sell">{formatCurrency(trader.realized || 0)}</div>

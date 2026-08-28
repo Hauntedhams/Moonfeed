@@ -49,6 +49,13 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
   const [error, setError] = useState(null);
   const [chartPrice, setChartPrice] = useState(null);
 
+  // Hide the feed's fixed-position buy-drawer swipe hint while this full-screen
+  // overlay is open — it would otherwise bleed through on top of it.
+  useEffect(() => {
+    document.body.classList.add('pdv-open');
+    return () => document.body.classList.remove('pdv-open');
+  }, []);
+
   useEffect(() => {
     if (!walletAddress || !mint) return;
     let cancelled = false;
