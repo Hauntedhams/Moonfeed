@@ -315,7 +315,12 @@ const NativeChart = ({
       }
     };
     chart.subscribeCrosshairMove(handleMove);
-    return () => chart.unsubscribeCrosshairMove(handleMove);
+    return () => {
+      // On unmount this cleanup can run AFTER the chart-creation effect's own
+      // cleanup (chart.remove()) already disposed it, since cleanups fire in
+      // declaration order, not reverse — guard against the resulting throw.
+      try { chart.unsubscribeCrosshairMove(handleMove); } catch (_) { /* chart disposed */ }
+    };
   }, [onCrosshairMove, status, tfIndex]);
 
   // Limit-order mode picks a timeframe that actually contains the move being asked
@@ -677,9 +682,14 @@ const NativeChart = ({
       const canvas = containerRef.current;
       const width = canvas?.clientWidth || 0;
       const height = canvas?.clientHeight || 0;
-      const fromX = chart.timeScale().timeToCoordinate(current.time);
-      const fromY = series.priceToCoordinate(current.close);
-      const rawToY = series.priceToCoordinate(target);
+      let fromX, fromY, rawToY;
+      try {
+        fromX = chart.timeScale().timeToCoordinate(current.time);
+        fromY = series.priceToCoordinate(current.close);
+        rawToY = series.priceToCoordinate(target);
+      } catch (_) {
+        return; // chart/series disposed
+      }
       if (![width, height, fromX, fromY, rawToY].every(Number.isFinite)) return;
       // The price scale caps how far it expands, so keep the guide's tip on-canvas.
       const toY = Math.min(Math.max(rawToY, 10), height - 10);
@@ -777,23 +787,34 @@ const NativeChart = ({
     if (!chart || !focusOneMinute || status !== 'ready' || dataLengthRef.current === 0) return;
 
     if (focusAnimationRef.current) cancelAnimationFrame(focusAnimationRef.current);
-    const scale = chart.timeScale();
+    let scale, current;
     const last = dataLengthRef.current - 1;
     const historyBars = 30;
     // Reserve exactly enough room for the projected path to the target.
     const futureBars = PROJECTION_BARS + 3;
     const target = { from: Math.max(0, last - historyBars), to: last + futureBars };
-    const current = scale.getVisibleLogicalRange() || { from: Math.max(0, last - 150), to: last + 2 };
+    try {
+      scale = chart.timeScale();
+      current = scale.getVisibleLogicalRange() || { from: Math.max(0, last - 150), to: last + 2 };
+    } catch (_) {
+      return; // chart disposed
+    }
     const startedAt = performance.now();
     const duration = 420;
 
     const animate = (now) => {
       const progress = Math.min(1, (now - startedAt) / duration);
       const eased = 1 - Math.pow(1 - progress, 3);
-      scale.setVisibleLogicalRange({
-        from: current.from + (target.from - current.from) * eased,
-        to: current.to + (target.to - current.to) * eased,
-      });
+      try {
+        scale.setVisibleLogicalRange({
+          from: current.from + (target.from - current.from) * eased,
+          to: current.to + (target.to - current.to) * eased,
+        });
+      } catch (_) {
+        // Chart disposed mid-animation (e.g. card unmounted) — stop the loop.
+        focusAnimationRef.current = null;
+        return;
+      }
       if (progress < 1) focusAnimationRef.current = requestAnimationFrame(animate);
       else focusAnimationRef.current = null;
     };
@@ -823,12 +844,16 @@ const NativeChart = ({
     }
 
     if (!projSeriesRef.current) {
-      projSeriesRef.current = chart.addSeries(CandlestickSeries, {
-        upColor: 'rgba(38,166,154,0.38)', downColor: 'rgba(239,83,80,0.38)',
-        borderVisible: false,
-        wickUpColor: 'rgba(38,166,154,0.3)', wickDownColor: 'rgba(239,83,80,0.3)',
-        priceLineVisible: false, lastValueVisible: false,
-      });
+      try {
+        projSeriesRef.current = chart.addSeries(CandlestickSeries, {
+          upColor: 'rgba(38,166,154,0.38)', downColor: 'rgba(239,83,80,0.38)',
+          borderVisible: false,
+          wickUpColor: 'rgba(38,166,154,0.3)', wickDownColor: 'rgba(239,83,80,0.3)',
+          priceLineVisible: false, lastValueVisible: false,
+        });
+      } catch (e) {
+        return; // chart disposed
+      }
     }
 
     const seedKey = `${mint}-${tfIndex}`;
