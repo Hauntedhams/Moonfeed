@@ -5,10 +5,9 @@
 // iframe embed. Runtime-togglable for A/B testing without a rebuild:
 //   localStorage.setItem('nativeChart', '0'); location.reload();  // disable
 //   localStorage.removeItem('nativeChart'); location.reload();    // back to default
-// Or build-time via VITE_NATIVE_CHART. Native charts remain available for
-// controlled testing, but production defaults to the stable iframe embed until
-// the lightweight-charts disposal issue is fully resolved.
-const DEFAULT_ON = false;
+// Or build-time via VITE_NATIVE_CHART. The native chart is backed by the
+// backend's CoinGecko Onchain OHLCV route and is the production graph path.
+const DEFAULT_ON = true;
 
 function readFlag(localStorageKey, envValue) {
   try {

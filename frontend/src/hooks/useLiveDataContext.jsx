@@ -45,14 +45,6 @@ export function LiveDataProvider({ children }) {
     }
 
     try {
-      // MOBILE FIX: Disable WebSocket on mobile in production
-      if (isMobile && import.meta.env.PROD) {
-        console.log('📱 Mobile device - WebSocket disabled for stability');
-        setConnectionStatus('disabled');
-        connectionState = 'disabled';
-        return;
-      }
-
       const wsUrl = import.meta.env.PROD 
         ? 'wss://api.moonfeed.app/ws'
         : 'ws://localhost:3001/ws';
