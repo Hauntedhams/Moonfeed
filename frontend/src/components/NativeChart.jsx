@@ -180,8 +180,10 @@ const NativeChart = ({
   // switch between candlestick (DEX pool) and area (pool-less /api/chart-data) modes.
   useEffect(() => {
     if (!containerRef.current) return undefined;
-    const chart = createChart(containerRef.current, {
-      autoSize: true,
+    const container = containerRef.current;
+    const chart = createChart(container, {
+      width: container.clientWidth || 1,
+      height: container.clientHeight || 1,
       ...themeOptions(isDarkMode),
       rightPriceScale: { borderVisible: false },
       // fixLeftEdge stops panning past the oldest candle into a blank pane.
@@ -191,7 +193,14 @@ const NativeChart = ({
       handleScale: isExpanded,
     });
     chartRef.current = chart;
+    const resizeObserver = new ResizeObserver(() => {
+      try {
+        chart.resize(container.clientWidth || 1, container.clientHeight || 1);
+      } catch (_) { /* chart disposed */ }
+    });
+    resizeObserver.observe(container);
     return () => {
+      resizeObserver.disconnect();
       try { chart.remove(); } catch (_) { /* already disposed */ }
       chartRef.current = null;
       seriesRef.current = null;
