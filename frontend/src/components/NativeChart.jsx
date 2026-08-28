@@ -83,6 +83,7 @@ const NativeChart = ({
   focusOneMinute = false,
   focusTimelineFrom = null,
   refocusSignal = 0,
+  resetViewSignal = 0,
   targetPrice = null,
   targetLabel = '',
   targetColor = '#22d3ee',
@@ -235,6 +236,61 @@ const NativeChart = ({
       el.removeEventListener('touchmove', stop);
     };
   }, [isExpanded]);
+
+  // Collapsed mode: the canvas is normally pointer-events:none so a swipe
+  // anywhere scrolls the feed. This gate selectively re-enables just the two
+  // axis strips — dragging the bottom time axis pans left/right, dragging the
+  // right price axis rescales the candles' height — both native
+  // lightweight-charts gestures, while a touch starting in the main plot area
+  // is left untouched so it still bubbles up to scroll the feed.
+  useEffect(() => {
+    const el = containerRef.current;
+    const chart = chartRef.current;
+    if (!el || !chart || isExpanded) return undefined;
+
+    el.style.pointerEvents = 'auto';
+    try { chart.applyOptions({ handleScroll: true, handleScale: true }); } catch (_) { /* disposed */ }
+
+    const axisTouchRef = { current: false };
+    const AXIS_FALLBACK = { bottom: 28, right: 56 };
+
+    const inAxisZone = (touch) => {
+      const rect = el.getBoundingClientRect();
+      const x = touch.clientX - rect.left;
+      const y = touch.clientY - rect.top;
+      let bottomH = AXIS_FALLBACK.bottom;
+      let rightW = AXIS_FALLBACK.right;
+      try { bottomH = chart.timeScale().height() || bottomH; } catch (_) { /* ignore */ }
+      try { rightW = chart.priceScale('right').width() || rightW; } catch (_) { /* ignore */ }
+      return y >= rect.height - bottomH || x >= rect.width - rightW;
+    };
+
+    const onTouchStartCapture = (e) => {
+      const touch = e.touches?.[0];
+      if (!touch) return;
+      axisTouchRef.current = inAxisZone(touch);
+      // Not an axis-strip touch: stop the chart's own listener on this same
+      // node from ever seeing it, so it can't preventDefault the feed scroll.
+      if (!axisTouchRef.current) e.stopImmediatePropagation();
+    };
+    const onTouchMoveCapture = (e) => {
+      // Once a drag is confirmed to be on an axis strip, keep it from also
+      // bubbling into the feed scroller for the rest of the gesture.
+      if (axisTouchRef.current) e.stopPropagation();
+    };
+    const onTouchEndCapture = () => { axisTouchRef.current = false; };
+
+    el.addEventListener('touchstart', onTouchStartCapture, { capture: true, passive: true });
+    el.addEventListener('touchmove', onTouchMoveCapture, { capture: true, passive: true });
+    el.addEventListener('touchend', onTouchEndCapture, { capture: true, passive: true });
+    return () => {
+      el.removeEventListener('touchstart', onTouchStartCapture, { capture: true });
+      el.removeEventListener('touchmove', onTouchMoveCapture, { capture: true });
+      el.removeEventListener('touchend', onTouchEndCapture, { capture: true });
+      el.style.pointerEvents = '';
+      try { chart.applyOptions({ handleScroll: false, handleScale: false }); } catch (_) { /* disposed */ }
+    };
+  }, [isExpanded, status]);
 
   // Feed the parent card's header with the historical candle under the
   // crosshair, and scrub the chart's own price badge to match — so hovering
@@ -465,6 +521,16 @@ const NativeChart = ({
       // from load() remains a useful fallback until the user changes timeframe.
     }
   }, [focusTimelineFrom, status, tfIndex, refocusSignal]);
+
+  // "Reset chart view" button: snap pan/zoom back to the default framing
+  // (skipped the very first time so it doesn't fight the initial fitContent).
+  const resetSkipRef = useRef(true);
+  useEffect(() => {
+    if (resetSkipRef.current) { resetSkipRef.current = false; return; }
+    const chart = chartRef.current;
+    if (!chart || status !== 'ready') return;
+    try { chart.timeScale().fitContent(); } catch (_) { /* chart disposed */ }
+  }, [resetViewSignal]);
 
   // Keep the price axis wide enough to always include the entry/target lines
   // (e.g. a placed order's buy-in and trigger price), not just the candles

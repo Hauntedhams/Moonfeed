@@ -218,15 +218,18 @@ const TopTradersList = ({ coinAddress, isExpanded, isOpen = true, previewLimit =
             {/* Column Headers */}
             <div className="table-header">
               <div className="col-rank">#</div>
+              <div className="col-pnl">PnL</div>
               <div className="col-wallet">Wallet</div>
               <div className="col-buy">Buy</div>
               <div className="col-sell">Sell</div>
-              <div className="col-pnl">PnL</div>
             </div>
             <div className="traders-scroll-window" ref={scrollWindowRef} onScroll={handleScrollWindowScroll}>
               {visibleTraders.map((trader, index) => (
                 <div key={trader.wallet || index} className="table-row">
                   <div className="col-rank">#{index + 1}</div>
+                  <div className={`col-pnl ${trader.total >= 0 ? 'positive' : 'negative'}`}>
+                    {formatCurrency(trader.total)}
+                  </div>
                   <div 
                     className={`col-wallet ${isOpen ? 'clickable' : ''}`}
                     onClick={() => {
@@ -248,9 +251,6 @@ const TopTradersList = ({ coinAddress, isExpanded, isOpen = true, previewLimit =
                   </div>
                   <div className="col-buy">{formatCurrency(trader.total_invested || 0)}</div>
                   <div className="col-sell">{formatCurrency(trader.realized || 0)}</div>
-                  <div className={`col-pnl ${trader.total >= 0 ? 'positive' : 'negative'}`}>
-                    {formatCurrency(trader.total)}
-                  </div>
                 </div>
               ))}
             </div>

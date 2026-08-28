@@ -42,6 +42,7 @@ const ProfileView = ({ onTradeClick }) => {
   const [coinBanners, setCoinBanners] = useState(new Map());
   const fileInputRef = useRef(null);
   const { trackedWallets, untrackWallet } = useTrackedWallets();
+  const [trackedCoinsCount, setTrackedCoinsCount] = useState(0);
   const [selectedWallet, setSelectedWallet] = useState(null);
   const [profileTab, setProfileTab] = useState('history');
   const [transactions, setTransactions] = useState([]);
@@ -73,6 +74,22 @@ const ProfileView = ({ onTradeClick }) => {
 
   // Convenience alias used throughout
   const profilePicture = profile.profilePicture;
+
+  // Read the account's synced tracked-coins count directly from the backend —
+  // combined with trackedWallets for the "Tracked" stat, so it reflects real
+  // persisted data instead of only ever counting wallets.
+  useEffect(() => {
+    if (!connected || !publicKey) { setTrackedCoinsCount(0); return; }
+    let cancelled = false;
+    fetch(getFullApiUrl(`/api/users/${publicKey.toString()}/tracked-coins`))
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled) return;
+        setTrackedCoinsCount(Array.isArray(data?.trackedCoins) ? data.trackedCoins.length : 0);
+      })
+      .catch(() => { if (!cancelled) setTrackedCoinsCount(0); });
+    return () => { cancelled = true; };
+  }, [connected, publicKey]);
 
   // Fetch SOL balance when wallet connects
   useEffect(() => {
@@ -750,7 +767,7 @@ const ProfileView = ({ onTradeClick }) => {
               <span className="pv-ig-stat-label">Orders</span>
             </div>
             <div className="pv-ig-stat">
-              <span className="pv-ig-stat-num">{trackedWallets.length}</span>
+              <span className="pv-ig-stat-num">{trackedWallets.length + trackedCoinsCount}</span>
               <span className="pv-ig-stat-label">Tracked</span>
             </div>
           </div>

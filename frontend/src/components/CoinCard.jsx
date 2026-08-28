@@ -120,6 +120,7 @@ const CoinCard = memo(({
   const [chartFirstPrice, setChartFirstPrice] = useState(null); // Track first visible price for % calculation
   const [nativeChartFullscreen, setNativeChartFullscreen] = useState(false);
   const [nativeChartControlsVisible, setNativeChartControlsVisible] = useState(false);
+  const [chartResetSignal, setChartResetSignal] = useState(0); // Bumped to snap the chart's pan/zoom back to default
   const [buyDrawerOpen, setBuyDrawerOpen] = useState(false);
   // While the open-swipe is in progress: { mode, progress } with progress 0..1.
   const [buyDrawerDrag, setBuyDrawerDrag] = useState(null);
@@ -3326,6 +3327,17 @@ const CoinCard = memo(({
             </svg>
           </button>
           <button
+            className={`native-chart-action-btn ${nativeChartControlsVisible ? 'visible' : ''}`}
+            onClick={() => setChartResetSignal((n) => n + 1)}
+            title="Reset chart view"
+            aria-label="Reset chart view"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="1 4 1 10 7 10" />
+              <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+            </svg>
+          </button>
+          <button
             className="native-chart-expand-card-btn"
             onClick={handleExpandToggle}
             title={isExpanded ? 'Collapse details' : 'Expand details'}
@@ -3364,7 +3376,7 @@ const CoinCard = memo(({
               <span>{coin.symbol || coin.name || 'Chart'}</span>
               <button onClick={closeNativeChartFullscreen} aria-label="Close full chart">×</button>
             </div>
-            <NativeChart coin={coin} isActive={true} isExpanded={true} livePrice={displayPrice} entryPrice={entryPrice} trackedPrice={effectiveTrackedPrice} markers={trackedMarkers} />
+            <NativeChart coin={coin} isActive={true} isExpanded={true} livePrice={displayPrice} entryPrice={entryPrice} trackedPrice={effectiveTrackedPrice} markers={trackedMarkers} resetViewSignal={chartResetSignal} />
           </div>
         </div>
       )}
@@ -3407,6 +3419,7 @@ const CoinCard = memo(({
               entryPrice={entryPrice}
               trackedPrice={effectiveTrackedPrice}
               markers={trackedMarkers}
+              resetViewSignal={chartResetSignal}
             />,
             target
           );

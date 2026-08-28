@@ -72,7 +72,7 @@
 /* Column Headers */
 .table-header {
   display: grid;
-  grid-template-columns: minmax(20px, 24px) minmax(110px, 1fr) minmax(50px, 60px) minmax(50px, 60px) minmax(58px, 72px);
+  grid-template-columns: minmax(20px, 24px) minmax(58px, 72px) minmax(90px, 1fr) minmax(50px, 60px) minmax(50px, 60px);
   gap: 6px;
   align-items: center;
   padding: 8px 4px 12px 4px;
@@ -90,6 +90,10 @@
   text-align: left;
 }
 
+.table-header .col-pnl {
+  text-align: left;
+}
+
 .table-header .col-wallet {
   text-align: left;
 }
@@ -99,10 +103,6 @@
 }
 
 .table-header .col-sell {
-  text-align: right;
-}
-
-.table-header .col-pnl {
   text-align: right;
 }
 
@@ -146,7 +146,7 @@
 /* Table row - 5 clean columns layout */
 .table-row {
   display: grid;
-  grid-template-columns: minmax(20px, 24px) minmax(110px, 1fr) minmax(50px, 60px) minmax(50px, 60px) minmax(58px, 72px);
+  grid-template-columns: minmax(20px, 24px) minmax(58px, 72px) minmax(90px, 1fr) minmax(50px, 60px) minmax(50px, 60px);
   gap: 6px;
   align-items: center;
   padding: 14px 4px;
@@ -179,7 +179,7 @@
   text-align: left;
 }
 
-/* Column 2: Wallet */
+/* Column 3: Wallet */
 .col-wallet {
   color: rgba(0, 0, 0, 0.9);
   font-size: 0.7rem;
@@ -198,7 +198,7 @@
   text-decoration: underline;
 }
 
-/* Column 3: Buy */
+/* Column 4: Buy */
 .col-buy {
   color: rgba(34, 197, 94, 0.85) !important;
   font-size: 0.68rem;
@@ -207,7 +207,7 @@
   text-align: right;
 }
 
-/* Column 4: Sell */
+/* Column 5: Sell */
 .col-sell {
   color: rgba(239, 68, 68, 0.85) !important;
   font-size: 0.68rem;
@@ -216,25 +216,21 @@
   text-align: right;
 }
 
-/* Column 5: PnL (far right) — highlighted, USD equivalent */
+/* Column 2: PnL (highlighted, USD equivalent — leads the row) */
 .col-pnl {
   font-size: 0.78rem;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   font-weight: 800;
-  text-align: right;
-  padding: 4px 7px;
-  border-radius: 8px;
+  text-align: left;
   color: #22c55e !important; /* Default to green (positive) */
 }
 
 .col-pnl.positive {
   color: #22c55e !important;
-  background: rgba(34, 197, 94, 0.12);
 }
 
 .col-pnl.negative {
   color: #ef4444 !important;
-  background: rgba(239, 68, 68, 0.12);
 }
 
 /* Placeholder, loading and error states */
