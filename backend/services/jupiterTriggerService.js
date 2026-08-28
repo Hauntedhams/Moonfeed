@@ -850,6 +850,20 @@ async function getTriggerOrders({
         }
       }
       
+      // Sanity guard: a real current price shouldn't be wildly different (>100x
+      // either way) from the order's own trigger price, which was itself a real
+      // price at creation time. A single bad quote this far off (unit mixup,
+      // stale/wrong-token API response, etc.) would otherwise blow up downstream
+      // math like the cashout $ estimate — fall back to the trigger price instead.
+      if (currentPrice > 0 && triggerPrice > 0) {
+        const ratio = currentPrice / triggerPrice;
+        if (ratio > 100 || ratio < 0.01) {
+          console.warn(`[Jupiter Trigger] ⚠️ Rejecting implausible current price ${currentPrice} (${ratio.toFixed(1)}x trigger ${triggerPrice}) from source "${priceSource}" — using trigger price instead`);
+          currentPrice = triggerPrice;
+          priceSource = 'fallback-trigger-outlier';
+        }
+      }
+      
       console.log(`[Jupiter Trigger] ✅ Enriched order: ${tokenSymbol} (${tokenName}) - ${isBuy ? 'BUY' : 'SELL'} ${displayAmount.toFixed(6)} @ ${triggerPrice.toFixed(10)} SOL | Current: ${currentPrice.toFixed(10)} SOL (source: ${priceSource})`);
       
       // Extract transaction signatures from various possible locations in Jupiter API response

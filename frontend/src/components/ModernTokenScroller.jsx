@@ -36,7 +36,8 @@ const ModernTokenScroller = ({
   // New props for filter handling
   onAdvancedFilter = null,
   isAdvancedFilterActive = false,
-  onSearchClick = null // Add search click handler
+  onSearchClick = null, // Add search click handler
+  showFiltersButton = true // Hide the top-left info/hamburger button (e.g. a fixed back button takes that spot instead)
 }) => {
   const { connected: walletConnected } = useWallet();
   const { openWalletConnect } = useWalletConnectOnboarding();
@@ -1476,17 +1477,19 @@ const ModernTokenScroller = ({
     <div className="modern-token-scroller">
       {/* Banner overlay buttons */}
       <div className="banner-overlay-buttons">
-        {/* Moonfeed Info Button - top left */}
-        <MoonfeedInfoButton 
-          className="banner-positioned-left"
-          showNudge={isFirstVisit}
-          onBuyMoo={handleBuyMoo}
-          onStartTutorial={() => {
-            console.log('🎓 Starting Interactive Tutorial...');
-            setIsFirstVisit(false);
-            setIsTutorialActive(true);
-          }}
-        />
+        {/* Moonfeed Info Button - top left (hidden where a back button takes this spot) */}
+        {showFiltersButton && (
+          <MoonfeedInfoButton 
+            className="banner-positioned-left"
+            showNudge={isFirstVisit}
+            onBuyMoo={handleBuyMoo}
+            onStartTutorial={() => {
+              console.log('🎓 Starting Interactive Tutorial...');
+              setIsFirstVisit(false);
+              setIsTutorialActive(true);
+            }}
+          />
+        )}
         
         {/* Search Button - top right (only show on main feed) */}
         {onSearchClick && (

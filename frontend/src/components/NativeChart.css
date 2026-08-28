@@ -90,10 +90,9 @@
   flex: 1 1 auto;
   width: 100%;
   min-height: 0;
-  /* Collapsed: pass touches through to the feed scroller for buttery scrolling
-     by default. A JS gate (see NativeChart.jsx) flips this to 'auto' only once
-     it's actively filtering touches, so the time/price axis strips stay
-     draggable while the center plot still passes through to the feed. */
+  /* Collapsed: no pointer events at all, so a swipe anywhere on the card —
+     including over the chart — always scrolls to the next coin. Only
+     .native-chart.expanded (below) turns interaction on. */
   pointer-events: none;
 }
 

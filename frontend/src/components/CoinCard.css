@@ -2950,6 +2950,33 @@ html:not(.dark-mode) .coin-card-left-panel::-webkit-scrollbar-thumb:hover {
   pointer-events: auto;
 }
 
+/* While the buy/limit-order drawer is open, hide everything except the chart so
+   the visible area to the right of the drawer is just the graph. Reverts to
+   normal automatically once the drawer closes (buy-drawer-active is removed). */
+.coin-card.buy-drawer-active .info-layer-header,
+.coin-card.buy-drawer-active .transactions-section {
+  display: none;
+}
+
+.coin-card.buy-drawer-active .info-layer-content {
+  height: 100%;
+  padding: 0;
+}
+
+.coin-card.buy-drawer-active .charts-section {
+  height: 100%;
+  min-height: 100%;
+}
+
+.coin-card.buy-drawer-active .mobile-chart-target {
+  height: 100%;
+  max-height: none; /* .twelve-chart-section normally caps this at 450px */
+}
+
+.coin-card.buy-drawer-active .mobile-chart-target .native-chart {
+  height: 100%; /* fill the now-full-height slot instead of the default fixed 380px */
+}
+
 /* Opaque cover shown over the chart iframe while the feed is actively scrolling.
    Matches the chart background so the card composites as one unit (the iframe is
    its own GPU layer and otherwise visibly drifts during the swipe). */

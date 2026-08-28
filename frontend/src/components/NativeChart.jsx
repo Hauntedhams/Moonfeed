@@ -254,27 +254,21 @@ const NativeChart = ({
     };
   }, [isExpanded]);
 
-  // Touch gestures on the plot.
+  // Touch gestures on the plot — expanded only. Dragging a finger left/right
+  // scrubs the crosshair and reads out the price at that point in time (the
+  // touch equivalent of the desktop cursor hover). A touch on the bottom
+  // time-axis strip or right price-axis strip is handed to lightweight-charts
+  // instead (native pan/rescale), and multi-touch is left alone for pinch zoom.
   //
-  // Dragging a finger left/right across the chart scrubs the crosshair and reads
-  // out the price at the point in time under the finger — the touch equivalent of
-  // the desktop cursor hover. A touch that starts on the bottom time-axis strip or
-  // the right price-axis strip is handed to lightweight-charts instead (native pan
-  // / rescale), and multi-touch is left alone so pinch zoom still works.
-  //
-  // Collapsed (feed) mode: the canvas is normally pointer-events:none so a swipe
-  // scrolls the feed. Here it's flipped to 'auto' with touch-action:pan-y, so the
-  // browser keeps owning vertical scrolling (feed swipe stays native/buttery) while
-  // the horizontal component is free for us to scrub with.
+  // Collapsed (feed) mode: the canvas stays the default pointer-events:none
+  // (see .native-chart-canvas in NativeChart.css) so a swipe anywhere on the
+  // card — including over the chart — always scrolls to the next coin. The
+  // chart only becomes interactive once the card is expanded.
   useEffect(() => {
     const el = containerRef.current;
     const chart = chartRef.current;
-    if (!el || !chart) return undefined;
+    if (!el || !chart || !isExpanded) return undefined;
 
-    if (!isExpanded) {
-      el.style.pointerEvents = 'auto';
-      el.style.touchAction = 'pan-y';
-    }
     try { chart.applyOptions({ handleScroll: true, handleScale: true }); } catch (_) { /* disposed */ }
 
     const AXIS_FALLBACK = { bottom: 28, right: 56 };
@@ -370,10 +364,6 @@ const NativeChart = ({
       el.removeEventListener('touchend', onTouchEndCapture, { capture: true });
       el.removeEventListener('touchcancel', onTouchEndCapture, { capture: true });
       if (rafId) cancelAnimationFrame(rafId);
-      if (!isExpanded) {
-        el.style.pointerEvents = '';
-        el.style.touchAction = '';
-      }
       try { chart.applyOptions({ handleScroll: isExpanded, handleScale: isExpanded }); } catch (_) { /* disposed */ }
     };
   }, [isExpanded, status, onCrosshairMove]);

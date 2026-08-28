@@ -256,19 +256,44 @@ const CoinCard = memo(({
   // Prefer the live WebSocket stream so the card follows the chart's freshest price.
   const livePrice = liveData?.price;
   const fallbackPrice = coin.price_usd || coin.priceUsd || coin.price || 0;
-  const displayPrice = rpcLivePrice || livePrice || onDemandPrice || fallbackPrice;
+  const rawLivePrice = rpcLivePrice || livePrice || onDemandPrice || 0;
+  // Sanity guard: a real live tick shouldn't be wildly different (>50x either way)
+  // from the known-good last price. A single-tick jump that extreme is almost
+  // always a bad/mis-scaled quote (e.g. a SOL price leaking in as a token price)
+  // rather than a genuine multi-thousand-percent move — fall back instead of
+  // flashing garbage in the header/chart.
+  const displayPrice = (() => {
+    if (!(rawLivePrice > 0)) return fallbackPrice;
+    if (!(fallbackPrice > 0)) return rawLivePrice;
+    const ratio = rawLivePrice / fallbackPrice;
+    return (ratio > 50 || ratio < 1 / 50) ? fallbackPrice : rawLivePrice;
+  })();
 
   // Trades on this coin by the wallets the user follows, drawn on the chart.
+  // Bursts of same-wallet buys/sells within a few minutes are collapsed into a
+  // single marker (with a ×N count) instead of stacking repeated labels.
   const { getTradesForMint } = useTrackedTrades();
   const trackedMarkers = useMemo(() => {
     const trades = getTradesForMint(mintAddress);
     if (!trades.length) return null;
-    return trades.slice(-40).map((t) => ({
-      time: Math.floor(t.time / 1000),
-      position: t.type === 'buy' ? 'belowBar' : 'aboveBar',
-      color: t.type === 'buy' ? '#26a69a' : '#ef5350',
-      shape: t.type === 'buy' ? 'arrowUp' : 'arrowDown',
-      text: `${t.label} ${t.type === 'buy' ? 'bought' : 'sold'}`,
+    const GROUP_WINDOW_MS = 5 * 60 * 1000;
+    const groups = [];
+    for (const t of trades.slice(-60)) {
+      const last = groups[groups.length - 1];
+      if (last && last.type === t.type && last.label === t.label && (t.time - last.time) <= GROUP_WINDOW_MS) {
+        last.count += 1;
+        last.time = t.time;
+      } else {
+        groups.push({ type: t.type, label: t.label, count: 1, time: t.time });
+      }
+    }
+    return groups.slice(-40).map((g) => ({
+      time: Math.floor(g.time / 1000),
+      position: g.type === 'buy' ? 'belowBar' : 'aboveBar',
+      color: g.type === 'buy' ? '#26a69a' : '#ef5350',
+      shape: g.type === 'buy' ? 'arrowUp' : 'arrowDown',
+      size: 0.8,
+      text: g.count > 1 ? `${g.label} ×${g.count}` : g.label,
     }));
   }, [getTradesForMint, mintAddress]);
 

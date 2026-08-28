@@ -232,6 +232,27 @@ function App() {
     setActiveTab('coin-detail');
   };
 
+  // Swipe left anywhere on the single-coin detail view (except the interactive
+  // chart, which owns its own horizontal drag-to-pan) closes it and returns to
+  // the previous tab — same gesture users expect from a "back" navigation.
+  const coinDetailSwipeStartRef = useRef(null);
+  const handleCoinDetailTouchStart = (e) => {
+    if (e.target.closest?.('.native-chart')) { coinDetailSwipeStartRef.current = null; return; }
+    const t = e.touches?.[0];
+    coinDetailSwipeStartRef.current = t ? { x: t.clientX, y: t.clientY } : null;
+  };
+  const handleCoinDetailTouchEnd = (e) => {
+    const start = coinDetailSwipeStartRef.current;
+    coinDetailSwipeStartRef.current = null;
+    const t = e.changedTouches?.[0];
+    if (!start || !t) return;
+    const dx = t.clientX - start.x;
+    const dy = t.clientY - start.y;
+    if (dx < -70 && Math.abs(dx) > Math.abs(dy) * 1.4) {
+      setActiveTab(previousTab || 'home');
+    }
+  };
+
   // Handle trade button click - open Jupiter modal with the coin
   const handleTradeClick = (coin, options = {}) => {
     if (IS_EXTENSION) { openFullSite(); return; }
@@ -523,7 +544,11 @@ function App() {
           />
         </Suspense>
       ) : activeTab === 'coin-detail' && selectedCoin ? (
-        <div style={{ position: 'relative' }}>
+        <div
+          style={{ position: 'relative' }}
+          onTouchStart={handleCoinDetailTouchStart}
+          onTouchEnd={handleCoinDetailTouchEnd}
+        >
           {/* Back button for coin detail view */}
           <button
             onClick={() => setActiveTab(previousTab || 'home')}
