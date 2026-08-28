@@ -192,7 +192,7 @@ const NativeChart = ({
     });
     chartRef.current = chart;
     return () => {
-      chart.remove();
+      try { chart.remove(); } catch (_) { /* already disposed */ }
       chartRef.current = null;
       seriesRef.current = null;
       seriesTypeRef.current = null;
@@ -209,14 +209,18 @@ const NativeChart = ({
 
   // Re-theme on dark-mode toggle.
   useEffect(() => {
-    if (chartRef.current) chartRef.current.applyOptions(themeOptions(isDarkMode));
+    try {
+      if (chartRef.current) chartRef.current.applyOptions(themeOptions(isDarkMode));
+    } catch (_) { /* chart disposed */ }
   }, [isDarkMode]);
 
   // Only allow pan/zoom when the card is expanded; collapsed lets the feed scroll.
   useEffect(() => {
-    if (chartRef.current) {
-      chartRef.current.applyOptions({ handleScroll: isExpanded, handleScale: isExpanded });
-    }
+    try {
+      if (chartRef.current) {
+        chartRef.current.applyOptions({ handleScroll: isExpanded, handleScale: isExpanded });
+      }
+    } catch (_) { /* chart disposed */ }
   }, [isExpanded]);
 
   // When expanded/interactive, the chart usually sits inside a scrollable sheet
@@ -314,7 +318,11 @@ const NativeChart = ({
         if (liveBadgeRef.current && last) liveBadgeRef.current.textContent = formatPrice(last.close);
       }
     };
-    chart.subscribeCrosshairMove(handleMove);
+    try {
+      chart.subscribeCrosshairMove(handleMove);
+    } catch (_) {
+      return undefined; // chart disposed
+    }
     return () => {
       // On unmount this cleanup can run AFTER the chart-creation effect's own
       // cleanup (chart.remove()) already disposed it, since cleanups fire in
