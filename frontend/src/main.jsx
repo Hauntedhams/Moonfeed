@@ -1,4 +1,4 @@
-import { StrictMode, useMemo } from 'react'
+import { useMemo } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
@@ -168,8 +168,6 @@ if ('serviceWorker' in navigator && import.meta.env.PROD && !import.meta.env.VIT
 }
 
 createRoot(document.getElementById('root')).render(
-  <StrictMode>
-    <RootApp />
-  </StrictMode>,
+  <RootApp />,
 )
 // Vercel webhook test Sat Dec 13 17:26:33 PST 2025
