@@ -201,7 +201,11 @@ const NativeChart = ({
     resizeObserver.observe(container);
     return () => {
       resizeObserver.disconnect();
-      try { chart.remove(); } catch (_) { /* already disposed */ }
+      // lightweight-charts 5.x can throw from its internal pane/canvas
+      // disposal after a chart has been removed during a mobile card change.
+      // Detach the chart DOM instead; cancelling our work below lets the
+      // detached chart become unreachable without entering that bad teardown.
+      try { container.replaceChildren(); } catch (_) { /* already detached */ }
       chartRef.current = null;
       seriesRef.current = null;
       seriesTypeRef.current = null;
