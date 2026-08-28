@@ -254,23 +254,30 @@ const NativeChart = ({
     };
   }, [isExpanded]);
 
-  // Collapsed mode: the canvas is normally pointer-events:none so a swipe
-  // anywhere scrolls the feed. This gate selectively re-enables just the two
-  // axis strips — dragging the bottom time axis pans left/right, dragging the
-  // right price axis rescales the candles' height — both native
-  // lightweight-charts gestures, while a touch starting in the main plot area
-  // is left untouched so it still bubbles up to scroll the feed.
+  // Touch gestures on the plot.
+  //
+  // Dragging a finger left/right across the chart scrubs the crosshair and reads
+  // out the price at the point in time under the finger — the touch equivalent of
+  // the desktop cursor hover. A touch that starts on the bottom time-axis strip or
+  // the right price-axis strip is handed to lightweight-charts instead (native pan
+  // / rescale), and multi-touch is left alone so pinch zoom still works.
+  //
+  // Collapsed (feed) mode: the canvas is normally pointer-events:none so a swipe
+  // scrolls the feed. Here it's flipped to 'auto' with touch-action:pan-y, so the
+  // browser keeps owning vertical scrolling (feed swipe stays native/buttery) while
+  // the horizontal component is free for us to scrub with.
   useEffect(() => {
     const el = containerRef.current;
     const chart = chartRef.current;
-    if (!el || !chart || isExpanded) return undefined;
+    if (!el || !chart) return undefined;
 
-    el.style.pointerEvents = 'auto';
+    if (!isExpanded) {
+      el.style.pointerEvents = 'auto';
+      el.style.touchAction = 'pan-y';
+    }
     try { chart.applyOptions({ handleScroll: true, handleScale: true }); } catch (_) { /* disposed */ }
 
-    const axisTouchRef = { current: false };
     const AXIS_FALLBACK = { bottom: 28, right: 56 };
-
     const inAxisZone = (touch) => {
       const rect = el.getBoundingClientRect();
       const x = touch.clientX - rect.left;
@@ -282,32 +289,94 @@ const NativeChart = ({
       return y >= rect.height - bottomH || x >= rect.width - rightW;
     };
 
+    let mode = null; // axis | multi | pending | scrub | pass
+    let startX = 0;
+    let startY = 0;
+    let rafId = 0;
+    let pendingX = null;
+
+    const applyScrub = () => {
+      rafId = 0;
+      const x = pendingX;
+      pendingX = null;
+      const series = seriesRef.current;
+      if (x == null || !series) return;
+      try {
+        const rect = el.getBoundingClientRect();
+        const logical = chart.timeScale().coordinateToLogical(x - rect.left);
+        if (logical == null) return;
+        const maxIndex = Math.max(0, (dataLengthRef.current || 0) - 1);
+        const point = series.dataByIndex(Math.max(0, Math.min(maxIndex, Math.round(logical))));
+        const price = Number(point?.close ?? point?.value);
+        if (!point || !Number.isFinite(price) || price <= 0) return;
+        chart.setCrosshairPosition(price, point.time, series);
+        if (liveBadgeRef.current) liveBadgeRef.current.textContent = formatPrice(price);
+        onCrosshairMove?.({ price, time: point.time });
+      } catch (_) { /* chart disposed mid-gesture */ }
+    };
+
+    const endScrub = () => {
+      if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
+      pendingX = null;
+      try { chart.clearCrosshairPosition(); } catch (_) { /* disposed */ }
+      const last = lastCandleRef.current;
+      if (liveBadgeRef.current && last) liveBadgeRef.current.textContent = formatPrice(last.close);
+      onCrosshairMove?.(null);
+    };
+
     const onTouchStartCapture = (e) => {
-      const touch = e.touches?.[0];
+      if (e.touches.length > 1) { mode = 'multi'; endScrub(); return; }
+      const touch = e.touches[0];
       if (!touch) return;
-      axisTouchRef.current = inAxisZone(touch);
-      // Not an axis-strip touch: stop the chart's own listener on this same
-      // node from ever seeing it, so it can't preventDefault the feed scroll.
-      if (!axisTouchRef.current) e.stopImmediatePropagation();
+      startX = touch.clientX;
+      startY = touch.clientY;
+      if (inAxisZone(touch)) { mode = 'axis'; return; }
+      mode = 'pending';
+      // Keep lightweight-charts' own handler on this node from claiming the
+      // gesture: a plot drag is a price scrub, not a pan, and letting the
+      // library see it would also let it preventDefault the feed scroll.
+      e.stopImmediatePropagation();
     };
+
     const onTouchMoveCapture = (e) => {
-      // Once a drag is confirmed to be on an axis strip, keep it from also
-      // bubbling into the feed scroller for the rest of the gesture.
-      if (axisTouchRef.current) e.stopPropagation();
+      if (mode === 'axis') { e.stopPropagation(); return; }
+      if (mode === 'multi' || mode === 'pass') return;
+      const touch = e.touches[0];
+      if (!touch) return;
+      const dx = touch.clientX - startX;
+      const dy = touch.clientY - startY;
+      if (mode === 'pending') {
+        if (Math.abs(dx) > 6 && Math.abs(dx) > Math.abs(dy)) mode = 'scrub';
+        else if (Math.abs(dy) > 6) { mode = 'pass'; return; } // vertical → let it scroll
+        else return;
+      }
+      e.stopPropagation();
+      pendingX = touch.clientX;
+      if (!rafId) rafId = requestAnimationFrame(applyScrub);
     };
-    const onTouchEndCapture = () => { axisTouchRef.current = false; };
+
+    const onTouchEndCapture = () => {
+      if (mode === 'scrub') endScrub();
+      mode = null;
+    };
 
     el.addEventListener('touchstart', onTouchStartCapture, { capture: true, passive: true });
     el.addEventListener('touchmove', onTouchMoveCapture, { capture: true, passive: true });
     el.addEventListener('touchend', onTouchEndCapture, { capture: true, passive: true });
+    el.addEventListener('touchcancel', onTouchEndCapture, { capture: true, passive: true });
     return () => {
       el.removeEventListener('touchstart', onTouchStartCapture, { capture: true });
       el.removeEventListener('touchmove', onTouchMoveCapture, { capture: true });
       el.removeEventListener('touchend', onTouchEndCapture, { capture: true });
-      el.style.pointerEvents = '';
-      try { chart.applyOptions({ handleScroll: false, handleScale: false }); } catch (_) { /* disposed */ }
+      el.removeEventListener('touchcancel', onTouchEndCapture, { capture: true });
+      if (rafId) cancelAnimationFrame(rafId);
+      if (!isExpanded) {
+        el.style.pointerEvents = '';
+        el.style.touchAction = '';
+      }
+      try { chart.applyOptions({ handleScroll: isExpanded, handleScale: isExpanded }); } catch (_) { /* disposed */ }
     };
-  }, [isExpanded, status]);
+  }, [isExpanded, status, onCrosshairMove]);
 
   // Feed the parent card's header with the historical candle under the
   // crosshair, and scrub the chart's own price badge to match — so hovering
@@ -927,10 +996,12 @@ const NativeChart = ({
     const sec = tfSeconds(TIMEFRAMES[tfIndex]);
     const nowBucket = Math.floor(Date.now() / 1000 / sec) * sec;
     const dir = p > last.close ? 'up' : p < last.close ? 'down' : null;
-    const candle = nowBucket > last.time
+    const isNewInterval = nowBucket > last.time;
+    const candle = isNewInterval
       ? { time: nowBucket, open: last.close, high: p, low: p, close: p } // new interval
       : { time: last.time, open: last.open, high: Math.max(last.high, p), low: Math.min(last.low, p), close: p };
     lastCandleRef.current = candle;
+    if (isNewInterval) dataLengthRef.current += 1; // keeps touch scrubbing's index clamp accurate
     setLiveTick((prev) => ({ price: p, dir, n: prev.n + 1 }));
     try {
       series.update(candle);
