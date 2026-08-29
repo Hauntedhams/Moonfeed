@@ -147,6 +147,40 @@ router.put('/:walletAddress/alerts', async (req, res) => {
   }
 });
 
+// POST /api/users/:walletAddress/referral — stamp first-touch influencer attribution.
+// Set once, immutable afterwards (first code wins). No signature: writing a ref code
+// for someone else's wallet only ever credits an influencer, never harms the user.
+router.post('/:walletAddress/referral', async (req, res) => {
+  try {
+    const { walletAddress } = req.params;
+    const { code } = req.body;
+
+    if (!walletAddress || walletAddress.length < 32) {
+      return res.status(400).json({ error: 'Invalid wallet address' });
+    }
+    if (!code || typeof code !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(code)) {
+      return res.status(400).json({ error: 'Invalid referral code' });
+    }
+
+    const existing = await User.findOne({ walletAddress }).lean();
+    if (existing?.referredBy?.code) {
+      return res.json({ walletAddress, referredBy: existing.referredBy, alreadySet: true });
+    }
+
+    const user = await User.findOneAndUpdate(
+      { walletAddress },
+      { $set: { referredBy: { code, at: new Date() } } },
+      { upsert: true, new: true }
+    );
+
+    console.log(`🎯 Referral attribution: ${walletAddress.slice(0, 8)}… → ${code}`);
+    res.json({ walletAddress: user.walletAddress, referredBy: user.referredBy, alreadySet: false });
+  } catch (err) {
+    console.error('❌ Error stamping referral:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // GET /api/users/:walletAddress/tracked-wallets — fetch synced tracked-wallet list
 router.get('/:walletAddress/tracked-wallets', async (req, res) => {
   try {

@@ -114,6 +114,11 @@ app.use('/api/search', searchRoutes);
 // Mount Affiliate routes
 app.use('/api/affiliates', affiliateRoutes);
 
+// Admin dashboard for affiliate management (page is public, data requires ADMIN_API_KEY)
+app.get('/admin/affiliates', (req, res) => {
+  res.sendFile(require('path').join(__dirname, 'admin', 'affiliate-dashboard.html'));
+});
+
 // Mount Comments routes
 app.use('/api/comments', commentsRoutes);
 

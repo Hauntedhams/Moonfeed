@@ -41,6 +41,34 @@ class ReferralTracker {
   }
 
   /**
+   * Stamp the locally-saved referral code onto the connected account (first-touch,
+   * immutable server-side). Ref-guarded per wallet so it only fires once per session.
+   */
+  static async stampReferralOnAccount(walletAddress) {
+    try {
+      const code = this.getReferralCode();
+      if (!code || !walletAddress) return;
+
+      const stampedKey = `moonfeed_referral_stamped_${walletAddress}`;
+      if (localStorage.getItem(stampedKey)) return;
+
+      const response = await fetch(`${API_CONFIG.BASE_URL}/api/users/${walletAddress}/referral`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code })
+      });
+
+      if (response.ok) {
+        localStorage.setItem(stampedKey, '1');
+        const data = await response.json();
+        console.log(`🎯 Referral attribution ${data.alreadySet ? 'already set' : 'stamped'}:`, data.referredBy?.code);
+      }
+    } catch (error) {
+      console.error('❌ Error stamping referral on account:', error);
+    }
+  }
+
+  /**
    * Set referral code in localStorage with expiry
    */
   static setReferralCode(code) {
@@ -134,13 +162,9 @@ class ReferralTracker {
     try {
       const referralCode = this.getReferralCode();
 
-      // If no referral code, don't track
-      if (!referralCode) {
-        console.log('📊 No referral code, skipping trade tracking');
-        return { success: false, reason: 'no_referral_code' };
-      }
-
-      console.log(`📊 Tracking trade for referral: ${referralCode}`);
+      // Send even without a local code — the backend falls back to the
+      // account-level referredBy attribution stamped at wallet connect.
+      console.log(`📊 Tracking trade${referralCode ? ` for referral: ${referralCode}` : ' (account-level attribution)'}`);
 
       const response = await fetch(`${API_CONFIG.BASE_URL}/api/affiliates/track-trade`, {
         method: 'POST',

@@ -98,6 +98,12 @@ function App() {
     }
   }, []);
 
+  // Stamp first-touch referral attribution onto the account at wallet connect
+  useEffect(() => {
+    if (!connected || !walletAddress) return;
+    ReferralTracker.stampReferralOnAccount(walletAddress);
+  }, [connected, walletAddress]);
+
   // Listen for favorites changes from TokenScroller
   const handleFavoritesChange = (newFavs) => {
     // Stamp the price at the moment tracking starts so the UI can show performance since then.

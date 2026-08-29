@@ -6,14 +6,16 @@
 const express = require('express');
 const router = express.Router();
 const affiliateStorage = require('../models/affiliate-storage');
+const adminAuth = require('../middleware/adminAuth');
+const User = require('../models/User');
 
 // ==================== AFFILIATE MANAGEMENT ====================
 
 /**
  * POST /api/affiliates/create
- * Create a new affiliate
+ * Create a new affiliate (admin only)
  */
-router.post('/create', async (req, res) => {
+router.post('/create', adminAuth, async (req, res) => {
   try {
     const { code, name, walletAddress, sharePercentage, email, telegram } = req.body;
 
@@ -36,7 +38,7 @@ router.post('/create', async (req, res) => {
       code,
       name,
       walletAddress,
-      sharePercentage: sharePercentage || 50,
+      sharePercentage: sharePercentage || 25,
       email,
       telegram
     });
@@ -56,9 +58,9 @@ router.post('/create', async (req, res) => {
 
 /**
  * GET /api/affiliates/list
- * Get all affiliates
+ * Get all affiliates (admin only)
  */
-router.get('/list', async (req, res) => {
+router.get('/list', adminAuth, async (req, res) => {
   try {
     const affiliates = await affiliateStorage.getAllAffiliates();
 
@@ -108,9 +110,9 @@ router.get('/:code', async (req, res) => {
 
 /**
  * PUT /api/affiliates/:code
- * Update affiliate
+ * Update affiliate (admin only)
  */
-router.put('/:code', async (req, res) => {
+router.put('/:code', adminAuth, async (req, res) => {
   try {
     const { code } = req.params;
     const updates = req.body;
@@ -139,9 +141,9 @@ router.put('/:code', async (req, res) => {
 
 /**
  * DELETE /api/affiliates/:code
- * Delete affiliate
+ * Delete affiliate (admin only)
  */
-router.delete('/:code', async (req, res) => {
+router.delete('/:code', adminAuth, async (req, res) => {
   try {
     const { code } = req.params;
 
@@ -202,15 +204,33 @@ router.post('/track-trade', async (req, res) => {
       metadata
     } = req.body;
 
-    if (!referralCode || !userWallet || !tradeVolume || !feeEarned) {
+    if (!userWallet || !tradeVolume || !feeEarned) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields: referralCode, userWallet, tradeVolume, feeEarned'
+        error: 'Missing required fields: userWallet, tradeVolume, feeEarned'
       });
     }
 
+    // On-chain txid required so volume is auditable and dedupable
+    if (!transactionSignature) {
+      return res.status(400).json({
+        success: false,
+        error: 'transactionSignature is required'
+      });
+    }
+
+    // No code on this device? Fall back to the account's permanent attribution.
+    let resolvedCode = referralCode;
+    if (!resolvedCode) {
+      const user = await User.findOne({ walletAddress: userWallet }).lean();
+      resolvedCode = user?.referredBy?.code || null;
+      if (!resolvedCode) {
+        return res.json({ success: false, reason: 'no_referral_attribution' });
+      }
+    }
+
     const trade = await affiliateStorage.recordTrade({
-      referralCode,
+      referralCode: resolvedCode,
       userWallet,
       tradeVolume: parseFloat(tradeVolume),
       feeEarned: parseFloat(feeEarned),
@@ -289,7 +309,7 @@ router.get('/:code/pending-earnings', async (req, res) => {
  * GET /api/affiliates/trades/all
  * Get all trades (admin only)
  */
-router.get('/trades/all', async (req, res) => {
+router.get('/trades/all', adminAuth, async (req, res) => {
   try {
     const { payoutStatus, limit, offset } = req.query;
 
@@ -317,9 +337,9 @@ router.get('/trades/all', async (req, res) => {
 
 /**
  * POST /api/affiliates/payouts/create
- * Create a payout for an affiliate
+ * Create a payout for an affiliate (admin only)
  */
-router.post('/payouts/create', async (req, res) => {
+router.post('/payouts/create', adminAuth, async (req, res) => {
   try {
     const {
       referralCode,
@@ -389,7 +409,7 @@ router.get('/:code/payouts', async (req, res) => {
  * GET /api/affiliates/payouts/all
  * Get all payouts (admin only)
  */
-router.get('/payouts/all', async (req, res) => {
+router.get('/payouts/all', adminAuth, async (req, res) => {
   try {
     const { limit, offset } = req.query;
 

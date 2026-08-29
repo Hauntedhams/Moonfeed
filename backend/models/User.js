@@ -21,6 +21,11 @@ const userSchema = new mongoose.Schema({
     type: String, // base64 data URL or external image URL
     default: null
   },
+  // First-touch influencer attribution — set once at first wallet connect, immutable.
+  referredBy: {
+    code: { type: String, default: null },
+    at: { type: Date, default: null }
+  },
   // Per-coin "Notify at" price-alert preferences, keyed by mint address.
   alerts: {
     type: mongoose.Schema.Types.Mixed,
