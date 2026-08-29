@@ -244,13 +244,26 @@ const CoinCard = memo(({
     coin.price_usd || coin.priceUsd || coin.price || 0
   );
 
+  // Full tx stream (history + trade table + ticks): expanded, or desktop current card.
+  const wantsFullTxStream = isExpanded || showLiveTransactions || (!isMobile && isCurrentCard);
+  // Mobile collapsed current card: lean per-trade PRICE TICK stream only (log-decoded
+  // server-side, no getTransaction credits). Gated on the settled chart mount AND a
+  // 300ms debounce so fast scrolls never churn WebSockets (the old WKWebView crash).
+  const tickStreamWanted = isMobile && !wantsFullTxStream && isCurrentCard && (mountChart ?? isVisible);
+  const [tickStreamSettled, setTickStreamSettled] = useState(false);
+  useEffect(() => {
+    if (!tickStreamWanted) {
+      setTickStreamSettled(false);
+      return;
+    }
+    const t = setTimeout(() => setTickStreamSettled(true), 300);
+    return () => clearTimeout(t);
+  }, [tickStreamWanted]);
+
   const { transactions, livePrice: rpcLivePrice, isConnected: txConnected, historyLoaded: txHistoryLoaded, error: txError, clearTransactions } = useSolanaTransactions(
     mintAddress,
-    // Mobile: only open the tx WebSocket when the user actually expands the card.
-    // Activating it for every collapsed current/preload card churns a WS open+close
-    // on each swipe (10+ during a fast scroll) → resource pressure → WKWebView crash.
-    // Desktop keeps the live collapsed marquee.
-    isExpanded || showLiveTransactions || (!isMobile && isCurrentCard)
+    wantsFullTxStream || (tickStreamWanted && tickStreamSettled),
+    wantsFullTxStream ? 'full' : 'ticks'
   );
 
   // Prefer the live WebSocket stream so the card follows the chart's freshest price.
@@ -545,36 +558,31 @@ const CoinCard = memo(({
     fetchCommentCount();
   }, [isVisible, mintAddress]);
 
-  // Handle price flash animation (COMPLETELY DISABLED on mobile for performance)
+  // Price flash on every live tick (per-trade stream). Alternates between the
+  // -2 twin classes so back-to-back same-direction ticks restart the animation.
   useEffect(() => {
-    // 🔥 MOBILE PERFORMANCE FIX: Completely skip on mobile AND when not visible
-    if (isMobile || !isVisible) return;
-    
-    const currentPrice = liveData?.price || coin.price_usd || coin.priceUsd || coin.price || 0;
+    if (!isVisible) return;
+
+    const currentPrice = displayPrice;
     const prevPrice = prevPriceRef.current;
-    
+
     let timer = null;
-    
+
     if (prevPrice !== null && currentPrice !== prevPrice && currentPrice > 0) {
-      if (currentPrice > prevPrice) {
-        setPriceFlash('price-up');
-      } else if (currentPrice < prevPrice) {
-        setPriceFlash('price-down');
-      }
-      
-      // Clear flash after animation
+      const base = currentPrice > prevPrice ? 'price-up' : 'price-down';
+      setPriceFlash(prev => (prev === base ? `${base}-2` : base));
       timer = setTimeout(() => setPriceFlash(''), 600);
     }
-    
+
     prevPriceRef.current = currentPrice;
-    
+
     // Always return cleanup function
     return () => {
       if (timer) {
         clearTimeout(timer);
       }
     };
-  }, [liveData?.price, coin.price_usd, coin.priceUsd, coin.price, isVisible, isMobile]);
+  }, [displayPrice, isVisible]);
 
   // Helpers
   const formatCompact = (num) => {

@@ -33,6 +33,8 @@ class PriceWebSocketServer {
     // Let the tx streamer price each swap in USD from the same cached SOL price
     // this monitor already maintains, so per-trade live price ticks are free.
     heliusTxStreamer.setSolPriceGetter(() => this.monitor.solPrice);
+    // Last broadcast price per mint — sanity reference for unverified log ticks.
+    heliusTxStreamer.setReferencePriceGetter((mint) => this.monitor.getLastPriceUsd(mint));
 
     this.init();
   }
@@ -123,6 +125,23 @@ class PriceWebSocketServer {
           throw new Error('Token address required for transaction unsubscription');
         }
         this.unsubscribeTxs(ws, token);
+        break;
+
+      case 'subscribe-ticks':
+        // Lean per-trade price ticks only (log-decoded, zero getTransaction credits) —
+        // no tx history fetch, no tx-new pushes. Used by mobile collapsed cards.
+        if (!token) {
+          throw new Error('Token address required for tick subscription');
+        }
+        heliusTxStreamer.subscribe(token, ws, { ticksOnly: true });
+        this.sendMessage(ws, { type: 'ticks-subscribed', token, timestamp: Date.now() });
+        break;
+
+      case 'unsubscribe-ticks':
+        if (!token) {
+          throw new Error('Token address required for tick unsubscription');
+        }
+        heliusTxStreamer.unsubscribe(token, ws);
         break;
 
       case 'ping':

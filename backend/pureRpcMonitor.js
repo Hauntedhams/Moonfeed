@@ -720,6 +720,12 @@ class PureRpcMonitor {
    * Broadcast price update to all subscribed clients
    */
   broadcastPrice(tokenMint, priceData) {
+    const priceUsd = priceData.price || priceData.priceUsd;
+    if (priceUsd > 0) {
+      if (!this.lastPriceUsd) this.lastPriceUsd = new Map();
+      if (this.lastPriceUsd.size > 500) this.lastPriceUsd.clear();
+      this.lastPriceUsd.set(tokenMint, priceUsd);
+    }
     const clients = this.clients.get(tokenMint);
     if (!clients || clients.size === 0) return;
 
@@ -743,6 +749,11 @@ class PureRpcMonitor {
       // Log only ~10% of broadcasts to avoid spam
       console.log(`📤 [Monitor] Broadcasted price $${(priceData.price || priceData.priceUsd).toFixed(8)} to ${sentCount} client(s)`);
     }
+  }
+
+  /** Last USD price broadcast for a mint (sanity reference for log-decoded ticks). */
+  getLastPriceUsd(tokenMint) {
+    return this.lastPriceUsd?.get(tokenMint) || 0;
   }
 
   /**

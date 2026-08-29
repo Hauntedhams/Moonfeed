@@ -2788,6 +2788,27 @@ html:not(.dark-mode) .coin-card-left-panel::-webkit-scrollbar-thumb:hover {
   animation: flash-red 0.6s ease-out;
 }
 
+/* Duplicate classes so consecutive same-direction ticks restart the animation */
+.coin-price.price-up-2 {
+  animation: flash-green-2 0.6s ease-out;
+}
+
+.coin-price.price-down-2 {
+  animation: flash-red-2 0.6s ease-out;
+}
+
+@keyframes flash-green-2 {
+  0% { background-color: transparent; }
+  50% { background-color: rgba(34, 197, 94, 0.3); border-radius: 8px; }
+  100% { background-color: transparent; }
+}
+
+@keyframes flash-red-2 {
+  0% { background-color: transparent; }
+  50% { background-color: rgba(239, 68, 68, 0.3); border-radius: 8px; }
+  100% { background-color: transparent; }
+}
+
 @keyframes flash-green {
   0% { background-color: transparent; }
   50% { background-color: rgba(34, 197, 94, 0.3); border-radius: 8px; }
