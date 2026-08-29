@@ -292,4 +292,68 @@ router.put('/:walletAddress/tracked-coins', async (req, res) => {
   }
 });
 
+// GET /api/users/:walletAddress/transactions — fetch synced Moonfeed trade history
+router.get('/:walletAddress/transactions', async (req, res) => {
+  try {
+    const { walletAddress } = req.params;
+    if (!walletAddress || walletAddress.length < 32) {
+      return res.status(400).json({ error: 'Invalid wallet address' });
+    }
+    const user = await User.findOne({ walletAddress });
+    res.json({ walletAddress, transactions: user?.transactions || [] });
+  } catch (err) {
+    console.error('❌ Error fetching user transactions:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// PUT /api/users/:walletAddress/transactions — save synced Moonfeed trade history
+router.put('/:walletAddress/transactions', async (req, res) => {
+  try {
+    const { walletAddress } = req.params;
+    const { transactions } = req.body;
+
+    if (!walletAddress || walletAddress.length < 32) {
+      return res.status(400).json({ error: 'Invalid wallet address' });
+    }
+    if (!Array.isArray(transactions)) {
+      return res.status(400).json({ error: 'transactions must be an array' });
+    }
+    if (transactions.length > 500) {
+      return res.status(400).json({ error: 'Too many transactions (max 500)' });
+    }
+
+    const sanitized = transactions
+      .filter(t => t && typeof t.signature === 'string' && t.signature.length >= 32)
+      .map(t => ({
+        id: typeof t.id === 'string' ? t.id.slice(0, 128) : `${t.signature}_${Date.now()}`,
+        signature: t.signature,
+        type: t.type === 'sell' ? 'sell' : 'buy',
+        tokenMint: typeof t.tokenMint === 'string' ? t.tokenMint.slice(0, 64) : '',
+        tokenSymbol: typeof t.tokenSymbol === 'string' ? t.tokenSymbol.slice(0, 32) : 'Unknown',
+        tokenName: typeof t.tokenName === 'string' ? t.tokenName.slice(0, 64) : '',
+        tokenImage: typeof t.tokenImage === 'string' ? t.tokenImage.slice(0, 500) : '',
+        inputAmount: Number.isFinite(t.inputAmount) ? t.inputAmount : 0,
+        outputAmount: Number.isFinite(t.outputAmount) ? t.outputAmount : 0,
+        inputMint: typeof t.inputMint === 'string' ? t.inputMint.slice(0, 64) : '',
+        outputMint: typeof t.outputMint === 'string' ? t.outputMint.slice(0, 64) : '',
+        pricePerToken: Number.isFinite(t.pricePerToken) ? t.pricePerToken : 0,
+        pricePerTokenUsd: Number.isFinite(t.pricePerTokenUsd) ? t.pricePerTokenUsd : 0,
+        timestamp: Number.isFinite(t.timestamp) ? t.timestamp : Date.now(),
+        createdAt: typeof t.createdAt === 'string' ? t.createdAt : new Date().toISOString()
+      }));
+
+    const user = await User.findOneAndUpdate(
+      { walletAddress },
+      { $set: { transactions: sanitized } },
+      { upsert: true, new: true }
+    );
+
+    res.json({ walletAddress: user.walletAddress, transactions: user.transactions || [] });
+  } catch (err) {
+    console.error('❌ Error saving user transactions:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 module.exports = router;

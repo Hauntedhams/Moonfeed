@@ -169,6 +169,7 @@ export const TrackedWalletsProvider = ({ children }) => {
       addedAt: Date.now(),
       lastViewed: Date.now(),
       copyTradeEnabled: true,
+      notificationsEnabled: true,
     };
 
     setTrackedWallets(prev => [...prev, newWallet]);
@@ -215,6 +216,20 @@ export const TrackedWalletsProvider = ({ children }) => {
     );
   };
 
+  const toggleNotifications = (walletAddress, overrideState = null) => {
+    setTrackedWallets(prev =>
+      prev.map(w =>
+        w.address === walletAddress
+          ? {
+              ...w,
+              notificationsEnabled:
+                overrideState !== null ? overrideState : !(w.notificationsEnabled ?? true),
+            }
+          : w
+      )
+    );
+  };
+
   const value = {
     trackedWallets,
     trackWallet,
@@ -223,6 +238,7 @@ export const TrackedWalletsProvider = ({ children }) => {
     updateLastViewed,
     isTracked,
     toggleCopyTrade,
+    toggleNotifications,
   };
 
   return (

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useCopyTrade } from '../contexts/CopyTradeContext';
 import './CopyTradeToast.css';
 
@@ -13,12 +13,12 @@ function formatSol(n) {
 /**
  * CopyTradeToast
  *
- * Displays the top notification from the copy-trade queue.
- * Auto-dismisses after 10 seconds with an animated progress bar.
- * "Copy Trade" opens Jupiter pre-filled with the same token.
+ * TikTok-style bottom-right floating speech bubble pop-up over the bottom navigation bar.
+ * Clicking the bubble expands a full trade detail modal with a ⚡ Copy Trade action.
  */
 const CopyTradeToast = () => {
   const { queue, dismiss, copyTrade } = useCopyTrade();
+  const [isExpanded, setIsExpanded] = useState(false);
   const progressRef = useRef(null);
   const timerRef = useRef(null);
 
@@ -27,6 +27,7 @@ const CopyTradeToast = () => {
   // Reset progress bar animation and auto-dismiss timer whenever a new notification arrives
   useEffect(() => {
     if (!top) return;
+    setIsExpanded(false);
 
     // Restart the CSS animation by briefly resetting width
     if (progressRef.current) {
@@ -55,49 +56,80 @@ const CopyTradeToast = () => {
 
   return (
     <div className="ctt-wrap">
-      <div className={`ctt-toast ${isBuy ? 'ctt-buy' : 'ctt-sell'}`}>
-
-        {/* ── Header ─────────────────────────────────────── */}
-        <div className="ctt-header">
-          <span className="ctt-dot" />
-          <span className="ctt-wallet-label">{top.walletLabel}</span>
-          <span className="ctt-badge">{isBuy ? 'BUY' : 'SELL'}</span>
-          <button
-            className="ctt-close"
-            onClick={() => dismiss(top.id)}
+      {/* ── Collapsed Speech Bubble Trigger (TikTok Style) ── */}
+      {!isExpanded ? (
+        <div 
+          className="ctt-bubble-trigger"
+          onClick={() => setIsExpanded(true)}
+        >
+          <div className="ctt-bubble-badge-icon">
+            <span className="ctt-money-icon">💸</span>
+            {queue.length > 0 && (
+              <span className="ctt-badge-count">{queue.length}</span>
+            )}
+          </div>
+          <div className="ctt-bubble-text-box">
+            <div className="ctt-bubble-title">
+              <span className="ctt-bubble-name">{top.walletLabel}</span>
+              <span className={`ctt-bubble-side ${isBuy ? 'buy' : 'sell'}`}>
+                {isBuy ? 'BUY' : 'SELL'}
+              </span>
+            </div>
+            <div className="ctt-bubble-sub">
+              {isBuy ? 'Bought' : 'Sold'} <strong>{top.tokenSymbol}</strong> {solStr ? `(${solStr})` : ''}
+            </div>
+          </div>
+          <button 
+            className="ctt-bubble-close"
+            onClick={(e) => {
+              e.stopPropagation();
+              dismiss(top.id);
+            }}
             aria-label="Dismiss"
           >
             ✕
           </button>
         </div>
+      ) : (
+        /* ── Expanded Detail Card ── */
+        <div className={`ctt-toast ${isBuy ? 'ctt-buy' : 'ctt-sell'}`}>
+          <div className="ctt-header">
+            <span className="ctt-dot" />
+            <span className="ctt-wallet-label">{top.walletLabel}</span>
+            <span className="ctt-badge">{isBuy ? 'BUY' : 'SELL'}</span>
+            <button
+              className="ctt-close"
+              onClick={() => setIsExpanded(false)}
+              aria-label="Close"
+            >
+              ✕
+            </button>
+          </div>
 
-        {/* ── Body ───────────────────────────────────────── */}
-        <div className="ctt-body">
-          <span className="ctt-verb">{isBuy ? 'Bought' : 'Sold'}</span>
-          <span className="ctt-token">{top.tokenSymbol}</span>
-          {solStr && (
-            <span className="ctt-sol">
-              {isBuy ? 'for' : '→'} {solStr}
-            </span>
-          )}
+          <div className="ctt-body">
+            <span className="ctt-verb">{isBuy ? 'Bought' : 'Sold'}</span>
+            <span className="ctt-token">{top.tokenSymbol}</span>
+            {solStr && (
+              <span className="ctt-sol">
+                {isBuy ? 'for' : '→'} {solStr}
+              </span>
+            )}
+          </div>
+
+          <div className="ctt-actions">
+            <button className="ctt-copy-btn" onClick={() => copyTrade(top)}>
+              ⚡ Copy Trade
+            </button>
+            {queue.length > 1 && (
+              <span className="ctt-more">+{queue.length - 1} more</span>
+            )}
+          </div>
+
+          <div className="ctt-progress-track">
+            <div className="ctt-progress-bar" ref={progressRef} />
+          </div>
         </div>
-
-        {/* ── Actions ────────────────────────────────────── */}
-        <div className="ctt-actions">
-          <button className="ctt-copy-btn" onClick={() => copyTrade(top)}>
-            ⚡ Copy Trade
-          </button>
-          {queue.length > 1 && (
-            <span className="ctt-more">+{queue.length - 1} more</span>
-          )}
-        </div>
-
-        {/* ── Progress bar ───────────────────────────────── */}
-        <div className="ctt-progress-track">
-          <div className="ctt-progress-bar" ref={progressRef} />
-        </div>
-
-      </div>
+      )}
     </div>
   );
 };

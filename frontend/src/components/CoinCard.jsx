@@ -75,6 +75,7 @@ const CoinCard = memo(({
   coin, 
   isFavorite, 
   trackedAtPrice = 0, // Persisted price captured when this coin was tracked (survives remounts)
+  trackedAtTime = null,
   onFavoriteToggle, 
   onTradeClick, 
   onWalletClick = null, // Open a full profile page for a clicked wallet address
@@ -108,10 +109,13 @@ const CoinCard = memo(({
   const [selectedWallet, setSelectedWallet] = useState(null);
   const [showDescriptionModal, setShowDescriptionModal] = useState(false);
   const [trackedPrice, setTrackedPrice] = useState(null);
+  const [trackedTimeState, setTrackedTimeState] = useState(null);
+  const [focusTrackedSignal, setFocusTrackedSignal] = useState(0);
   // Local state gives instant feedback on tap; once the persisted value (from
   // the account's tracked-coins list) arrives it takes over so the "Tracked
   // at" price survives reloads/remounts instead of resetting to nothing.
   const effectiveTrackedPrice = trackedPrice || Number(trackedAtPrice) || Number(coin?.trackedAtPrice) || 0;
+  const effectiveTrackedTime = trackedTimeState || trackedAtTime || coin?.savedAt || coin?.trackedAtTime || null;
   const [bannerError, setBannerError] = useState(false); // Track banner image load failure
   const [profileSrcIndex, setProfileSrcIndex] = useState(0); // Index into ordered list of profile image URLs to try
   const [profileLoaded, setProfileLoaded] = useState(false); // True once the winning profile img fires onLoad
@@ -2162,15 +2166,32 @@ const CoinCard = memo(({
                       className={`banner-follow-button ${isFavorite ? 'following' : ''}`}
                       onClick={(e) => {
                         e.stopPropagation();
-                        setTrackedPrice(isFavorite ? null : displayPrice);
-                        onFavoriteToggle?.(coin, displayPrice);
+                        if (isFavorite) {
+                          setFocusTrackedSignal(s => s + 1);
+                        } else {
+                          const now = Date.now();
+                          setTrackedPrice(displayPrice);
+                          setTrackedTimeState(now);
+                          onFavoriteToggle?.(coin, displayPrice);
+                          setFocusTrackedSignal(s => s + 1);
+                        }
                       }}
-                      title={isFavorite ? 'Stop tracking this coin' : 'Track this coin'}
+                      title={isFavorite ? 'Click to zoom in to tracked position on chart' : 'Track this coin'}
                     >
                       <span className="follow-label">{isFavorite ? 'Tracking' : 'Track'}</span>
                     </button>
                     {isFavorite && effectiveTrackedPrice > 0 && (
-                      <span className="tracked-price">Tracked at {formatPrice(effectiveTrackedPrice)}</span>
+                      <span 
+                        className="tracked-price clickable"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setFocusTrackedSignal(s => s + 1);
+                        }}
+                        style={{ cursor: 'pointer' }}
+                        title="Click to zoom in to tracked position on chart"
+                      >
+                        Tracked at {formatPrice(effectiveTrackedPrice)}
+                      </span>
                     )}
                   </div>
                 </div>
@@ -3035,6 +3056,31 @@ const CoinCard = memo(({
                       <span className="coin-buy-step-label">Step 1 · Sell for</span>
                     )}
 
+                    <label className="coin-buy-target-multiplier">
+                      <span className="coin-buy-target-multiplier-label">
+                        <span>Target step</span>
+                        <strong>{orderStepMultiplier}x</strong>
+                      </span>
+                      <input
+                        type="range"
+                        min="1"
+                        max="100"
+                        step="1"
+                        value={orderStepMultiplier}
+                        onChange={(e) => setOrderStepMultiplier(Number(e.target.value))}
+                        aria-label="Target price step multiplier"
+                      />
+                      <span className="coin-buy-target-multiplier-scale">
+                        <span>1x</span>
+                        <span>
+                          {buyDrawerOrderSide === 'sell' && sellProceedsUsd > 0 && displayPrice > 0
+                            ? `$${(wageredUsd * getOrderTargetStep() / displayPrice).toFixed(2)} / tick`
+                            : `${formatOrderStepUsd()} per ${coin.symbol || 'token'} / tick`}
+                        </span>
+                        <span>100x</span>
+                      </span>
+                    </label>
+
                     <div
                       className="coin-buy-price-wheel compact"
                       onWheel={handleBuyWheel}
@@ -3110,31 +3156,6 @@ const CoinCard = memo(({
                         </div>
                       </label>
                     )}
-
-                    <label className="coin-buy-target-multiplier">
-                      <span className="coin-buy-target-multiplier-label">
-                        <span>Target step</span>
-                        <strong>{orderStepMultiplier}x</strong>
-                      </span>
-                      <input
-                        type="range"
-                        min="1"
-                        max="100"
-                        step="1"
-                        value={orderStepMultiplier}
-                        onChange={(e) => setOrderStepMultiplier(Number(e.target.value))}
-                        aria-label="Target price step multiplier"
-                      />
-                      <span className="coin-buy-target-multiplier-scale">
-                        <span>1x</span>
-                        <span>
-                          {buyDrawerOrderSide === 'sell' && sellProceedsUsd > 0 && displayPrice > 0
-                            ? `$${(wageredUsd * getOrderTargetStep() / displayPrice).toFixed(2)} / tick`
-                            : `${formatOrderStepUsd()} per ${coin.symbol || 'token'} / tick`}
-                        </span>
-                        <span>100x</span>
-                      </span>
-                    </label>
 
                     <div className="coin-buy-expiry">
                       <span className="coin-buy-expiry-label">Expires in</span>
@@ -3291,39 +3312,6 @@ const CoinCard = memo(({
           </span>
           <span className="tiktok-action-label">PnL</span>
         </button>
-
-        {/* Comments */}
-        <button 
-          className={`tiktok-action-btn ${showComments ? 'active' : ''}`}
-          onClick={(e) => { e.stopPropagation(); setShowComments(prev => !prev); }}
-          title="Comments"
-        >
-          <span className="tiktok-action-icon">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-          </span>
-          <span className="tiktok-action-label">{comments.length > 0 ? comments.length : 'Chat'}</span>
-        </button>
-
-        {/* Share / Copy Address */}
-        <button 
-          className="tiktok-action-btn"
-          onClick={(e) => { 
-            e.stopPropagation(); 
-            const addr = coin.mintAddress || coin.mint || coin.address || '';
-            if (addr) {
-              navigator.clipboard.writeText(addr);
-              // Brief visual feedback
-              e.currentTarget.classList.add('copied');
-              setTimeout(() => e.currentTarget.classList.remove('copied'), 1200);
-            }
-          }}
-          title="Copy token address"
-        >
-          <span className="tiktok-action-icon">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-          </span>
-          <span className="tiktok-action-label">Copy</span>
-        </button>
       </div>
       {USE_NATIVE_CHART && _mobilePortal && (
         <div className="native-chart-mobile-right-actions">
@@ -3360,6 +3348,44 @@ const CoinCard = memo(({
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="1 4 1 10 7 10" />
               <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+            </svg>
+          </button>
+          {/* Comments */}
+          <button
+            className={`native-chart-action-btn ${nativeChartControlsVisible ? 'visible' : ''} ${showComments ? 'active' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowComments(prev => !prev);
+            }}
+            title="Comments"
+            aria-label="Open comments"
+            style={{ position: 'relative' }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+            {comments.length > 0 && (
+              <span className="native-chart-action-badge">{comments.length}</span>
+            )}
+          </button>
+          {/* Share / Copy Address */}
+          <button
+            className={`native-chart-action-btn ${nativeChartControlsVisible ? 'visible' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              const addr = coin.mintAddress || coin.mint || coin.address || '';
+              if (addr) {
+                navigator.clipboard.writeText(addr);
+                e.currentTarget.classList.add('copied');
+                setTimeout(() => e.currentTarget.classList.remove('copied'), 1200);
+              }
+            }}
+            title="Copy token address"
+            aria-label="Copy token address"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
             </svg>
           </button>
           <button
@@ -3401,7 +3427,7 @@ const CoinCard = memo(({
               <span>{coin.symbol || coin.name || 'Chart'}</span>
               <button onClick={closeNativeChartFullscreen} aria-label="Close full chart">×</button>
             </div>
-            <NativeChart coin={coin} isActive={true} isExpanded={true} livePrice={displayPrice} entryPrice={entryPrice} trackedPrice={effectiveTrackedPrice} tradeDots={tradeDots} resetViewSignal={chartResetSignal} />
+            <NativeChart coin={coin} isActive={true} isExpanded={true} livePrice={displayPrice} entryPrice={entryPrice} trackedPrice={effectiveTrackedPrice} trackedTime={effectiveTrackedTime} focusTrackedSignal={focusTrackedSignal} tradeDots={tradeDots} resetViewSignal={chartResetSignal} />
           </div>
         </div>
       )}
@@ -3443,6 +3469,8 @@ const CoinCard = memo(({
               targetColor={buyDrawerOrderSide === 'sell' ? '#22d3ee' : '#4ade80'}
               entryPrice={entryPrice}
               trackedPrice={effectiveTrackedPrice}
+              trackedTime={effectiveTrackedTime}
+              focusTrackedSignal={focusTrackedSignal}
               tradeDots={tradeDots}
               resetViewSignal={chartResetSignal}
             />,

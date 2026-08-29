@@ -10,7 +10,7 @@ import WalletPopup from './WalletPopup';
 import JupiterWalletButton from './JupiterWalletButton';
 import './ProfileView.css';
 import './OrdersView.css';
-import { getTransactions } from '../utils/transactionStorage';
+import { getTransactions, syncTransactionsWithAccount } from '../utils/transactionStorage';
 import { computeFillStats, getSolUsdPrice } from '../utils/orderFillTracking';
 
 const ProfileView = ({ onTradeClick }) => {
@@ -117,12 +117,21 @@ const ProfileView = ({ onTradeClick }) => {
     }
   }, [statusFilter]);
 
-  // Load transaction history and fetch their banners
+  // Load transaction history (local + MongoDB remote sync) and fetch their banners
   useEffect(() => {
     if (publicKey) {
-      const txs = getTransactions(publicKey.toString());
-      setTransactions(txs);
-      if (txs.length) fetchCoinBanners(txs);
+      const addr = publicKey.toString();
+      const localTxs = getTransactions(addr);
+      setTransactions(localTxs);
+      if (localTxs.length) fetchCoinBanners(localTxs);
+
+      // Async sync with MongoDB account database
+      syncTransactionsWithAccount(addr).then(syncedTxs => {
+        if (syncedTxs && syncedTxs.length) {
+          setTransactions(syncedTxs);
+          fetchCoinBanners(syncedTxs);
+        }
+      });
     } else {
       setTransactions([]);
     }

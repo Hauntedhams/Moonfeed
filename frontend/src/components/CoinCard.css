@@ -388,13 +388,46 @@
   transform: translateX(0) scale(1);
 }
 
-.native-chart-action-btn:first-child {
-  transition-delay: 0.06s, 0.06s, 0s, 0s;
+.native-chart-action-btn.active {
+  background: rgba(79, 140, 255, 0.35);
+  border-color: #4f8cff;
+  color: #ffffff;
+  box-shadow: 0 0 14px rgba(79, 140, 255, 0.5);
 }
 
-.native-chart-action-btn.visible:first-child {
-  transition-delay: 0.12s, 0.12s, 0s, 0s;
+.native-chart-action-btn.copied {
+  background: rgba(34, 197, 94, 0.35);
+  border-color: #22c55e;
+  color: #ffffff;
+  box-shadow: 0 0 14px rgba(34, 197, 94, 0.5);
 }
+
+.native-chart-action-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  background: #ef4444;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 999px;
+  border: 1.5px solid #000000;
+  line-height: 1;
+}
+
+/* Staggered animation sequence for expand/collapse (right to left) */
+.native-chart-action-btn.visible:nth-child(1) { transition-delay: 0.16s, 0.16s, 0s, 0s; }
+.native-chart-action-btn.visible:nth-child(2) { transition-delay: 0.12s, 0.12s, 0s, 0s; }
+.native-chart-action-btn.visible:nth-child(3) { transition-delay: 0.08s, 0.08s, 0s, 0s; }
+.native-chart-action-btn.visible:nth-child(4) { transition-delay: 0.04s, 0.04s, 0s, 0s; }
+.native-chart-action-btn.visible:nth-child(5) { transition-delay: 0s, 0s, 0s, 0s; }
+
+.native-chart-action-btn:nth-child(1) { transition-delay: 0s, 0s, 0s, 0s; }
+.native-chart-action-btn:nth-child(2) { transition-delay: 0.04s, 0.04s, 0s, 0s; }
+.native-chart-action-btn:nth-child(3) { transition-delay: 0.08s, 0.08s, 0s, 0s; }
+.native-chart-action-btn:nth-child(4) { transition-delay: 0.12s, 0.12s, 0s, 0s; }
+.native-chart-action-btn:nth-child(5) { transition-delay: 0.16s, 0.16s, 0s, 0s; }
 
 .native-chart-action-btn:hover {
   background: rgba(10, 10, 20, 0.95);
@@ -2798,39 +2831,27 @@ html:not(.dark-mode) .coin-card-left-panel::-webkit-scrollbar-thumb:hover {
 }
 
 @keyframes flash-green-2 {
-  0% { color: #ffffff; }
+  0% { color: inherit; }
   35% { color: #4ade80; }
-  100% { color: #ffffff; }
+  100% { color: inherit; }
 }
 
 @keyframes flash-red-2 {
-  0% { color: #ffffff; }
+  0% { color: inherit; }
   35% { color: #f87171; }
-  100% { color: #ffffff; }
+  100% { color: inherit; }
 }
 
 @keyframes flash-green {
-  0% { color: #ffffff; }
+  0% { color: inherit; }
   35% { color: #4ade80; }
-  100% { color: #ffffff; }
+  100% { color: inherit; }
 }
 
 @keyframes flash-red {
-  0% { color: #ffffff; }
+  0% { color: inherit; }
   35% { color: #f87171; }
-  100% { color: #ffffff; }
-}
-
-@keyframes flash-green {
-  0% { background-color: transparent; }
-  50% { background-color: rgba(34, 197, 94, 0.3); border-radius: 8px; }
-  100% { background-color: transparent; }
-}
-
-@keyframes flash-red {
-  0% { background-color: transparent; }
-  50% { background-color: rgba(239, 68, 68, 0.3); border-radius: 8px; }
-  100% { background-color: transparent; }
+  100% { color: inherit; }
 }
 
 /* =============================================================================

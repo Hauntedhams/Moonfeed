@@ -169,3 +169,47 @@ export async function notifyWalletTrade(swap) {
     console.debug('[TradeNotifications] schedule error:', err?.message);
   }
 }
+
+// Send a custom push notification to the user (e.g. for notifications enabled or test alert)
+export async function sendPushNotification(title, body, extraData = {}) {
+  await initTradeNotifications();
+  if (!permissionGranted) return false;
+
+  const notifId = Math.floor(Math.random() * 2147483647) || 1;
+
+  try {
+    if (isNative) {
+      await LocalNotifications.schedule({
+        notifications: [
+          {
+            id: notifId,
+            title,
+            body,
+            schedule: { at: new Date(Date.now() + 200) },
+            extra: extraData,
+          },
+        ],
+      });
+    } else if ('Notification' in window) {
+      const notificationOptions = {
+        body,
+        icon: '/android-chrome-192x192.png',
+        badge: '/favicon-32x32.png',
+        tag: `moonfeed-push-${Date.now()}`,
+        renotify: true,
+        data: { url: '/', ...extraData },
+      };
+
+      const registration = await getServiceWorkerRegistration();
+      if (registration?.showNotification) {
+        await registration.showNotification(title, notificationOptions);
+      } else {
+        new Notification(title, notificationOptions);
+      }
+    }
+    return true;
+  } catch (err) {
+    console.debug('[TradeNotifications] sendPushNotification error:', err?.message);
+    return false;
+  }
+}

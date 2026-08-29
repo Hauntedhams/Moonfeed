@@ -100,6 +100,8 @@ const NativeChart = ({
   targetColor = '#22d3ee',
   entryPrice = null,
   trackedPrice = null,
+  trackedTime = null,
+  focusTrackedSignal = 0,
 }) => {
   const { isDarkMode } = useDarkMode();
   const containerRef = useRef(null);
@@ -139,6 +141,9 @@ const NativeChart = ({
   // separate arrows/labels when several trades land close together in time).
   const [dotClusters, setDotClusters] = useState([]);
   const [openCluster, setOpenCluster] = useState(null);
+  const [trackedBubble, setTrackedBubble] = useState(null);
+  const resolvedMintRef = useRef(null);
+  const fittedMintTfRef = useRef('');
 
   const mint = coin?.mintAddress || coin?.tokenAddress || coin?.address;
 
@@ -146,18 +151,35 @@ const NativeChart = ({
   // poolResolved flips true once we know the answer (pool found OR none exists), so
   // load() can then fall back to the line-chart source for pool-less coins ($MOO).
   useEffect(() => {
-    const existing = resolvePool(coin);
-    if (existing) { setPool(existing); setPoolResolved(true); return; }
     if (!mint) { setPoolResolved(true); return; }
+
+    const existing = resolvePool(coin);
+    if (existing) {
+      if (pool !== existing) setPool(existing);
+      setPoolResolved(true);
+      resolvedMintRef.current = mint;
+      return;
+    }
+
+    if (resolvedMintRef.current === mint && poolResolved) {
+      return;
+    }
+
+    resolvedMintRef.current = mint;
     let cancelled = false;
     setPool(null);
     setPoolResolved(false);
     fetch(`${API_CONFIG.BASE_URL}/api/resolve-pool/${mint}`)
       .then((r) => r.json())
-      .then((d) => { if (!cancelled) { if (d?.poolAddress) setPool(d.poolAddress); setPoolResolved(true); } })
+      .then((d) => {
+        if (!cancelled) {
+          if (d?.poolAddress) setPool(d.poolAddress);
+          setPoolResolved(true);
+        }
+      })
       .catch(() => { if (!cancelled) setPoolResolved(true); });
     return () => { cancelled = true; };
-  }, [coin, mint]);
+  }, [mint, coin]);
 
   // Lazily create/swap the series so we can switch between candlesticks (DEX pools)
   // and an area line (pool-less coins fed by /api/chart-data).
@@ -251,21 +273,43 @@ const NativeChart = ({
     } catch (_) { /* chart disposed */ }
   }, [isExpanded]);
 
-  // When expanded/interactive, the chart usually sits inside a scrollable sheet
-  // (PositionDetailView, OrderDetailView, fullscreen panel). Wheel/touch events
-  // over the canvas would otherwise bubble up and scroll that ancestor at the
-  // same time lightweight-charts pans/zooms, producing a jittery double-move.
-  // Stopping propagation (not the default action) keeps the gesture contained
-  // to the chart for both mouse-wheel and touch/trackpad scrolling.
+  // Wheel zoom / pan & touch gesture handling over the chart canvas.
   useEffect(() => {
     const el = containerRef.current;
-    if (!el || !isExpanded) return undefined;
-    const stop = (e) => e.stopPropagation();
-    el.addEventListener('wheel', stop, { passive: true });
-    el.addEventListener('touchmove', stop, { passive: true });
+    const chart = chartRef.current;
+    if (!el || !chart || !isExpanded) return undefined;
+
+    // Direct mouse wheel zoom handling
+    const onWheel = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      try {
+        const ts = chart.timeScale();
+        const range = ts.getVisibleLogicalRange();
+        if (!range) return;
+
+        const delta = e.deltaY;
+        const rect = el.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const logicalPos = ts.coordinateToLogical(mouseX);
+        const anchor = logicalPos ?? (range.from + range.to) / 2;
+
+        const zoomFactor = delta > 0 ? 1.15 : 0.85;
+        const currentSpan = range.to - range.from;
+        const newSpan = Math.max(5, Math.min(1000, currentSpan * zoomFactor));
+
+        const leftRatio = (anchor - range.from) / (currentSpan || 1);
+        const newFrom = anchor - newSpan * leftRatio;
+        const newTo = anchor + newSpan * (1 - leftRatio);
+
+        ts.setVisibleLogicalRange({ from: newFrom, to: newTo });
+      } catch (_) { /* chart disposed */ }
+    };
+
+    el.addEventListener('wheel', onWheel, { passive: false });
     return () => {
-      el.removeEventListener('wheel', stop);
-      el.removeEventListener('touchmove', stop);
+      el.removeEventListener('wheel', onWheel);
     };
   }, [isExpanded]);
 
@@ -308,10 +352,19 @@ const NativeChart = ({
     let startY = 0;
     let lastX = 0;
     let lastY = 0;
+    let initialPinchDist = 0;
+    let initialSpan = 0;
+    let initialLogicalRange = null;
     let rafId = 0;
     let pendingX = null;
     // Manual vertical price-zoom state, seeded from the live range at drag start.
     let priceRange = null; // { min, max }
+
+    const getPinchDistance = (t1, t2) => {
+      const dx = t1.clientX - t2.clientX;
+      const dy = t1.clientY - t2.clientY;
+      return Math.sqrt(dx * dx + dy * dy);
+    };
 
     const applyScrub = () => {
       rafId = 0;
@@ -370,7 +423,23 @@ const NativeChart = ({
     };
 
     const onTouchStartCapture = (e) => {
-      if (e.touches.length > 1) { mode = 'multi'; endScrub(); return; }
+      if (e.touches.length > 1) {
+        mode = 'multi';
+        endScrub();
+        if (e.touches.length === 2) {
+          const t1 = e.touches[0];
+          const t2 = e.touches[1];
+          initialPinchDist = getPinchDistance(t1, t2);
+          try {
+            const ts = chart.timeScale();
+            initialLogicalRange = ts.getVisibleLogicalRange();
+            if (initialLogicalRange) {
+              initialSpan = initialLogicalRange.to - initialLogicalRange.from;
+            }
+          } catch (_) {}
+        }
+        return;
+      }
       const touch = e.touches[0];
       if (!touch) return;
       startX = touch.clientX;
@@ -403,6 +472,26 @@ const NativeChart = ({
     };
 
     const onTouchMoveCapture = (e) => {
+      if (e.touches.length === 2 && mode === 'multi' && initialPinchDist > 0 && initialLogicalRange) {
+        e.stopPropagation();
+        e.preventDefault();
+        const dist = getPinchDistance(e.touches[0], e.touches[1]);
+        if (dist > 0) {
+          const scaleRatio = initialPinchDist / dist; // pinching together (smaller dist) -> larger scaleRatio (zoom out)
+          const newSpan = Math.max(5, Math.min(1000, initialSpan * scaleRatio));
+          const rect = el.getBoundingClientRect();
+          const midpointX = ((e.touches[0].clientX + e.touches[1].clientX) / 2) - rect.left;
+          try {
+            const ts = chart.timeScale();
+            const anchorLogical = ts.coordinateToLogical(midpointX) ?? ((initialLogicalRange.from + initialLogicalRange.to) / 2);
+            const leftRatio = (anchorLogical - initialLogicalRange.from) / (initialSpan || 1);
+            const newFrom = anchorLogical - newSpan * leftRatio;
+            const newTo = anchorLogical + newSpan * (1 - leftRatio);
+            ts.setVisibleLogicalRange({ from: newFrom, to: newTo });
+          } catch (_) {}
+        }
+        return;
+      }
       if (mode === 'multi' || mode === 'pass') return;
       const touch = e.touches[0];
       if (!touch) return;
@@ -432,6 +521,8 @@ const NativeChart = ({
     const onTouchEndCapture = () => {
       if (mode === 'scrub') endScrub();
       priceRange = null;
+      initialPinchDist = 0;
+      initialLogicalRange = null;
       mode = null;
     };
 
@@ -591,7 +682,11 @@ const NativeChart = ({
         recentVolRef.current = vols.length ? vols.reduce((a, b) => a + b, 0) / vols.length : 0;
         // Seed the price badge immediately so it never shows blank/stale before the first live tick.
         if (lastCandleRef.current) setLiveTick((prev) => ({ price: lastCandleRef.current.close, dir: null, n: prev.n }));
-        chartRef.current?.timeScale().fitContent();
+        const fitKey = `${mint}-${tf.label}-${pool}`;
+        if (fittedMintTfRef.current !== fitKey) {
+          fittedMintTfRef.current = fitKey;
+          chartRef.current?.timeScale().fitContent();
+        }
       } catch (e) {
         // Chart/series disposed mid-fetch (e.g. card scrolled away and unmounted) — nothing to draw into anymore.
         return;
@@ -645,7 +740,11 @@ const NativeChart = ({
         if (deduped.length === 0) { setStatus('empty'); return; }
         const lastPoint = deduped[deduped.length - 1];
         setLiveTick((prev) => ({ price: lastPoint.value, dir: null, n: prev.n }));
-        chartRef.current?.timeScale().fitContent();
+        const fitKey = `${mint}-${tf.label}-${pool}`;
+        if (fittedMintTfRef.current !== fitKey) {
+          fittedMintTfRef.current = fitKey;
+          chartRef.current?.timeScale().fitContent();
+        }
       } catch (e) {
         // Chart/series disposed mid-fetch — nothing to draw into anymore.
         return;
@@ -688,14 +787,20 @@ const NativeChart = ({
     }
   }, [focusTimelineFrom, status, tfIndex, refocusSignal]);
 
-  // "Reset chart view" button: snap pan/zoom back to the default framing
+  // "Reset chart view" button: snap pan/zoom back to default framing
   // (skipped the very first time so it doesn't fight the initial fitContent).
   const resetSkipRef = useRef(true);
   useEffect(() => {
     if (resetSkipRef.current) { resetSkipRef.current = false; return; }
     const chart = chartRef.current;
+    const series = seriesRef.current;
     if (!chart || status !== 'ready') return;
-    try { chart.timeScale().fitContent(); } catch (_) { /* chart disposed */ }
+    try {
+      if (series) {
+        series.applyOptions({ autoscaleInfoProvider: undefined });
+      }
+      chart.timeScale().fitContent();
+    } catch (_) { /* chart disposed */ }
   }, [resetViewSignal]);
 
   // Keep the price axis wide enough to always include the entry/target lines
@@ -710,7 +815,7 @@ const NativeChart = ({
     if (!(entry > 0) && !(target > 0)) return undefined;
 
     const autoscaleInfoProvider = (original) => {
-      const baseInfo = original();
+      const baseInfo = original ? original() : { priceRange: { minValue: 0, maxValue: 1 } };
       const baseRange = baseInfo?.priceRange;
       if (!baseRange) return baseInfo;
       let min = baseRange.minValue;
@@ -724,7 +829,7 @@ const NativeChart = ({
     return () => {
       try { series.applyOptions({ autoscaleInfoProvider: undefined }); } catch (_) { /* chart disposed */ }
     };
-  }, [focusOneMinute, status, entryPrice, targetPrice, refocusSignal]);
+  }, [focusOneMinute, status, entryPrice, targetPrice, refocusSignal, resetViewSignal]);
 
   // Overlay caller-supplied markers (e.g. buy/sell points) once real candles are in.
   // v5 moved markers off the series onto a plugin, so keep the primitive around.
@@ -801,31 +906,161 @@ const NativeChart = ({
     }
   }, [status, entryPrice, tfIndex]);
 
-  // Price when the user started tracking this coin.
-  useEffect(() => {
-    const series = seriesRef.current;
-    if (!series || status !== 'ready') return;
+  // Zoom into the tracked position on the chart scale
+  const zoomToTracked = useCallback(() => {
+    const chart = chartRef.current;
+    if (!chart || status !== 'ready') return;
 
+    const price = Number(trackedPrice);
+    if (!Number.isFinite(price) || price <= 0) return;
+
+    let targetSec = null;
+    const trackedMs = Number(trackedTime);
+    if (Number.isFinite(trackedMs) && trackedMs > 0) {
+      targetSec = Math.floor(trackedMs / 1000);
+    }
+
+    if (!targetSec && trackedBubble?.targetTime) {
+      targetSec = trackedBubble.targetTime;
+    }
+
+    const last = lastCandleRef.current;
+    if (!targetSec && last) {
+      targetSec = last.time;
+    }
+
+    if (targetSec != null) {
+      const interval = tfSeconds(TIMEFRAMES[tfIndex]);
+      const span = interval * 40;
+      const from = Math.max(0, targetSec - span * 0.4);
+      const to = targetSec + span * 0.6;
+      try {
+        chart.timeScale().setVisibleRange({ from, to });
+      } catch (_) {
+        try { chart.timeScale().fitContent(); } catch (_) {}
+      }
+    }
+  }, [trackedPrice, trackedTime, trackedBubble, status, tfIndex]);
+
+  // Respond to focusTrackedSignal from parent (e.g. clicking header Tracked price)
+  useEffect(() => {
+    if (focusTrackedSignal > 0) {
+      zoomToTracked();
+    }
+  }, [focusTrackedSignal, zoomToTracked]);
+
+  // Tracked price marker bubble positioning (replaces full-width line with interactive point arrow bubble)
+  useEffect(() => {
+    const chart = chartRef.current;
+    const series = seriesRef.current;
     if (trackedLineRef.current) {
-      try { series.removePriceLine(trackedLineRef.current); } catch (e) { /* series changed */ }
+      try { series?.removePriceLine(trackedLineRef.current); } catch (e) { /* series changed */ }
       trackedLineRef.current = null;
     }
 
     const price = Number(trackedPrice);
-    if (!Number.isFinite(price) || price <= 0) return;
-    try {
-      trackedLineRef.current = series.createPriceLine({
-        price,
-        color: '#fbbf24',
-        lineWidth: 1,
-        lineStyle: 1,
-        axisLabelVisible: true,
-        title: 'Tracked at',
-      });
-    } catch (e) {
-      // Area fallback series may not support price lines in all chart builds.
+    if (!chart || !series || status !== 'ready' || !Number.isFinite(price) || price <= 0) {
+      setTrackedBubble(null);
+      return undefined;
     }
-  }, [status, trackedPrice, tfIndex]);
+
+    const recomputeTracked = () => {
+      const container = containerRef.current;
+      const width = container?.clientWidth || 0;
+      const height = container?.clientHeight || 0;
+      if (!width || !height) return;
+
+      let targetTime = null;
+      const trackedMs = Number(trackedTime);
+
+      let data = [];
+      try {
+        if (typeof series.data === 'function') {
+          data = series.data() || [];
+        }
+      } catch (_) {}
+
+      if (Number.isFinite(trackedMs) && trackedMs > 0) {
+        const targetSec = Math.floor(trackedMs / 1000);
+        if (data && data.length) {
+          let closest = data[0];
+          let minDiff = Math.abs((data[0].time || 0) - targetSec);
+          for (let i = 1; i < data.length; i++) {
+            const diff = Math.abs((data[i].time || 0) - targetSec);
+            if (diff < minDiff) {
+              minDiff = diff;
+              closest = data[i];
+            }
+          }
+          targetTime = closest.time;
+        }
+      }
+
+      if (targetTime == null && data && data.length) {
+        let closest = data[0];
+        let minDiff = Math.abs((data[0].close || data[0].value || 0) - price);
+        for (let i = 1; i < data.length; i++) {
+          const p = data[i].close || data[i].value || 0;
+          const diff = Math.abs(p - price);
+          if (diff < minDiff) {
+            minDiff = diff;
+            closest = data[i];
+          }
+        }
+        targetTime = closest.time;
+      }
+
+      if (targetTime == null && lastCandleRef.current) {
+        targetTime = lastCandleRef.current.time;
+      }
+
+      if (targetTime == null) {
+        setTrackedBubble(null);
+        return;
+      }
+
+      let x, y;
+      try {
+        x = chart.timeScale().timeToCoordinate(targetTime);
+        y = series.priceToCoordinate(price);
+      } catch (_) {
+        setTrackedBubble(null);
+        return;
+      }
+
+      if (!Number.isFinite(y)) {
+        setTrackedBubble(null);
+        return;
+      }
+
+      const isOffLeft = x != null && x < 0;
+      const isOffRight = x != null && x > width;
+      const clampedX = Math.max(50, Math.min(width - 50, x ?? width / 2));
+      const clampedY = Math.max(30, Math.min(height - 30, y));
+
+      setTrackedBubble({
+        x: clampedX,
+        y: clampedY,
+        rawX: x,
+        rawY: y,
+        isOffLeft,
+        isOffRight,
+        price,
+        targetTime,
+      });
+    };
+
+    let raf = requestAnimationFrame(function tick() {
+      recomputeTracked();
+      raf = requestAnimationFrame(tick);
+    });
+    const observer = new ResizeObserver(recomputeTracked);
+    if (containerRef.current) observer.observe(containerRef.current);
+    return () => {
+      cancelAnimationFrame(raf);
+      observer.disconnect();
+    };
+  }, [trackedPrice, trackedTime, status, tfIndex]);
 
   // In order mode, draw a guide from the latest traded price to the selected
   // target instead of a full-width line that obscures the chart history.
@@ -1167,6 +1402,26 @@ const NativeChart = ({
         <svg className="native-chart-order-guide" viewBox={`0 0 ${orderGuide.width} ${orderGuide.height}`} preserveAspectRatio="none" aria-hidden="true">
           <text x={orderGuide.toX - 4} y={orderGuide.toY - 8} textAnchor="end">{targetLabel}</text>
         </svg>
+      )}
+      {trackedBubble && (
+        <div 
+          className="native-chart-tracked-bubble-wrapper"
+          style={{ left: trackedBubble.x, top: trackedBubble.y }}
+        >
+          <button
+            type="button"
+            className={`native-chart-tracked-bubble ${trackedBubble.isOffLeft ? 'off-left' : ''} ${trackedBubble.isOffRight ? 'off-right' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              zoomToTracked();
+            }}
+            title="Click to zoom in to tracked position"
+          >
+            <span className="tracked-bubble-icon">📍</span>
+            <span className="tracked-bubble-text">Tracked at {formatPrice(trackedBubble.price)}</span>
+            <span className="tracked-bubble-arrow">↑</span>
+          </button>
+        </div>
       )}
       {dotClusters.length > 0 && (
         <div className="native-chart-trade-dots" aria-hidden={openCluster ? 'true' : undefined}>

@@ -120,8 +120,13 @@ export const CopyTradeProvider = ({ children, onCopyTrade }) => {
 
         if (newNotifs.length === 0) return prev;
 
-        // Fire a native OS notification for each new trade.
-        newNotifs.forEach(n => notifyWalletTrade(n));
+        // Fire a native OS push notification for each new trade if notifications are enabled
+        newNotifs.forEach(n => {
+          const targetW = trackedWallets.find(w => w.address === n.walletAddress);
+          if (!targetW || targetW.notificationsEnabled !== false) {
+            notifyWalletTrade(n);
+          }
+        });
 
         // Haptic feedback on mobile
         try {

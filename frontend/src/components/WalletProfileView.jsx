@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { getFullApiUrl, fetchJsonWithTimeout } from '../config/api';
 import { useTrackedWallets } from '../contexts/TrackedWalletsContext';
+import { initTradeNotifications, sendPushNotification } from '../utils/tradeNotifications';
 import NativeChart from './NativeChart';
 import './ProfileView.css';
 import './WalletProfileView.css';
@@ -166,12 +167,20 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
   const [coins, setCoins] = useState([]);
   const [coinsLoading, setCoinsLoading] = useState(true);
   const [showAnalyticsModal, setShowAnalyticsModal] = useState(false);
-  const { trackWallet, untrackWallet, isTracked, trackedWallets, toggleCopyTrade } = useTrackedWallets();
+  const { trackWallet, untrackWallet, isTracked, trackedWallets, toggleCopyTrade, toggleNotifications, updateWalletLabel } = useTrackedWallets();
   const [tracked, setTracked] = useState(false);
   const [copyHintDismissed, setCopyHintDismissed] = useState(false);
   const [showChartInfo, setShowChartInfo] = useState(false);
   const [chartPosition, setChartPosition] = useState(null);
   const [chartPrice, setChartPrice] = useState(null);
+  const [showRenameModal, setShowRenameModal] = useState(false);
+  const [renameInput, setRenameInput] = useState('');
+  const [toastMsg, setToastMsg] = useState(null);
+
+  const showToast = (msg) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(null), 3200);
+  };
   // A fast mobile swipe fires the chart's crosshair callback dozens of times a
   // second — coalesce those into at most one state update (and re-render) per
   // animation frame instead of one per touch-move event.
@@ -200,6 +209,7 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
 
   const trackedWallet = trackedWallets.find((w) => w.address === walletAddress);
   const copyEnabled = trackedWallet ? trackedWallet.copyTradeEnabled !== false : false;
+  const notificationsEnabled = trackedWallet ? trackedWallet.notificationsEnabled !== false : false;
 
   // Fetch aggregate wallet analytics
   useEffect(() => {
@@ -267,7 +277,38 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
   const identity = stats?.identity || null;
   const anonAnimal = getAnonAnimal(walletAddress);
   const displayName = identity?.name || profileHint?.displayName || profileHint?.name || buildWalletName(walletAddress);
+  const walletName = trackedWallet?.label || displayName;
   const latestCoin = coins[0] || null;
+
+  const handleBellClick = async () => {
+    if (!tracked) {
+      const ok = trackWallet(walletAddress);
+      if (!ok) return;
+      setTracked(true);
+    }
+
+    const nextState = !notificationsEnabled;
+    toggleNotifications(walletAddress, nextState);
+
+    if (nextState) {
+      await initTradeNotifications();
+      await sendPushNotification(
+        '🔔 Wallet Notifications Enabled!',
+        `You will receive instant push notifications whenever ${walletName} makes a trade.`
+      );
+      showToast('🔔 Push notifications enabled!');
+    } else {
+      showToast('🔕 Notifications turned off');
+    }
+
+    setRenameInput(walletName);
+    setShowRenameModal(true);
+  };
+
+  const handleRenameClick = () => {
+    setRenameInput(walletName);
+    setShowRenameModal(true);
+  };
 
   // Entry price + realized ROI for the charted coin, so the chart can show how
   // far above/below the wallet's own buy-in the price currently is.
@@ -363,6 +404,18 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
           </button>
         </div>
 
+        <div className="wpv-name-title-row">
+          <h2 className="wpv-name-heading">{walletName}</h2>
+          <button
+            type="button"
+            className={`wpv-pencil-btn ${notificationsEnabled ? 'active' : 'locked'}`}
+            onClick={handleRenameClick}
+            title={notificationsEnabled ? 'Rename Wallet' : 'Turn on notifications to rename this wallet'}
+          >
+            ✏️
+          </button>
+        </div>
+
         <div className="wpv-addr-row">
           <a
             className="pv-ig-addr-chip"
@@ -375,6 +428,14 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
           </a>
           <button className="wpv-fast-follow" onClick={handleTrackWallet} disabled={tracked}>
             {tracked ? 'Tracked' : 'Follow'}
+          </button>
+          <button
+            type="button"
+            className={`wpv-bell-btn ${notificationsEnabled ? 'active' : ''}`}
+            onClick={handleBellClick}
+            title={notificationsEnabled ? 'Notifications ON — Click to edit name or settings' : 'Turn ON push notifications'}
+          >
+            <span className="wpv-bell-icon">{notificationsEnabled ? '🔔' : '🔕'}</span>
           </button>
         </div>
 
@@ -449,6 +510,13 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
             onClick={handleCopyToggle}
           >
             {!tracked ? 'Copy Next Trade' : copyEnabled ? '✓ Copying Trades' : 'Resume Copying'}
+          </button>
+          <button
+            type="button"
+            className={`pv-ig-btn pv-ig-btn--edit wpv-bell-action-btn ${notificationsEnabled ? 'wpv-bell-action--on' : ''}`}
+            onClick={handleBellClick}
+          >
+            {notificationsEnabled ? '🔔 Alerts ON' : '🔕 Enable Alerts'}
           </button>
         </div>
 
@@ -599,6 +667,121 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
             {statsError && !statsLoading && (
               <div className="wpv-error">Couldn't load full analytics for this wallet.</div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Toast popup */}
+      {toastMsg && <div className="wpv-toast">{toastMsg}</div>}
+
+      {/* Rename & Notifications Modal */}
+      {showRenameModal && (
+        <div className="wpv-modal-overlay" onClick={() => setShowRenameModal(false)}>
+          <div className="wpv-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="wpv-modal-header">
+              <div className="wpv-modal-title-wrap">
+                <span className="wpv-modal-icon">🔔</span>
+                <h3>Wallet Notifications & Name</h3>
+              </div>
+              <button type="button" className="wpv-modal-close" onClick={() => setShowRenameModal(false)}>×</button>
+            </div>
+
+            <div className="wpv-modal-body">
+              <div className="wpv-notif-status-box">
+                <div className="wpv-notif-info">
+                  <span className="wpv-notif-badge-icon">{notificationsEnabled ? '🔔' : '🔕'}</span>
+                  <div>
+                    <div className="wpv-notif-title">
+                      Trade Notifications: <strong>{notificationsEnabled ? 'Active' : 'Disabled'}</strong>
+                    </div>
+                    <div className="wpv-notif-desc">
+                      {notificationsEnabled
+                        ? 'Push notifications are enabled for this wallet.'
+                        : 'Enable notifications to receive trade alerts and rename.'}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className={`wpv-notif-toggle-btn ${notificationsEnabled ? 'on' : 'off'}`}
+                  onClick={async () => {
+                    if (!tracked) {
+                      setTracked(trackWallet(walletAddress));
+                    }
+                    const next = !notificationsEnabled;
+                    toggleNotifications(walletAddress, next);
+                    if (next) {
+                      await initTradeNotifications();
+                      await sendPushNotification(
+                        '🔔 Wallet Notifications Enabled!',
+                        `You will receive instant push notifications whenever ${renameInput || walletName} makes a trade.`
+                      );
+                      showToast('🔔 Push notifications enabled!');
+                    } else {
+                      showToast('🔕 Notifications disabled');
+                    }
+                  }}
+                >
+                  {notificationsEnabled ? 'Disable' : 'Enable'}
+                </button>
+              </div>
+
+              {notificationsEnabled && (
+                <button
+                  type="button"
+                  className="wpv-test-push-btn"
+                  onClick={async () => {
+                    await sendPushNotification(
+                      '🔔 Test Trade Alert',
+                      `Push notifications active for ${renameInput || walletName}!`
+                    );
+                    showToast('📲 Test push notification sent!');
+                  }}
+                >
+                  📲 Send Test Push Notification
+                </button>
+              )}
+
+              <div className="wpv-rename-section">
+                <label className="wpv-rename-label">
+                  Custom Wallet Name
+                </label>
+                {!notificationsEnabled ? (
+                  <div className="wpv-rename-locked-hint">
+                    🔒 Renaming is only allowed when push notifications are turned ON for this wallet.
+                  </div>
+                ) : (
+                  <div className="wpv-rename-unlocked-hint">
+                    ✏️ Name saves with your profile & syncs across devices.
+                  </div>
+                )}
+                <input
+                  type="text"
+                  className="wpv-rename-input"
+                  value={renameInput}
+                  onChange={(e) => setRenameInput(e.target.value)}
+                  placeholder="e.g. Whale Trader #1"
+                  disabled={!notificationsEnabled}
+                />
+              </div>
+            </div>
+
+            <div className="wpv-modal-footer">
+              <button
+                type="button"
+                className="wpv-modal-save-btn"
+                disabled={!notificationsEnabled || !renameInput.trim()}
+                onClick={() => {
+                  if (renameInput.trim()) {
+                    updateWalletLabel(walletAddress, renameInput.trim());
+                    showToast('✅ Wallet name saved!');
+                    setShowRenameModal(false);
+                  }
+                }}
+              >
+                Save Wallet Name
+              </button>
+            </div>
           </div>
         </div>
       )}

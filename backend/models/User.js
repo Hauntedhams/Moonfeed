@@ -55,6 +55,27 @@ const userSchema = new mongoose.Schema({
       trackedAtPrice: { type: Number, default: 0 }
     }],
     default: []
+  },
+  // Moonfeed transaction history (Jupiter trades performed through Moonfeed), synced across devices.
+  transactions: {
+    type: [{
+      id: { type: String, required: true },
+      signature: { type: String, required: true },
+      type: { type: String, default: 'buy' },
+      tokenMint: { type: String, default: '' },
+      tokenSymbol: { type: String, default: '' },
+      tokenName: { type: String, default: '' },
+      tokenImage: { type: String, default: '' },
+      inputAmount: { type: Number, default: 0 },
+      outputAmount: { type: Number, default: 0 },
+      inputMint: { type: String, default: '' },
+      outputMint: { type: String, default: '' },
+      pricePerToken: { type: Number, default: 0 },
+      pricePerTokenUsd: { type: Number, default: 0 },
+      timestamp: { type: Number, default: Date.now },
+      createdAt: { type: String, default: '' }
+    }],
+    default: []
   }
 }, {
   timestamps: true

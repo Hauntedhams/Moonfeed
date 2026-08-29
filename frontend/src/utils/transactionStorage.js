@@ -1,3 +1,5 @@
+import { getFullApiUrl } from '../config/api';
+
 /**
  * LocalStorage utility for storing and retrieving meme coin transaction history
  * Stores recent buys made through Moonfeed (Jupiter swaps)
@@ -6,6 +8,62 @@
 const STORAGE_KEY = 'moonfeed_transactions';
 const MAX_TRANSACTIONS = 100; // Maximum transactions to store
 const STORAGE_VERSION = 'v1';
+
+/**
+ * Sync local transactions with MongoDB backend
+ */
+export async function syncTransactionsWithAccount(walletAddress) {
+  if (!walletAddress || walletAddress.length < 32) return [];
+
+  const storageKey = `${STORAGE_KEY}_${walletAddress}_${STORAGE_VERSION}`;
+  let localList = [];
+  try {
+    const stored = localStorage.getItem(storageKey);
+    if (stored) {
+      const data = JSON.parse(stored);
+      localList = data.transactions || [];
+    }
+  } catch (e) {
+    console.warn('[TransactionStorage] Failed reading local transactions for sync:', e);
+  }
+
+  try {
+    const res = await fetch(getFullApiUrl(`/api/users/${walletAddress}/transactions`));
+    if (res.ok) {
+      const data = await res.json();
+      const remoteList = Array.isArray(data?.transactions) ? data.transactions : [];
+
+      // Merge local and remote without duplicates (by signature)
+      const map = new Map();
+      remoteList.forEach(t => { if (t && t.signature) map.set(t.signature, t); });
+      localList.forEach(t => { if (t && t.signature && !map.has(t.signature)) map.set(t.signature, t); });
+
+      const merged = Array.from(map.values());
+      merged.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+      const trimmed = merged.slice(0, MAX_TRANSACTIONS);
+
+      // Save back locally
+      localStorage.setItem(storageKey, JSON.stringify({ transactions: trimmed, lastUpdated: Date.now() }));
+
+      // If local had unsaved items or remote was merged, push updated list to backend
+      if (trimmed.length > remoteList.length || (trimmed.length > 0 && localList.length > 0)) {
+        fetch(getFullApiUrl(`/api/users/${walletAddress}/transactions`), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transactions: trimmed }),
+          keepalive: true,
+        }).catch(err => console.warn('[TransactionStorage] Failed saving remote sync:', err.message));
+      }
+
+      return trimmed;
+    }
+  } catch (err) {
+    console.warn('[TransactionStorage] Remote sync failed:', err.message);
+  }
+
+  return localList;
+}
 
 /**
  * Get all stored transactions for a wallet
@@ -114,6 +172,14 @@ export function storeTransaction(transactionData) {
     localStorage.setItem(storageKey, JSON.stringify(existingData));
     console.log(`[TransactionStorage] ✅ Stored ${type} transaction for ${tokenSymbol} - ${signature.slice(0, 8)}...`);
     
+    // Sync newly stored transaction to MongoDB backend
+    fetch(getFullApiUrl(`/api/users/${walletAddress}/transactions`), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ transactions: existingData.transactions }),
+      keepalive: true,
+    }).catch(err => console.warn('[TransactionStorage] Failed pushing transaction to backend:', err.message));
+
     return true;
   } catch (error) {
     console.error('[TransactionStorage] Error storing transaction:', error);
@@ -144,6 +210,14 @@ export function deleteTransaction(walletAddress, signature) {
       data.lastUpdated = Date.now();
       localStorage.setItem(storageKey, JSON.stringify(data));
       console.log(`[TransactionStorage] ✅ Deleted transaction ${signature.slice(0, 8)}...`);
+
+      fetch(getFullApiUrl(`/api/users/${walletAddress}/transactions`), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transactions: data.transactions }),
+        keepalive: true,
+      }).catch(err => console.warn('[TransactionStorage] Failed updating deleted transaction to backend:', err.message));
+
       return true;
     }
 

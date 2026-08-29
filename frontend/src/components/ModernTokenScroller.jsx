@@ -1246,6 +1246,13 @@ const ModernTokenScroller = ({
     );
     return Number(fav?.trackedAtPrice) || 0;
   };
+
+  const getTrackedAtTime = (coin) => {
+    const fav = favorites.find(f =>
+      (f.mintAddress || f.tokenAddress) === (coin.mintAddress || coin.tokenAddress)
+    );
+    return fav?.savedAt || fav?.timestamp || null;
+  };
   
   // Get DexScreener chart for current and nearby coins
   const renderCoinWithChart = (coin, index) => {
@@ -1284,6 +1291,7 @@ const ModernTokenScroller = ({
           coin={enrichedCoin}
           isFavorite={isFavorite(coin)}
           trackedAtPrice={getTrackedAtPrice(coin)}
+          trackedAtTime={getTrackedAtTime(coin)}
           onFavoriteToggle={handleFavoriteToggle}
           onTradeClick={onTradeClick}
           onWalletClick={onWalletClick}
