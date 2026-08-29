@@ -63,26 +63,37 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
   const trackTradeWithAffiliate = async (txid, swapResult) => {
     try {
       console.log('📊 Attempting to track trade for affiliate system...');
-      
-      // Extract trade info from swapResult
-      const inputAmount = swapResult?.inputAmount || 0;
-      const outputAmount = swapResult?.outputAmount || 0;
-      
-      // Calculate approximate trade volume and fee
-      // Jupiter swaps show amounts in smallest units, need to convert
-      const tradeVolume = inputAmount / 1e9; // Assuming SOL input (9 decimals)
+
+      const SOL_MINT = 'So11111111111111111111111111111111111111112';
+      const inputMint = swapResult?.inputMint || SOL_MINT;
+      const outputMint = swapResult?.outputMint || coin?.mintAddress;
+
+      // Volume = the SOL side of the swap (input on buys, output on sells).
+      // Never assume the input is SOL — on sells it's the token amount.
+      let lamports = 0;
+      if (inputMint === SOL_MINT) {
+        lamports = Number(swapResult?.inputAmount) || 0;
+      } else if (outputMint === SOL_MINT) {
+        lamports = Number(swapResult?.outputAmount) || 0;
+      }
+      const tradeVolume = lamports / 1e9;
+      if (!(tradeVolume > 0)) {
+        console.log('📊 No SOL side found on swap, skipping affiliate tracking');
+        return;
+      }
       const feeEarned = tradeVolume * 0.01; // 1% fee
-      
+
       const trackingData = {
         userWallet: walletAddress || 'unknown',
         tradeVolume: tradeVolume,
         feeEarned: feeEarned,
-        tokenIn: swapResult?.inputMint || 'SOL',
-        tokenOut: swapResult?.outputMint || coin?.mintAddress,
+        tokenIn: inputMint,
+        tokenOut: outputMint,
         transactionSignature: txid,
         metadata: {
           coinSymbol: coin?.symbol,
           coinName: coin?.name,
+          side: inputMint === SOL_MINT ? 'buy' : 'sell',
           timestamp: new Date().toISOString()
         }
       };
