@@ -108,6 +108,8 @@ async function api(path, opts = {}) {
 }
 function short(a) { return a ? a.slice(0, 4) + '…' + a.slice(-4) : '—'; }
 function usd(n) { return '$' + (n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 }); }
+function sol(n) { return (n || 0).toLocaleString(undefined, { maximumFractionDigits: 4 }) + ' SOL'; }
+function solUsd(nSol, nUsd) { return `${sol(nSol)}<br><span class="muted">${usd(nUsd)}</span>`; }
 function copyText(t) { navigator.clipboard.writeText(t); toast('Copied: ' + t); }
 function monthLabel(d) { return new Date(d).toLocaleString('en-US', { month: 'short', year: 'numeric' }); }
 
@@ -118,7 +120,7 @@ async function loadAffiliates() {
     if (!affiliates.length) { el.innerHTML = '<span class="muted">No affiliates yet — create one below.</span>'; return; }
 
     const rows = await Promise.all(affiliates.map(async a => {
-      let pending = { totalPending: 0, tradeCount: 0, trades: [] };
+      let pending = { totalPending: 0, totalPendingUsd: 0, tradeCount: 0, trades: [] };
       try { pending = await api(`/api/affiliates/${a.code}/pending-earnings`); } catch (e) {}
       return { a, pending };
     }));
@@ -131,11 +133,11 @@ async function loadAffiliates() {
           <td class="mono">?ref=${a.code}<span class="copy" onclick="copyText('${LINK_BASE}?ref=${a.code}')">copy</span></td>
           <td class="mono">${short(a.walletAddress)}<span class="copy" onclick="copyText('${a.walletAddress}')">copy</span></td>
           <td>${a.sharePercentage}%</td>
-          <td>${usd(a.totalVolume)}</td>
-          <td class="green">${usd(a.totalEarned)}</td>
-          <td class="amber">${usd(pending.totalPending)}<br><span class="muted">${pending.tradeCount} trades</span></td>
+          <td>${solUsd(a.totalVolume, a.totalVolumeUsd)}</td>
+          <td class="green">${solUsd(a.totalEarned, a.totalEarnedUsd)}</td>
+          <td class="amber">${solUsd(pending.totalPending, pending.totalPendingUsd)}<br><span class="muted">${pending.tradeCount} trades</span></td>
           <td>${pending.totalPending > 0
-            ? `<button onclick="payOut('${a.code}', ${pending.totalPending})">Record payout</button>`
+            ? `<button onclick="payOut('${a.code}')">Record payout</button>`
             : '<span class="muted">—</span>'}</td>
         </tr>`).join('')}
     </table>`;
@@ -146,15 +148,15 @@ async function loadAffiliates() {
   }
 }
 
-async function payOut(code, amount) {
-  const { trades, totalPending } = await api(`/api/affiliates/${code}/pending-earnings`);
+async function payOut(code) {
+  const { trades, totalPending, totalPendingUsd } = await api(`/api/affiliates/${code}/pending-earnings`);
   if (!trades.length) return toast('Nothing pending');
   const byMonth = {};
   trades.forEach(t => { const m = monthLabel(t.timestamp); byMonth[m] = (byMonth[m] || 0) + t.influencerShare; });
-  const breakdown = Object.entries(byMonth).map(([m, v]) => `${m}: ${usd(v)}`).join(', ');
+  const breakdown = Object.entries(byMonth).map(([m, v]) => `${m}: ${sol(v)}`).join(', ');
 
   const sig = prompt(
-    `Pay ${usd(totalPending)} to "${code}" (${trades.length} trades — ${breakdown}).\n\n` +
+    `Pay ${sol(totalPending)} (${usd(totalPendingUsd)}) to "${code}" (${trades.length} trades — ${breakdown}).\n\n` +
     `1. Send the payment from your wallet first.\n2. Paste the transaction signature here to record it:`
   );
   if (!sig || !sig.trim()) return toast('Cancelled — nothing recorded');
@@ -170,7 +172,7 @@ async function payOut(code, amount) {
         notes: `Manual payout via admin dashboard (${breakdown})`
       })
     });
-    toast(`Payout of ${usd(totalPending)} recorded for ${code}`);
+    toast(`Payout of ${sol(totalPending)} (${usd(totalPendingUsd)}) recorded for ${code}`);
     loadAll();
   } catch (e) { toast('Error: ' + e.message); }
 }
@@ -204,8 +206,8 @@ async function loadTrades() {
           <td class="muted">${new Date(t.timestamp).toLocaleString()}</td>
           <td class="mono">${t.referralCode}</td>
           <td class="mono">${short(t.userWallet)}</td>
-          <td>${usd(t.tradeVolume)}</td>
-          <td class="green">${usd(t.influencerShare)}</td>
+          <td>${solUsd(t.tradeVolume, t.tradeVolumeUsd)}</td>
+          <td class="green">${solUsd(t.influencerShare, t.influencerShareUsd)}</td>
           <td><span class="pill ${t.payoutStatus}">${t.payoutStatus}</span></td>
           <td>${t.transactionSignature ? `<a class="copy" href="https://solscan.io/tx/${t.transactionSignature}" target="_blank">solscan</a>` : '—'}</td>
         </tr>`).join('')}

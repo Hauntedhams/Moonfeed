@@ -5,6 +5,7 @@
  */
 
 const { Affiliate, AffiliateTrade, AffiliatePayout } = require('./Affiliate');
+const { getSolUsdPrice } = require('../utils/solPrice');
 
 class AffiliateStorage {
   // Kept for API compatibility — Mongo connection is managed by config/database.js
@@ -91,6 +92,13 @@ class AffiliateStorage {
     const influencerShare = affiliate ? (feeEarned * (affiliate.sharePercentage / 100)) : 0;
     const platformShare = netFee - influencerShare;
 
+    // USD equivalents are valued once at the trade's own SOL/USD rate (not re-priced later).
+    const solUsdPriceAtTrade = await getSolUsdPrice();
+    const tradeVolumeUsd = tradeVolume * solUsdPriceAtTrade;
+    const feeEarnedUsd = feeEarned * solUsdPriceAtTrade;
+    const influencerShareUsd = influencerShare * solUsdPriceAtTrade;
+    const platformShareUsd = platformShare * solUsdPriceAtTrade;
+
     const trade = await AffiliateTrade.create({
       tradeId: `trade_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       referralCode,
@@ -103,6 +111,11 @@ class AffiliateStorage {
       netFee,
       influencerShare,
       platformShare,
+      solUsdPriceAtTrade,
+      tradeVolumeUsd,
+      feeEarnedUsd,
+      influencerShareUsd,
+      platformShareUsd,
       tokenIn,
       tokenOut,
       transactionSignature,
@@ -116,13 +129,15 @@ class AffiliateStorage {
           $inc: {
             totalEarned: influencerShare,
             totalVolume: tradeVolume,
-            totalTrades: 1
+            totalTrades: 1,
+            totalEarnedUsd: influencerShareUsd,
+            totalVolumeUsd: tradeVolumeUsd
           }
         }
       );
     }
 
-    console.log(`📊 Trade recorded: ${tradeVolume} volume, ${influencerShare.toFixed(4)} to ${referralCode}`);
+    console.log(`📊 Trade recorded: ${tradeVolume} SOL volume ($${tradeVolumeUsd.toFixed(2)}), ${influencerShare.toFixed(4)} SOL ($${influencerShareUsd.toFixed(2)}) to ${referralCode}`);
     return trade.toObject();
   }
 
@@ -151,10 +166,12 @@ class AffiliateStorage {
     }).sort({ timestamp: -1 }).lean();
 
     const totalPending = pendingTrades.reduce((sum, t) => sum + t.influencerShare, 0);
+    const totalPendingUsd = pendingTrades.reduce((sum, t) => sum + (t.influencerShareUsd || 0), 0);
 
     return {
       referralCode,
       totalPending,
+      totalPendingUsd,
       tradeCount: pendingTrades.length,
       trades: pendingTrades
     };
@@ -174,12 +191,16 @@ class AffiliateStorage {
       throw new Error(`Affiliate "${referralCode}" not found`);
     }
 
+    const paidTrades = await AffiliateTrade.find({ tradeId: { $in: tradeIds } }).lean();
+    const amountUsd = paidTrades.reduce((sum, t) => sum + (t.influencerShareUsd || 0), 0);
+
     const payout = await AffiliatePayout.create({
       payoutId: `payout_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       referralCode,
       influencerWallet: affiliate.walletAddress,
       influencerName: affiliate.name,
       amount,
+      amountUsd,
       tradeIds,
       tradeCount: tradeIds.length,
       transactionSignature,
@@ -236,6 +257,12 @@ class AffiliateStorage {
           paidEarnings: {
             $sum: { $cond: [{ $eq: ['$payoutStatus', 'paid'] }, '$influencerShare', 0] }
           },
+          pendingEarningsUsd: {
+            $sum: { $cond: [{ $eq: ['$payoutStatus', 'pending'] }, '$influencerShareUsd', 0] }
+          },
+          paidEarningsUsd: {
+            $sum: { $cond: [{ $eq: ['$payoutStatus', 'paid'] }, '$influencerShareUsd', 0] }
+          },
           pendingTradeCount: {
             $sum: { $cond: [{ $eq: ['$payoutStatus', 'pending'] }, 1, 0] }
           },
@@ -251,9 +278,13 @@ class AffiliateStorage {
       stats: {
         totalTrades: agg?.totalTrades || 0,
         totalVolume: affiliate.totalVolume,
+        totalVolumeUsd: affiliate.totalVolumeUsd,
         totalEarnings: affiliate.totalEarned,
+        totalEarningsUsd: affiliate.totalEarnedUsd,
         pendingEarnings: agg?.pendingEarnings || 0,
+        pendingEarningsUsd: agg?.pendingEarningsUsd || 0,
         paidEarnings: agg?.paidEarnings || 0,
+        paidEarningsUsd: agg?.paidEarningsUsd || 0,
         pendingTradeCount: agg?.pendingTradeCount || 0,
         paidTradeCount: agg?.paidTradeCount || 0
       }

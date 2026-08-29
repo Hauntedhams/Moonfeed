@@ -12,6 +12,9 @@ const affiliateSchema = new mongoose.Schema({
   totalEarned: { type: Number, default: 0 },
   totalVolume: { type: Number, default: 0 },
   totalTrades: { type: Number, default: 0 },
+  // USD equivalents, valued at each trade's own SOL/USD rate (not re-priced later)
+  totalEarnedUsd: { type: Number, default: 0 },
+  totalVolumeUsd: { type: Number, default: 0 },
   status: { type: String, default: 'active' }
 }, { timestamps: true });
 
@@ -21,12 +24,19 @@ const affiliateTradeSchema = new mongoose.Schema({
   influencerWallet: { type: String, default: null },
   influencerName: { type: String, default: null },
   userWallet: { type: String, index: true },
+  // All amounts below are denominated in SOL (the fee currency Jupiter pays out in).
   tradeVolume: { type: Number, required: true },
   feeEarned: { type: Number, required: true },
   jupiterCut: { type: Number, default: 0 },
   netFee: { type: Number, default: 0 },
   influencerShare: { type: Number, default: 0 },
   platformShare: { type: Number, default: 0 },
+  // USD equivalents, computed once from the SOL/USD rate at the moment of the trade
+  solUsdPriceAtTrade: { type: Number, default: 0 },
+  tradeVolumeUsd: { type: Number, default: 0 },
+  feeEarnedUsd: { type: Number, default: 0 },
+  influencerShareUsd: { type: Number, default: 0 },
+  platformShareUsd: { type: Number, default: 0 },
   tokenIn: { type: String, default: null },
   tokenOut: { type: String, default: null },
   transactionSignature: { type: String, default: null },
@@ -49,6 +59,7 @@ const affiliatePayoutSchema = new mongoose.Schema({
   influencerWallet: { type: String, default: null },
   influencerName: { type: String, default: null },
   amount: { type: Number, required: true },
+  amountUsd: { type: Number, default: 0 },
   tradeIds: { type: [String], default: [] },
   tradeCount: { type: Number, default: 0 },
   transactionSignature: { type: String, default: null },
