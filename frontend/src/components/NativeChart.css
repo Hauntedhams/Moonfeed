@@ -50,6 +50,18 @@
   color: #ffffff;
 }
 
+.native-chart-tf-advanced {
+  background: rgba(124, 58, 237, 0.2);
+  color: #a78bfa;
+  border: 1px solid rgba(124, 58, 237, 0.4);
+  margin-left: 2px;
+}
+
+.native-chart-tf-advanced:hover {
+  background: rgba(124, 58, 237, 0.35);
+  color: #ffffff;
+}
+
 /* Live price badge — flashes green on an up-tick, red on a down-tick. */
 .native-chart-live {
   font-size: 12px;

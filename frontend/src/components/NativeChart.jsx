@@ -102,6 +102,7 @@ const NativeChart = ({
   trackedPrice = null,
   trackedTime = null,
   focusTrackedSignal = 0,
+  onToggleAdvancedChart = null,
 }) => {
   const { isDarkMode } = useDarkMode();
   const containerRef = useRef(null);
@@ -1409,6 +1410,16 @@ const NativeChart = ({
             {tf.label}
           </button>
         ))}
+        {onToggleAdvancedChart && (
+          <button
+            type="button"
+            className="native-chart-tf native-chart-tf-advanced"
+            onClick={(e) => { e.stopPropagation(); onToggleAdvancedChart(); }}
+            title="Switch to GeckoTerminal Embed Chart"
+          >
+            ⚡ Advanced
+          </button>
+        )}
       </div>
       <div className="native-chart-canvas" ref={containerRef} />
       {orderGuide && (

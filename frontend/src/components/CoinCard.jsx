@@ -124,6 +124,7 @@ const CoinCard = memo(({
   const [chartFirstPrice, setChartFirstPrice] = useState(null); // Track first visible price for % calculation
   const [nativeChartFullscreen, setNativeChartFullscreen] = useState(false);
   const [nativeChartControlsVisible, setNativeChartControlsVisible] = useState(false);
+  const [useAdvancedGeckoChart, setUseAdvancedGeckoChart] = useState(false);
   const [chartResetSignal, setChartResetSignal] = useState(0); // Bumped to snap the chart's pan/zoom back to default
   const [buyDrawerOpen, setBuyDrawerOpen] = useState(false);
   // While the open-swipe is in progress: { mode, progress } with progress 0..1.
@@ -3468,7 +3469,7 @@ const CoinCard = memo(({
       {(mountChart ?? isVisible) && mobileTargetMounted && (() => {
         // Native chart (Phase 1): renders in-flow into the right panel on desktop,
         // or the mobile chart slot on mobile. No body-portal / iframe touch-trap.
-        if (USE_NATIVE_CHART) {
+        if (USE_NATIVE_CHART && !useAdvancedGeckoChart) {
           const target = isDesktopMode ? rightPanelRef.current : mobileChartTargetRef.current;
           if (!target) return null;
           return createPortal(
@@ -3489,6 +3490,7 @@ const CoinCard = memo(({
               focusTrackedSignal={focusTrackedSignal}
               tradeDots={tradeDots}
               resetViewSignal={chartResetSignal}
+              onToggleAdvancedChart={() => setUseAdvancedGeckoChart(true)}
             />,
             target
           );
