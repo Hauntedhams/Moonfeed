@@ -182,6 +182,43 @@ const TriggerOrderModal = ({
     return ((parseFloat(triggerPrice) - currentPrice) / currentPrice) * 100;
   }, [triggerPrice, currentPrice]);
 
+  const handleAmountPctClick = async (pct) => {
+    if (!walletAddress) {
+      openWalletConnect();
+      return;
+    }
+    try {
+      const { Connection, PublicKey } = await import('@solana/web3.js');
+      const conn = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
+      const pk = new PublicKey(walletAddress);
+
+      if (side === 'buy') {
+        const balLamports = await conn.getBalance(pk);
+        const solBal = balLamports / 1e9;
+        if (solBal > 0) {
+          const reserve = pct === 100 ? 0.01 : 0;
+          const calc = Math.max(0, (solBal - reserve) * (pct / 100));
+          setInputAmount(calc.toFixed(3));
+        }
+      } else {
+        const mint = coin?.mintAddress || coin?.address;
+        if (mint) {
+          const res = await conn.getParsedTokenAccountsByOwner(pk, {
+            programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'),
+          });
+          const acc = res.value.find((a) => a.account.data.parsed?.info?.mint === mint);
+          const tokBal = acc?.account?.data?.parsed?.info?.tokenAmount?.uiAmount || 0;
+          if (tokBal > 0) {
+            const calc = tokBal * (pct / 100);
+            setInputAmount(calc < 1 ? calc.toFixed(4) : calc.toFixed(2));
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Could not calculate balance percentage:', e);
+    }
+  };
+
   // Debug price on modal open
   useEffect(() => {
     if (isOpen) {
@@ -653,6 +690,21 @@ const TriggerOrderModal = ({
                   step="0.01"
                   min="0"
                 />
+                <div className="amount-pct-chips">
+                  {[25, 50, 75, 100].map((pct) => (
+                    <button
+                      key={pct}
+                      type="button"
+                      className="amount-pct-chip"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAmountPctClick(pct);
+                      }}
+                    >
+                      {pct}%
+                    </button>
+                  ))}
+                </div>
               </div>
               <div className="input-group flex-1">
                 <label>Expires</label>

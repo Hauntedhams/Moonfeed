@@ -1039,6 +1039,37 @@ const CoinCard = memo(({
     setBuyDrawerOpen(false);
   };
 
+  const handleDrawerAmountPctClick = async (pct) => {
+    if (!walletAddress || !connection) return;
+    try {
+      const { PublicKey } = await import('@solana/web3.js');
+      const pk = new PublicKey(walletAddress);
+
+      if (buyDrawerOrderSide === 'buy') {
+        const balLamports = await connection.getBalance(pk);
+        const solBal = balLamports / 1e9;
+        if (solBal > 0) {
+          const reserve = pct === 100 ? 0.01 : 0;
+          const calc = Math.max(0, (solBal - reserve) * (pct / 100));
+          setOrderAmountInput(calc.toFixed(3));
+        }
+      } else {
+        const solPrice = solUsd || (await getSolUsdPrice()) || 200;
+        const balLamports = await connection.getBalance(pk);
+        const solBal = balLamports / 1e9;
+        if (solBal > 0) {
+          const reserve = pct === 100 ? 0.01 : 0;
+          const calcSol = Math.max(0, (solBal - reserve) * (pct / 100));
+          const calcUsd = calcSol * solPrice;
+          setSellFundingUsdInput(calcUsd.toFixed(2));
+          setSellFundingSolInput(calcSol.toFixed(3));
+        }
+      }
+    } catch (e) {
+      console.warn('Could not calculate percentage amount:', e);
+    }
+  };
+
   // Helper function to format exact numbers for tooltips
   const formatExact = (num) => {
     const n = Number(num);
@@ -3171,6 +3202,21 @@ const CoinCard = memo(({
                           />
                           <strong>SOL</strong>
                         </div>
+                        <div className="amount-pct-chips">
+                          {[25, 50, 75, 100].map((pct) => (
+                            <button
+                              key={pct}
+                              type="button"
+                              className="amount-pct-chip"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDrawerAmountPctClick(pct);
+                              }}
+                            >
+                              {pct}%
+                            </button>
+                          ))}
+                        </div>
                       </label>
                     )}
 
@@ -3208,6 +3254,21 @@ const CoinCard = memo(({
                             aria-label="Amount to buy in with, in US dollars"
                           />
                           <strong>{sellFundingSol > 0 ? `${sellFundingSol.toFixed(3)} SOL` : 'USD'}</strong>
+                        </div>
+                        <div className="amount-pct-chips">
+                          {[25, 50, 75, 100].map((pct) => (
+                            <button
+                              key={pct}
+                              type="button"
+                              className="amount-pct-chip"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDrawerAmountPctClick(pct);
+                              }}
+                            >
+                              {pct}%
+                            </button>
+                          ))}
                         </div>
                         <div className="coin-buy-balance-line">
                           {sellOrderPending
