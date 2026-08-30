@@ -8,6 +8,7 @@ import { useUserProfile } from '../contexts/UserProfileContext';
 import { useDemoMode } from '../contexts/DemoModeContext';
 import WalletPopup from './WalletPopup';
 import JupiterWalletButton from './JupiterWalletButton';
+import NativeChart from './NativeChart';
 import './ProfileView.css';
 import './OrdersView.css';
 import { getTransactions, syncTransactionsWithAccount } from '../utils/transactionStorage';
@@ -2030,6 +2031,15 @@ const ProfileView = ({ onTradeClick }) => {
           return num.toFixed(3);
         };
 
+        const firstBuyTime = buys[0]?.timestamp;
+        const entryMarker = avgEntryPrice > 0 && firstBuyTime ? [{
+          time: Math.floor(firstBuyTime / 1000),
+          position: 'belowBar',
+          color: '#26a69a',
+          shape: 'arrowUp',
+          text: `Bought at ${fmtSol(avgEntryPrice)} SOL`,
+        }] : null;
+
         return (
           <div className="chs-backdrop" onClick={() => setHistoryDetailCoin(null)}>
             <div className="chs-sheet" onClick={e => e.stopPropagation()}>
@@ -2049,6 +2059,17 @@ const ProfileView = ({ onTradeClick }) => {
                   </div>
                 </div>
                 <button className="chs-close-btn" onClick={() => setHistoryDetailCoin(null)}>✕</button>
+              </div>
+
+              {/* Interactive Price Chart with "Bought at" marker */}
+              <div className="chs-chart-wrap">
+                <NativeChart
+                  coin={{ mintAddress: historyDetailCoin.tokenMint, symbol: historyDetailCoin.tokenSymbol }}
+                  isActive={true}
+                  isExpanded={true}
+                  markers={entryMarker}
+                  entryPrice={avgEntryPrice}
+                />
               </div>
 
               {/* Win / Loss Ratio */}
@@ -2119,22 +2140,54 @@ const ProfileView = ({ onTradeClick }) => {
                 )}
               </div>
 
-              {/* Buy More */}
+              {/* Action Buttons: Cash Out & Limit Order & Buy More */}
               {onTradeClick && (
-                <button
-                  className="chs-buy-btn"
-                  onClick={() => {
-                    setHistoryDetailCoin(null);
-                    onTradeClick({
-                      mintAddress: historyDetailCoin.tokenMint,
-                      symbol: historyDetailCoin.tokenSymbol,
-                      name: historyDetailCoin.tokenName,
-                      image: historyDetailCoin.tokenImage,
-                    });
-                  }}
-                >
-                  Buy More ${historyDetailCoin.tokenSymbol}
-                </button>
+                <div className="chs-actions">
+                  <button
+                    className="chs-action-btn chs-cashout-btn"
+                    onClick={() => {
+                      setHistoryDetailCoin(null);
+                      onTradeClick({
+                        mintAddress: historyDetailCoin.tokenMint,
+                        symbol: historyDetailCoin.tokenSymbol,
+                        name: historyDetailCoin.tokenName,
+                        image: historyDetailCoin.tokenImage,
+                      }, { tab: 'swap' });
+                    }}
+                  >
+                    💸 Cash Out
+                  </button>
+
+                  <button
+                    className="chs-action-btn chs-limit-btn"
+                    onClick={() => {
+                      setHistoryDetailCoin(null);
+                      onTradeClick({
+                        mintAddress: historyDetailCoin.tokenMint,
+                        symbol: historyDetailCoin.tokenSymbol,
+                        name: historyDetailCoin.tokenName,
+                        image: historyDetailCoin.tokenImage,
+                      }, { tab: 'limit' });
+                    }}
+                  >
+                    🎯 Limit Order
+                  </button>
+
+                  <button
+                    className="chs-action-btn chs-buy-btn"
+                    onClick={() => {
+                      setHistoryDetailCoin(null);
+                      onTradeClick({
+                        mintAddress: historyDetailCoin.tokenMint,
+                        symbol: historyDetailCoin.tokenSymbol,
+                        name: historyDetailCoin.tokenName,
+                        image: historyDetailCoin.tokenImage,
+                      });
+                    }}
+                  >
+                    Buy More
+                  </button>
+                </div>
               )}
             </div>
           </div>
