@@ -820,8 +820,16 @@ const NativeChart = ({
       if (!baseRange) return baseInfo;
       let min = baseRange.minValue;
       let max = baseRange.maxValue;
-      if (entry > 0) { min = Math.min(min, entry); max = Math.max(max, entry); }
-      if (target > 0) { min = Math.min(min, target); max = Math.max(max, target); }
+      // Only include entry/target in price range scaling if within 3x of candle range
+      // to avoid squishing candles into a flat line when entry is an extreme outlier
+      if (entry > 0 && entry <= max * 3 && entry >= min * 0.2) {
+        min = Math.min(min, entry);
+        max = Math.max(max, entry);
+      }
+      if (target > 0 && target <= max * 3 && target >= min * 0.2) {
+        min = Math.min(min, target);
+        max = Math.max(max, target);
+      }
       const pad = (max - min) * 0.12 || max * 0.05;
       return { ...baseInfo, priceRange: { minValue: Math.max(0, min - pad), maxValue: max + pad } };
     };
@@ -909,10 +917,15 @@ const NativeChart = ({
   // Zoom into the tracked position on the chart scale
   const zoomToTracked = useCallback(() => {
     const chart = chartRef.current;
+    const series = seriesRef.current;
     if (!chart || status !== 'ready') return;
 
     const price = Number(trackedPrice);
     if (!Number.isFinite(price) || price <= 0) return;
+
+    if (series) {
+      try { series.applyOptions({ autoscaleInfoProvider: undefined }); } catch (_) {}
+    }
 
     let targetSec = null;
     const trackedMs = Number(trackedTime);

@@ -252,6 +252,19 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
     return () => { cancelled = true; };
   }, [walletAddress]);
 
+  const handleTrackToggle = () => {
+    if (tracked) {
+      untrackWallet(walletAddress);
+      setTracked(false);
+      showToast('🗑️ Untracked wallet');
+    } else {
+      if (trackWallet(walletAddress)) {
+        setTracked(true);
+        showToast('✓ Tracking wallet');
+      }
+    }
+  };
+
   const handleTrackWallet = () => {
     if (!tracked && trackWallet(walletAddress)) {
       setTracked(true);
@@ -426,7 +439,7 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
           >
             {shortAddr(walletAddress)} ↗
           </a>
-          <button className="wpv-fast-follow" onClick={handleTrackWallet} disabled={tracked}>
+          <button className={`wpv-fast-follow ${tracked ? 'following' : ''}`} onClick={handleTrackToggle}>
             {tracked ? 'Tracked' : 'Follow'}
           </button>
           <button
@@ -500,8 +513,7 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
         <div className="pv-ig-actions">
           <button
             className={`pv-ig-btn pv-ig-btn--edit wpv-track-action ${tracked ? 'wpv-track-action--on' : ''}`}
-            onClick={handleTrackWallet}
-            disabled={tracked}
+            onClick={handleTrackToggle}
           >
             {tracked ? '✓ Tracked' : 'Track Wallet'}
           </button>

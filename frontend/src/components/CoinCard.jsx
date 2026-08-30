@@ -322,12 +322,27 @@ const CoinCard = memo(({
       let tokens = 0;
       let cost = 0;
       for (const tx of buys) {
-        const usd = Number(tx.pricePerTokenUsd) > 0
-          ? Number(tx.pricePerTokenUsd)
-          : Number(tx.pricePerToken) * solUsd;
+        let usd = Number(tx.pricePerTokenUsd);
+        if (!(usd > 0) && Number(tx.pricePerToken) > 0) {
+          usd = Number(tx.pricePerToken) * (solUsd || 200);
+        }
+        let outTok = Number(tx.outputAmount);
+        let inSol = Number(tx.inputAmount);
+        if (inSol > 1e4) inSol = inSol / 1e9; // handle raw lamports if unscaled
+        if (inSol > 0 && outTok > 0) {
+          const calcUsd = (inSol / outTok) * (solUsd || 200);
+          // If stored usd is a crazy outlier (> 10x or < 0.1x calcUsd), use calcUsd
+          if (!(usd > 0) || (calcUsd > 0 && (usd > calcUsd * 10 || usd < calcUsd / 10))) {
+            usd = calcUsd;
+          }
+        }
         if (!(usd > 0)) continue;
-        tokens += Number(tx.outputAmount);
-        cost += Number(tx.outputAmount) * usd;
+        // Ignore corrupt entry price if it's > 50x away from current displayPrice
+        if (displayPrice > 0 && (usd > displayPrice * 50 || usd < displayPrice / 50)) {
+          continue;
+        }
+        tokens += outTok > 0 ? outTok : 1;
+        cost += (outTok > 0 ? outTok : 1) * usd;
       }
       if (!cancelled) setEntryPrice(tokens > 0 ? cost / tokens : null);
     };
@@ -336,7 +351,7 @@ const CoinCard = memo(({
     const onSwap = () => compute();
     window.addEventListener('moonfeed:swap-success', onSwap);
     return () => { cancelled = true; window.removeEventListener('moonfeed:swap-success', onSwap); };
-  }, [walletAddress, mintAddress]);
+  }, [walletAddress, mintAddress, displayPrice]);
 
   // 🆕 ON-VIEW ENRICHMENT: Trigger enrichment when coin becomes visible
   const [enrichmentRequested, setEnrichmentRequested] = useState(false);
@@ -2167,7 +2182,8 @@ const CoinCard = memo(({
                       onClick={(e) => {
                         e.stopPropagation();
                         if (isFavorite) {
-                          setFocusTrackedSignal(s => s + 1);
+                          setTrackedPrice(null);
+                          onFavoriteToggle?.(coin, displayPrice);
                         } else {
                           const now = Date.now();
                           setTrackedPrice(displayPrice);
@@ -2176,7 +2192,7 @@ const CoinCard = memo(({
                           setFocusTrackedSignal(s => s + 1);
                         }
                       }}
-                      title={isFavorite ? 'Click to zoom in to tracked position on chart' : 'Track this coin'}
+                      title={isFavorite ? 'Stop tracking this coin' : 'Track this coin'}
                     >
                       <span className="follow-label">{isFavorite ? 'Tracking' : 'Track'}</span>
                     </button>
