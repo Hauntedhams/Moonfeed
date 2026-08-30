@@ -528,19 +528,6 @@
   min-width: 0;
 }
 
-/* Token Details / Data Sources — neutral card, no light blue tint */
-.token-details-card,
-.data-sources-detailed {
-  background: rgba(255, 255, 255, 0.03) !important;
-  border-color: rgba(255, 255, 255, 0.1) !important;
-}
-
-.token-details-card:hover,
-.data-sources-detailed:hover {
-  box-shadow: none !important;
-  border-color: rgba(255, 255, 255, 0.16) !important;
-}
-
 .token-details-row {
   align-items: flex-start;
   gap: 14px;
@@ -4386,19 +4373,11 @@ html.dark-mode .charts-section-header,
   color: rgba(255, 255, 255, 0.9) !important;
 }
 
-/* Token Details Section - Dark Mode (no extra blue wrapper tint) */
+/* Token Details Section - Dark Mode */
 html.dark-mode .token-details-section,
 .dark-mode .token-details-section {
   background: transparent !important;
   border-color: transparent !important;
-}
-
-html.dark-mode .token-details-card,
-.dark-mode .token-details-card,
-html.dark-mode .data-sources-detailed,
-.dark-mode .data-sources-detailed {
-  background: rgba(255, 255, 255, 0.03) !important;
-  border-color: rgba(255, 255, 255, 0.1) !important;
 }
 
 html.dark-mode .token-details-header,

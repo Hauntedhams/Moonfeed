@@ -3352,8 +3352,7 @@ const CoinCard = memo(({
         {/* Live transaction window */}
         <button
           className={`tiktok-action-btn ${showLiveTransactions ? 'active' : ''}`}
-          onPointerDown={(e) => {
-            e.preventDefault();
+          onClick={(e) => {
             e.stopPropagation();
             setShowInlineTopTraders(false);
             setShowLiveTransactions((open) => !open);
