@@ -488,8 +488,8 @@ function App() {
   };
 
   // Open the FOMO-style entry/exit position detail for a wallet's specific trade
-  const handleOpenPosition = (wallet, mint) => {
-    if (wallet && mint) setPositionDetail({ wallet, mint });
+  const handleOpenPosition = (wallet, mint, profileHint = {}) => {
+    if (wallet && mint) setPositionDetail({ wallet, mint, profileHint });
   };
 
   return (
@@ -499,7 +499,21 @@ function App() {
         <WalletProvider>
           <AlertsProvider>
           <CopyTradeProvider onCopyTrade={handleCopyTrade}>
-          <CopyTradeToast />
+          <CopyTradeToast
+            onShowTransaction={(notification) => {
+              handleOpenPosition(notification.walletAddress, notification.tokenMint, {
+                displayName: notification.walletLabel,
+                tokenSymbol: notification.tokenSymbol,
+                tokenName: notification.tokenSymbol,
+                tokenImage: notification.tokenImage || null,
+                tx: notification.signature || notification.id,
+                type: notification.type,
+                solAmount: notification.solAmount,
+                tokenAmount: notification.tokenAmount,
+                timestamp: notification.timestamp,
+              });
+            }}
+          />
           <div style={{ height: '100dvh', position: 'relative', overflow: 'hidden' }}>
         {/* Feed selector + search - only show on home screen */}
         {activeTab !== 'tracked' && activeTab !== 'coin-detail' && activeTab !== 'profile' && activeTab !== 'orders' && (

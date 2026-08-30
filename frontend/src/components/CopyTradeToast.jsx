@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useCopyTrade } from '../contexts/CopyTradeContext';
+import { AnimalSilhouetteAvatar, gradientForWallet, shortWalletAddress } from '../utils/walletIdentity';
 import './CopyTradeToast.css';
 
 const AUTO_DISMISS_MS = 10000;
@@ -13,10 +14,10 @@ function formatSol(n) {
 /**
  * CopyTradeToast
  *
- * TikTok-style bottom-right floating speech bubble pop-up over the bottom navigation bar.
- * Clicking the bubble expands a full trade detail modal with a ⚡ Copy Trade action.
+ * TikTok-style floating speech bubble pop-up positioned directly over the Tracked tab button.
+ * Clicking the bubble opens the transaction on an interactive candlestick chart with full trade info.
  */
-const CopyTradeToast = () => {
+const CopyTradeToast = ({ onShowTransaction }) => {
   const { queue, dismiss, copyTrade } = useCopyTrade();
   const [isExpanded, setIsExpanded] = useState(false);
   const progressRef = useRef(null);
@@ -54,23 +55,45 @@ const CopyTradeToast = () => {
   const isBuy = top.type === 'buy';
   const solStr = formatSol(top.solAmount);
 
+  const handleTriggerClick = (e) => {
+    e.stopPropagation();
+    if (onShowTransaction) {
+      onShowTransaction(top);
+      dismiss(top.id);
+    } else {
+      setIsExpanded(true);
+    }
+  };
+
+  const walletDisplayName = top.walletLabel || (top.walletAddress ? shortWalletAddress(top.walletAddress) : 'Tracked Wallet');
+
   return (
     <div className="ctt-wrap">
       {/* ── Collapsed Speech Bubble Trigger (TikTok Style) ── */}
       {!isExpanded ? (
         <div 
           className="ctt-bubble-trigger"
-          onClick={() => setIsExpanded(true)}
+          onClick={handleTriggerClick}
+          role="button"
+          tabIndex={0}
+          title="Click to view transaction on graph"
         >
-          <div className="ctt-bubble-badge-icon">
-            <span className="ctt-money-icon">💸</span>
+          <div
+            className="ctt-bubble-badge-icon"
+            style={top.walletAddress ? { background: gradientForWallet(top.walletAddress) } : undefined}
+          >
+            {top.walletAddress ? (
+              <AnimalSilhouetteAvatar address={top.walletAddress} className="ctt-animal-avatar" />
+            ) : (
+              <span className="ctt-money-icon">💸</span>
+            )}
             {queue.length > 0 && (
               <span className="ctt-badge-count">{queue.length}</span>
             )}
           </div>
           <div className="ctt-bubble-text-box">
             <div className="ctt-bubble-title">
-              <span className="ctt-bubble-name">{top.walletLabel}</span>
+              <span className="ctt-bubble-name">{walletDisplayName}</span>
               <span className={`ctt-bubble-side ${isBuy ? 'buy' : 'sell'}`}>
                 {isBuy ? 'BUY' : 'SELL'}
               </span>
@@ -94,19 +117,31 @@ const CopyTradeToast = () => {
         /* ── Expanded Detail Card ── */
         <div className={`ctt-toast ${isBuy ? 'ctt-buy' : 'ctt-sell'}`}>
           <div className="ctt-header">
-            <span className="ctt-dot" />
-            <span className="ctt-wallet-label">{top.walletLabel}</span>
+            <span
+              className="ctt-avatar-mini"
+              style={top.walletAddress ? { background: gradientForWallet(top.walletAddress) } : undefined}
+            >
+              {top.walletAddress ? (
+                <AnimalSilhouetteAvatar address={top.walletAddress} className="ctt-animal-avatar-mini" />
+              ) : (
+                <span className="ctt-dot" />
+              )}
+            </span>
+            <span className="ctt-wallet-label">{walletDisplayName}</span>
             <span className="ctt-badge">{isBuy ? 'BUY' : 'SELL'}</span>
             <button
               className="ctt-close"
-              onClick={() => setIsExpanded(false)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsExpanded(false);
+              }}
               aria-label="Close"
             >
               ✕
             </button>
           </div>
 
-          <div className="ctt-body">
+          <div className="ctt-body" onClick={handleTriggerClick} style={{ cursor: 'pointer' }}>
             <span className="ctt-verb">{isBuy ? 'Bought' : 'Sold'}</span>
             <span className="ctt-token">{top.tokenSymbol}</span>
             {solStr && (
@@ -117,6 +152,11 @@ const CopyTradeToast = () => {
           </div>
 
           <div className="ctt-actions">
+            {onShowTransaction && (
+              <button className="ctt-chart-btn" onClick={handleTriggerClick}>
+                📊 View Chart
+              </button>
+            )}
             <button className="ctt-copy-btn" onClick={() => copyTrade(top)}>
               ⚡ Copy Trade
             </button>

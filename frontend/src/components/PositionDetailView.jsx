@@ -95,9 +95,8 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
   }, [walletAddress, mint]);
 
   const markers = useMemo(() => {
-    if (!data?.timing) return [];
     const list = [];
-    if (data.timing.firstBuy && data.avgEntryPrice) {
+    if (data?.timing?.firstBuy && data.avgEntryPrice) {
       list.push({
         time: Math.floor(data.timing.firstBuy / 1000),
         position: 'belowBar',
@@ -106,7 +105,7 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
         text: `Entry ${formatMcap(data.avgEntryMarketCap)}`,
       });
     }
-    if (data.timing.lastSell && data.avgExitPrice) {
+    if (data?.timing?.lastSell && data.avgExitPrice) {
       list.push({
         time: Math.floor(data.timing.lastSell / 1000),
         position: 'aboveBar',
@@ -115,28 +114,61 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
         text: `Exit ${formatMcap(data.avgExitMarketCap)}`,
       });
     }
+    // Fallback: if no timing from API, plot the swap marker from notification/profileHint
+    if (list.length === 0 && profileHint?.timestamp) {
+      const timeSec = Math.floor(profileHint.timestamp < 1e12 ? profileHint.timestamp : profileHint.timestamp / 1000);
+      const isSell = profileHint.type === 'sell';
+      const solText = profileHint.solAmount ? ` (${Number(profileHint.solAmount).toFixed(3)} SOL)` : '';
+      list.push({
+        time: timeSec,
+        position: isSell ? 'aboveBar' : 'belowBar',
+        color: isSell ? '#ef5350' : '#26a69a',
+        shape: isSell ? 'arrowDown' : 'arrowUp',
+        text: `${isSell ? 'Sold' : 'Bought'}${solText}`,
+      });
+    }
     return list.sort((a, b) => a.time - b.time);
-  }, [data]);
+  }, [data, profileHint]);
 
   const fastTraderPosition = useMemo(() => {
     const trader = profileHint?.traderData;
-    if (!trader) return null;
-    return {
-      success: true,
-      symbol: profileHint?.tokenSymbol || 'Token',
-      name: profileHint?.tokenName || profileHint?.tokenSymbol || 'Token',
-      image: profileHint?.tokenImage || null,
-      currentMarketCap: profileHint?.currentMarketCap ?? null,
-      pnl: { total: trader.total ?? trader.realized ?? 0 },
-      invested: trader.total_invested ?? trader.invested ?? 0,
-      proceeds: trader.realized ?? trader.proceeds ?? 0,
-      roi: trader.roi ?? null,
-      counts: trader.counts || { total: null },
-      avgEntryMarketCap: null,
-      avgExitMarketCap: null,
-      timing: null,
-      fast: true,
-    };
+    if (trader) {
+      return {
+        success: true,
+        symbol: profileHint?.tokenSymbol || 'Token',
+        name: profileHint?.tokenName || profileHint?.tokenSymbol || 'Token',
+        image: profileHint?.tokenImage || null,
+        currentMarketCap: profileHint?.currentMarketCap ?? null,
+        pnl: { total: trader.total ?? trader.realized ?? 0 },
+        invested: trader.total_invested ?? trader.invested ?? 0,
+        proceeds: trader.realized ?? trader.proceeds ?? 0,
+        roi: trader.roi ?? null,
+        counts: trader.counts || { total: null },
+        avgEntryMarketCap: null,
+        avgExitMarketCap: null,
+        timing: null,
+        fast: true,
+      };
+    }
+    if (profileHint?.solAmount || profileHint?.tokenSymbol) {
+      return {
+        success: true,
+        symbol: profileHint?.tokenSymbol || 'Token',
+        name: profileHint?.tokenName || profileHint?.tokenSymbol || 'Token',
+        image: profileHint?.tokenImage || null,
+        currentMarketCap: profileHint?.currentMarketCap ?? null,
+        pnl: { total: 0 },
+        invested: profileHint?.solAmount ?? null,
+        proceeds: null,
+        roi: null,
+        counts: { total: 1 },
+        avgEntryMarketCap: null,
+        avgExitMarketCap: null,
+        timing: profileHint.timestamp ? { firstBuy: (profileHint.timestamp < 1e12 ? profileHint.timestamp * 1000 : profileHint.timestamp) } : null,
+        fast: true,
+      };
+    }
+    return null;
   }, [profileHint]);
 
   const position = data?.success ? data : fastTraderPosition;
@@ -276,7 +308,7 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
           isExpanded={true}
           markers={markers}
           initialTfIndex={tfIndexForHold(position?.timing?.holdTimeSecs)}
-          focusTimelineFrom={position?.timing?.firstBuy}
+          focusTimelineFrom={position?.timing?.firstBuy || (profileHint?.timestamp ? (profileHint.timestamp < 1e12 ? profileHint.timestamp * 1000 : profileHint.timestamp) : null)}
           onCrosshairMove={handleChartCrosshairMove}
         />
       </div>

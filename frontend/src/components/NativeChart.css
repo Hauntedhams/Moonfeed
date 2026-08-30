@@ -321,7 +321,8 @@ html:not(.dark-mode) .native-chart-dot-modal-row {
 .wpv-chart-wrap .native-chart,
 .twc-chart-wrap .native-chart,
 .pdv-chart-wrap .native-chart,
-.odv-chart-wrap .native-chart {
+.odv-chart-wrap .native-chart,
+.chs-chart-wrap .native-chart {
   height: 100%;
 }
 

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { getFullApiUrl, fetchJsonWithTimeout } from '../config/api';
 import NativeChart from './NativeChart';
+import { AnimalSilhouetteAvatar } from '../utils/walletIdentity';
 import './TrackedWalletCard.css';
 
 const SOL_MINT = 'So11111111111111111111111111111111111111112';

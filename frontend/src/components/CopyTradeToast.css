@@ -1,15 +1,46 @@
 /* ─────────────────────────────────────────────────────────────
    CopyTradeToast
-   TikTok-style floating speech bubble in the bottom right corner above the bottom navigation bar.
+   TikTok-style floating speech bubble positioned directly over the Tracked button on the bottom nav bar.
    ───────────────────────────────────────────────────────────── */
 
 .ctt-wrap {
   position: fixed;
-  right: 14px;
-  bottom: calc(env(safe-area-inset-bottom) + 82px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 430px;
+  bottom: calc(env(safe-area-inset-bottom) + 70px);
   z-index: 9999;
   pointer-events: none;
-  max-width: 320px;
+  display: flex;
+  justify-content: flex-end;
+  padding-right: 14px;
+  box-sizing: border-box;
+}
+
+@media (min-width: 1200px) {
+  .ctt-wrap {
+    left: 0;
+    right: auto;
+    transform: none;
+    width: 480px;
+    max-width: 480px;
+    margin: 0;
+  }
+}
+
+@media (min-width: 1200px) and (max-width: 1600px) {
+  .ctt-wrap {
+    width: 420px;
+    max-width: 420px;
+  }
+}
+
+@media (min-width: 1600px) {
+  .ctt-wrap {
+    width: 540px;
+    max-width: 540px;
+  }
 }
 
 /* ── TikTok Speech Bubble Trigger Button ─────────────────────── */
@@ -29,6 +60,7 @@
     0 4px 12px rgba(0, 0, 0, 0.6);
   cursor: pointer;
   pointer-events: auto;
+  max-width: 320px;
   animation: ctt-bubble-pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
   transition: transform 0.2s ease, background 0.2s ease;
 }
@@ -42,12 +74,12 @@
   transform: scale(0.95);
 }
 
-/* Speech bubble pointer stem pointing down towards navigation bar */
+/* Speech bubble pointer stem pointing down towards the Tracked button on the nav bar */
 .ctt-bubble-trigger::after {
   content: '';
   position: absolute;
   bottom: -7px;
-  right: 24px;
+  right: 88px;
   width: 0;
   height: 0;
   border-left: 7px solid transparent;
@@ -77,6 +109,30 @@
   border: 1px solid rgba(239, 68, 68, 0.4);
   border-radius: 50%;
   flex-shrink: 0;
+  overflow: visible;
+}
+
+.ctt-animal-avatar {
+  width: 22px;
+  height: 22px;
+  fill: #ffffff;
+}
+
+.ctt-animal-avatar-mini {
+  width: 16px;
+  height: 16px;
+  fill: #ffffff;
+}
+
+.ctt-avatar-mini {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  overflow: hidden;
 }
 
 .ctt-money-icon {
@@ -182,6 +238,8 @@
     0 12px 40px rgba(0, 0, 0, 0.6),
     0 0 0 1px rgba(255, 255, 255, 0.04);
   pointer-events: all;
+  max-width: 340px;
+  width: 100%;
   animation: ctt-in 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
 }
 
@@ -279,6 +337,26 @@
   align-items: center;
   gap: 10px;
   padding-bottom: 14px;
+}
+
+.ctt-chart-btn {
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, transform 0.12s;
+}
+.ctt-chart-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  transform: translateY(-1px);
+}
+.ctt-chart-btn:active {
+  transform: scale(0.97);
 }
 
 .ctt-copy-btn {

@@ -218,24 +218,87 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
     setHoldingsError(null);
     try {
       const walletAddress = publicKey.toString();
-      const { Connection, PublicKey } = await import('@solana/web3.js');
-      const conn = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
-      const res = await conn.getParsedTokenAccountsByOwner(
-        new PublicKey(walletAddress),
-        { programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA') }
-      );
+      const storedTxs = getTransactions(walletAddress);
+      const mintsMap = new Map(); // mint -> { mint, amount, decimals, symbol, name, image }
 
-      const parsedHoldings = [];
-      const mintsToFetch = [];
+      // 1. Try to fetch on-chain balances across fallback RPC endpoints
+      const RPC_ENDPOINTS = [
+        'https://mainnet.helius-rpc.com/?api-key=05a97104-cba1-4284-aed6-e0ad21af8b33',
+        'https://rpc.ankr.com/solana',
+        'https://api.mainnet-beta.solana.com'
+      ];
 
-      for (const item of res.value) {
-        const info = item.account.data.parsed?.info;
-        const amount = info?.tokenAmount?.uiAmount || 0;
-        const mint = info?.mint;
-        if (amount > 0 && mint) {
-          mintsToFetch.push({ mint, amount, decimals: info?.tokenAmount?.decimals || 6 });
+      for (const rpcUrl of RPC_ENDPOINTS) {
+        try {
+          const { Connection, PublicKey } = await import('@solana/web3.js');
+          const conn = new Connection(rpcUrl, 'confirmed');
+          const ownerPk = new PublicKey(walletAddress);
+
+          const [splRes, token2022Res] = await Promise.allSettled([
+            conn.getParsedTokenAccountsByOwner(ownerPk, { programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA') }),
+            conn.getParsedTokenAccountsByOwner(ownerPk, { programId: new PublicKey('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb') })
+          ]);
+
+          const allAccounts = [];
+          if (splRes.status === 'fulfilled' && splRes.value?.value) {
+            allAccounts.push(...splRes.value.value);
+          }
+          if (token2022Res.status === 'fulfilled' && token2022Res.value?.value) {
+            allAccounts.push(...token2022Res.value.value);
+          }
+
+          if (splRes.status === 'fulfilled' || token2022Res.status === 'fulfilled') {
+            for (const item of allAccounts) {
+              const info = item.account?.data?.parsed?.info;
+              const amount = Number(info?.tokenAmount?.uiAmount) || 0;
+              const mint = info?.mint;
+              if (amount > 0 && mint) {
+                mintsMap.set(mint, {
+                  mint,
+                  amount,
+                  decimals: info?.tokenAmount?.decimals || 6
+                });
+              }
+            }
+            break; // RPC call succeeded
+          }
+        } catch (rpcErr) {
+          console.warn(`RPC ${rpcUrl} holdings error:`, rpcErr.message);
         }
       }
+
+      // 2. Incorporate stored transactions to fill any tokens bought in-app
+      if (storedTxs && storedTxs.length > 0) {
+        const txByMint = {};
+        for (const tx of storedTxs) {
+          if (!tx.tokenMint) continue;
+          if (!txByMint[tx.tokenMint]) txByMint[tx.tokenMint] = { bought: 0, sold: 0, sampleTx: tx };
+          const qty = Number(tx.outputAmount) || 0;
+          if (!tx.type || tx.type === 'buy') {
+            txByMint[tx.tokenMint].bought += qty;
+          } else if (tx.type === 'sell') {
+            txByMint[tx.tokenMint].sold += Number(tx.inputAmount) || qty;
+          }
+        }
+
+        for (const [mint, stats] of Object.entries(txByMint)) {
+          if (!mintsMap.has(mint)) {
+            const netAmount = Math.max(0, stats.bought - stats.sold);
+            if (netAmount > 0) {
+              mintsMap.set(mint, {
+                mint,
+                amount: netAmount,
+                decimals: 6,
+                symbol: stats.sampleTx.tokenSymbol,
+                name: stats.sampleTx.tokenName,
+                image: stats.sampleTx.tokenImage
+              });
+            }
+          }
+        }
+      }
+
+      const mintsToFetch = Array.from(mintsMap.values());
 
       if (mintsToFetch.length === 0) {
         setHoldings([]);
@@ -243,10 +306,7 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
         return;
       }
 
-      // Read buy-in prices from transactions history (cost basis)
-      const storedTxs = getTransactions(walletAddress);
-
-      // Fetch Dexscreener market data for current USD prices & token names/images
+      // 3. Fetch Dexscreener market data for current USD prices & token names/images
       const mintAddrs = mintsToFetch.map(m => m.mint).slice(0, 30).join(',');
       let dexPairs = [];
       try {
@@ -261,32 +321,38 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
 
       const list = mintsToFetch.map(item => {
         const pair = dexPairs.find(p => p.baseToken?.address === item.mint);
-        const symbol = pair?.baseToken?.symbol || item.mint.slice(0, 6);
-        const name = pair?.baseToken?.name || symbol;
-        const image = pair?.info?.imageUrl || pair?.baseToken?.image || null;
-        const priceUsd = parseFloat(pair?.priceUsd || 0);
+        const buys = storedTxs.filter(tx => tx.tokenMint === item.mint && (!tx.type || tx.type === 'buy'));
+        const latestTx = buys[buys.length - 1] || storedTxs.find(tx => tx.tokenMint === item.mint);
+
+        const symbol = pair?.baseToken?.symbol || item.symbol || latestTx?.tokenSymbol || item.mint.slice(0, 6);
+        const name = pair?.baseToken?.name || item.name || latestTx?.tokenName || symbol;
+        const image = pair?.info?.imageUrl || pair?.baseToken?.image || item.image || latestTx?.tokenImage || null;
+        const priceUsd = parseFloat(pair?.priceUsd || latestTx?.pricePerTokenUsd || 0);
 
         // Find cost basis from local transaction history
-        const buys = storedTxs.filter(tx => tx.tokenMint === item.mint && (!tx.type || tx.type === 'buy'));
         let costBasisUsd = 0;
+        let totalCostUsd = 0;
+        let totalCostSol = 0;
         if (buys.length > 0) {
-          let totalCost = 0;
           let totalQty = 0;
           buys.forEach(b => {
             const qty = Number(b.outputAmount) || 0;
             const price = Number(b.pricePerTokenUsd) || (Number(b.pricePerToken) * solUsdPrice) || 0;
             if (qty > 0 && price > 0) {
-              totalCost += qty * price;
+              totalCostUsd += qty * price;
               totalQty += qty;
             }
+            if (Number(b.inputAmount) > 0) {
+              totalCostSol += Number(b.inputAmount);
+            }
           });
-          if (totalQty > 0) costBasisUsd = totalCost / totalQty;
+          if (totalQty > 0) costBasisUsd = totalCostUsd / totalQty;
         }
 
+        const effectiveTotalBoughtUsd = totalCostUsd > 0 ? totalCostUsd : (costBasisUsd > 0 ? item.amount * costBasisUsd : 0);
         const currentValueUsd = item.amount * priceUsd;
-        const totalCostUsd = item.amount * costBasisUsd;
-        const pnlUsd = costBasisUsd > 0 ? currentValueUsd - totalCostUsd : null;
-        const pnlPct = costBasisUsd > 0 && totalCostUsd > 0 ? ((currentValueUsd - totalCostUsd) / totalCostUsd) * 100 : null;
+        const pnlUsd = effectiveTotalBoughtUsd > 0 ? currentValueUsd - effectiveTotalBoughtUsd : null;
+        const pnlPct = effectiveTotalBoughtUsd > 0 ? ((currentValueUsd - effectiveTotalBoughtUsd) / effectiveTotalBoughtUsd) * 100 : null;
 
         return {
           mint: item.mint,
@@ -296,6 +362,8 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
           image,
           priceUsd,
           costBasisUsd,
+          totalBoughtUsd: effectiveTotalBoughtUsd,
+          totalCostSol,
           currentValueUsd,
           pnlUsd,
           pnlPct,
@@ -303,10 +371,43 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
       });
 
       // Sort by current USD value descending
-      list.sort((a, b) => b.currentValueUsd - a.currentValueUsd);
+      list.sort((a, b) => (b.currentValueUsd || 0) - (a.currentValueUsd || 0));
       setHoldings(list);
     } catch (err) {
       console.error('Error fetching holdings:', err);
+      // Fallback: If stored transactions exist, present them rather than displaying error
+      try {
+        const walletAddress = publicKey?.toString?.();
+        const storedTxs = walletAddress ? getTransactions(walletAddress) : [];
+        if (storedTxs.length > 0) {
+          const buys = storedTxs.filter(t => !t.type || t.type === 'buy');
+          const fallbackList = [];
+          const seen = new Set();
+          for (const b of buys) {
+            if (!b.tokenMint || seen.has(b.tokenMint)) continue;
+            seen.add(b.tokenMint);
+            const price = Number(b.pricePerTokenUsd) || (Number(b.pricePerToken) * solUsdPrice) || 0;
+            const qty = Number(b.outputAmount) || 0;
+            fallbackList.push({
+              mint: b.tokenMint,
+              amount: qty,
+              symbol: b.tokenSymbol || b.tokenMint.slice(0, 6),
+              name: b.tokenName || b.tokenSymbol || 'Token',
+              image: b.tokenImage || null,
+              priceUsd: price,
+              costBasisUsd: price,
+              totalBoughtUsd: qty * price,
+              currentValueUsd: qty * price,
+              pnlUsd: 0,
+              pnlPct: 0,
+            });
+          }
+          if (fallbackList.length > 0) {
+            setHoldings(fallbackList);
+            return;
+          }
+        }
+      } catch (_) {}
       setHoldingsError('Could not load on-chain holdings');
     } finally {
       setLoadingHoldings(false);
@@ -834,10 +935,14 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
 
                   const formatUsd = (num) => {
                     if (num === null || num === undefined) return '—';
-                    if (num === 0) return '$0.00';
-                    if (num < 0.0001) return `$${num.toExponential(2)}`;
-                    if (num < 0.01) return `$${num.toFixed(6)}`;
-                    return `$${num.toFixed(2)}`;
+                    const v = Number(num);
+                    if (!isFinite(v)) return '—';
+                    if (v === 0) return '$0.00';
+                    if (Math.abs(v) < 0.000001) return `$${v.toExponential(2)}`;
+                    if (Math.abs(v) < 0.0001) return `$${v.toFixed(7)}`;
+                    if (Math.abs(v) < 0.01) return `$${v.toFixed(6)}`;
+                    if (Math.abs(v) < 1) return `$${v.toFixed(4)}`;
+                    return `$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
                   };
 
                   return (
@@ -855,20 +960,33 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
                         {item.image ? (
                           <img src={item.image} alt={item.symbol} className="holding-token-img" onError={(e) => { e.target.style.display = 'none'; }} />
                         ) : (
-                          <div className="holding-token-img-ph">{item.symbol.slice(0, 2).toUpperCase()}</div>
+                          <div className="holding-token-img-ph">{(item.symbol || '?').slice(0, 2).toUpperCase()}</div>
                         )}
                         <div className="holding-token-info">
                           <div className="holding-token-symbol">${item.symbol}</div>
                           <div className="holding-token-name">{item.name}</div>
-                          <div className="holding-amount">{formatNumber(item.amount)} tokens</div>
+                          <div className="holding-token-prices">
+                            <span className="holding-current-price-tag">
+                              Price: <strong>{formatUsd(item.priceUsd)}</strong>
+                            </span>
+                            <span className="holding-amount-tag">{formatNumber(item.amount)} tokens</span>
+                          </div>
                         </div>
                       </div>
 
                       <div className="holding-card-right">
                         <div className="holding-value-usd">{formatUsd(item.currentValueUsd)}</div>
-                        {item.costBasisUsd > 0 && (
-                          <div className="holding-cost-basis">Bought at {formatUsd(item.costBasisUsd)}</div>
-                        )}
+                        {item.totalBoughtUsd > 0 ? (
+                          <div className="holding-bought-highlight">
+                            <span className="holding-bought-label">Bought:</span>
+                            <span className="holding-bought-val">{formatUsd(item.totalBoughtUsd)}</span>
+                          </div>
+                        ) : item.costBasisUsd > 0 ? (
+                          <div className="holding-bought-highlight">
+                            <span className="holding-bought-label">Bought at:</span>
+                            <span className="holding-bought-val">{formatUsd(item.costBasisUsd)}</span>
+                          </div>
+                        ) : null}
                         {item.pnlPct !== null && (
                           <div className={`holding-pnl ${item.pnlPct >= 0 ? 'pos' : 'neg'}`}>
                             {item.pnlPct >= 0 ? '+' : ''}{item.pnlPct.toFixed(1)}%

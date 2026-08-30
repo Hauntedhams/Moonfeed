@@ -2005,6 +2005,12 @@ const ProfileView = ({ onTradeClick }) => {
         const avgEntryPrice = totalTokensBought > 0 ? totalInvested / totalTokensBought : 0;
         const totalSoldSOL = sells.reduce((sum, t) => sum + (Number(t.outputAmount) || 0), 0);
 
+        const totalCostUsd = buys.reduce((sum, t) => {
+          const usd = Number(t.pricePerTokenUsd) > 0 ? Number(t.pricePerTokenUsd) * (Number(t.outputAmount) || 0) : 0;
+          return sum + usd;
+        }, 0);
+        const avgEntryPriceUsd = totalTokensBought > 0 && totalCostUsd > 0 ? totalCostUsd / totalTokensBought : null;
+
         const wins = historyCurrentPrice
           ? buys.filter(t => historyCurrentPrice > (Number(t.pricePerToken) || 0) && (Number(t.pricePerToken) || 0) > 0).length
           : 0;
@@ -2068,7 +2074,7 @@ const ProfileView = ({ onTradeClick }) => {
                   isActive={true}
                   isExpanded={true}
                   markers={entryMarker}
-                  entryPrice={avgEntryPrice}
+                  entryPrice={avgEntryPriceUsd}
                 />
               </div>
 
@@ -2155,7 +2161,7 @@ const ProfileView = ({ onTradeClick }) => {
                       }, { tab: 'swap' });
                     }}
                   >
-                    💸 Cash Out
+                    Cash Out
                   </button>
 
                   <button
@@ -2170,7 +2176,7 @@ const ProfileView = ({ onTradeClick }) => {
                       }, { tab: 'limit' });
                     }}
                   >
-                    🎯 Limit Order
+                    Limit Order
                   </button>
 
                   <button

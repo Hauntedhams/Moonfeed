@@ -2470,12 +2470,18 @@
 
 /* Interactive Chart Container inside Coin History Detail Sheet */
 .chs-chart-wrap {
-  height: 220px;
+  height: 250px;
   border-radius: 16px;
   overflow: hidden;
   margin-bottom: 16px;
   background: rgba(0, 0, 0, 0.3);
   border: 1px solid rgba(255, 255, 255, 0.08);
+  position: relative;
+}
+
+.chs-chart-wrap .native-chart {
+  height: 100%;
+  width: 100%;
 }
 
 /* Action Buttons: Cash Out, Limit Order, Buy More */
