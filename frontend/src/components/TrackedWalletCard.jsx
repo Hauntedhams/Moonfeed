@@ -171,6 +171,41 @@ function TrackedWalletCard({ wallet, shouldLoad = true, onOpenProfile, onOpenPos
 
   return (
     <div className="twc-card">
+      {/* Wallet Name on Top */}
+      <div className="twc-top-overlay">
+        <div
+          className="twc-avatar twc-avatar--clickable"
+          style={{ background: gradientFor(address) }}
+          onClick={() => onOpenProfile?.(address)}
+          title="View full wallet profile"
+        >
+          <AnimalSilhouetteAvatar address={address} />
+        </div>
+        <div className="twc-identity twc-identity--clickable" onClick={() => onOpenProfile?.(address)} title="View full wallet profile">
+          <div className="twc-label">{wallet?.label || shortAddr(address)}</div>
+          <a
+            className="twc-addr"
+            href={`https://solscan.io/account/${address}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {shortAddr(address)} ↗
+          </a>
+        </div>
+        <button
+          className="twc-profile-top-btn"
+          onClick={() => onOpenProfile?.(address)}
+          title="View full wallet profile"
+        >
+          Profile ↗
+        </button>
+        <button className="twc-untrack" onClick={() => onUntrack?.(address)} title="Stop tracking">
+          Untrack
+        </button>
+      </div>
+
+      {/* Main Content: Chart */}
       <div className="twc-chart-wrap">
         {chartCoin ? (
           <NativeChart coin={chartCoin} isActive={shouldLoad} isExpanded={false} markers={trackedMarker} />
@@ -185,34 +220,27 @@ function TrackedWalletCard({ wallet, shouldLoad = true, onOpenProfile, onOpenPos
         )}
       </div>
 
-      <div className="twc-top-overlay">
-        <div className="twc-avatar" style={{ background: gradientFor(address) }}>
-          <span role="img" aria-label="wallet">🥚</span>
-        </div>
-        <div className="twc-identity">
-          <div className="twc-label">{wallet?.label || shortAddr(address)}</div>
-          <a
-            className="twc-addr"
-            href={`https://solscan.io/account/${address}`}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            {shortAddr(address)} ↗
-          </a>
-        </div>
-        <button className="twc-untrack" onClick={() => onUntrack?.(address)} title="Stop tracking">
-          Untrack
-        </button>
-      </div>
-
+      {/* Trade Summary: bought/sold for X and current value is X */}
       {lastTrade && (
-        <div className="twc-chart-caption">
-          Chart: {lastTrade.symbol} ({lastTrade.type === 'sell' ? 'last sold' : 'last bought'} {timeAgo(lastTrade.time)})
+        <div className="twc-trade-summary-bar">
+          <div className="twc-summary-row">
+            <span className="twc-summary-symbol">{lastTrade.symbol}</span>
+            <span className={`twc-summary-action twc-summary-action--${lastTrade.type}`}>
+              {lastTrade.type === 'sell' ? 'Sold' : 'Bought'}
+              {lastTrade.solAmount ? ` for ${Number(lastTrade.solAmount).toFixed(3)} SOL` : ''}
+            </span>
+            <span className="twc-summary-time">{timeAgo(lastTrade.time)}</span>
+          </div>
+          {lastTrade.mint && (
+            <div className="twc-summary-sub">
+              Current value: {statsLoading ? '…' : formatCurrency(pnl.invested)}
+            </div>
+          )}
         </div>
       )}
 
       <div className="twc-bottom-bar">
-        <div className="twc-bottom-pnl">
+        <div className="twc-bottom-pnl" onClick={() => onOpenProfile?.(address)} style={{ cursor: 'pointer' }}>
           <span className="twc-bottom-pnl-label">Realized PnL</span>
           <span className={`twc-bottom-pnl-value ${(pnl.realized ?? 0) >= 0 ? 'pos' : 'neg'}`}>
             {statsLoading ? '—' : formatCurrency(pnl.realized)}
