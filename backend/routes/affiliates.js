@@ -8,6 +8,7 @@ const router = express.Router();
 const affiliateStorage = require('../models/affiliate-storage');
 const adminAuth = require('../middleware/adminAuth');
 const User = require('../models/User');
+const { verifySwapVolume } = require('../utils/verifySwapVolume');
 
 // ==================== AFFILIATE MANAGEMENT ====================
 
@@ -204,10 +205,10 @@ router.post('/track-trade', async (req, res) => {
       metadata
     } = req.body;
 
-    if (!userWallet || !tradeVolume || !feeEarned) {
+    if (!userWallet) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields: userWallet, tradeVolume, feeEarned'
+        error: 'Missing required field: userWallet'
       });
     }
 
@@ -229,15 +230,42 @@ router.post('/track-trade', async (req, res) => {
       }
     }
 
+    // NEVER trust the client-reported volume — derive the true SOL side of the
+    // swap from the on-chain transaction (a raw token amount was once reported
+    // as SOL, inflating volume ~20,000x). Client value is only a fallback for
+    // small trades when the RPC lookup fails.
+    const claimedVolume = parseFloat(tradeVolume) || 0;
+    let finalVolume = claimedVolume;
+    let volumeVerified = false;
+    const verification = await verifySwapVolume(transactionSignature, userWallet);
+    if (verification.verified) {
+      finalVolume = verification.volumeSol;
+      volumeVerified = true;
+      if (claimedVolume > 0 && Math.abs(claimedVolume - finalVolume) / finalVolume > 0.25) {
+        console.warn(`⚠️ Affiliate trade volume mismatch for ${transactionSignature.slice(0, 12)}…: claimed ${claimedVolume} SOL, on-chain ${finalVolume} SOL — using on-chain value`);
+      }
+    } else {
+      console.warn(`⚠️ Could not verify swap ${transactionSignature.slice(0, 12)}… on-chain (${verification.reason})`);
+      // Refuse unverifiable claims that would be worth real money
+      if (!(claimedVolume > 0) || claimedVolume > 10) {
+        return res.status(422).json({
+          success: false,
+          error: `Unable to verify trade volume on-chain (${verification.reason})`
+        });
+      }
+    }
+
+    const finalFee = finalVolume * 0.01; // 1% integrator fee
+
     const trade = await affiliateStorage.recordTrade({
       referralCode: resolvedCode,
       userWallet,
-      tradeVolume: parseFloat(tradeVolume),
-      feeEarned: parseFloat(feeEarned),
+      tradeVolume: finalVolume,
+      feeEarned: finalFee,
       tokenIn,
       tokenOut,
       transactionSignature,
-      metadata
+      metadata: { ...(metadata || {}), volumeVerified, claimedVolume }
     });
 
     res.json({

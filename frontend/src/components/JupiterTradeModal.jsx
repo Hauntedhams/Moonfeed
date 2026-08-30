@@ -65,11 +65,13 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
       console.log('📊 Attempting to track trade for affiliate system...');
 
       const SOL_MINT = 'So11111111111111111111111111111111111111112';
-      const inputMint = swapResult?.inputMint || SOL_MINT;
-      const outputMint = swapResult?.outputMint || coin?.mintAddress;
+      // Do NOT default missing mints to SOL — that once mislabeled a sell as a
+      // buy and reported the raw TOKEN amount as SOL volume (20,000x inflated).
+      const inputMint = swapResult?.inputMint || null;
+      const outputMint = swapResult?.outputMint || null;
 
       // Volume = the SOL side of the swap (input on buys, output on sells).
-      // Never assume the input is SOL — on sells it's the token amount.
+      // The backend re-verifies this against the on-chain transaction anyway.
       let lamports = 0;
       if (inputMint === SOL_MINT) {
         lamports = Number(swapResult?.inputAmount) || 0;
@@ -77,23 +79,19 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
         lamports = Number(swapResult?.outputAmount) || 0;
       }
       const tradeVolume = lamports / 1e9;
-      if (!(tradeVolume > 0)) {
-        console.log('📊 No SOL side found on swap, skipping affiliate tracking');
-        return;
-      }
       const feeEarned = tradeVolume * 0.01; // 1% fee
 
       const trackingData = {
         userWallet: walletAddress || 'unknown',
         tradeVolume: tradeVolume,
         feeEarned: feeEarned,
-        tokenIn: inputMint,
-        tokenOut: outputMint,
+        tokenIn: inputMint || undefined,
+        tokenOut: outputMint || coin?.mintAddress,
         transactionSignature: txid,
         metadata: {
           coinSymbol: coin?.symbol,
           coinName: coin?.name,
-          side: inputMint === SOL_MINT ? 'buy' : 'sell',
+          side: inputMint === SOL_MINT ? 'buy' : (outputMint === SOL_MINT ? 'sell' : 'unknown'),
           timestamp: new Date().toISOString()
         }
       };
