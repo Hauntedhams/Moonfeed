@@ -144,6 +144,123 @@
   border-color: transparent;
 }
 
+/* ── Holdings List Styling ── */
+.holdings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.holding-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: var(--bg-secondary, #1a1a2e);
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+  border-radius: 14px;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.holding-card:hover {
+  transform: translateY(-1px);
+  background: var(--bg-hover, rgba(255, 255, 255, 0.05));
+}
+
+.holding-card-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.holding-token-img {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.holding-token-img-ph {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 15px;
+  color: #ffffff;
+  flex-shrink: 0;
+}
+
+.holding-token-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.holding-token-symbol {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text-primary, #ffffff);
+}
+
+.holding-token-name {
+  font-size: 12px;
+  color: var(--text-secondary, rgba(255, 255, 255, 0.5));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 140px;
+}
+
+.holding-amount {
+  font-size: 11px;
+  color: var(--text-secondary, rgba(255, 255, 255, 0.6));
+  font-weight: 600;
+}
+
+.holding-card-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.holding-value-usd {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text-primary, #ffffff);
+}
+
+.holding-cost-basis {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.holding-pnl {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+.holding-pnl.pos {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.holding-pnl.neg {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.12);
+}
+
 /* Transactions Header */
 .transactions-header-top {
   display: flex;

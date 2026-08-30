@@ -23,7 +23,10 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [loadingTransactions, setLoadingTransactions] = useState(false);
   const [ordersError, setOrdersError] = useState(null);
-  const [statusFilter, setStatusFilter] = useState('active');
+  const [statusFilter, setStatusFilter] = useState('active'); // 'active' | 'history' | 'holdings'
+  const [holdings, setHoldings] = useState([]);
+  const [loadingHoldings, setLoadingHoldings] = useState(false);
+  const [holdingsError, setHoldingsError] = useState(null);
   const [cancellingOrder, setCancellingOrder] = useState(null);
   const [showLimitOrderInfo, setShowLimitOrderInfo] = useState(false);
   const [activeSection, setActiveSection] = useState('orders'); // 'orders' or 'transactions'
@@ -60,15 +63,20 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
   };
 
 
-  // Fetch orders when wallet connects or filter changes
+  // Fetch orders or holdings when wallet connects or filter changes
   useEffect(() => {
     const setupOrders = async () => {
       if (connected && publicKey) {
-        fetchOrders();
-        fetchTransactions();
+        if (statusFilter === 'holdings') {
+          fetchHoldings();
+        } else {
+          fetchOrders();
+          fetchTransactions();
+        }
       } else {
         setOrders([]);
         setTransactions([]);
+        setHoldings([]);
         
         // Clear order caches on disconnect
         const { clearAllOrderCaches } = await import('../utils/orderCache.js');
@@ -203,7 +211,107 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
     }
   };
 
-  // Helper function to check if an order is expired
+  // Fetch token holdings (on-chain balances) for connected wallet
+  const fetchHoldings = async () => {
+    if (!publicKey) return;
+    setLoadingHoldings(true);
+    setHoldingsError(null);
+    try {
+      const walletAddress = publicKey.toString();
+      const { Connection, PublicKey } = await import('@solana/web3.js');
+      const conn = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
+      const res = await conn.getParsedTokenAccountsByOwner(
+        new PublicKey(walletAddress),
+        { programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA') }
+      );
+
+      const parsedHoldings = [];
+      const mintsToFetch = [];
+
+      for (const item of res.value) {
+        const info = item.account.data.parsed?.info;
+        const amount = info?.tokenAmount?.uiAmount || 0;
+        const mint = info?.mint;
+        if (amount > 0 && mint) {
+          mintsToFetch.push({ mint, amount, decimals: info?.tokenAmount?.decimals || 6 });
+        }
+      }
+
+      if (mintsToFetch.length === 0) {
+        setHoldings([]);
+        setLoadingHoldings(false);
+        return;
+      }
+
+      // Read buy-in prices from transactions history (cost basis)
+      const storedTxs = getTransactions(walletAddress);
+
+      // Fetch Dexscreener market data for current USD prices & token names/images
+      const mintAddrs = mintsToFetch.map(m => m.mint).slice(0, 30).join(',');
+      let dexPairs = [];
+      try {
+        const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mintAddrs}`);
+        if (dexRes.ok) {
+          const dexData = await dexRes.json();
+          dexPairs = dexData.pairs || [];
+        }
+      } catch (e) {
+        console.warn('Dexscreener holdings fetch warning:', e);
+      }
+
+      const list = mintsToFetch.map(item => {
+        const pair = dexPairs.find(p => p.baseToken?.address === item.mint);
+        const symbol = pair?.baseToken?.symbol || item.mint.slice(0, 6);
+        const name = pair?.baseToken?.name || symbol;
+        const image = pair?.info?.imageUrl || pair?.baseToken?.image || null;
+        const priceUsd = parseFloat(pair?.priceUsd || 0);
+
+        // Find cost basis from local transaction history
+        const buys = storedTxs.filter(tx => tx.tokenMint === item.mint && (!tx.type || tx.type === 'buy'));
+        let costBasisUsd = 0;
+        if (buys.length > 0) {
+          let totalCost = 0;
+          let totalQty = 0;
+          buys.forEach(b => {
+            const qty = Number(b.outputAmount) || 0;
+            const price = Number(b.pricePerTokenUsd) || (Number(b.pricePerToken) * solUsdPrice) || 0;
+            if (qty > 0 && price > 0) {
+              totalCost += qty * price;
+              totalQty += qty;
+            }
+          });
+          if (totalQty > 0) costBasisUsd = totalCost / totalQty;
+        }
+
+        const currentValueUsd = item.amount * priceUsd;
+        const totalCostUsd = item.amount * costBasisUsd;
+        const pnlUsd = costBasisUsd > 0 ? currentValueUsd - totalCostUsd : null;
+        const pnlPct = costBasisUsd > 0 && totalCostUsd > 0 ? ((currentValueUsd - totalCostUsd) / totalCostUsd) * 100 : null;
+
+        return {
+          mint: item.mint,
+          amount: item.amount,
+          symbol,
+          name,
+          image,
+          priceUsd,
+          costBasisUsd,
+          currentValueUsd,
+          pnlUsd,
+          pnlPct,
+        };
+      });
+
+      // Sort by current USD value descending
+      list.sort((a, b) => b.currentValueUsd - a.currentValueUsd);
+      setHoldings(list);
+    } catch (err) {
+      console.error('Error fetching holdings:', err);
+      setHoldingsError('Could not load on-chain holdings');
+    } finally {
+      setLoadingHoldings(false);
+    }
+  };
   const isOrderExpired = (order) => {
     if (!order.expiresAt) return false;
     
@@ -690,9 +798,89 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
             >
               History
             </button>
+            <button
+              className={`filter-btn ${statusFilter === 'holdings' ? 'active' : ''}`}
+              onClick={() => setStatusFilter('holdings')}
+            >
+              Holdings
+            </button>
           </div>
 
-          {loadingOrders ? (
+          {statusFilter === 'holdings' ? (
+            loadingHoldings ? (
+              <div className="orders-loading">
+                <div className="loading-spinner"></div>
+                <p>Loading holdings...</p>
+              </div>
+            ) : holdingsError ? (
+              <div className="orders-error">
+                <p>⚠️ {holdingsError}</p>
+                <button onClick={fetchHoldings} className="retry-btn">Retry</button>
+              </div>
+            ) : holdings.length === 0 ? (
+              <div className="orders-empty">
+                <p>No token holdings found</p>
+                <span className="empty-hint">Buy meme coins on Moonfeed to track your portfolio holdings here</span>
+              </div>
+            ) : (
+              <div className="holdings-list">
+                {holdings.map((item) => {
+                  const formatNumber = (num) => {
+                    if (!num) return '0';
+                    if (num >= 1e6) return `${(num / 1e6).toFixed(2)}M`;
+                    if (num >= 1e3) return `${(num / 1e3).toFixed(2)}K`;
+                    return num < 1 ? num.toFixed(4) : num.toFixed(2);
+                  };
+
+                  const formatUsd = (num) => {
+                    if (num === null || num === undefined) return '—';
+                    if (num === 0) return '$0.00';
+                    if (num < 0.0001) return `$${num.toExponential(2)}`;
+                    if (num < 0.01) return `$${num.toFixed(6)}`;
+                    return `$${num.toFixed(2)}`;
+                  };
+
+                  return (
+                    <div
+                      key={item.mint}
+                      className="holding-card"
+                      onClick={() => onCoinClick?.({
+                        mintAddress: item.mint,
+                        symbol: item.symbol,
+                        name: item.name,
+                        image: item.image,
+                      })}
+                    >
+                      <div className="holding-card-left">
+                        {item.image ? (
+                          <img src={item.image} alt={item.symbol} className="holding-token-img" onError={(e) => { e.target.style.display = 'none'; }} />
+                        ) : (
+                          <div className="holding-token-img-ph">{item.symbol.slice(0, 2).toUpperCase()}</div>
+                        )}
+                        <div className="holding-token-info">
+                          <div className="holding-token-symbol">${item.symbol}</div>
+                          <div className="holding-token-name">{item.name}</div>
+                          <div className="holding-amount">{formatNumber(item.amount)} tokens</div>
+                        </div>
+                      </div>
+
+                      <div className="holding-card-right">
+                        <div className="holding-value-usd">{formatUsd(item.currentValueUsd)}</div>
+                        {item.costBasisUsd > 0 && (
+                          <div className="holding-cost-basis">Bought at {formatUsd(item.costBasisUsd)}</div>
+                        )}
+                        {item.pnlPct !== null && (
+                          <div className={`holding-pnl ${item.pnlPct >= 0 ? 'pos' : 'neg'}`}>
+                            {item.pnlPct >= 0 ? '+' : ''}{item.pnlPct.toFixed(1)}%
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )
+          ) : loadingOrders ? (
             <div className="orders-loading">
               <div className="loading-spinner"></div>
               <p>Loading orders...</p>
