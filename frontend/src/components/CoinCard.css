@@ -3005,13 +3005,13 @@ html:not(.dark-mode) .coin-card-left-panel::-webkit-scrollbar-thumb:hover {
   transform: translateY(-1px);
 }
 
-/* Section title styling - matches header metrics */
+/* Section title styling - matches the blue hue used by .info-card-header */
 .section-title {
   font-size: 0.7rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.3px;
-  color: rgba(0, 0, 0, 0.6);
+  color: #667eea;
   margin-bottom: 12px;
 }
 
@@ -4477,7 +4477,7 @@ html.dark-mode .load-live-transactions-btn:hover,
 /* General Text - Dark Mode */
 html.dark-mode .section-title,
 .dark-mode .section-title {
-  color: rgba(255, 255, 255, 0.9) !important;
+  color: #8b9bff !important;
 }
 
 html.dark-mode .section-header,

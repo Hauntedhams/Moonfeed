@@ -1417,7 +1417,7 @@ const NativeChart = ({
             onClick={(e) => { e.stopPropagation(); onToggleAdvancedChart(); }}
             title="Switch to GeckoTerminal Embed Chart"
           >
-            ⚡ Advanced
+            Advanced
           </button>
         )}
       </div>
@@ -1441,7 +1441,6 @@ const NativeChart = ({
             }}
             title="Click to zoom in to tracked position"
           >
-            <span className="tracked-bubble-icon">📍</span>
             <span className="tracked-bubble-text">Tracked at {formatPrice(trackedBubble.price)}</span>
             <span className="tracked-bubble-arrow">↑</span>
           </button>

@@ -2221,7 +2221,6 @@ const CoinCard = memo(({
                           setTrackedPrice(displayPrice);
                           setTrackedTimeState(now);
                           onFavoriteToggle?.(coin, displayPrice);
-                          setFocusTrackedSignal(s => s + 1);
                         }
                       }}
                       title={isFavorite ? 'Stop tracking this coin' : 'Track this coin'}
@@ -3220,21 +3219,6 @@ const CoinCard = memo(({
                       </label>
                     )}
 
-                    <div className="coin-buy-expiry">
-                      <span className="coin-buy-expiry-label">Expires in</span>
-                      <div className="coin-buy-expiry-row">
-                        {EXPIRY_OPTIONS.map((option) => (
-                          <button
-                            key={option.id}
-                            className={`coin-buy-expiry-btn${orderExpiry === option.id ? ' active' : ''}`}
-                            onClick={() => setOrderExpiry(option.id)}
-                          >
-                            {option.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
                     {buyDrawerOrderSide === 'sell' && (
                       <>
                       <div className="coin-buy-order-side-note">
@@ -3279,6 +3263,21 @@ const CoinCard = memo(({
                       </>
                     )}
 
+                    <div className="coin-buy-expiry">
+                      <span className="coin-buy-expiry-label">Expires in</span>
+                      <div className="coin-buy-expiry-row">
+                        {EXPIRY_OPTIONS.map((option) => (
+                          <button
+                            key={option.id}
+                            className={`coin-buy-expiry-btn${orderExpiry === option.id ? ' active' : ''}`}
+                            onClick={() => setOrderExpiry(option.id)}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
                     {orderError && <div className="coin-buy-order-status error">{orderError}</div>}
                     {orderSuccess && <div className="coin-buy-order-status success">{orderSuccess}</div>}
 
@@ -3319,7 +3318,12 @@ const CoinCard = memo(({
            z-index 9999 guarantees they always paint on top.
            On desktop: rendered in-place (no chart z-index conflict). */}
       {!buyDrawerOpen && (function() {
-        const _mobilePortal = !isDesktopMode && isActiveCard;
+        // Keep the buttons portaled while the card is expanded, even if the
+        // scroller's "active card" tracking briefly flips (e.g. triggered by
+        // scrollIntoView when opening the Top Traders/Transactions panels).
+        // Without this, the buttons fall back to in-place rendering and get
+        // hidden/occluded, making them appear to only work for closing panels.
+        const _mobilePortal = !isDesktopMode && (isActiveCard || isExpanded);
         const _buttons = (
       <>
       <div
@@ -3871,8 +3875,7 @@ const CoinCard = memo(({
             <div className="tiktok-sheet-body">
               {comments.length === 0 ? (
                 <div className="tiktok-sheet-empty">
-                  <div style={{ fontSize: '32px', marginBottom: '8px' }}>💭</div>
-                  <div>No comments yet</div>
+                  <div>Leave a comment</div>
                   <div style={{ fontSize: '12px', opacity: 0.5, marginTop: '4px' }}>
                     Be the first to share your thoughts!
                   </div>

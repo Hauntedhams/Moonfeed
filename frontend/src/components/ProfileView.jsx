@@ -9,6 +9,7 @@ import { useDemoMode } from '../contexts/DemoModeContext';
 import WalletPopup from './WalletPopup';
 import JupiterWalletButton from './JupiterWalletButton';
 import NativeChart from './NativeChart';
+import TwelveDataChart from './TwelveDataChart';
 import './ProfileView.css';
 import './OrdersView.css';
 import { getTransactions, syncTransactionsWithAccount } from '../utils/transactionStorage';
@@ -57,6 +58,7 @@ const ProfileView = ({ onTradeClick }) => {
 
   // Coin history detail sheet
   const [historyDetailCoin, setHistoryDetailCoin] = useState(null);
+  const [historyDetailUseAdvancedChart, setHistoryDetailUseAdvancedChart] = useState(false);
   const [historyCurrentPrice, setHistoryCurrentPrice] = useState(null);
   const [historyPriceLoading, setHistoryPriceLoading] = useState(false);
 
@@ -2047,7 +2049,7 @@ const ProfileView = ({ onTradeClick }) => {
         }] : null;
 
         return (
-          <div className="chs-backdrop" onClick={() => setHistoryDetailCoin(null)}>
+          <div className="chs-backdrop" onClick={() => { setHistoryDetailCoin(null); setHistoryDetailUseAdvancedChart(false); }}>
             <div className="chs-sheet" onClick={e => e.stopPropagation()}>
               <div className="chs-handle" />
 
@@ -2064,18 +2066,27 @@ const ProfileView = ({ onTradeClick }) => {
                     <div className="chs-name">{historyDetailCoin.tokenName || historyDetailCoin.tokenSymbol}</div>
                   </div>
                 </div>
-                <button className="chs-close-btn" onClick={() => setHistoryDetailCoin(null)}>✕</button>
+                <button className="chs-close-btn" onClick={() => { setHistoryDetailCoin(null); setHistoryDetailUseAdvancedChart(false); }}>✕</button>
               </div>
 
               {/* Interactive Price Chart with "Bought at" marker */}
               <div className="chs-chart-wrap">
-                <NativeChart
-                  coin={{ mintAddress: historyDetailCoin.tokenMint, symbol: historyDetailCoin.tokenSymbol }}
-                  isActive={true}
-                  isExpanded={true}
-                  markers={entryMarker}
-                  entryPrice={avgEntryPriceUsd}
-                />
+                {historyDetailUseAdvancedChart ? (
+                  <TwelveDataChart
+                    coin={{ mintAddress: historyDetailCoin.tokenMint, symbol: historyDetailCoin.tokenSymbol }}
+                    isActive={true}
+                    isExpanded={true}
+                  />
+                ) : (
+                  <NativeChart
+                    coin={{ mintAddress: historyDetailCoin.tokenMint, symbol: historyDetailCoin.tokenSymbol }}
+                    isActive={true}
+                    isExpanded={true}
+                    markers={entryMarker}
+                    entryPrice={avgEntryPriceUsd}
+                    onToggleAdvancedChart={() => setHistoryDetailUseAdvancedChart(true)}
+                  />
+                )}
               </div>
 
               {/* Win / Loss Ratio */}
