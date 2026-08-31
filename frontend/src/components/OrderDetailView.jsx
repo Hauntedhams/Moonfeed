@@ -17,7 +17,7 @@ const formatUsd = (n) => {
  * order's sell/buy target, with the primary action being to cancel the
  * pending limit order and return the escrowed funds to the wallet.
  */
-function OrderDetailView({ order, walletAddress, solUsdPrice = 150, cancelling, onCancel, onBack, jupiterLink }) {
+function OrderDetailView({ order, walletAddress, solUsdPrice = 150, cancelling, onCancel, onBack, onCoinClick, jupiterLink }) {
   const [entryPriceUsd, setEntryPriceUsd] = useState(null);
   const [entryTime, setEntryTime] = useState(null);
   const [refocusSignal, setRefocusSignal] = useState(0);
@@ -94,15 +94,30 @@ function OrderDetailView({ order, walletAddress, solUsdPrice = 150, cancelling, 
         </button>
 
         <div className="odv-header">
-          {order.tokenImage ? (
-            <img className="odv-token-img" src={order.tokenImage} alt={order.tokenSymbol} />
-          ) : (
-            <div className="odv-token-img odv-token-img--ph">{order.tokenSymbol?.[0] || '?'}</div>
-          )}
-          <div className="odv-token-info">
-            <div className="odv-token-symbol">{order.tokenSymbol}</div>
-            <div className="odv-token-name">{order.tokenName}</div>
-          </div>
+          <button
+            type="button"
+            className="odv-header-coin-btn"
+            onClick={() => onCoinClick?.({
+              mintAddress: order.tokenMint,
+              address: order.tokenMint,
+              symbol: order.tokenSymbol,
+              name: order.tokenName,
+              image: order.tokenImage,
+              banner: order.bannerSrc,
+              pairAddress: order.resolvedPairAddress,
+            })}
+            title="View coin"
+          >
+            {order.tokenImage ? (
+              <img className="odv-token-img" src={order.tokenImage} alt={order.tokenSymbol} />
+            ) : (
+              <div className="odv-token-img odv-token-img--ph">{order.tokenSymbol?.[0] || '?'}</div>
+            )}
+            <div className="odv-token-info">
+              <div className="odv-token-symbol">{order.tokenSymbol}</div>
+              <div className="odv-token-name">{order.tokenName}</div>
+            </div>
+          </button>
           <span className={`odv-type-badge odv-type-${isSell ? 'sell' : 'buy'}`}>
             {isSell ? '↑ SELL' : '↓ BUY'}
           </span>

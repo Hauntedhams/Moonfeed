@@ -1602,7 +1602,7 @@ const ModernTokenScroller = ({
       )}
 
       {showHelpHint && !onlyFavorites && !isTutorialActive && helpHintTarget && (
-        <div className="help-section-hint" aria-hidden="true">
+        <div className="help-section-hint" onClick={dismissHelpHint}>
           <div className="help-section-hint-backdrop" />
           <div
             className="help-section-target-ring"

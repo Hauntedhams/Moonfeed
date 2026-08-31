@@ -71,53 +71,19 @@ const CopyTradeToast = ({ onShowTransaction }) => {
 
   return (
     <div className="ctt-wrap">
-      {/* ── Collapsed Speech Bubble Trigger (TikTok Style) ── */}
+      {/* ── Collapsed Icon-Only Trigger ── */}
       {!isExpanded ? (
-        <div className="ctt-bubble-shell">
-          <button
-            type="button"
-            className="ctt-bubble-trigger"
-            onClick={handleTriggerClick}
-            title="View this trade on the chart"
-          >
-            <span
-              className="ctt-bubble-badge-icon"
-              style={top.walletAddress ? { background: gradientForWallet(top.walletAddress) } : undefined}
-            >
-              {top.walletAddress ? (
-                <AnimalSilhouetteAvatar address={top.walletAddress} className="ctt-animal-avatar" />
-              ) : (
-                <span className="ctt-money-icon">💸</span>
-              )}
-              {queue.length > 0 && (
-                <span className="ctt-badge-count">{queue.length}</span>
-              )}
-            </span>
-            <span className="ctt-bubble-text-box">
-              <span className="ctt-bubble-title">
-                <span className="ctt-bubble-name">{walletDisplayName}</span>
-                <span className={`ctt-bubble-side ${isBuy ? 'buy' : 'sell'}`}>
-                  {isBuy ? 'BUY' : 'SELL'}
-                </span>
-              </span>
-              <span className="ctt-bubble-sub">
-                {isBuy ? 'Bought' : 'Sold'} <strong>{top.tokenSymbol}</strong> {solStr ? `(${solStr})` : ''}
-              </span>
-            </span>
-            <span className="ctt-bubble-chevron" aria-hidden="true">›</span>
-          </button>
-          <button
-            type="button"
-            className="ctt-bubble-close"
-            onClick={(e) => {
-              e.stopPropagation();
-              dismiss(top.id);
-            }}
-            aria-label="Dismiss"
-          >
-            ✕
-          </button>
-        </div>
+        <button
+          type="button"
+          className={`ctt-bubble-icon-only ${isBuy ? 'buy' : 'sell'}`}
+          onClick={handleTriggerClick}
+          title="View this trade on the chart"
+        >
+          <span className="ctt-money-icon">💸</span>
+          {queue.length > 1 && (
+            <span className="ctt-badge-count">{queue.length}</span>
+          )}
+        </button>
       ) : (
         /* ── Expanded Detail Card ── */
         <div className={`ctt-toast ${isBuy ? 'ctt-buy' : 'ctt-sell'}`}>

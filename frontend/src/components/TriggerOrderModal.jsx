@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { getFullApiUrl } from '../config/api';
 import { useWallet } from '../contexts/WalletContext';
 import { useWalletConnectOnboarding } from './WalletConnectOnboarding';
+import { getSolUsdPrice } from '../utils/orderFillTracking';
 import './TriggerOrderModal.css';
 
 const TriggerOrderModal = ({ 
@@ -39,6 +40,12 @@ const TriggerOrderModal = ({
   // Live price fetched on-demand when the coin arrives without price data
   // (e.g. opened from a price alert, which only carries basic coin info).
   const [fetchedPrice, setFetchedPrice] = useState(0);
+
+  // SOL/USD rate for the USD-first order summary line.
+  const [solUsd, setSolUsd] = useState(0);
+  useEffect(() => {
+    if (isOpen) getSolUsdPrice().then(setSolUsd).catch(() => {});
+  }, [isOpen]);
 
   // Force recheck wallet connection when modal opens
   useEffect(() => {
@@ -228,6 +235,7 @@ const TriggerOrderModal = ({
         const reserve = pct === 100 ? 0.01 : 0;
         const calc = Math.max(0, (d.sol - reserve) * (pct / 100));
         setInputAmount(calc.toFixed(3));
+        setError(null);
       } else {
         const mint = coin?.mintAddress || coin?.address;
         if (!mint) return;
@@ -236,9 +244,8 @@ const TriggerOrderModal = ({
         if (!d.success) throw new Error(d.error || 'Failed to fetch balance');
         const calc = d.amount * (pct / 100);
         setInputAmount(calc < 1 ? calc.toFixed(4) : calc.toFixed(2));
-        if (d.amount === 0) setError(`No ${coin?.symbol || 'token'} balance found in this wallet`);
+        setError(d.amount === 0 ? `You don't hold any ${coin?.symbol || 'this token'} in this wallet yet` : null);
       }
-      setError(null);
     } catch (e) {
       console.warn('Could not calculate balance percentage:', e);
       setError('Could not read wallet balance — enter the amount manually');
@@ -770,18 +777,32 @@ const TriggerOrderModal = ({
               </div>
             </div>
 
-            {/* Mini Order Summary */}
-            {inputAmount && triggerPrice && parseFloat(triggerPrice) > 0 && (
-              <div className="mini-summary">
-                <span className="summary-text">
-                  {side === 'buy' ? 'Buy' : 'Sell'} {inputAmount} {side === 'buy' ? 'SOL' : coin?.symbol} → Get ~{
-                    side === 'buy' 
-                      ? (parseFloat(inputAmount) / parseFloat(triggerPrice)).toFixed(2)
-                      : (parseFloat(inputAmount) * parseFloat(triggerPrice)).toFixed(4)
-                  } {side === 'buy' ? coin?.symbol : 'SOL'}
-                </span>
-              </div>
-            )}
+            {/* Mini Order Summary — USD first, SOL second. triggerPrice is USD per token. */}
+            {inputAmount && triggerPrice && parseFloat(triggerPrice) > 0 && (() => {
+              const amt = parseFloat(inputAmount);
+              const px = parseFloat(triggerPrice);
+              if (side === 'buy') {
+                const usdSpend = solUsd > 0 ? amt * solUsd : null;
+                const tokens = usdSpend != null ? usdSpend / px : null;
+                return (
+                  <div className="mini-summary">
+                    <span className="summary-text">
+                      Buy {usdSpend != null ? `~$${usdSpend.toFixed(2)} (${amt} SOL)` : `${amt} SOL`}
+                      {tokens != null ? ` → Get ~${tokens >= 100 ? tokens.toFixed(0) : tokens.toFixed(2)} ${coin?.symbol}` : ''}
+                    </span>
+                  </div>
+                );
+              }
+              const usdValue = amt * px;
+              const solValue = solUsd > 0 ? usdValue / solUsd : null;
+              return (
+                <div className="mini-summary">
+                  <span className="summary-text">
+                    Sell {amt} {coin?.symbol} → Get ~${usdValue.toFixed(2)}{solValue != null ? ` (${solValue.toFixed(4)} SOL)` : ''}
+                  </span>
+                </div>
+              );
+            })()}
 
             {/* Error/Warning Messages */}
             {error && <div className="inline-error">{error}</div>}

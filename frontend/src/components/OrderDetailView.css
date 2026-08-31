@@ -78,6 +78,24 @@ html:not(.dark-mode) .odv-root {
   gap: 12px;
 }
 
+.odv-header-coin-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
 .odv-token-img {
   width: 44px;
   height: 44px;

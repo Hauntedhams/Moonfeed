@@ -1987,6 +1987,10 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
             handleCancelOrder(id);
           }}
           onBack={() => setOrderDetailOrder(null)}
+          onCoinClick={(coinData) => {
+            setOrderDetailOrder(null);
+            onCoinClick?.(coinData);
+          }}
           jupiterLink={`https://jup.ag/limit/${publicKey?.toString() || ''}`}
         />
       )}

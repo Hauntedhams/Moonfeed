@@ -171,7 +171,14 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 8px;
+}
+
+.hero-slider-hint {
+  margin: 0 0 14px;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.45);
 }
 
 .price-main {
@@ -506,6 +513,35 @@
 .summary-text {
   font-size: 0.85rem;
   color: rgba(255, 255, 255, 0.7);
+}
+
+/* ============================================
+   BUY MODE NOTE (explains the absent Stop Loss)
+   ============================================ */
+.buy-note-section {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(16, 185, 129, 0.03);
+}
+
+.buy-note-icon {
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.buy-note-text {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.buy-note-text strong {
+  color: rgba(255, 255, 255, 0.8);
 }
 
 /* ============================================

@@ -686,6 +686,7 @@ function App() {
             walletAddress={walletProfile.address}
             profileHint={walletProfile}
             onBack={() => setWalletProfile(null)}
+            onOpenPosition={handleOpenPosition}
             onCoinClick={(coinData) => {
               setWalletProfile(null);
               setPreviousTab(activeTab);

@@ -1,8 +1,7 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { getFullApiUrl, fetchJsonWithTimeout } from '../config/api';
 import { useTrackedWallets } from '../contexts/TrackedWalletsContext';
 import { initTradeNotifications, sendPushNotification } from '../utils/tradeNotifications';
-import NativeChart from './NativeChart';
 import './ProfileView.css';
 import './WalletProfileView.css';
 
@@ -160,7 +159,7 @@ const parseTrade = (t) => {
   };
 };
 
-const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClick }) => {
+const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClick, onOpenPosition }) => {
   const [stats, setStats] = useState(null);
   const [statsLoading, setStatsLoading] = useState(true);
   const [statsError, setStatsError] = useState(null);
@@ -170,9 +169,6 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
   const { trackWallet, untrackWallet, isTracked, trackedWallets, toggleCopyTrade, toggleNotifications, updateWalletLabel } = useTrackedWallets();
   const [tracked, setTracked] = useState(false);
   const [copyHintDismissed, setCopyHintDismissed] = useState(false);
-  const [showChartInfo, setShowChartInfo] = useState(false);
-  const [chartPosition, setChartPosition] = useState(null);
-  const [chartPrice, setChartPrice] = useState(null);
   const [showRenameModal, setShowRenameModal] = useState(false);
   const [renameInput, setRenameInput] = useState('');
   const [toastMsg, setToastMsg] = useState(null);
@@ -181,20 +177,6 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
     setToastMsg(msg);
     setTimeout(() => setToastMsg(null), 3200);
   };
-  // A fast mobile swipe fires the chart's crosshair callback dozens of times a
-  // second — coalesce those into at most one state update (and re-render) per
-  // animation frame instead of one per touch-move event.
-  const pendingChartPointRef = useRef(null);
-  const chartPriceRafRef = useRef(false);
-  const handleChartCrosshairMove = useCallback((point) => {
-    pendingChartPointRef.current = point;
-    if (chartPriceRafRef.current) return;
-    chartPriceRafRef.current = true;
-    requestAnimationFrame(() => {
-      chartPriceRafRef.current = false;
-      setChartPrice(pendingChartPointRef.current?.price ?? null);
-    });
-  }, []);
 
   useEffect(() => {
     setTracked(isTracked(walletAddress));
@@ -323,64 +305,6 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
     setShowRenameModal(true);
   };
 
-  // Entry price + realized ROI for the charted coin, so the chart can show how
-  // far above/below the wallet's own buy-in the price currently is.
-  useEffect(() => {
-    if (!walletAddress || !latestCoin?.mint) { setChartPosition(null); return; }
-    let cancelled = false;
-    setChartPosition(null);
-    fetchJsonWithTimeout(getFullApiUrl(`/api/wallet/${walletAddress}/position/${latestCoin.mint}`))
-      .then((d) => { if (!cancelled && d?.success) setChartPosition(d); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [walletAddress, latestCoin?.mint]);
-
-  // Chart of the wallet's most recently traded coin, marked with when the
-  // viewer started following this wallet (if tracked).
-  const chartCoin = useMemo(
-    () => (latestCoin?.mint ? { mintAddress: latestCoin.mint } : null),
-    [latestCoin?.mint]
-  );
-  const trackedMarker = useMemo(() => {
-    if (!trackedWallet?.addedAt) return null;
-    return [{
-      time: Math.floor(trackedWallet.addedAt / 1000),
-      position: 'belowBar',
-      color: '#fbbf24',
-      shape: 'arrowUp',
-      text: 'Tracked wallet here',
-    }];
-  }, [trackedWallet?.addedAt]);
-
-  // Marks the wallet's own buy-in point on the chart, same shape/color language as
-  // the tracked-trades markers elsewhere in the app (green up-arrow = entry).
-  const entryMarker = useMemo(() => {
-    const firstBuy = chartPosition?.timing?.firstBuy;
-    const entryPrice = Number(chartPosition?.avgEntryPrice);
-    if (!firstBuy || !(entryPrice > 0)) return null;
-    return [{
-      time: Math.floor(firstBuy / 1000),
-      position: 'belowBar',
-      color: '#26a69a',
-      shape: 'arrowUp',
-      text: `Entry $${entryPrice < 1 ? entryPrice.toPrecision(4) : entryPrice.toFixed(2)}`,
-    }];
-  }, [chartPosition?.timing?.firstBuy, chartPosition?.avgEntryPrice]);
-
-  const chartMarkers = useMemo(
-    () => [...(entryMarker || []), ...(trackedMarker || [])],
-    [entryMarker, trackedMarker]
-  );
-
-  // Live PnL $ for this coin vs. the wallet's entry — recomputed from a hovered
-  // historical price when available, otherwise the position's realized PnL.
-  const entryPrice = Number(chartPosition?.avgEntryPrice);
-  const invested = Number(chartPosition?.invested);
-  const hasLivePrice = Number.isFinite(chartPrice) && chartPrice > 0 && entryPrice > 0 && invested > 0;
-  const coinPnl = hasLivePrice
-    ? invested * ((chartPrice - entryPrice) / entryPrice)
-    : chartPosition?.pnl?.total;
-
   return (
     <div className="wpv-root">
       <button className="wpv-back" onClick={onBack} title="Back" aria-label="Back">
@@ -439,96 +363,39 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
           >
             {shortAddr(walletAddress)} ↗
           </a>
-          <button className={`wpv-fast-follow ${tracked ? 'following' : ''}`} onClick={handleTrackToggle}>
-            {tracked ? 'Tracked' : 'Follow'}
-          </button>
-          <button
-            type="button"
-            className={`wpv-bell-btn ${notificationsEnabled ? 'active' : ''}`}
-            onClick={handleBellClick}
-            title={notificationsEnabled ? 'Notifications ON — Click to edit name or settings' : 'Turn ON push notifications'}
-          >
-            <span className="wpv-bell-icon">{notificationsEnabled ? '🔔' : '🔕'}</span>
-          </button>
         </div>
 
-        {chartCoin && (
-          <div className="wpv-chart-section">
-            {/* Sits above the chart, not overlapping it \u2014 just aligned to its top-right. */}
-            <div className="wpv-chart-header-row">
-              <button
-                className="wpv-chart-info-btn"
-                onClick={() => setShowChartInfo((v) => !v)}
-                title="About this chart"
-                aria-label="About this chart"
-              >
-                ?
-              </button>
-            </div>
-            {showChartInfo && (
-              <div className="wpv-chart-info-tooltip" onClick={() => setShowChartInfo(false)}>
-                This is the price chart for <strong>{latestCoin.symbol}</strong>, the last coin {displayName} traded.
-                The green marker shows their entry price{trackedWallet?.addedAt && ', and the amber marker shows when you started following this wallet'}.
-              </div>
-            )}
-            <div className="wpv-chart-wrap">
-              <div className="wpv-chart-identity-overlay">
-                <span className="wpv-chart-identity-left">
-                  <span
-                    className="wpv-chart-identity-name wpv-chart-identity-name--clickable"
-                    onClick={() => onCoinClick?.({
-                      mintAddress: latestCoin.mint,
-                      address: latestCoin.mint,
-                      symbol: latestCoin.symbol,
-                      name: latestCoin.name || latestCoin.symbol,
-                      image: latestCoin.image,
-                    })}
-                    role="button"
-                    title="View coin"
-                  >
-                    {latestCoin.symbol}
-                  </span>
-                  {Number.isFinite(coinPnl) && (
-                    <span className={`wpv-chart-roi-badge ${coinPnl >= 0 ? 'pos' : 'neg'}`}>
-                      {formatCurrency(coinPnl)}
-                    </span>
-                  )}
-                </span>
-              </div>
-              <NativeChart
-                coin={chartCoin}
-                isActive={true}
-                isExpanded={true}
-                markers={chartMarkers}
-                onCrosshairMove={handleChartCrosshairMove}
-              />
-              <div className="wpv-chart-caption">
-                {latestCoin.symbol} — {latestCoin.type === 'sell' ? 'last sold' : 'last bought'} {timeAgo(latestCoin.time)} ago
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Bio line — mirrors ProfileView's bio slot with a stats summary */}
+        <p className="pv-ig-bio">
+          {latestCoin
+            ? `Last traded ${latestCoin.symbol} ${timeAgo(latestCoin.time)} ago`
+            : statsLoading ? '…' : 'No recent trades'}
+          {!statsLoading && Number.isFinite(Number(pnl.realized)) ? ` · Realized PnL ${formatCurrency(pnl.realized)}` : ''}
+        </p>
 
-        {/* Actions row — mirrors ProfileView's Edit/Disconnect row */}
+        {/* Actions row — mirrors ProfileView's Edit Profile / Disconnect / icon row */}
         <div className="pv-ig-actions">
           <button
             className={`pv-ig-btn pv-ig-btn--edit wpv-track-action ${tracked ? 'wpv-track-action--on' : ''}`}
             onClick={handleTrackToggle}
           >
-            {tracked ? '✓ Tracked' : 'Track Wallet'}
+            {tracked ? '✓ Following' : 'Follow'}
           </button>
           <button
-            className={`pv-ig-btn pv-ig-btn--edit ${tracked && copyEnabled ? 'wpv-track-btn--on' : ''}`}
-            onClick={handleCopyToggle}
+            className="pv-ig-btn pv-ig-btn--out"
+            onClick={() => latestCoin && onOpenPosition?.(walletAddress, latestCoin.mint, { displayName: walletName })}
+            disabled={!latestCoin}
+            title={latestCoin ? `View their latest ${latestCoin.symbol} position on the chart` : 'No recent trades'}
           >
-            {!tracked ? 'Copy Next Trade' : copyEnabled ? '✓ Copying Trades' : 'Resume Copying'}
+            Most Recent Trade
           </button>
           <button
             type="button"
-            className={`pv-ig-btn pv-ig-btn--edit wpv-bell-action-btn ${notificationsEnabled ? 'wpv-bell-action--on' : ''}`}
+            className={`pv-ig-btn pv-ig-btn--icon wpv-bell-action-btn ${notificationsEnabled ? 'wpv-bell-action--on' : ''}`}
             onClick={handleBellClick}
+            title={notificationsEnabled ? 'Notifications ON' : 'Turn on push notifications'}
           >
-            {notificationsEnabled ? '🔔 Alerts ON' : '🔕 Enable Alerts'}
+            {notificationsEnabled ? '🔔' : '🔕'}
           </button>
         </div>
 
