@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { getFullApiUrl } from '../config/api';
 import { useWallet } from '../contexts/WalletContext';
 import { useWalletConnectOnboarding } from './WalletConnectOnboarding';
@@ -119,6 +119,30 @@ const TriggerOrderModal = ({
     setFetchedPrice(0);
   }, [coin?.mintAddress, coin?.address]);
 
+  // Buy and Sell remember their own last-picked target % independently, so
+  // switching tabs doesn't leave a percentage that only made sense for the
+  // other side (e.g. a Sell take-profit target showing up under Buy).
+  // Defaults: Buy -> "buy the dip" (-10%), Sell -> take-profit (+25%).
+  const buyPctRef = useRef(-10);
+  const sellPctRef = useRef(25);
+  const prevSideRef = useRef(side);
+
+  const applyTargetPercent = useCallback((pct) => {
+    if (currentPrice <= 0) return;
+    const price = currentPrice * (1 + pct / 100);
+    setPercentage(pct.toString());
+    setTriggerPrice(price.toFixed(8));
+    setSliderValue(price);
+  }, [currentPrice]);
+
+  // Snap to the other side's remembered (or default) target whenever the
+  // Buy/Sell tab changes — skipped on the very first render.
+  useEffect(() => {
+    if (prevSideRef.current === side) return;
+    prevSideRef.current = side;
+    applyTargetPercent(side === 'buy' ? buyPctRef.current : sellPctRef.current);
+  }, [side, applyTargetPercent]);
+
   // Calculate price range for slider (50% below to 100% above current price)
   const priceRange = useMemo(() => {
     if (currentPrice <= 0) return { min: 0, max: 1, step: 0.01 };
@@ -140,8 +164,7 @@ const TriggerOrderModal = ({
   // Initialize slider value when modal opens or price changes
   useEffect(() => {
     if (isOpen && currentPrice > 0 && sliderValue === 0) {
-      setSliderValue(currentPrice);
-      setTriggerPrice(currentPrice.toFixed(8));
+      applyTargetPercent(side === 'buy' ? buyPctRef.current : sellPctRef.current);
     }
     // Init stop-loss at -20% of current price
     if (isOpen && currentPrice > 0 && stopLossSliderValue === 0) {
@@ -162,8 +185,9 @@ const TriggerOrderModal = ({
     if (currentPrice > 0) {
       const pct = ((value - currentPrice) / currentPrice) * 100;
       setPercentage(pct.toFixed(2));
+      if (side === 'buy') buyPctRef.current = pct; else sellPctRef.current = pct;
     }
-  }, [currentPrice]);
+  }, [currentPrice, side]);
 
   // Handle stop-loss slider change
   const handleStopLossSliderChange = useCallback((e) => {
@@ -182,40 +206,42 @@ const TriggerOrderModal = ({
     return ((parseFloat(triggerPrice) - currentPrice) / currentPrice) * 100;
   }, [triggerPrice, currentPrice]);
 
+  // The Stop Loss section only applies alongside an upside target — if the main
+  // target drops to a downside exit, turn off any pending stop-loss so it doesn't
+  // silently place a hidden second order the user can no longer see.
+  useEffect(() => {
+    if (stopLossEnabled && percentageFromCurrent <= 0) {
+      setStopLossEnabled(false);
+    }
+  }, [percentageFromCurrent, stopLossEnabled]);
+
   const handleAmountPctClick = async (pct) => {
     if (!walletAddress) {
       openWalletConnect();
       return;
     }
     try {
-      const { Connection, PublicKey } = await import('@solana/web3.js');
-      const conn = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
-      const pk = new PublicKey(walletAddress);
-
       if (side === 'buy') {
-        const balLamports = await conn.getBalance(pk);
-        const solBal = balLamports / 1e9;
-        if (solBal > 0) {
-          const reserve = pct === 100 ? 0.01 : 0;
-          const calc = Math.max(0, (solBal - reserve) * (pct / 100));
-          setInputAmount(calc.toFixed(3));
-        }
+        const res = await fetch(getFullApiUrl(`/api/wallet/${walletAddress}/balance`));
+        const d = await res.json();
+        if (!d.success) throw new Error(d.error || 'Failed to fetch balance');
+        const reserve = pct === 100 ? 0.01 : 0;
+        const calc = Math.max(0, (d.sol - reserve) * (pct / 100));
+        setInputAmount(calc.toFixed(3));
       } else {
         const mint = coin?.mintAddress || coin?.address;
-        if (mint) {
-          const res = await conn.getParsedTokenAccountsByOwner(pk, {
-            programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'),
-          });
-          const acc = res.value.find((a) => a.account.data.parsed?.info?.mint === mint);
-          const tokBal = acc?.account?.data?.parsed?.info?.tokenAmount?.uiAmount || 0;
-          if (tokBal > 0) {
-            const calc = tokBal * (pct / 100);
-            setInputAmount(calc < 1 ? calc.toFixed(4) : calc.toFixed(2));
-          }
-        }
+        if (!mint) return;
+        const res = await fetch(getFullApiUrl(`/api/wallet/${walletAddress}/balance?mint=${mint}`));
+        const d = await res.json();
+        if (!d.success) throw new Error(d.error || 'Failed to fetch balance');
+        const calc = d.amount * (pct / 100);
+        setInputAmount(calc < 1 ? calc.toFixed(4) : calc.toFixed(2));
+        if (d.amount === 0) setError(`No ${coin?.symbol || 'token'} balance found in this wallet`);
       }
+      setError(null);
     } catch (e) {
       console.warn('Could not calculate balance percentage:', e);
+      setError('Could not read wallet balance — enter the amount manually');
     }
   };
 
@@ -519,13 +545,20 @@ const TriggerOrderModal = ({
                 <>
                   <div className="slider-hero-display">
                     <div className="price-main">
-                      <span className="price-label">Target Price</span>
+                      <span className="price-label">
+                        {side === 'sell' ? 'Sell When Price Reaches' : 'Buy When Price Reaches'}
+                      </span>
                       <span className="price-value">${formatPrice(triggerPrice || sliderValue)}</span>
                     </div>
                     <span className={`percentage-badge ${percentageFromCurrent >= 0 ? 'positive' : 'negative'}`}>
                       {percentageFromCurrent >= 0 ? '+' : ''}{percentageFromCurrent.toFixed(1)}%
                     </span>
                   </div>
+                  <p className="hero-slider-hint">
+                    {side === 'sell'
+                      ? 'One order — works for either a take-profit above, or a downside exit below, the current price.'
+                      : 'Order fills automatically once the price drops to (or rises to) this level.'}
+                  </p>
                   
                   <div className="slider-wrapper-hero">
                     <div 
@@ -578,6 +611,7 @@ const TriggerOrderModal = ({
                           setTriggerPrice(targetPrice.toFixed(8));
                           setSliderValue(targetPrice);
                           setError(null);
+                          if (side === 'buy') buyPctRef.current = pct; else sellPctRef.current = pct;
                         }}
                       >
                         {pct > 0 ? '+' : ''}{pct}%
@@ -600,15 +634,29 @@ const TriggerOrderModal = ({
               )}
             </div>
 
-            {/* Stop Loss Section — shown when selling and price data available */}
-            {side === 'sell' && currentPrice > 0 && (
+            {/* Buy mode has no Stop Loss (it protects a SELL, not a purchase) —
+                a short note here instead of just silently omitting the section,
+                so it doesn't look like something went missing. */}
+            {side === 'buy' && currentPrice > 0 && (
+              <div className="buy-note-section">
+                <span className="buy-note-icon">💡</span>
+                <p className="buy-note-text">
+                  No Stop Loss here — that protects a position you're <strong>selling</strong>. Switch to the Sell tab once this buy fills to set one up.
+                </p>
+              </div>
+            )}
+
+            {/* Stop Loss Section — only offered alongside an UPSIDE target (take-profit).
+                If the main target is already a downside exit (negative %), it already does
+                what Stop Loss would do, so showing both would just be confusing. */}
+            {side === 'sell' && currentPrice > 0 && percentageFromCurrent > 0 && (
               <div className={`stop-loss-section${stopLossEnabled ? ' sl-active' : ''}`}>
                 <div className="sl-header">
                   <div className="sl-title-group">
                     <span className="sl-shield">🛡️</span>
                     <div>
-                      <span className="sl-title">Stop Loss</span>
-                      <span className="sl-subtitle">Auto-sell if price drops</span>
+                      <span className="sl-title">Also Protect Against a Drop</span>
+                      <span className="sl-subtitle">Optional second order — sells if price falls instead</span>
                     </div>
                   </div>
                   <label className="sl-toggle">

@@ -311,6 +311,43 @@ router.post('/warm', (req, res) => {
 });
 
 /**
+ * GET /api/wallet/:owner/balance?mint=<mint>
+ * On-chain SOL balance (no mint) or SPL/Token-2022 balance for a specific mint,
+ * read via Helius RPC. Exists so the browser never has to hit the public
+ * mainnet-beta RPC directly (heavily rate-limited / flaky from client-side).
+ */
+router.get('/:owner/balance', async (req, res) => {
+  try {
+    const { owner } = req.params;
+    const { mint } = req.query;
+    if (!owner) {
+      return res.status(400).json({ success: false, error: 'Wallet address is required' });
+    }
+
+    const { Connection, PublicKey } = require('@solana/web3.js');
+    const { HELIUS_RPC_URL } = require('../solanaRpcConfig');
+    const connection = new Connection(HELIUS_RPC_URL, 'confirmed');
+    const ownerKey = new PublicKey(owner);
+
+    if (!mint) {
+      const lamports = await connection.getBalance(ownerKey);
+      return res.json({ success: true, owner, sol: lamports / 1e9 });
+    }
+
+    const mintKey = new PublicKey(mint);
+    const accounts = await connection.getParsedTokenAccountsByOwner(ownerKey, { mint: mintKey });
+    const amount = accounts.value.reduce(
+      (sum, acc) => sum + (acc.account.data.parsed?.info?.tokenAmount?.uiAmount || 0),
+      0
+    );
+    res.json({ success: true, owner, mint, amount });
+  } catch (error) {
+    console.error('❌ Error fetching wallet balance:', error.message);
+    res.status(500).json({ success: false, error: 'Failed to fetch wallet balance', details: error.message });
+  }
+});
+
+/**
  * GET /api/wallet/:owner/position/:mint
  * Single wallet+token position (entry/exit price & market cap, PnL) — used for the
  * FOMO-style "most recent trade" detail view. One lightweight upstream call, no
