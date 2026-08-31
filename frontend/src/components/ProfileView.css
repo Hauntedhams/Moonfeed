@@ -1688,6 +1688,19 @@
   gap: 3px;
 }
 
+.pv-ig-stat--clickable {
+  background: none;
+  border: none;
+  font: inherit;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 8px;
+}
+
+.pv-ig-stat--clickable:active {
+  background: rgba(127, 127, 127, 0.12);
+}
+
 .pv-ig-stat-num {
   font-size: 20px;
   font-weight: 700;

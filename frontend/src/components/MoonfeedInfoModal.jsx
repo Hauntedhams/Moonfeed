@@ -337,7 +337,7 @@ const TrackedWalletsPanel = ({ onClose }) => {
             aria-selected={activeTab === 'orangie'}
             onClick={() => setActiveTab('orangie')}
           >
-            Orangie's Wallets
+            Whale Wallets
           </button>
         </div>
 
@@ -442,7 +442,7 @@ const TrackedWalletsPanel = ({ onClose }) => {
           {trackedWallets.length === 0 ? (
             <div className="menu-panel-empty">
               <p>No tracked wallets yet.</p>
-              <p className="menu-panel-empty-hint">Tap any wallet address in the feed to track it, or add some from Orangie's Wallets above.</p>
+              <p className="menu-panel-empty-hint">Tap any wallet address in the feed to track it, or add some from Whale Wallets above.</p>
             </div>
           ) : (
             <ul className="tracked-wallet-list">

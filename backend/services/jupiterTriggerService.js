@@ -71,9 +71,54 @@ function setCachedTokenPrice(tokenMint, price, source) {
 // Jupiter Trigger API base URL - CORRECT endpoint for limit orders
 const JUPITER_TRIGGER_API = 'https://lite-api.jup.ag/trigger/v1';
 
-// Ultra API referral configuration from environment
+// Trigger API integrator fee configuration.
+// V1 spec: fee goes in `params.feeBps` + top-level `feeAccount`, where feeAccount is a
+// Referral Program token account (PDA of the referral account + mint). The old code sent
+// top-level `referralAccount`/`feeBps`, which the API silently ignores (no fee collected).
+const { Connection, PublicKey } = require('@solana/web3.js');
+const { HELIUS_RPC_URL } = require('../solanaRpcConfig');
 const REFERRAL_ACCOUNT = process.env.JUPITER_REFERRAL_ACCOUNT;
 const FEE_BPS = parseInt(process.env.JUPITER_REFERRAL_FEE_BPS) || 70;
+const REFERRAL_PROGRAM_ID = 'REFER4ZgmyYx9c6He5XfaTMiGfdLwRnkV4RPp9t9iF3';
+
+let feeConnection = null;
+const feeAccountCache = new Map(); // mint -> feeAccount pubkey string, or null if uninitialized
+
+/**
+ * Resolve the referral token account (feeAccount) for this order, preferring the
+ * output mint (per V1 docs) and falling back to the input mint (docs allow either
+ * for ExactIn). Returns null if neither referral token account is initialized
+ * on-chain — in that case the order is created without a fee rather than failing.
+ */
+async function resolveTriggerFeeAccount(inputMint, outputMint) {
+  if (!REFERRAL_ACCOUNT) return null;
+  for (const mint of [outputMint, inputMint]) {
+    if (feeAccountCache.has(mint)) {
+      const cached = feeAccountCache.get(mint);
+      if (cached) return cached;
+      continue;
+    }
+    try {
+      const [ata] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from('referral_ata'),
+          new PublicKey(REFERRAL_ACCOUNT).toBuffer(),
+          new PublicKey(mint).toBuffer()
+        ],
+        new PublicKey(REFERRAL_PROGRAM_ID)
+      );
+      if (!feeConnection) feeConnection = new Connection(HELIUS_RPC_URL, 'confirmed');
+      const info = await feeConnection.getAccountInfo(ata);
+      const value = info ? ata.toBase58() : null;
+      feeAccountCache.set(mint, value);
+      if (value) return value;
+    } catch (error) {
+      console.warn('[Jupiter Trigger] feeAccount lookup failed for mint', mint, error.message);
+      return null; // don't block order creation on RPC hiccups
+    }
+  }
+  return null;
+}
 
 /**
  * Create a new trigger/limit order
@@ -119,26 +164,49 @@ async function createOrder(orderParams) {
       payload.expiredAt = expiredAt;
     }
 
-    // Add referral account and fee BPS if configured
-    if (REFERRAL_ACCOUNT) {
-      payload.referralAccount = REFERRAL_ACCOUNT;
-      payload.feeBps = FEE_BPS;
-      console.log(`[Jupiter Trigger] Using referral account: ${REFERRAL_ACCOUNT} with ${FEE_BPS} BPS`);
+    // Add integrator fee if the referral token account for this order exists.
+    // V1 spec: params.feeBps (string) + top-level feeAccount (referral token account).
+    const feeAccount = await resolveTriggerFeeAccount(inputMint, outputMint);
+    if (feeAccount) {
+      payload.params.feeBps = String(FEE_BPS);
+      payload.feeAccount = feeAccount;
+      console.log(`[Jupiter Trigger] Collecting ${FEE_BPS} bps fee to ${feeAccount}`);
+    } else if (REFERRAL_ACCOUNT) {
+      console.log('[Jupiter Trigger] No initialized referral token account for this pair — order created WITHOUT fee');
     }
 
     console.log('[Jupiter Trigger] Creating order:', JSON.stringify(payload, null, 2));
 
     // Call Jupiter Trigger API
-    const response = await axios.post(
-      `${JUPITER_TRIGGER_API}/createOrder`,
-      payload,
-      {
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        timeout: 30000 // 30 second timeout
-      }
-    );
+    let response;
+    try {
+      response = await axios.post(
+        `${JUPITER_TRIGGER_API}/createOrder`,
+        payload,
+        {
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          timeout: 30000 // 30 second timeout
+        }
+      );
+    } catch (feeError) {
+      // Never let the fee block a user's order: retry once without fee params.
+      if (!payload.feeAccount) throw feeError;
+      console.warn('[Jupiter Trigger] Create with fee failed, retrying without fee:', feeError.response?.data || feeError.message);
+      delete payload.feeAccount;
+      delete payload.params.feeBps;
+      response = await axios.post(
+        `${JUPITER_TRIGGER_API}/createOrder`,
+        payload,
+        {
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          timeout: 30000
+        }
+      );
+    }
 
     console.log('[Jupiter Trigger] Order created successfully');
     

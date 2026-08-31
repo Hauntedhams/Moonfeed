@@ -25,6 +25,7 @@ const debounce = (func, wait) => {
 const ModernTokenScroller = ({ 
   favorites = [], 
   onlyFavorites = false, 
+  singleCoin = null, // Show just this one coin (e.g. from search) without treating `favorites` as the coin source
   onFavoritesChange, 
   filters = {}, 
   onTradeClick,
@@ -679,9 +680,10 @@ const ModernTokenScroller = ({
     
     try {
       if (onlyFavorites) {
-        // Use favorites from props
-        setCoins(favorites);
-        onTotalCoinsChange?.(favorites.length); // Notify parent of total coins
+        // Use favorites from props, or a single explicitly-passed coin (search result, etc.)
+        const singleCoinList = singleCoin ? [singleCoin] : favorites;
+        setCoins(singleCoinList);
+        onTotalCoinsChange?.(singleCoinList.length); // Notify parent of total coins
         setLoading(false);
         return;
       }
@@ -785,7 +787,7 @@ const ModernTokenScroller = ({
     } finally {
       setLoading(false);
     }
-  }, [onlyFavorites, favorites, filters, advancedFilters, getFeedEndpoint, normalizeFeedCoins]);
+  }, [onlyFavorites, favorites, singleCoin, filters, advancedFilters, getFeedEndpoint, normalizeFeedCoins]);
 
   const appendNextFeed = useCallback(async () => {
     if (!feedOrder.length || isLoadingMoreFeedRef.current || loading) return;

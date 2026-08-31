@@ -43,6 +43,7 @@ const ProfileView = ({ onTradeClick }) => {
   const [cancellingOrder, setCancellingOrder] = useState(null);
   const [coinBanners, setCoinBanners] = useState(new Map());
   const fileInputRef = useRef(null);
+  const contentRef = useRef(null); // scrolled into view when a header stat is tapped
   const { trackedWallets, untrackWallet } = useTrackedWallets();
   const [trackedCoinsCount, setTrackedCoinsCount] = useState(0);
   const [selectedWallet, setSelectedWallet] = useState(null);
@@ -614,6 +615,13 @@ const ProfileView = ({ onTradeClick }) => {
     }
   };
 
+  // Tapping a header stat (Trades/Orders/Tracked) jumps straight to that tab's
+  // scrollable list below, Instagram-style, instead of just being a static number.
+  const handleStatClick = (tab) => {
+    setProfileTab(tab);
+    contentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   if (!connected) {
     return (
       <div className="profile-view pv-social">
@@ -770,18 +778,18 @@ const ProfileView = ({ onTradeClick }) => {
             )}
           </div>
           <div className="pv-ig-stats">
-            <div className="pv-ig-stat">
+            <button type="button" className="pv-ig-stat pv-ig-stat--clickable" onClick={() => handleStatClick('history')}>
               <span className="pv-ig-stat-num">{transactions.length}</span>
               <span className="pv-ig-stat-label">Trades</span>
-            </div>
-            <div className="pv-ig-stat">
+            </button>
+            <button type="button" className="pv-ig-stat pv-ig-stat--clickable" onClick={() => handleStatClick('orders')}>
               <span className="pv-ig-stat-num">{orders.filter(o => o.status === 'active').length}</span>
               <span className="pv-ig-stat-label">Orders</span>
-            </div>
-            <div className="pv-ig-stat">
+            </button>
+            <button type="button" className="pv-ig-stat pv-ig-stat--clickable" onClick={() => handleStatClick('tracked')}>
               <span className="pv-ig-stat-num">{trackedWallets.length + trackedCoinsCount}</span>
               <span className="pv-ig-stat-label">Tracked</span>
-            </div>
+            </button>
           </div>
         </div>
 
@@ -877,7 +885,7 @@ const ProfileView = ({ onTradeClick }) => {
       </div>
 
       {/* ─── CONTENT ─── */}
-      <div className="pv-ig-content">
+      <div className="pv-ig-content" ref={contentRef}>
 
         {/* ── HISTORY TAB ── */}
         {profileTab === 'history' && (

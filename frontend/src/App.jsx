@@ -360,6 +360,14 @@ function App() {
     setCoinListModalOpen(false);
   };
 
+  // Handle coin selection from the Tracked > Coins list
+  const handleTrackedCoinSelect = (coin) => {
+    setPreviousTab('tracked');
+    setSelectedCoin(coin);
+    setCurrentViewedCoin(coin);
+    setActiveTab('coin-detail');
+  };
+
   // Handle search modal
   const handleSearchClick = () => {
     console.log('🔍 APP: handleSearchClick called!');
@@ -501,6 +509,11 @@ function App() {
           <CopyTradeProvider onCopyTrade={handleCopyTrade}>
           <CopyTradeToast
             onShowTransaction={(notification) => {
+              if (!notification?.tokenMint) {
+                // No mint on the swap — fall back to the wallet's profile page.
+                handleWalletClick(notification?.walletAddress, { displayName: notification?.walletLabel });
+                return;
+              }
               handleOpenPosition(notification.walletAddress, notification.tokenMint, {
                 displayName: notification.walletLabel,
                 tokenSymbol: notification.tokenSymbol,
@@ -534,6 +547,7 @@ function App() {
           onFavoritesChange={handleFavoritesChange}
           onTradeClick={handleTradeClick}
           onWalletClick={handleWalletClick}
+          onCoinSelect={handleTrackedCoinSelect}
           onOpenPosition={handleOpenPosition}
           onCurrentCoinChange={handleCurrentCoinChange}
         />
@@ -607,7 +621,8 @@ function App() {
           </button>
           <ModernTokenScroller
             onFavoritesChange={handleFavoritesChange}
-            favorites={[selectedCoin]} // Show only the selected coin
+            favorites={favorites} // Real tracked-coins list, so the Tracking button reflects/toggles actual state
+            singleCoin={selectedCoin} // Show only the selected coin
             filters={{}}
             onlyFavorites={true}
             onTradeClick={handleTradeClick}

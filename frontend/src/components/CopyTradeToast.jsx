@@ -57,7 +57,9 @@ const CopyTradeToast = ({ onShowTransaction }) => {
 
   const handleTriggerClick = (e) => {
     e.stopPropagation();
+    e.preventDefault();
     if (onShowTransaction) {
+      clearTimeout(timerRef.current);
       onShowTransaction(top);
       dismiss(top.id);
     } else {
@@ -71,38 +73,41 @@ const CopyTradeToast = ({ onShowTransaction }) => {
     <div className="ctt-wrap">
       {/* ── Collapsed Speech Bubble Trigger (TikTok Style) ── */}
       {!isExpanded ? (
-        <div 
-          className="ctt-bubble-trigger"
-          onClick={handleTriggerClick}
-          role="button"
-          tabIndex={0}
-          title="Click to view transaction on graph"
-        >
-          <div
-            className="ctt-bubble-badge-icon"
-            style={top.walletAddress ? { background: gradientForWallet(top.walletAddress) } : undefined}
+        <div className="ctt-bubble-shell">
+          <button
+            type="button"
+            className="ctt-bubble-trigger"
+            onClick={handleTriggerClick}
+            title="View this trade on the chart"
           >
-            {top.walletAddress ? (
-              <AnimalSilhouetteAvatar address={top.walletAddress} className="ctt-animal-avatar" />
-            ) : (
-              <span className="ctt-money-icon">💸</span>
-            )}
-            {queue.length > 0 && (
-              <span className="ctt-badge-count">{queue.length}</span>
-            )}
-          </div>
-          <div className="ctt-bubble-text-box">
-            <div className="ctt-bubble-title">
-              <span className="ctt-bubble-name">{walletDisplayName}</span>
-              <span className={`ctt-bubble-side ${isBuy ? 'buy' : 'sell'}`}>
-                {isBuy ? 'BUY' : 'SELL'}
+            <span
+              className="ctt-bubble-badge-icon"
+              style={top.walletAddress ? { background: gradientForWallet(top.walletAddress) } : undefined}
+            >
+              {top.walletAddress ? (
+                <AnimalSilhouetteAvatar address={top.walletAddress} className="ctt-animal-avatar" />
+              ) : (
+                <span className="ctt-money-icon">💸</span>
+              )}
+              {queue.length > 0 && (
+                <span className="ctt-badge-count">{queue.length}</span>
+              )}
+            </span>
+            <span className="ctt-bubble-text-box">
+              <span className="ctt-bubble-title">
+                <span className="ctt-bubble-name">{walletDisplayName}</span>
+                <span className={`ctt-bubble-side ${isBuy ? 'buy' : 'sell'}`}>
+                  {isBuy ? 'BUY' : 'SELL'}
+                </span>
               </span>
-            </div>
-            <div className="ctt-bubble-sub">
-              {isBuy ? 'Bought' : 'Sold'} <strong>{top.tokenSymbol}</strong> {solStr ? `(${solStr})` : ''}
-            </div>
-          </div>
-          <button 
+              <span className="ctt-bubble-sub">
+                {isBuy ? 'Bought' : 'Sold'} <strong>{top.tokenSymbol}</strong> {solStr ? `(${solStr})` : ''}
+              </span>
+            </span>
+            <span className="ctt-bubble-chevron" aria-hidden="true">›</span>
+          </button>
+          <button
+            type="button"
             className="ctt-bubble-close"
             onClick={(e) => {
               e.stopPropagation();

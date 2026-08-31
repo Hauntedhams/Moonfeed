@@ -53,6 +53,11 @@ function tfSeconds(tf) {
   return base * tf.aggregate;
 }
 
+// Gentle accelerate-then-decelerate curve — reads as a calm drift rather than a snap.
+function easeInOutCubic(t) {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
 function formatPrice(p) {
   if (!Number.isFinite(p)) return '';
   if (p >= 1) return '$' + p.toLocaleString(undefined, { maximumFractionDigits: 2 });
@@ -122,6 +127,7 @@ const NativeChart = ({
   const dataLengthRef = useRef(0);
   const focusAnimationRef = useRef(null);
   const targetScaleAnimationRef = useRef(null);
+  const exitFocusAnimationRef = useRef(null); // eases the view back out after the order drawer closes
   const targetPriceRef = useRef(null);
   const displayedTargetPriceRef = useRef(null);
   // Most recent candle, kept in sync so live prices can fold into it in place.
@@ -254,6 +260,7 @@ const NativeChart = ({
       projSeriesRef.current = null;
       if (focusAnimationRef.current) cancelAnimationFrame(focusAnimationRef.current);
       if (targetScaleAnimationRef.current) cancelAnimationFrame(targetScaleAnimationRef.current);
+      if (exitFocusAnimationRef.current) cancelAnimationFrame(exitFocusAnimationRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -602,8 +609,10 @@ const NativeChart = ({
       : distance < 1 ? 4
       : 5;
     if (desired === tfIndex) return undefined;
-    // Debounced so dragging the price wheel doesn't refetch on every tick.
-    const timer = setTimeout(() => setTfIndex(desired), 400);
+    // Debounced well past a typical drag pause so the timeframe (and its reload
+    // spinner) only commits once the user actually settles on a target, instead
+    // of reloading mid-drag every time the slider crosses a distance threshold.
+    const timer = setTimeout(() => setTfIndex(desired), 900);
     return () => clearTimeout(timer);
   }, [focusOneMinute, targetPrice, tfIndex]);
 
@@ -963,6 +972,94 @@ const NativeChart = ({
     }
   }, [focusTrackedSignal, zoomToTracked]);
 
+  // Zoom the visible range in on the candle closest to the user's entry price,
+  // switching to 1m first (if not already there) for the tightest possible view.
+  const performEntryZoom = useCallback(() => {
+    const chart = chartRef.current;
+    const series = seriesRef.current;
+    if (!chart || !series || status !== 'ready') return;
+
+    const price = Number(entryPrice);
+    if (!Number.isFinite(price) || price <= 0) return;
+
+    try { series.applyOptions({ autoscaleInfoProvider: undefined }); } catch (_) {}
+
+    let data = [];
+    try { if (typeof series.data === 'function') data = series.data() || []; } catch (_) {}
+
+    let targetSec = null;
+    if (data && data.length) {
+      let closest = data[0];
+      let minDiff = Math.abs((data[0].close ?? data[0].value ?? 0) - price);
+      for (let i = 1; i < data.length; i++) {
+        const p = data[i].close ?? data[i].value ?? 0;
+        const diff = Math.abs(p - price);
+        if (diff < minDiff) { minDiff = diff; closest = data[i]; }
+      }
+      targetSec = closest.time;
+    }
+
+    if (targetSec == null && lastCandleRef.current) {
+      targetSec = lastCandleRef.current.time;
+    }
+    if (targetSec == null) return;
+
+    const interval = tfSeconds(TIMEFRAMES[tfIndex]);
+    const span = interval * 40;
+    const from = Math.max(0, targetSec - span * 0.4);
+    const to = targetSec + span * 0.6;
+    try {
+      chart.timeScale().setVisibleRange({ from, to });
+    } catch (_) {
+      try { chart.timeScale().fitContent(); } catch (_) {}
+    }
+  }, [entryPrice, status, tfIndex]);
+
+  const entryZoomPendingRef = useRef(false);
+  const zoomToEntry = useCallback(() => {
+    if (tfIndex !== 0) {
+      entryZoomPendingRef.current = true;
+      setTfIndex(0);
+    } else {
+      performEntryZoom();
+    }
+  }, [tfIndex, performEntryZoom]);
+
+  // Once the 1m data (triggered above) finishes loading, run the deferred zoom.
+  useEffect(() => {
+    if (entryZoomPendingRef.current && status === 'ready' && tfIndex === 0) {
+      entryZoomPendingRef.current = false;
+      performEntryZoom();
+    }
+  }, [status, tfIndex, performEntryZoom]);
+
+  // Clicking anywhere along the "Your buy in" price line zooms into that spot.
+  useEffect(() => {
+    const chart = chartRef.current;
+    const series = seriesRef.current;
+    if (!chart || !series || status !== 'ready') return undefined;
+    const handleClick = (param) => {
+      const price = Number(entryPrice);
+      if (!Number.isFinite(price) || price <= 0) return;
+      const y = param.point?.y;
+      if (!Number.isFinite(y)) return;
+      let lineY;
+      try { lineY = series.priceToCoordinate(price); } catch (_) { return; }
+      if (!Number.isFinite(lineY)) return;
+      if (Math.abs(y - lineY) <= 10) {
+        zoomToEntry();
+      }
+    };
+    try {
+      chart.subscribeClick(handleClick);
+    } catch (_) {
+      return undefined; // chart disposed
+    }
+    return () => {
+      try { chart.unsubscribeClick(handleClick); } catch (_) { /* chart disposed */ }
+    };
+  }, [entryPrice, status, zoomToEntry]);
+
   // Tracked price marker bubble positioning (replaces full-width line with interactive point arrow bubble)
   useEffect(() => {
     const chart = chartRef.current;
@@ -1272,11 +1369,12 @@ const NativeChart = ({
       return; // chart disposed
     }
     const startedAt = performance.now();
-    const duration = 420;
+    // Slow, gentle ease — this should read as a calm drift, not a snap.
+    const duration = 900;
 
     const animate = (now) => {
       const progress = Math.min(1, (now - startedAt) / duration);
-      const eased = 1 - Math.pow(1 - progress, 3);
+      const eased = easeInOutCubic(progress);
       try {
         scale.setVisibleLogicalRange({
           from: current.from + (target.from - current.from) * eased,
@@ -1296,6 +1394,55 @@ const NativeChart = ({
       if (focusAnimationRef.current) cancelAnimationFrame(focusAnimationRef.current);
     };
   }, [focusOneMinute, status, targetPrice, tfIndex]);
+
+  // When the order drawer closes (focusOneMinute true -> false), the chart was
+  // left zoomed tight on the order-target view — animate it back out to the
+  // normal full view instead of leaving the user stuck looking at a sliver.
+  const wasFocusedRef = useRef(false);
+  useEffect(() => {
+    const chart = chartRef.current;
+    const series = seriesRef.current;
+    const wasFocused = wasFocusedRef.current;
+    wasFocusedRef.current = focusOneMinute;
+    if (!wasFocused || focusOneMinute) return undefined; // only on the true -> false edge
+    if (!chart || status !== 'ready' || dataLengthRef.current === 0) return undefined;
+
+    if (exitFocusAnimationRef.current) cancelAnimationFrame(exitFocusAnimationRef.current);
+    const last = dataLengthRef.current - 1;
+    const target = { from: 0, to: last + 2 };
+    let scale, current;
+    try {
+      scale = chart.timeScale();
+      current = scale.getVisibleLogicalRange() || target;
+      if (series) series.applyOptions({ autoscaleInfoProvider: undefined });
+    } catch (_) {
+      return undefined; // chart disposed
+    }
+    const startedAt = performance.now();
+    // Slow, gentle ease — this should read as a calm drift, not a snap.
+    const duration = 900;
+
+    const animate = (now) => {
+      const progress = Math.min(1, (now - startedAt) / duration);
+      const eased = easeInOutCubic(progress);
+      try {
+        scale.setVisibleLogicalRange({
+          from: current.from + (target.from - current.from) * eased,
+          to: current.to + (target.to - current.to) * eased,
+        });
+      } catch (_) {
+        exitFocusAnimationRef.current = null;
+        return;
+      }
+      if (progress < 1) exitFocusAnimationRef.current = requestAnimationFrame(animate);
+      else exitFocusAnimationRef.current = null;
+    };
+
+    exitFocusAnimationRef.current = requestAnimationFrame(animate);
+    return () => {
+      if (exitFocusAnimationRef.current) cancelAnimationFrame(exitFocusAnimationRef.current);
+    };
+  }, [focusOneMinute, status]);
 
   // Draw a plausible path of candles from the live price to the chosen order target,
   // so the user sees what "getting there" looks like instead of an abstract line.
