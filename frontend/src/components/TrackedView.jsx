@@ -179,7 +179,7 @@ function WalletTweetRow({ wallet, onOpenProfile, onUntrack }) {
 /** One post-style row for a tracked coin: a live mini chart as the "attached
  * media" with the tracked-at price line + live price badge, like a compact
  * coin card — tapping opens the full coin view. */
-function CoinPostRow({ coin, onSelect, onRemove }) {
+function CoinPostRow({ coin, onSelect, onRemove, onTradeClick }) {
   const price = Number(coin.price_usd || coin.priceUsd || coin.price) || null;
   const trackedAtPrice = Number(coin.trackedAtPrice) || null;
   const perf = price && trackedAtPrice ? ((price - trackedAtPrice) / trackedAtPrice) * 100 : null;
@@ -195,7 +195,11 @@ function CoinPostRow({ coin, onSelect, onRemove }) {
   return (
     <div className="tw-post" role="button" tabIndex={0} onClick={() => onSelect?.(coin)}>
       <div className="tw-post-header">
-        <span className="tw-post-avatar">
+        <span
+          className="tw-post-avatar tw-post-avatar--clickable"
+          title="Open coin"
+          onClick={(e) => { e.stopPropagation(); onSelect?.(coin); }}
+        >
           {coin.image || coin.logo ? <img src={coin.image || coin.logo} alt="" loading="lazy" /> : <span className="tw-post-egg-sm">🥚</span>}
         </span>
         <span className="tw-post-title">{coin.symbol || coin.name || 'Unknown'}</span>
@@ -231,6 +235,22 @@ function CoinPostRow({ coin, onSelect, onRemove }) {
           trackedPrice={trackedAtPrice}
           trackedTime={coin.savedAt || coin.timestamp}
         />
+      </div>
+      <div className="tw-post-actions">
+        <button
+          type="button"
+          className="tw-post-buy-btn"
+          onClick={(e) => { e.stopPropagation(); onTradeClick?.(coin); }}
+        >
+          Buy
+        </button>
+        <button
+          type="button"
+          className="tw-post-view-btn"
+          onClick={(e) => { e.stopPropagation(); onSelect?.(coin); }}
+        >
+          View coin
+        </button>
       </div>
     </div>
   );
@@ -315,6 +335,7 @@ function TrackedView({
                 coin={coin}
                 onSelect={onCoinSelect}
                 onRemove={handleRemoveCoin}
+                onTradeClick={onTradeClick}
               />
             ))}
           </div>
