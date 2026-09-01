@@ -6,7 +6,7 @@ import { useWalletConnectOnboarding } from './WalletConnectOnboarding';
 import ReferralTracker from '../utils/ReferralTracker';
 import './JupiterTradeModal.css';
 
-const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, initialTab, initialSolAmount, initialPercentage, initialSide, initialTriggerPrice }) => {
+const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, initialTab, initialSolAmount, initialPercentage, initialSide, initialTriggerPrice, autoSellOrder }) => {
   const jupiterInitialized = useRef(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -14,6 +14,9 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
   const [swapSuccessInfo, setSwapSuccessInfo] = useState(null);
   // Side to preselect on the Limit Order page when jumping there post-swap
   const [limitPrefillSide, setLimitPrefillSide] = useState(null);
+  // Live status of the sell order queued by the slide-out "Sell at" flow
+  // (CoinCard places it automatically after this swap — no manual setup needed).
+  const [autoOrderStatus, setAutoOrderStatus] = useState(null); // { status, triggerPrice, error }
   const [pendingWallet, setPendingWallet] = useState(null); // Wallet name awaiting connect after select
   const { walletAddress } = useWallet();
 
@@ -252,8 +255,17 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
     setActiveTab('swap');
     setSwapSuccessInfo(null);
     setLimitPrefillSide(null);
+    setAutoOrderStatus(null);
     onClose();
   };
+
+  // Track the auto-placed sell order's progress (slide-out "Sell at" flow)
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleAutoOrder = (e) => setAutoOrderStatus(e.detail || null);
+    window.addEventListener('moonfeed:auto-sell-order', handleAutoOrder);
+    return () => window.removeEventListener('moonfeed:auto-sell-order', handleAutoOrder);
+  }, [isOpen]);
 
   // When opened with initialTab='limit', jump straight to the limit page
   useEffect(() => {
@@ -550,21 +562,49 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
                     <span className="success-banner-title">Trade successful!</span>
                   </div>
 
-                  <button
-                    className="setup-limit-link"
-                    onClick={() => {
-                      const SOL_MINT = 'So11111111111111111111111111111111111111112';
-                      const swapResult = swapSuccessInfo?.swapResult;
-                      // After a buy, preselect sell (take-profit) on the limit page
-                      if (swapResult?.inputMint === SOL_MINT || swapResult?.outputMint === coin?.mintAddress) {
-                        setLimitPrefillSide('sell');
-                      }
-                      setSwapSuccessInfo(null);
-                      setActiveTab('limit');
-                    }}
-                  >
-                    Setup limit order? →
-                  </button>
+                  {autoSellOrder ? (
+                    // The sell order was already queued from the "Sell at" slide-out —
+                    // show its live progress instead of offering to set one up again.
+                    <div className={`auto-order-status auto-order-${autoOrderStatus?.status || 'placing'}`}>
+                      {(!autoOrderStatus || autoOrderStatus.status === 'placing') && (
+                        <>Placing your sell order… approve the prompts in your wallet</>
+                      )}
+                      {autoOrderStatus?.status === 'placed' && (
+                        <>✓ Sell order placed — view it in the Orders tab</>
+                      )}
+                      {autoOrderStatus?.status === 'failed' && (
+                        <>
+                          ⚠ Sell order failed: {autoOrderStatus.error}
+                          <button
+                            className="setup-limit-link"
+                            onClick={() => {
+                              setLimitPrefillSide('sell');
+                              setSwapSuccessInfo(null);
+                              setActiveTab('limit');
+                            }}
+                          >
+                            Retry in Limit Order tab →
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  ) : (
+                    <button
+                      className="setup-limit-link"
+                      onClick={() => {
+                        const SOL_MINT = 'So11111111111111111111111111111111111111112';
+                        const swapResult = swapSuccessInfo?.swapResult;
+                        // After a buy, preselect sell (take-profit) on the limit page
+                        if (swapResult?.inputMint === SOL_MINT || swapResult?.outputMint === coin?.mintAddress) {
+                          setLimitPrefillSide('sell');
+                        }
+                        setSwapSuccessInfo(null);
+                        setActiveTab('limit');
+                      }}
+                    >
+                      Setup limit order? →
+                    </button>
+                  )}
                 </div>
             </div>
           )}

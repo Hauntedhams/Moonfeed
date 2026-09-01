@@ -14,6 +14,8 @@ services:
         sync: false
       - key: COINGECKO_API_KEY
         sync: false
+      - key: JUPITER_API_KEY
+        sync: false
       - key: MONGODB_URI
         sync: false
     healthCheckPath: /api/health

@@ -6,6 +6,111 @@
 const express = require('express');
 const router = express.Router();
 const jupiterTriggerService = require('../services/jupiterTriggerService');
+const jupiterTriggerV2Service = require('../services/jupiterTriggerV2Service');
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Trigger V2 (api.jup.ag/trigger/v2) — supports stop-loss/sell-below, OCO.
+// The frontend holds a wallet-scoped JWT (passed via Authorization header);
+// this backend attaches the JUPITER_API_KEY. All V1 routes below remain for
+// legacy orders created before the migration.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const getJwt = (req) => {
+  const auth = req.headers.authorization || '';
+  return auth.startsWith('Bearer ') ? auth.slice(7) : null;
+};
+
+const sendV2 = (res, result) => {
+  if (result.success) return res.json(result);
+  return res.status(result.statusCode >= 400 && result.statusCode < 600 ? result.statusCode : 500).json(result);
+};
+
+router.post('/v2/auth/challenge', async (req, res) => {
+  try {
+    const { walletPubkey, type } = req.body;
+    if (!walletPubkey) return res.status(400).json({ success: false, error: 'Missing walletPubkey' });
+    sendV2(res, await jupiterTriggerV2Service.authChallenge({ walletPubkey, type }));
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ success: false, error: error.message });
+  }
+});
+
+router.post('/v2/auth/verify', async (req, res) => {
+  try {
+    sendV2(res, await jupiterTriggerV2Service.authVerify(req.body));
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ success: false, error: error.message });
+  }
+});
+
+router.get('/v2/vault', async (req, res) => {
+  try {
+    const jwt = getJwt(req);
+    if (!jwt) return res.status(401).json({ success: false, error: 'Missing Authorization token' });
+    sendV2(res, await jupiterTriggerV2Service.getOrRegisterVault(jwt));
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ success: false, error: error.message });
+  }
+});
+
+router.post('/v2/deposit', async (req, res) => {
+  try {
+    const jwt = getJwt(req);
+    if (!jwt) return res.status(401).json({ success: false, error: 'Missing Authorization token' });
+    sendV2(res, await jupiterTriggerV2Service.craftDeposit(jwt, req.body));
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ success: false, error: error.message });
+  }
+});
+
+router.post('/v2/order', async (req, res) => {
+  try {
+    const jwt = getJwt(req);
+    if (!jwt) return res.status(401).json({ success: false, error: 'Missing Authorization token' });
+    sendV2(res, await jupiterTriggerV2Service.createPriceOrder(jwt, req.body));
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ success: false, error: error.message });
+  }
+});
+
+router.get('/v2/orders', async (req, res) => {
+  try {
+    const jwt = getJwt(req);
+    if (!jwt) return res.status(401).json({ success: false, error: 'Missing Authorization token' });
+    const { state = 'active', limit = 50, offset = 0 } = req.query;
+    sendV2(res, await jupiterTriggerV2Service.getOrders(jwt, {
+      state,
+      limit: parseInt(limit),
+      offset: parseInt(offset),
+    }));
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ success: false, error: error.message });
+  }
+});
+
+router.post('/v2/cancel/:orderId', async (req, res) => {
+  try {
+    const jwt = getJwt(req);
+    if (!jwt) return res.status(401).json({ success: false, error: 'Missing Authorization token' });
+    sendV2(res, await jupiterTriggerV2Service.cancelOrderInit(jwt, req.params.orderId));
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ success: false, error: error.message });
+  }
+});
+
+router.post('/v2/confirm-cancel/:orderId', async (req, res) => {
+  try {
+    const jwt = getJwt(req);
+    if (!jwt) return res.status(401).json({ success: false, error: 'Missing Authorization token' });
+    const { signedTransaction, cancelRequestId } = req.body;
+    if (!signedTransaction || !cancelRequestId) {
+      return res.status(400).json({ success: false, error: 'Missing signedTransaction or cancelRequestId' });
+    }
+    sendV2(res, await jupiterTriggerV2Service.cancelOrderConfirm(jwt, req.params.orderId, { signedTransaction, cancelRequestId }));
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ success: false, error: error.message });
+  }
+});
 
 /**
  * POST /api/trigger/create-order

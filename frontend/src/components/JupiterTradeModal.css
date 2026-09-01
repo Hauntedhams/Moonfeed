@@ -902,6 +902,36 @@
   border-color: rgba(79, 195, 247, 0.6);
 }
 
+/* Live status of the auto-queued sell order (slide-out "Sell at" flow) */
+.auto-order-status {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.auto-order-placing {
+  background: rgba(79, 195, 247, 0.12);
+  border: 1px solid rgba(79, 195, 247, 0.35);
+  color: #4FC3F7;
+}
+
+.auto-order-placed {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #10b981;
+}
+
+.auto-order-failed {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #f87171;
+}
+
 .limit-success-confirm {
   margin: 0;
   font-size: 14px;

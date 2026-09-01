@@ -14,6 +14,7 @@ import './ProfileView.css';
 import './OrdersView.css';
 import { getTransactions, syncTransactionsWithAccount } from '../utils/transactionStorage';
 import { computeFillStats, getSolUsdPrice } from '../utils/orderFillTracking';
+import { fetchTriggerOrdersV2, cancelTriggerOrderV2 } from '../utils/triggerOrdersV2';
 import { WalletChip } from '../utils/walletIdentity';
 
 const ProfileView = ({ onTradeClick }) => {
@@ -218,6 +219,28 @@ const ProfileView = ({ onTradeClick }) => {
     if (!publicKey) return;
     
     const walletAddress = publicKey.toString();
+
+    // Trigger V2 orders (wallet-private). Only fetched when a JWT is already
+    // cached from a previous sign-in — never prompts the wallet from here.
+    let v2Orders = [];
+    if (!isDemoMode) {
+      try {
+        const list = await fetchTriggerOrdersV2({
+          walletAddress,
+          signMessage: jupiterWallet.signMessage || null,
+          signTransaction: jupiterWallet.signTransaction || null,
+          state: statusFilter === 'active' ? 'active' : 'past',
+          interactive: false,
+        });
+        if (Array.isArray(list)) v2Orders = list;
+      } catch (err) {
+        console.warn('[Profile] V2 orders fetch failed:', err.message);
+      }
+    }
+    const withV2 = (list) => [
+      ...v2Orders,
+      ...list.map((o) => ({ ...o, source: o.source || 'v1' })),
+    ].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
     
     // Check cache first
     const { getCachedOrders, setCachedOrders } = await import('../utils/orderCache.js');
@@ -241,13 +264,14 @@ const ProfileView = ({ onTradeClick }) => {
           console.warn(`[Profile] Found ${expiredOrders.length} expired order(s) in cached active orders`);
         }
         
-        setOrders(activeOrders);
-        fetchCoinBanners(activeOrders);
+        const mergedActive = withV2(activeOrders);
+        setOrders(mergedActive);
+        fetchCoinBanners(mergedActive);
       } else {
-        const enrichedCached = cachedOrders.map(order => ({
+        const enrichedCached = withV2(cachedOrders.map(order => ({
           ...order,
           isExpired: isOrderExpired(order)
-        }));
+        })));
         setOrders(enrichedCached);
         fetchCoinBanners(enrichedCached);
       }
@@ -302,14 +326,15 @@ const ProfileView = ({ onTradeClick }) => {
           }
           
           // Only show non-expired orders in active tab
-          setOrders(activeOrders);
-          fetchCoinBanners(activeOrders);
+          const mergedActive = withV2(activeOrders);
+          setOrders(mergedActive);
+          fetchCoinBanners(mergedActive);
         } else {
           // For history tab, mark expired orders with a flag
-          fetchedOrders = fetchedOrders.map(order => ({
+          fetchedOrders = withV2(fetchedOrders.map(order => ({
             ...order,
             isExpired: isOrderExpired(order)
-          }));
+          })));
           
           setOrders(fetchedOrders);
           fetchCoinBanners(fetchedOrders);
@@ -330,6 +355,31 @@ const ProfileView = ({ onTradeClick }) => {
   const handleCancelOrder = async (orderId) => {
     if (!publicKey || !signTransaction) {
       alert('Please connect your wallet first');
+      return;
+    }
+
+    // V2 orders use the two-step cancel: initiate → sign withdrawal → confirm.
+    const orderToCancel = orders.find((o) => (o.orderId || o.id) === orderId);
+    if (orderToCancel?.source === 'v2') {
+      setCancellingOrder(orderId);
+      try {
+        await cancelTriggerOrderV2({
+          walletAddress: publicKey.toString(),
+          signMessage: jupiterWallet.signMessage || null,
+          signTransaction: jupiterWallet.signTransaction || null,
+          orderId,
+        });
+        const { invalidateOrderCache } = await import('../utils/orderCache.js');
+        invalidateOrderCache(publicKey.toString());
+        await fetchOrders();
+      } catch (err) {
+        console.error('[Cancel Order V2] ❌ Error:', err);
+        if (!/reject/i.test(err.message || '')) {
+          alert('Failed to cancel order: ' + (err.message || err));
+        }
+      } finally {
+        setCancellingOrder(null);
+      }
       return;
     }
 

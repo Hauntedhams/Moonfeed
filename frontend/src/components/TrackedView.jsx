@@ -345,6 +345,7 @@ function TrackedView({
   onCurrentCoinChange,
 }) {
   const [activeFeed, setActiveFeed] = useState('wallets');
+  const [coinSort, setCoinSort] = useState('newest');
   const { trackedWallets, untrackWallet } = useTrackedWallets();
   const { tradesByMint, tradesLoaded } = useTrackedTrades();
   const { connected: walletConnected } = useWallet();
@@ -405,6 +406,40 @@ function TrackedView({
     );
     onFavoritesChange?.(newFavs);
   };
+
+  // Coins tab ordering — perf sorts use the same price fields CoinPostRow displays.
+  const sortedFavorites = useMemo(() => {
+    const trackedAtOf = (c) => Number(c.savedAt || c.timestamp || c.addedAt) || 0;
+    const perfOf = (c) => {
+      const price = Number(c.price_usd || c.priceUsd || c.price) || 0;
+      const tracked = Number(c.trackedAtPrice) || 0;
+      return price > 0 && tracked > 0 ? (price - tracked) / tracked : null;
+    };
+    const list = [...favorites];
+    if (coinSort === 'oldest') {
+      list.sort((a, b) => trackedAtOf(a) - trackedAtOf(b));
+    } else if (coinSort === 'gainers' || coinSort === 'losers') {
+      const dir = coinSort === 'gainers' ? -1 : 1;
+      list.sort((a, b) => {
+        const pa = perfOf(a);
+        const pb = perfOf(b);
+        if (pa === null && pb === null) return trackedAtOf(b) - trackedAtOf(a);
+        if (pa === null) return 1; // unknown perf sinks to the bottom
+        if (pb === null) return -1;
+        return (pa - pb) * dir;
+      });
+    } else {
+      list.sort((a, b) => trackedAtOf(b) - trackedAtOf(a)); // newest
+    }
+    return list;
+  }, [favorites, coinSort]);
+
+  const COIN_SORTS = [
+    { id: 'newest', label: 'Newest' },
+    { id: 'oldest', label: 'Oldest' },
+    { id: 'gainers', label: 'Top gainers' },
+    { id: 'losers', label: 'Losers' },
+  ];
 
   return (
     <div className="tracked-view">
@@ -485,8 +520,20 @@ function TrackedView({
         </div>
       ) : (
         <div className="tw-feed-scroller">
+          <div className="tw-sort-bar">
+            {COIN_SORTS.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                className={`tw-sort-chip ${coinSort === s.id ? 'active' : ''}`}
+                onClick={() => setCoinSort(s.id)}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
           <div className="tw-feed">
-            {favorites.map((coin) => (
+            {sortedFavorites.map((coin) => (
               <CoinPostRow
                 key={coin.mintAddress || coin.address}
                 coin={coin}

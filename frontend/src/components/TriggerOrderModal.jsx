@@ -3,7 +3,7 @@ import { getFullApiUrl } from '../config/api';
 import { useWallet } from '../contexts/WalletContext';
 import { useWalletConnectOnboarding } from './WalletConnectOnboarding';
 import { getSolUsdPrice } from '../utils/orderFillTracking';
-import { fetchSolPerUsd } from '../utils/triggerOrders';
+import { placeTriggerOrderV2 } from '../utils/triggerOrdersV2';
 import './TriggerOrderModal.css';
 
 const TriggerOrderModal = ({ 
@@ -17,7 +17,7 @@ const TriggerOrderModal = ({
   initialTriggerPrice,
   embedded = false, // When true, render inline (no overlay) as a swipeable page
 }) => {
-  const { walletAddress, connected, signTransaction, recheckConnection } = useWallet();
+  const { walletAddress, connected, signTransaction, signMessage, recheckConnection } = useWallet();
   const { openWalletConnect } = useWalletConnectOnboarding();
   const [side, setSide] = useState('buy'); // 'buy' or 'sell'
   const [inputAmount, setInputAmount] = useState('');
@@ -335,168 +335,40 @@ const TriggerOrderModal = ({
     setError(null);
 
     try {
-      // Determine input and output mints based on buy/sell
-      const SOL_MINT = 'So11111111111111111111111111111111111111112';
-      const inputMint = side === 'buy' ? SOL_MINT : coin.mintAddress;
-      const outputMint = side === 'buy' ? coin.mintAddress : SOL_MINT;
-
-      // Fetch actual token decimals (Pump.fun tokens use 6, not 9)
-      let tokenDecimals = 6; // safe default for meme/pump tokens
-      try {
-        const metaRes = await fetch(`https://tokens.jup.ag/token/${coin.mintAddress}`);
-        if (metaRes.ok) {
-          const meta = await metaRes.json();
-          if (typeof meta.decimals === 'number') tokenDecimals = meta.decimals;
-        }
-      } catch (_) { /* use default */ }
-      const tokenMultiplier = Math.pow(10, tokenDecimals);
-
-      // Jupiter orders are quoted in SOL per token; this modal's prices are USD per token.
-      const solPerUsd = await fetchSolPerUsd(coin.mintAddress);
-      if (!solPerUsd) throw new Error('Could not fetch the SOL price right now — try again in a moment');
-      const triggerPriceSol = parseFloat(triggerPrice) * solPerUsd;
-      if (!Number.isFinite(triggerPriceSol) || triggerPriceSol <= 0) {
-        throw new Error('Please enter a valid trigger price');
-      }
-
-      // Convert amounts to smallest unit using correct decimals
-      // SOL always uses 9 decimals (lamports); token uses fetched decimals.
-      // Floor — .toFixed(0) rounds up and can exceed the wallet's real balance.
-      const makingAmount = side === 'buy'
-        ? String(Math.floor(parseFloat(inputAmount) * 1e9))
-        : String(Math.floor(parseFloat(inputAmount) * tokenMultiplier));
-
-      // Calculate minimum output based on trigger price (in SOL per token)
-      // For buy:  outputAmount = inputAmount / triggerPriceSol  (tokens out)
-      // For sell: outputAmount = inputAmount * triggerPriceSol  (SOL out in lamports)
-      const minOutput = side === 'buy'
-        ? (parseFloat(inputAmount) / triggerPriceSol) * tokenMultiplier
-        : (parseFloat(inputAmount) * triggerPriceSol) * 1e9;
-      const takingAmount = minOutput.toFixed(0);
-
       const expiredAt = getExpiryTimestamp();
 
-      console.log('🎯 Creating trigger order:', {
+      console.log('🎯 Creating trigger order (V2):', {
         side,
         inputAmount,
         triggerPrice,
-        expiredAt: expiredAt ? new Date(expiredAt).toISOString() : 'none'
+        stopLoss: stopLossEnabled && side === 'sell' ? stopLossPrice : 'none',
+        expiredAt: expiredAt ? new Date(expiredAt).toISOString() : 'default (30d)'
       });
 
-      // Call backend to create order transaction
-      const response = await fetch(getFullApiUrl('/api/trigger/create-order'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          maker: walletAddress,
-          payer: walletAddress, // Add payer (same as maker for user orders)
-          inputMint,
-          outputMint,
-          makingAmount,
-          takingAmount,
-          expiredAt,
-          orderType: 'limit'
-        })
-      });
-
-      const result = await response.json();
-
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to create order');
-      }
-
-      console.log('📝 Order transaction created, signing...');
-      console.log('🔑 Request ID:', result.data?.requestId);
-
-      // Sign the transaction with wallet
-      const signedTx = await signTransaction(result.data.transaction);
-      console.log('✅ Transaction signed');
-
-      // Prepare order metadata for storage
-      const orderMetadata = {
-        maker: walletAddress,
-        inputMint,
-        outputMint,
+      // Trigger V2 is USD-native and supports downside sells (real stop-losses).
+      // An upside sell target + enabled Stop Loss becomes one OCO pair: whichever
+      // side fills first cancels the other.
+      const result = await placeTriggerOrderV2({
+        walletAddress,
+        signMessage,
+        signTransaction,
+        mintAddress: coin.mintAddress,
         side,
-        orderType: 'limit',
-        expiredAt
-      };
-
-      // Execute the order with requestId and metadata
-      const executeResponse = await fetch(getFullApiUrl('/api/trigger/execute'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          signedTransaction: signedTx,
-          requestId: result.data.requestId, // MUST include requestId from createOrder response
-          orderMetadata // Include metadata for potential storage
-        })
+        inputAmount,
+        triggerPriceUsd: parseFloat(triggerPrice),
+        currentPriceUsd: currentPrice > 0 ? currentPrice : null,
+        stopLossPriceUsd: stopLossEnabled && side === 'sell' && parseFloat(stopLossPrice) > 0
+          ? parseFloat(stopLossPrice)
+          : null,
+        expiredAt,
       });
 
-      const executeResult = await executeResponse.json();
-
-      if (!executeResult.success) {
-        throw new Error(executeResult.error || 'Failed to execute order');
-      }
-
-      console.log('✅ Order executed successfully!');
-      console.log('📝 Transaction signature:', executeResult.signature);
-
-      // Store signature in localStorage for future reference
-      if (executeResult.signature && executeResult.orderId) {
-        const { storeOrderSignature } = await import('../utils/orderStorage.js');
-        storeOrderSignature({
-          orderId: executeResult.orderId,
-          signature: executeResult.signature,
-          maker: walletAddress,
-          orderType: 'create'
-        });
-      }
-
-      // ── Stop Loss order (second Jupiter trigger order) ──────────────
-      if (stopLossEnabled && side === 'sell' && stopLossPrice && parseFloat(stopLossPrice) > 0) {
-        try {
-          const stopLossPriceSol = parseFloat(stopLossPrice) * solPerUsd;
-          const slMakingAmount = String(Math.floor(parseFloat(inputAmount) * tokenMultiplier));
-          const slTakingAmount = ((parseFloat(inputAmount) * stopLossPriceSol) * 1e9).toFixed(0);
-          const slResponse = await fetch(getFullApiUrl('/api/trigger/create-order'), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              maker: walletAddress,
-              payer: walletAddress,
-              inputMint: coin.mintAddress,
-              outputMint: 'So11111111111111111111111111111111111111112',
-              makingAmount: slMakingAmount,
-              takingAmount: slTakingAmount,
-              expiredAt,
-              orderType: 'stop'
-            })
-          });
-          const slResult = await slResponse.json();
-          if (slResult.success) {
-            console.log('🛡️ Signing stop-loss order...');
-            const slSignedTx = await signTransaction(slResult.data.transaction);
-            await fetch(getFullApiUrl('/api/trigger/execute'), {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                signedTransaction: slSignedTx,
-                requestId: slResult.data.requestId,
-              })
-            });
-            console.log('✅ Stop-loss order placed at', stopLossPrice);
-          }
-        } catch (slErr) {
-          console.warn('⚠️ Stop-loss order failed (main order succeeded):', slErr.message);
-        }
-      }
+      console.log('✅ Order created!', result.orderId, result.signature);
 
       setSuccess(true);
       onOrderCreated?.({
-        ...result,
-        orderId: executeResult.orderId,
-        signature: executeResult.signature
+        orderId: result.orderId,
+        signature: result.signature
       });
 
       setTimeout(() => {

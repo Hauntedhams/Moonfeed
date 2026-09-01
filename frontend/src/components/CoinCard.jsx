@@ -13,7 +13,8 @@ import { useLiveData } from '../hooks/useLiveDataContext.jsx';
 import { useSolanaTransactions } from '../hooks/useSolanaTransactions.jsx';
 import { useOnDemandPrice } from '../hooks/useOnDemandPrice.js';
 import { useWallet } from '../contexts/WalletContext';
-import { placeTriggerOrder, getExpiryTimestamp, EXPIRY_OPTIONS, fetchTokenDecimals } from '../utils/triggerOrders.js';
+import { getExpiryTimestamp, EXPIRY_OPTIONS, fetchTokenDecimals } from '../utils/triggerOrders.js';
+import { placeTriggerOrderV2 } from '../utils/triggerOrdersV2.js';
 import { getTransactions } from '../utils/transactionStorage';
 import { getSolUsdPrice } from '../utils/orderFillTracking';
 import { WalletChip } from '../utils/walletIdentity';
@@ -198,7 +199,7 @@ const CoinCard = memo(({
   // Get live data from WebSocket (COMPLETELY disabled on mobile for performance)
   // 🔥 CRITICAL FIX: Get coins Map directly from context to force re-renders when it updates
   const { getCoin, getChart, connected, connectionStatus, coins, updateCount } = useLiveData();
-  const { walletAddress, connected: walletConnected, signTransaction, connection } = useWallet();
+  const { walletAddress, connected: walletConnected, signTransaction, signMessage, connection } = useWallet();
   
   // 🔥 PRICE UPDATE FIX: Directly read from coins Map and use it to trigger re-renders
   const address = coin.mintAddress || coin.address;
@@ -947,6 +948,13 @@ const CoinCard = memo(({
       setSellOrderPending(false);
       setOrderSubmitting(true);
       setOrderError(null);
+      // Keep the trade modal's success popup in sync with the queued order.
+      const emitAutoOrder = (status, extra = {}) => {
+        window.dispatchEvent(new CustomEvent('moonfeed:auto-sell-order', {
+          detail: { status, triggerPrice: pending.triggerPrice, ...extra },
+        }));
+      };
+      emitAutoOrder('placing');
       try {
         const decimals = Number.isInteger(detail.coin?.decimals)
           ? detail.coin.decimals
@@ -956,18 +964,40 @@ const CoinCard = memo(({
         if (!(tokenAmount > 0)) tokenAmount = await fetchTokenBalance();
         if (!(tokenAmount > 0)) throw new Error('Could not read your new balance — place the sell order manually.');
 
-        await placeTriggerOrder({
+        // Wait for the bought tokens to actually settle in the wallet. Crafting
+        // the vault deposit before the buy confirms makes the wallet's simulation
+        // fail — Solflare then rewrites the tx and Jupiter rejects it as modified.
+        let settledAmount = null;
+        for (let i = 0; i < 8 && settledAmount === null; i++) {
+          try {
+            const res = await fetch(`${API_CONFIG.BASE_URL}/api/wallet/${walletAddress}/balance?mint=${mintAddress}`);
+            const d = await res.json();
+            if (d.success && Number(d.amount) >= tokenAmount * 0.98) settledAmount = Number(d.amount);
+          } catch (_) { /* keep polling */ }
+          if (settledAmount === null) await new Promise((r) => setTimeout(r, 1500));
+        }
+        // Never ask to escrow more than the wallet verifiably holds.
+        if (settledAmount !== null && settledAmount < tokenAmount) {
+          tokenAmount = Math.floor(settledAmount * 1e6) / 1e6;
+        }
+
+        await placeTriggerOrderV2({
           walletAddress,
+          signMessage,
           signTransaction,
           mintAddress,
           side: 'sell',
           inputAmount: tokenAmount,
-          triggerPrice: pending.triggerPrice,
+          triggerPriceUsd: pending.triggerPrice,
+          currentPriceUsd: displayPrice > 0 ? displayPrice : null,
           expiredAt: pending.expiredAt,
+          tokenDecimals: decimals,
         });
         setOrderSuccess(`Sell order placed at ${formatPrice(pending.triggerPrice)}`);
+        emitAutoOrder('placed');
       } catch (err) {
         setOrderError(err.message || 'Failed to place sell order');
+        emitAutoOrder('failed', { error: err.message || 'Failed to place sell order' });
       } finally {
         setOrderSubmitting(false);
       }
@@ -997,7 +1027,7 @@ const CoinCard = memo(({
       expiredAt: getExpiryTimestamp(orderExpiry),
     };
     setSellOrderPending(true);
-    onTradeClick(coin, { tab: 'swap', side: 'buy', solAmount });
+    onTradeClick(coin, { tab: 'swap', side: 'buy', solAmount, autoSellOrder: true });
   };
 
   const submitBuyDrawerOrder = async () => {
@@ -1012,13 +1042,15 @@ const CoinCard = memo(({
 
     setOrderSubmitting(true);
     try {
-      await placeTriggerOrder({
+      await placeTriggerOrderV2({
         walletAddress,
+        signMessage,
         signTransaction,
         mintAddress,
         side: buyDrawerOrderSide,
         inputAmount: orderAmountInput,
-        triggerPrice: buyOrderPrice,
+        triggerPriceUsd: buyOrderPrice,
+        currentPriceUsd: displayPrice > 0 ? displayPrice : null,
         expiredAt: getExpiryTimestamp(orderExpiry),
       });
       setOrderSuccess(`Limit ${buyDrawerOrderSide} placed at ${formatPrice(buyOrderPrice)}`);
@@ -2061,30 +2093,58 @@ const CoinCard = memo(({
 
         {/* Tracked-wallet buy indicator: a wallet the user follows recently bought this coin */}
         {coin.trackedWalletBuy && (
-          <button
-            type="button"
-            className="tracked-buy-banner"
-            onClick={(e) => {
-              e.stopPropagation();
-              window.dispatchEvent(new CustomEvent('moonfeed:open-wallet-profile', {
-                detail: {
-                  address: coin.trackedWalletBuy.walletAddress,
-                  displayName: coin.trackedWalletBuy.label,
-                },
-              }));
-            }}
-            title="View this wallet's profile"
-          >
-            <span className="tracked-buy-banner-dot" />
-            <span className="tracked-buy-banner-text">
-              <strong>{coin.trackedWalletBuy.label}</strong>
-              {coin.trackedWalletBuy.othersCount > 0 && (
-                ` +${coin.trackedWalletBuy.othersCount} other wallet${coin.trackedWalletBuy.othersCount > 1 ? 's' : ''}`
-              )}
-              {' recently bought into this coin'}
-            </span>
-            <span className="tracked-buy-banner-time">{getTimeAgo(coin.trackedWalletBuy.time)} ago</span>
-          </button>
+          <div className="tracked-buy-banner">
+            <button
+              type="button"
+              className="tracked-buy-banner-main"
+              onClick={(e) => {
+                e.stopPropagation();
+                window.dispatchEvent(new CustomEvent('moonfeed:open-wallet-profile', {
+                  detail: {
+                    address: coin.trackedWalletBuy.walletAddress,
+                    displayName: coin.trackedWalletBuy.label,
+                  },
+                }));
+              }}
+              title="View this wallet's profile"
+            >
+              <span className="tracked-buy-banner-dot" />
+              <span className="tracked-buy-banner-text">
+                <strong>{coin.trackedWalletBuy.label}</strong>
+                {coin.trackedWalletBuy.othersCount > 0 && (
+                  ` +${coin.trackedWalletBuy.othersCount} other wallet${coin.trackedWalletBuy.othersCount > 1 ? 's' : ''}`
+                )}
+                {' recently bought into this coin'}
+              </span>
+              <span className="tracked-buy-banner-time">{getTimeAgo(coin.trackedWalletBuy.time)} ago</span>
+            </button>
+            <button
+              type="button"
+              className="tracked-buy-banner-info"
+              onClick={(e) => {
+                e.stopPropagation();
+                const b = coin.trackedWalletBuy;
+                window.dispatchEvent(new CustomEvent('moonfeed:open-wallet-profile', {
+                  detail: {
+                    address: b.walletAddress,
+                    displayName: b.label,
+                    // mint routes this to the position detail view instead of the profile
+                    mint: coin.mintAddress || coin.tokenAddress || coin.address,
+                    tokenSymbol: b.symbol || coin.symbol,
+                    tokenName: coin.name || b.symbol,
+                    tokenImage: b.image || coin.image || null,
+                    type: 'buy',
+                    solAmount: b.solAmount,
+                    timestamp: b.time,
+                  },
+                }));
+              }}
+              title={`View ${coin.trackedWalletBuy.label}'s position in this coin`}
+              aria-label="View this wallet's position in this coin"
+            >
+              i
+            </button>
+          </div>
         )}
 
         <div className="info-layer-header">
@@ -2253,7 +2313,7 @@ const CoinCard = memo(({
                       }}
                       title={isFavorite ? 'Stop tracking this coin' : 'Track this coin'}
                     >
-                      <span className="follow-label">{isFavorite ? 'Tracking' : 'Track'}</span>
+                      <span className="follow-label">{isFavorite ? 'Tracked' : 'Track'}</span>
                     </button>
                     {isFavorite && effectiveTrackedPrice > 0 && (
                       <span 
@@ -2263,9 +2323,9 @@ const CoinCard = memo(({
                           setFocusTrackedSignal(s => s + 1);
                         }}
                         style={{ cursor: 'pointer' }}
-                        title="Click to zoom in to tracked position on chart"
+                        title="Tracked at this price — click to zoom to it on the chart"
                       >
-                        Tracked at {formatPrice(effectiveTrackedPrice)}
+                        {formatPrice(effectiveTrackedPrice)}
                       </span>
                     )}
                   </div>
@@ -3536,7 +3596,7 @@ const CoinCard = memo(({
               <span>{coin.symbol || coin.name || 'Chart'}</span>
               <button onClick={closeNativeChartFullscreen} aria-label="Close full chart">×</button>
             </div>
-            <NativeChart coin={coin} isActive={true} isExpanded={true} livePrice={displayPrice} entryPrice={entryPrice} trackedPrice={effectiveTrackedPrice} trackedTime={effectiveTrackedTime} focusTrackedSignal={focusTrackedSignal} tradeDots={tradeDots} resetViewSignal={chartResetSignal} />
+            <NativeChart coin={coin} isActive={true} isExpanded={true} livePrice={displayPrice} entryPrice={entryPrice} trackedPrice={effectiveTrackedPrice} trackedTime={effectiveTrackedTime} focusTrackedSignal={focusTrackedSignal} tradeDots={tradeDots} resetViewSignal={chartResetSignal} orderLinePrice={coin.activeOrder?.triggerPriceUsd} orderLineLabel={coin.activeOrder?.side === 'buy' ? 'Buy target' : 'Sell target'} />
           </div>
         </div>
       )}
@@ -3579,6 +3639,8 @@ const CoinCard = memo(({
               entryPrice={entryPrice}
               trackedPrice={effectiveTrackedPrice}
               trackedTime={effectiveTrackedTime}
+              orderLinePrice={coin.activeOrder?.triggerPriceUsd}
+              orderLineLabel={coin.activeOrder?.side === 'buy' ? 'Buy target' : 'Sell target'}
               focusTrackedSignal={focusTrackedSignal}
               tradeDots={tradeDots}
               resetViewSignal={chartResetSignal}

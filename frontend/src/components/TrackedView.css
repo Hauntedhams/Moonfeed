@@ -105,6 +105,43 @@
   margin: 0 auto;
 }
 
+/* ── Coins tab sort bar ── */
+.tw-sort-bar {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding: 4px 14px 12px;
+  max-width: 640px;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+.tw-sort-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.tw-sort-chip {
+  flex-shrink: 0;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tw-sort-chip.active {
+  background: rgba(96, 165, 250, 0.18);
+  border-color: rgba(96, 165, 250, 0.5);
+  color: #93c5fd;
+}
+
 /* ── Tracked wallets strip (above the trade timeline) ── */
 .tw-wallet-strip {
   display: flex;

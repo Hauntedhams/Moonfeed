@@ -107,6 +107,8 @@ const NativeChart = ({
   trackedPrice = null,
   trackedTime = null,
   focusTrackedSignal = 0,
+  orderLinePrice = null,
+  orderLineLabel = 'Order target',
   onToggleAdvancedChart = null,
 }) => {
   const { isDarkMode } = useDarkMode();
@@ -117,6 +119,7 @@ const NativeChart = ({
   const targetLineRef = useRef(null);
   const entryLineRef = useRef(null);
   const trackedLineRef = useRef(null);
+  const orderLineRef = useRef(null);
   const markersRef = useRef(null);
   const projSeriesRef = useRef(null);
   const projShapeRef = useRef(null); // stable noise so scrolling stretches one path, not a new one
@@ -132,6 +135,12 @@ const NativeChart = ({
   const displayedTargetPriceRef = useRef(null);
   // Most recent candle, kept in sync so live prices can fold into it in place.
   const lastCandleRef = useRef(null);
+  // True once the user has manually panned/zoomed — live updates then stop
+  // rescaling/shifting the view; only the user's own navigation re-fits it.
+  const userNavRef = useRef(false);
+  const pinRafRef = useRef(0);
+  // Candidate out-of-band live tick awaiting confirmation before folding in.
+  const outlierTickRef = useRef(null);
   // Direct DOM handle for the price badge — hover/drag scrubbing writes to this
   // node's textContent instead of calling setState, so a fast mobile swipe
   // doesn't force a React re-render on every touchmove tick.
@@ -153,6 +162,69 @@ const NativeChart = ({
   const fittedMintTfRef = useRef('');
 
   const mint = coin?.mintAddress || coin?.tokenAddress || coin?.address;
+
+  // Mirror focusOneMinute into a ref so stable callbacks can read it without re-binding.
+  const focusOneMinuteRef = useRef(focusOneMinute);
+  focusOneMinuteRef.current = focusOneMinute;
+
+  // Pin the price axis to exactly the candles currently in view. Called on each
+  // user navigation step so zoom/pan still re-fits vertically like autoscale —
+  // but between navigations the pinned range holds, so a live tick (or a price
+  // spike entering the last candle) can no longer rescale the view under the user.
+  const repinVisibleRange = useCallback(() => {
+    const chart = chartRef.current;
+    const series = seriesRef.current;
+    if (!chart || !series) return;
+    try {
+      const range = chart.timeScale().getVisibleLogicalRange();
+      if (!range) return;
+      const data = series.data();
+      if (!data || data.length === 0) return;
+      const from = Math.max(0, Math.floor(range.from));
+      const to = Math.min(data.length - 1, Math.ceil(range.to));
+      if (to < from) return;
+      let min = Infinity;
+      let max = -Infinity;
+      for (let i = from; i <= to; i++) {
+        const c = data[i];
+        const lo = Number(c.low ?? c.value);
+        const hi = Number(c.high ?? c.value);
+        if (Number.isFinite(lo)) min = Math.min(min, lo);
+        if (Number.isFinite(hi)) max = Math.max(max, hi);
+      }
+      if (!Number.isFinite(min) || !Number.isFinite(max) || max <= 0) return;
+      const pad = (max - min) * 0.08 || max * 0.05;
+      const minValue = Math.max(0, min - pad);
+      const maxValue = max + pad;
+      series.applyOptions({ autoscaleInfoProvider: () => ({ priceRange: { minValue, maxValue } }) });
+    } catch (_) { /* chart disposed */ }
+  }, []);
+
+  // Register a manual pan/zoom. repin=false for gestures that manage their own
+  // price range (the price-axis drag), which we shouldn't override.
+  const markUserNav = useCallback((repin = true) => {
+    if (focusOneMinuteRef.current) return; // order mode animates its own scale
+    if (!userNavRef.current) {
+      userNavRef.current = true;
+      // A new live bar must not shift the view while the user is parked somewhere.
+      try { chartRef.current?.applyOptions({ timeScale: { shiftVisibleRangeOnNewBar: false } }); } catch (_) { /* disposed */ }
+    }
+    if (repin && !pinRafRef.current) {
+      pinRafRef.current = requestAnimationFrame(() => {
+        pinRafRef.current = 0;
+        repinVisibleRange();
+      });
+    }
+  }, [repinVisibleRange]);
+
+  // Back to follow-the-market mode (new data load, timeframe switch, reset view).
+  const clearUserNav = useCallback(() => {
+    if (pinRafRef.current) { cancelAnimationFrame(pinRafRef.current); pinRafRef.current = 0; }
+    if (!userNavRef.current) return;
+    userNavRef.current = false;
+    try { chartRef.current?.applyOptions({ timeScale: { shiftVisibleRangeOnNewBar: true } }); } catch (_) { /* disposed */ }
+    try { seriesRef.current?.applyOptions({ autoscaleInfoProvider: undefined }); } catch (_) { /* disposed */ }
+  }, []);
 
   // Resolve a pool address if the coin doesn't carry one (pre-DEX pump.fun tokens).
   // poolResolved flips true once we know the answer (pool found OR none exists), so
@@ -256,11 +328,13 @@ const NativeChart = ({
       targetLineRef.current = null;
       entryLineRef.current = null;
       trackedLineRef.current = null;
+      orderLineRef.current = null;
       markersRef.current = null;
       projSeriesRef.current = null;
       if (focusAnimationRef.current) cancelAnimationFrame(focusAnimationRef.current);
       if (targetScaleAnimationRef.current) cancelAnimationFrame(targetScaleAnimationRef.current);
       if (exitFocusAnimationRef.current) cancelAnimationFrame(exitFocusAnimationRef.current);
+      if (pinRafRef.current) { cancelAnimationFrame(pinRafRef.current); pinRafRef.current = 0; }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -312,14 +386,33 @@ const NativeChart = ({
         const newTo = anchor + newSpan * (1 - leftRatio);
 
         ts.setVisibleLogicalRange({ from: newFrom, to: newTo });
+        markUserNav();
       } catch (_) { /* chart disposed */ }
     };
 
+    // Detect the library's own mouse-drag pan (expanded desktop) so it also
+    // freezes the view against live-update rescaling.
+    let mouseDown = false;
+    let downX = 0;
+    let downY = 0;
+    const onMouseDown = (e) => { mouseDown = true; downX = e.clientX; downY = e.clientY; };
+    const onMouseMove = (e) => {
+      if (!mouseDown) return;
+      if (Math.abs(e.clientX - downX) > 4 || Math.abs(e.clientY - downY) > 4) markUserNav();
+    };
+    const onMouseUp = () => { mouseDown = false; };
+
     el.addEventListener('wheel', onWheel, { passive: false });
+    el.addEventListener('mousedown', onMouseDown);
+    el.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
     return () => {
       el.removeEventListener('wheel', onWheel);
+      el.removeEventListener('mousedown', onMouseDown);
+      el.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
     };
-  }, [isExpanded]);
+  }, [isExpanded, markUserNav]);
 
   // Touch gestures on the plot — expanded only. Dragging a finger left/right
   // scrubs the crosshair and reads out the price at that point in time (the
@@ -412,6 +505,7 @@ const NativeChart = ({
         const barsPerPixel = (range.to - range.from) / rect.width;
         const shift = -dxPixels * barsPerPixel;
         ts.setVisibleLogicalRange({ from: range.from + shift, to: range.to + shift });
+        markUserNav();
       } catch (_) { /* chart disposed mid-gesture */ }
     };
 
@@ -427,6 +521,7 @@ const NativeChart = ({
       const maxValue = mid + half;
       try {
         series.applyOptions({ autoscaleInfoProvider: () => ({ priceRange: { minValue, maxValue } }) });
+        markUserNav(false); // manages its own price range — don't repin over it
       } catch (_) { /* chart disposed mid-gesture */ }
     };
 
@@ -496,6 +591,7 @@ const NativeChart = ({
             const newFrom = anchorLogical - newSpan * leftRatio;
             const newTo = anchorLogical + newSpan * (1 - leftRatio);
             ts.setVisibleLogicalRange({ from: newFrom, to: newTo });
+            markUserNav();
           } catch (_) {}
         }
         return;
@@ -546,7 +642,7 @@ const NativeChart = ({
       if (rafId) cancelAnimationFrame(rafId);
       try { chart.applyOptions({ handleScroll: isExpanded, handleScale: isExpanded }); } catch (_) { /* disposed */ }
     };
-  }, [isExpanded, status, onCrosshairMove]);
+  }, [isExpanded, status, onCrosshairMove, markUserNav]);
 
   // Feed the parent card's header with the historical candle under the
   // crosshair, and scrub the chart's own price badge to match — so hovering
@@ -641,6 +737,8 @@ const NativeChart = ({
     const tf = TIMEFRAMES[tfIndex];
     setStatus('loading');
     lastCandleRef.current = null; // block live folding until fresh data lands
+    outlierTickRef.current = null;
+    clearUserNav(); // fresh data/timeframe = fresh auto view
 
     // Candlestick mode: coin has a DEX pool → GeckoTerminal OHLCV.
     if (pool) {
@@ -764,7 +862,7 @@ const NativeChart = ({
     }
 
     setStatus('empty');
-  }, [pool, poolResolved, tfIndex, mint, ensureSeries]);
+  }, [pool, poolResolved, tfIndex, mint, ensureSeries, clearUserNav]);
 
   useEffect(() => {
     if (isActive) load();
@@ -805,13 +903,14 @@ const NativeChart = ({
     const chart = chartRef.current;
     const series = seriesRef.current;
     if (!chart || status !== 'ready') return;
+    clearUserNav();
     try {
       if (series) {
         series.applyOptions({ autoscaleInfoProvider: undefined });
       }
       chart.timeScale().fitContent();
     } catch (_) { /* chart disposed */ }
-  }, [resetViewSignal]);
+  }, [resetViewSignal, clearUserNav]);
 
   // Keep the price axis wide enough to always include the entry/target lines
   // (e.g. a placed order's buy-in and trigger price), not just the candles
@@ -820,6 +919,8 @@ const NativeChart = ({
   useEffect(() => {
     const series = seriesRef.current;
     if (!series || focusOneMinute || status !== 'ready') return undefined;
+    // The user has manually framed the chart — don't force lines into range.
+    if (userNavRef.current) return undefined;
     const entry = Number(entryPrice);
     const target = Number(targetPrice);
     if (!(entry > 0) && !(target > 0)) return undefined;
@@ -845,6 +946,8 @@ const NativeChart = ({
     };
     try { series.applyOptions({ autoscaleInfoProvider }); } catch (_) { /* chart disposed */ }
     return () => {
+      // Leave a user-pinned range alone — clearUserNav()/reset handles it.
+      if (userNavRef.current) return;
       try { series.applyOptions({ autoscaleInfoProvider: undefined }); } catch (_) { /* chart disposed */ }
     };
   }, [focusOneMinute, status, entryPrice, targetPrice, refocusSignal, resetViewSignal]);
@@ -924,6 +1027,32 @@ const NativeChart = ({
     }
   }, [status, entryPrice, tfIndex]);
 
+  // Active limit-order target — shows where a pending order will fire.
+  useEffect(() => {
+    const series = seriesRef.current;
+    if (!series || status !== 'ready') return;
+
+    if (orderLineRef.current) {
+      try { series.removePriceLine(orderLineRef.current); } catch (e) { /* series changed */ }
+      orderLineRef.current = null;
+    }
+
+    const price = Number(orderLinePrice);
+    if (!Number.isFinite(price) || price <= 0) return;
+    try {
+      orderLineRef.current = series.createPriceLine({
+        price,
+        color: '#f87171',
+        lineWidth: 1,
+        lineStyle: 2,
+        axisLabelVisible: true,
+        title: orderLineLabel,
+      });
+    } catch (e) {
+      // Area fallback series may not support price lines in all chart builds.
+    }
+  }, [status, orderLinePrice, orderLineLabel, tfIndex]);
+
   // Zoom into the tracked position on the chart scale
   const zoomToTracked = useCallback(() => {
     const chart = chartRef.current;
@@ -933,6 +1062,7 @@ const NativeChart = ({
     const price = Number(trackedPrice);
     if (!Number.isFinite(price) || price <= 0) return;
 
+    clearUserNav();
     if (series) {
       try { series.applyOptions({ autoscaleInfoProvider: undefined }); } catch (_) {}
     }
@@ -963,7 +1093,7 @@ const NativeChart = ({
         try { chart.timeScale().fitContent(); } catch (_) {}
       }
     }
-  }, [trackedPrice, trackedTime, trackedBubble, status, tfIndex]);
+  }, [trackedPrice, trackedTime, trackedBubble, status, tfIndex, clearUserNav]);
 
   // Respond to focusTrackedSignal from parent (e.g. clicking header Tracked price)
   useEffect(() => {
@@ -982,6 +1112,7 @@ const NativeChart = ({
     const price = Number(entryPrice);
     if (!Number.isFinite(price) || price <= 0) return;
 
+    clearUserNav();
     try { series.applyOptions({ autoscaleInfoProvider: undefined }); } catch (_) {}
 
     let data = [];
@@ -1013,7 +1144,7 @@ const NativeChart = ({
     } catch (_) {
       try { chart.timeScale().fitContent(); } catch (_) {}
     }
-  }, [entryPrice, status, tfIndex]);
+  }, [entryPrice, status, tfIndex, clearUserNav]);
 
   const entryZoomPendingRef = useRef(false);
   const zoomToEntry = useCallback(() => {
@@ -1293,6 +1424,11 @@ const NativeChart = ({
     targetPriceRef.current = focusOneMinute && Number.isFinite(price) && price > 0 ? price : null;
   }, [focusOneMinute, targetPrice]);
 
+  // Order mode drives its own scale animation — release any user-pinned view first.
+  useEffect(() => {
+    if (focusOneMinute) clearUserNav();
+  }, [focusOneMinute, clearUserNav]);
+
   useEffect(() => {
     const series = seriesRef.current;
     // Candlestick mode gets projection candles instead, and those already pull the
@@ -1522,6 +1658,18 @@ const NativeChart = ({
     const series = seriesRef.current;
     const last = lastCandleRef.current;
     if (!series || !last) return;
+    // Guard against bogus ticks (dust swaps / multi-hop routes can report wild
+    // prices) — a single out-of-band tick would blow a giant wick into the live
+    // candle and flatten the whole autoscaled chart. A genuine large move is
+    // confirmed by several successive ticks agreeing with each other.
+    const OUTLIER_BAND = 3.5;
+    if (p > last.close * OUTLIER_BAND || p < last.close / OUTLIER_BAND) {
+      const o = outlierTickRef.current;
+      if (o && p > o.price / 1.3 && p < o.price * 1.3) o.count += 1;
+      else outlierTickRef.current = { price: p, count: 1 };
+      if (outlierTickRef.current.count < 3) return;
+    }
+    outlierTickRef.current = null;
     const sec = tfSeconds(TIMEFRAMES[tfIndex]);
     const nowBucket = Math.floor(Date.now() / 1000 / sec) * sec;
     const dir = p > last.close ? 'up' : p < last.close ? 'down' : null;

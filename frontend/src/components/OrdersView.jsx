@@ -6,6 +6,7 @@ import { getFullApiUrl } from '../config/api';
 import { getTransactions, deleteTransaction, storeTransaction, clearTransactions } from '../utils/transactionStorage';
 import { useDemoMode } from '../contexts/DemoModeContext';
 import { computeFillStats, getSolUsdPrice } from '../utils/orderFillTracking';
+import { fetchTriggerOrdersV2, cancelTriggerOrderV2, ensureTriggerAuth } from '../utils/triggerOrdersV2';
 import OrderDetailView from './OrderDetailView';
 import './OrdersView.css';
 
@@ -37,6 +38,10 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
   // Map of tokenMint -> { symbol, name } for client-side enrichment of address-like symbols
   const [enrichedTokenMeta, setEnrichedTokenMeta] = useState(new Map());
   const [solUsdPrice, setSolUsdPrice] = useState(150);
+  // Trigger V2 orders are wallet-private: they need a one-time wallet signature
+  // (24h JWT). Never prompted automatically — the user taps "Sign in".
+  const [needsV2Auth, setNeedsV2Auth] = useState(false);
+  const [unlockingV2, setUnlockingV2] = useState(false);
 
   // Keep a live-ish SOL/USD price around for converting filled-order values to USD
   useEffect(() => {
@@ -499,107 +504,79 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
     if (metaUpdates.size) setEnrichedTokenMeta(prev => new Map([...prev, ...metaUpdates]));
   };
 
-  // Fetch active orders
+  // Fetch active orders — merges legacy V1 orders (public endpoint) with
+  // Trigger V2 orders (JWT-gated; skipped silently until the user signs in).
   const fetchOrders = async () => {
     if (!publicKey) return;
     
     const walletAddress = publicKey.toString();
-    
-    // Check cache first
-    const { getCachedOrders, setCachedOrders } = await import('../utils/orderCache.js');
-    const cachedOrders = getCachedOrders(walletAddress, statusFilter);
-    
-    if (cachedOrders) {
-      // Use cached data
-      if (statusFilter === 'active') {
-        const activeOrders = [];
-        const expiredOrders = [];
-        
-        cachedOrders.forEach(order => {
-          if (isOrderExpired(order)) {
-            expiredOrders.push(order);
-          } else {
-            activeOrders.push(order);
-          }
-        });
-        
-        if (expiredOrders.length > 0) {
-          console.warn(`[Orders] Found ${expiredOrders.length} expired order(s) in cached active orders`);
-        }
-        
-        setOrders(activeOrders);
-      } else {
-        const enrichedCached = cachedOrders.map(order => ({
-          ...order,
-          isExpired: isOrderExpired(order)
-        }));
-        setOrders(enrichedCached);
-      }
-      
-      setLoadingOrders(false);
-      setOrdersError(null);
-      return; // Exit early, using cache
-    }
-    
-    // No cache, fetch from backend
     setLoadingOrders(true);
     setOrdersError(null);
 
     try {
-      const url = getFullApiUrl(`/api/trigger/orders?wallet=${walletAddress}&status=${statusFilter}`);
-      const response = await fetch(url);
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch orders');
+      const { getCachedOrders, setCachedOrders } = await import('../utils/orderCache.js');
+      const { enrichOrderWithStoredSignatures } = await import('../utils/orderStorage.js');
+
+      // Legacy V1 orders (created before the V2 migration)
+      const v1Promise = (async () => {
+        const cached = getCachedOrders(walletAddress, statusFilter);
+        if (cached) return cached;
+        const url = getFullApiUrl(`/api/trigger/orders?wallet=${walletAddress}&status=${statusFilter}`);
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Failed to fetch orders');
+        const result = await response.json();
+        if (!result.success) throw new Error(result.error || 'Unknown error');
+        const list = (result.orders || []).map((order) => enrichOrderWithStoredSignatures(order));
+        setCachedOrders(walletAddress, statusFilter, list);
+        return list;
+      })();
+
+      // V2 orders — non-interactive: returns null (instead of a wallet popup)
+      // when there's no cached JWT yet.
+      const v2Promise = (async () => {
+        if (isDemoMode) return [];
+        const list = await fetchTriggerOrdersV2({
+          walletAddress,
+          signMessage: jupiterWallet.signMessage || null,
+          signTransaction: jupiterWallet.signTransaction || null,
+          state: statusFilter === 'active' ? 'active' : 'past',
+          interactive: false,
+        });
+        if (list === null) {
+          setNeedsV2Auth(true);
+          return [];
+        }
+        setNeedsV2Auth(false);
+        return list;
+      })();
+
+      const [v1Result, v2Result] = await Promise.allSettled([v1Promise, v2Promise]);
+      const v1Orders = v1Result.status === 'fulfilled' ? v1Result.value : [];
+      const v2Orders = v2Result.status === 'fulfilled' ? v2Result.value : [];
+      if (v1Result.status === 'rejected' && v2Result.status === 'rejected') {
+        throw v1Result.reason;
+      }
+      if (v2Result.status === 'rejected') {
+        console.warn('[Orders] V2 fetch failed:', v2Result.reason?.message);
       }
 
-      const result = await response.json();
-      
-      if (result.success) {
-        let fetchedOrders = result.orders || [];
-        
-        // ENRICH ORDERS WITH STORED SIGNATURES FROM LOCALSTORAGE
-        const { enrichOrderWithStoredSignatures } = await import('../utils/orderStorage.js');
-        fetchedOrders = fetchedOrders.map(order => enrichOrderWithStoredSignatures(order));
-        
-        // Cache the fetched orders
-        setCachedOrders(walletAddress, statusFilter, fetchedOrders);
-        
-        // CLIENT-SIDE EXPIRATION FILTERING:
-        // If viewing "active" orders, filter out expired ones
-        if (statusFilter === 'active') {
-          const activeOrders = [];
-          const expiredOrders = [];
-          
-          fetchedOrders.forEach(order => {
-            if (isOrderExpired(order)) {
-              expiredOrders.push(order);
-            } else {
-              activeOrders.push(order);
-            }
-          });
-          
-          // Log expired orders for debugging
-          if (expiredOrders.length > 0) {
-            console.warn(`[Orders] Found ${expiredOrders.length} expired order(s) in active orders:`, 
-              expiredOrders.map(o => ({ orderId: o.orderId, expiresAt: o.expiresAt })));
-          }
-          
-          // Only show non-expired orders in active tab
-          setOrders(activeOrders);
-          fetchCoinBanners(activeOrders);
-        } else {
-          // For history tab, mark expired orders with a flag
-          fetchedOrders = fetchedOrders.map(order => ({
-            ...order,
-            isExpired: isOrderExpired(order)
-          }));
-          
-          setOrders(fetchedOrders);
-          fetchCoinBanners(fetchedOrders);
+      let merged = [
+        ...v2Orders,
+        ...v1Orders.map((o) => ({ ...o, source: o.source || 'v1' })),
+      ].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
+      if (statusFilter === 'active') {
+        const activeOrders = merged.filter((order) => !isOrderExpired(order));
+        const expiredCount = merged.length - activeOrders.length;
+        if (expiredCount > 0) {
+          console.warn(`[Orders] Filtered ${expiredCount} expired order(s) out of active tab`);
         }
+        setOrders(activeOrders);
+        fetchCoinBanners(activeOrders);
       } else {
-        throw new Error(result.error || 'Unknown error');
+        merged = merged.map((order) => ({ ...order, isExpired: isOrderExpired(order) }));
+        setOrders(merged);
+        fetchCoinBanners(merged);
       }
     } catch (err) {
       console.error('Error fetching orders:', err);
@@ -610,10 +587,55 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
     }
   };
 
+  // One-time wallet sign-in that unlocks the (private) V2 order list.
+  const handleUnlockV2Orders = async () => {
+    if (!publicKey || isDemoMode) return;
+    setUnlockingV2(true);
+    try {
+      await ensureTriggerAuth({
+        walletAddress: publicKey.toString(),
+        signMessage: jupiterWallet.signMessage || null,
+        signTransaction: jupiterWallet.signTransaction || null,
+      });
+      setNeedsV2Auth(false);
+      await fetchOrders();
+    } catch (err) {
+      console.warn('[Orders] V2 sign-in failed:', err.message);
+      alert(err.message || 'Wallet sign-in failed — try again');
+    } finally {
+      setUnlockingV2(false);
+    }
+  };
+
   // Handle cancel order
   const handleCancelOrder = async (orderId) => {
     if (!publicKey || !signTransaction) {
       alert('Please connect your wallet first');
+      return;
+    }
+
+    // V2 orders use the two-step cancel: initiate → sign withdrawal → confirm.
+    const orderToCancel = orders.find((o) => (o.orderId || o.id) === orderId);
+    if (orderToCancel?.source === 'v2') {
+      setCancellingOrder(orderId);
+      try {
+        await cancelTriggerOrderV2({
+          walletAddress: publicKey.toString(),
+          signMessage: jupiterWallet.signMessage || null,
+          signTransaction: jupiterWallet.signTransaction || null,
+          orderId,
+        });
+        const { invalidateOrderCache } = await import('../utils/orderCache.js');
+        invalidateOrderCache(publicKey.toString());
+        await fetchOrders();
+      } catch (err) {
+        console.error('[Cancel Order V2] ❌ Error:', err);
+        if (!/reject/i.test(err.message || '')) {
+          alert('Failed to cancel order: ' + (err.message || err));
+        }
+      } finally {
+        setCancellingOrder(null);
+      }
       return;
     }
 
@@ -931,6 +953,15 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
             </button>
           </div>
 
+          {statusFilter !== 'holdings' && needsV2Auth && !isDemoMode && connected && (
+            <div className="orders-v2-unlock">
+              <span>Sign in with your wallet to load your limit orders</span>
+              <button onClick={handleUnlockV2Orders} disabled={unlockingV2}>
+                {unlockingV2 ? 'Waiting for wallet…' : 'Sign in'}
+              </button>
+            </div>
+          )}
+
           {statusFilter === 'holdings' ? (
             loadingHoldings ? (
               <div className="orders-loading">
@@ -1109,7 +1140,16 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
                 const priceDiffPercent = currentPrice > 0
                   ? ((currentPrice - triggerPrice) / currentPrice * 100).toFixed(2)
                   : 0;
+                // Which way this order fires: V2 orders carry triggerCondition
+                // ('below' = stop-loss / dip-buy); legacy V1 sells only fill on a
+                // rise, V1 buys only on a drop.
+                const fireCondition = order.triggerCondition && order.triggerCondition !== 'oco'
+                  ? order.triggerCondition
+                  : (orderType === 'buy' ? 'below' : 'above');
                 const isPriceAboveTrigger = currentPrice > triggerPrice;
+                const targetReached = fireCondition === 'below'
+                  ? currentPrice <= triggerPrice
+                  : currentPrice >= triggerPrice;
                 
                 // Calculate time since order creation
                 const createdDate = new Date(createdAt);
@@ -1176,9 +1216,13 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
 
                 // ── New visual card for active orders ──────────────────────
                 if (status === 'active') {
-                  const progressPct = triggerPrice > 0
-                    ? Math.min(100, Math.max(0, (currentPrice / triggerPrice) * 100))
-                    : 0;
+                  const progressPct = fireCondition === 'below'
+                    ? (currentPrice > 0
+                      ? Math.min(100, Math.max(0, (triggerPrice / currentPrice) * 100))
+                      : 0)
+                    : (triggerPrice > 0
+                      ? Math.min(100, Math.max(0, (currentPrice / triggerPrice) * 100))
+                      : 0);
                   const isCancelling = cancellingOrder === orderId;
                   // What a cashout returns: the locked SOL for a buy, the tokens' current value for a sell.
                   const cashoutSol = orderType === 'sell' ? amount * currentPrice : estimatedValue;
@@ -1206,7 +1250,30 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
                     <div
                       key={orderId}
                       className={`order-card-visual${isExpired ? ' order-card-expired' : ''}`}
-                      onClick={() => setOrderDetailOrder({
+                      onClick={() => {
+                        // Open the standard coin card with the order target + buy-in
+                        // drawn on its chart; fall back to the old detail sheet.
+                        if (onCoinClick) {
+                          onCoinClick({
+                            mintAddress: order.tokenMint,
+                            address: order.tokenMint,
+                            symbol: tokenSymbol,
+                            name: tokenName,
+                            image: resolvedImage,
+                            banner: bannerSrc,
+                            pairAddress: resolvedPairAddress,
+                            price_usd: currentPrice > 0 ? currentPrice * solUsdPrice : undefined,
+                            activeOrder: {
+                              orderId,
+                              side: orderType,
+                              triggerPriceUsd: Number(order.triggerPriceUsd) > 0
+                                ? Number(order.triggerPriceUsd)
+                                : triggerPrice * solUsdPrice,
+                            },
+                          });
+                          return;
+                        }
+                        setOrderDetailOrder({
                         orderId,
                         tokenSymbol,
                         tokenName,
@@ -1222,7 +1289,8 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
                         resolvedPairAddress,
                         dexBanner,
                         rawOrder: order,
-                      })}
+                        });
+                      }}
                     >
                       {/* Blurred banner background — prefer wide Dexscreener banner */}
                       {bannerSrc && (
@@ -1295,8 +1363,8 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
                         </div>
 
                         <div className="order-card-progress-footer">
-                          <span className={`order-card-diff${(isPriceAboveTrigger || parseFloat(priceDiffPercent) === 0) ? ' above' : ''}`}>
-                            {(isPriceAboveTrigger || parseFloat(priceDiffPercent) === 0) ? '✓ Target reached' : `${Math.abs(priceDiffPercent)}% to go`}
+                          <span className={`order-card-diff${(targetReached || parseFloat(priceDiffPercent) === 0) ? ' above' : ''}`}>
+                            {(targetReached || parseFloat(priceDiffPercent) === 0) ? '✓ Target reached' : `${Math.abs(priceDiffPercent)}% to go`}
                           </span>
                           <span className={`order-card-expiry-pill${expiryWarning ? ' warn' : ''}`}>
                             ⏱ {expiryText}
@@ -1319,6 +1387,12 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
                             </span>
                           </div>
                         )}
+                        {Number(order.stopLossPriceUsd) > 0 && (
+                          <div className="order-card-stats-row">
+                            <span className="order-card-stats-label">STOP LOSS AT</span>
+                            <span className="order-card-stats-val">{formatUsdPrice(order.stopLossPriceUsd)}</span>
+                          </div>
+                        )}
                         {buySol > 0 && (
                           <div className="order-card-stats-row">
                             <span className="order-card-stats-label">BOUGHT FOR</span>
@@ -1338,7 +1412,7 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
                         )}
                       </div>
 
-                      {(isPriceAboveTrigger || parseFloat(priceDiffPercent) === 0) && (
+                      {(targetReached || parseFloat(priceDiffPercent) === 0) && (
                         <div className="order-card-executing-banner">
                           <span className="order-card-executing-dot" />
                           Target reached — pending fill

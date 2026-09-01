@@ -507,8 +507,8 @@ function App() {
   // profile without threading a prop through every layer.
   useEffect(() => {
     const onOpenWalletProfile = (e) => {
-      const { address, displayName } = e.detail || {};
-      if (address) handleWalletClick(address, displayName ? { displayName } : {});
+      const { address, ...hint } = e.detail || {};
+      if (address) handleWalletClick(address, hint);
     };
     window.addEventListener('moonfeed:open-wallet-profile', onOpenWalletProfile);
     return () => window.removeEventListener('moonfeed:open-wallet-profile', onOpenWalletProfile);
@@ -759,6 +759,7 @@ function App() {
           initialPercentage={tradeModalOptions?.percentage}
           initialSide={tradeModalOptions?.side}
           initialTriggerPrice={tradeModalOptions?.targetPrice}
+          autoSellOrder={tradeModalOptions?.autoSellOrder}
         />
       </Suspense>
       

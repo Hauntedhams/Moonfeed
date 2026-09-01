@@ -40,6 +40,7 @@ const ExtensionWalletStub = ({ children }) => {
     recheckConnection: async () => false,
     signTransaction: notAvailable,
     signAndSendTransaction: notAvailable,
+    signMessage: null,
     getBalance: async () => null,
     wallet: null,
     connection: null,
@@ -258,6 +259,17 @@ const JupiterWalletBridge = ({ children }) => {
     return connected;
   }, [walletAddress, connected, walletType]);
 
+  // Sign an arbitrary message (used for Jupiter Trigger V2 JWT auth).
+  // Null when the connected wallet doesn't support message signing — callers
+  // fall back to transaction-challenge auth.
+  const signMessage = useCallback(async (message) => {
+    if (!connected || !jupiterWallet.signMessage) {
+      throw new Error('Wallet does not support message signing');
+    }
+    const bytes = typeof message === 'string' ? new TextEncoder().encode(message) : message;
+    return await jupiterWallet.signMessage(bytes);
+  }, [connected, jupiterWallet]);
+
   const value = {
     // State
     walletAddress,
@@ -276,6 +288,7 @@ const JupiterWalletBridge = ({ children }) => {
     // Transaction methods
     signTransaction,
     signAndSendTransaction,
+    signMessage: jupiterWallet.signMessage ? signMessage : null,
     
     // Utility
     getBalance,
