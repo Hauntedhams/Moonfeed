@@ -38,7 +38,7 @@ export async function fetchTokenDecimals(mint) {
 
 // SOL per 1 USD. Prefers the token's own Dexscreener SOL pair so the rate matches the
 // pair the order fills against; falls back to a plain SOL/USD quote.
-async function fetchSolPerUsd(mint) {
+export async function fetchSolPerUsd(mint) {
   try {
     const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
     if (res.ok) {
@@ -99,7 +99,8 @@ export async function placeTriggerOrder({
 
   const inputMint = side === 'buy' ? SOL_MINT : mintAddress;
   const outputMint = side === 'buy' ? mintAddress : SOL_MINT;
-  const makingAmount = (side === 'buy' ? amount * 1e9 : amount * tokenMultiplier).toFixed(0);
+  // Floor — rounding up can exceed the wallet's real balance and the order gets rejected.
+  const makingAmount = String(Math.floor(side === 'buy' ? amount * 1e9 : amount * tokenMultiplier));
   const takingAmount = (side === 'buy'
     ? (amount / priceInSol) * tokenMultiplier
     : amount * priceInSol * 1e9

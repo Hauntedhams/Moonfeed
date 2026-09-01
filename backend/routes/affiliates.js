@@ -221,13 +221,12 @@ router.post('/track-trade', async (req, res) => {
     }
 
     // No code on this device? Fall back to the account's permanent attribution.
+    // Un-attributed trades are STILL recorded (referralCode null) so the main
+    // fee wallet's contributions stay auditable in the dashboard.
     let resolvedCode = referralCode;
     if (!resolvedCode) {
       const user = await User.findOne({ walletAddress: userWallet }).lean();
       resolvedCode = user?.referredBy?.code || null;
-      if (!resolvedCode) {
-        return res.json({ success: false, reason: 'no_referral_attribution' });
-      }
     }
 
     // NEVER trust the client-reported volume — derive the true SOL side of the
@@ -543,6 +542,64 @@ router.get('/platform/earnings', async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching platform earnings:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/affiliates/platform/contributors
+ * Wallets contributing fees to the main fee wallet, aggregated (admin only)
+ */
+router.get('/platform/contributors', adminAuth, async (req, res) => {
+  try {
+    const { AffiliateTrade } = require('../models/Affiliate');
+    const contributors = await AffiliateTrade.aggregate([
+      {
+        $group: {
+          _id: '$userWallet',
+          trades: { $sum: 1 },
+          totalVolume: { $sum: '$tradeVolume' },
+          totalVolumeUsd: { $sum: '$tradeVolumeUsd' },
+          totalFees: { $sum: '$feeEarned' },
+          totalFeesUsd: { $sum: '$feeEarnedUsd' },
+          platformShare: { $sum: '$platformShare' },
+          platformShareUsd: { $sum: '$platformShareUsd' },
+          lastTradeAt: { $max: '$timestamp' },
+          referralCodes: { $addToSet: '$referralCode' },
+        }
+      },
+      { $sort: { platformShare: -1 } },
+      { $limit: 100 },
+    ]);
+
+    const totals = contributors.reduce((acc, c) => ({
+      totalFees: acc.totalFees + (c.totalFees || 0),
+      totalFeesUsd: acc.totalFeesUsd + (c.totalFeesUsd || 0),
+      platformShare: acc.platformShare + (c.platformShare || 0),
+      platformShareUsd: acc.platformShareUsd + (c.platformShareUsd || 0),
+    }), { totalFees: 0, totalFeesUsd: 0, platformShare: 0, platformShareUsd: 0 });
+
+    res.json({
+      success: true,
+      totals,
+      contributors: contributors.map((c) => ({
+        wallet: c._id,
+        trades: c.trades,
+        totalVolume: c.totalVolume,
+        totalVolumeUsd: c.totalVolumeUsd,
+        totalFees: c.totalFees,
+        totalFeesUsd: c.totalFeesUsd,
+        platformShare: c.platformShare,
+        platformShareUsd: c.platformShareUsd,
+        lastTradeAt: c.lastTradeAt,
+        referralCodes: (c.referralCodes || []).filter(Boolean),
+      })),
+    });
+  } catch (error) {
+    console.error('Error fetching platform contributors:', error);
     res.status(500).json({
       success: false,
       error: error.message

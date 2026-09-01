@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import TopTabs from './TopTabs';
 import NativeChart from './NativeChart';
 import { useTrackedWallets } from '../contexts/TrackedWalletsContext';
+import { useTrackedTrades } from '../contexts/TrackedTradesContext';
 import { useWallet } from '../contexts/WalletContext';
 import WalletConnectOnboarding from './WalletConnectOnboarding';
 import { AnimalSilhouetteAvatar, buildWalletName, gradientForWallet, shortWalletAddress } from '../utils/walletIdentity';
@@ -71,6 +72,78 @@ const parseTrade = (t) => {
     time: t.time,
   };
 };
+
+/** One chronological trade-event row: which tracked wallet moved, what they
+ * bought/sold, the USD (and SOL) they put in, and how the coin has moved since. */
+function TradeEventRow({ trade, walletLabel, currentPrice, onOpenProfile, onOpenPosition }) {
+  const { walletAddress, mint, type, symbol, image, solAmount, usdAmount, priceUsd, time } = trade;
+  const sincePct = currentPrice > 0 && priceUsd > 0
+    ? ((currentPrice - priceUsd) / priceUsd) * 100
+    : null;
+  const sinceUp = sincePct !== null ? sincePct >= 0 : null;
+
+  return (
+    <div
+      className="tw-tweet"
+      role="button"
+      tabIndex={0}
+      onClick={() => onOpenPosition?.(walletAddress, mint, { displayName: walletLabel, tokenSymbol: symbol, tokenImage: image })}
+    >
+      <div
+        className="tw-tweet-avatar"
+        style={{ background: gradientForWallet(walletAddress) }}
+        onClick={(e) => { e.stopPropagation(); onOpenProfile?.(walletAddress, { displayName: walletLabel }); }}
+        title="View wallet profile"
+      >
+        <AnimalSilhouetteAvatar address={walletAddress} />
+      </div>
+      <div className="tw-tweet-body">
+        <div className="tw-tweet-header">
+          <span
+            className="tw-tweet-name"
+            onClick={(e) => { e.stopPropagation(); onOpenProfile?.(walletAddress, { displayName: walletLabel }); }}
+          >
+            {walletLabel || buildWalletName(walletAddress)}
+          </span>
+          <span className="tw-tweet-handle">{shortWalletAddress(walletAddress)}</span>
+          {time > 0 && (
+            <>
+              <span className="tw-tweet-dot">·</span>
+              <span className="tw-tweet-time">{timeAgo(time)}</span>
+            </>
+          )}
+        </div>
+        <p className="tw-tweet-text">
+          {type === 'sell' ? 'Sold' : 'Bought'} <strong>${symbol}</strong>
+          {usdAmount > 0
+            ? <> for <strong>{formatUsdCompact(usdAmount)}</strong>{solAmount > 0 ? ` (${solAmount.toFixed(3)} SOL)` : ''}</>
+            : (solAmount > 0 ? ` for ${solAmount.toFixed(3)} SOL` : '')}
+          {sincePct !== null && (
+            <span className={sinceUp ? 'tw-up' : 'tw-down'}>
+              {' '}· {sinceUp ? 'up' : 'down'} {Math.abs(sincePct).toFixed(1)}% since
+            </span>
+          )}
+        </p>
+        <div className="tw-tweet-trade-card">
+          <span className="tw-tweet-coin-img">
+            {image ? <img src={image} alt="" loading="lazy" /> : <span className="tw-tweet-coin-egg">🥚</span>}
+          </span>
+          <span className="tw-tweet-trade-meta">
+            <span className="tw-tweet-trade-symbol">${symbol}</span>
+            <span className={`tw-tweet-trade-side ${type === 'sell' ? 'sell' : 'buy'}`}>
+              {type === 'sell' ? 'Sell' : 'Buy'}{time > 0 ? ` · ${timeAgo(time)} ago` : ''}
+            </span>
+          </span>
+          {sincePct !== null && (
+            <span className={`tw-tweet-pnl-chip ${sinceUp ? 'pos' : 'neg'}`}>
+              {sinceUp ? '+' : ''}{sincePct.toFixed(1)}% since
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /** One tweet-style row: avatar + name/handle/time header, a caption describing
  * the wallet's most recent trade (colored by direction), and a PnL chip —
@@ -273,7 +346,57 @@ function TrackedView({
 }) {
   const [activeFeed, setActiveFeed] = useState('wallets');
   const { trackedWallets, untrackWallet } = useTrackedWallets();
+  const { tradesByMint, tradesLoaded } = useTrackedTrades();
   const { connected: walletConnected } = useWallet();
+
+  // All tracked wallets' trades, newest first — the "recent moves" timeline.
+  const tradeFeed = useMemo(() => {
+    const all = [];
+    for (const list of tradesByMint.values()) all.push(...list);
+    all.sort((a, b) => b.time - a.time);
+    return all.slice(0, 60);
+  }, [tradesByMint]);
+
+  const labelByWallet = useMemo(() => {
+    const m = new Map();
+    for (const w of trackedWallets) m.set(w.address, w.label);
+    return m;
+  }, [trackedWallets]);
+
+  // Live USD prices for the coins in the feed (Dexscreener supports 30 mints per call).
+  const [livePrices, setLivePrices] = useState(new Map());
+  const feedMintsKey = useMemo(
+    () => [...new Set(tradeFeed.map((t) => t.mint))].sort().join(','),
+    [tradeFeed]
+  );
+  useEffect(() => {
+    const mints = feedMintsKey ? feedMintsKey.split(',') : [];
+    if (!mints.length) return undefined;
+    let cancelled = false;
+    (async () => {
+      const prices = new Map();
+      for (let i = 0; i < mints.length; i += 30) {
+        try {
+          const chunk = mints.slice(i, i + 30);
+          const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${chunk.join(',')}`);
+          if (!res.ok) continue;
+          const data = await res.json();
+          for (const pair of data.pairs || []) {
+            const mint = pair.baseToken?.address;
+            const price = Number(pair.priceUsd);
+            if (!mint || !(price > 0)) continue;
+            const liq = Number(pair.liquidity?.usd) || 0;
+            const prev = prices.get(mint);
+            if (!prev || liq > prev.liq) prices.set(mint, { price, liq });
+          }
+        } catch (_) { /* keep whatever we have */ }
+      }
+      if (!cancelled) {
+        setLivePrices(new Map([...prices].map(([m, v]) => [m, v.price])));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [feedMintsKey]);
 
   const handleRemoveCoin = (e, coin) => {
     e.stopPropagation();
@@ -304,15 +427,49 @@ function TrackedView({
           </div>
         ) : (
           <div className="tw-feed-scroller">
-            <div className="tw-feed">
-              {trackedWallets.map((wallet) => (
-                <WalletTweetRow
-                  key={wallet.address}
-                  wallet={wallet}
-                  onOpenProfile={onWalletClick}
-                  onUntrack={untrackWallet}
-                />
+            {/* Tracked wallets strip — tap to open a profile, × to untrack */}
+            <div className="tw-wallet-strip">
+              {trackedWallets.map((w) => (
+                <span key={w.address} className="tw-wallet-chip">
+                  <span
+                    className="tw-wallet-chip-main"
+                    onClick={() => onWalletClick?.(w.address, { displayName: w.label })}
+                    role="button"
+                  >
+                    <span className="tw-wallet-chip-avatar" style={{ background: gradientForWallet(w.address) }}>
+                      <AnimalSilhouetteAvatar address={w.address} />
+                    </span>
+                    <span className="tw-wallet-chip-name">{w.label || buildWalletName(w.address)}</span>
+                  </span>
+                  <button
+                    type="button"
+                    className="tw-wallet-chip-x"
+                    title="Stop tracking"
+                    onClick={() => untrackWallet(w.address)}
+                  >
+                    ×
+                  </button>
+                </span>
               ))}
+            </div>
+
+            <div className="tw-feed">
+              {tradeFeed.length > 0 ? (
+                tradeFeed.map((trade) => (
+                  <TradeEventRow
+                    key={`${trade.signature || trade.time}-${trade.walletAddress}-${trade.mint}`}
+                    trade={trade}
+                    walletLabel={labelByWallet.get(trade.walletAddress)}
+                    currentPrice={livePrices.get(trade.mint) || 0}
+                    onOpenProfile={onWalletClick}
+                    onOpenPosition={onOpenPosition}
+                  />
+                ))
+              ) : (
+                <div className="tracked-empty tracked-empty--inline">
+                  <p>{tradesLoaded ? 'No recent trades from your tracked wallets yet.' : 'Loading recent moves…'}</p>
+                </div>
+              )}
             </div>
           </div>
         )

@@ -7,6 +7,35 @@ import './WalletProfileView.css';
 
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
 
+// White-outline icons matching the coin card action buttons.
+const BellIcon = ({ off = false, size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+    {off && <line x1="2" y1="2" x2="22" y2="22" />}
+  </svg>
+);
+
+const PencilIcon = ({ size = 14 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+  </svg>
+);
+
+const SendIcon = ({ size = 15 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="m22 2-7 20-4-9-9-4Z" />
+    <path d="M22 2 11 13" />
+  </svg>
+);
+
+const LockIcon = ({ size = 13 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="11" width="18" height="11" rx="2" />
+    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+  </svg>
+);
+
 const ANON_ANIMALS = [
   { name: 'Wolf', body: 'M12 4.2 17.5 7.8 20 5.8 18.7 13.2 21 16.5 16.7 16.2 14.2 19.8 12 17 9.8 19.8 7.3 16.2 3 16.5 5.3 13.2 4 5.8 6.5 7.8z' },
   { name: 'Fox', body: 'M12 5 16.8 7.3 20 4.8 18.5 13.7 20.2 17.8 15.2 16.4 12 19.2 8.8 16.4 3.8 17.8 5.5 13.7 4 4.8 7.2 7.3z' },
@@ -349,7 +378,9 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
             onClick={handleRenameClick}
             title={notificationsEnabled ? 'Rename Wallet' : 'Turn on notifications to rename this wallet'}
           >
-            ✏️
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+            </svg>
           </button>
         </div>
 
@@ -395,7 +426,11 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
             onClick={handleBellClick}
             title={notificationsEnabled ? 'Notifications ON' : 'Turn on push notifications'}
           >
-            {notificationsEnabled ? '🔔' : '🔕'}
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+              {!notificationsEnabled && <line x1="2" y1="2" x2="22" y2="22" />}
+            </svg>
           </button>
         </div>
 
@@ -559,7 +594,7 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
           <div className="wpv-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="wpv-modal-header">
               <div className="wpv-modal-title-wrap">
-                <span className="wpv-modal-icon">🔔</span>
+                <span className="wpv-modal-icon"><BellIcon size={18} /></span>
                 <h3>Wallet Notifications & Name</h3>
               </div>
               <button type="button" className="wpv-modal-close" onClick={() => setShowRenameModal(false)}>×</button>
@@ -568,7 +603,7 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
             <div className="wpv-modal-body">
               <div className="wpv-notif-status-box">
                 <div className="wpv-notif-info">
-                  <span className="wpv-notif-badge-icon">{notificationsEnabled ? '🔔' : '🔕'}</span>
+                  <span className="wpv-notif-badge-icon"><BellIcon off={!notificationsEnabled} /></span>
                   <div>
                     <div className="wpv-notif-title">
                       Trade Notifications: <strong>{notificationsEnabled ? 'Active' : 'Disabled'}</strong>
@@ -595,9 +630,9 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
                         '🔔 Wallet Notifications Enabled!',
                         `You will receive instant push notifications whenever ${renameInput || walletName} makes a trade.`
                       );
-                      showToast('🔔 Push notifications enabled!');
+                      showToast('Push notifications enabled!');
                     } else {
-                      showToast('🔕 Notifications disabled');
+                      showToast('Notifications disabled');
                     }
                   }}
                 >
@@ -614,10 +649,10 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
                       '🔔 Test Trade Alert',
                       `Push notifications active for ${renameInput || walletName}!`
                     );
-                    showToast('📲 Test push notification sent!');
+                    showToast('Test push notification sent!');
                   }}
                 >
-                  📲 Send Test Push Notification
+                  <SendIcon /> Send Test Push Notification
                 </button>
               )}
 
@@ -627,11 +662,11 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
                 </label>
                 {!notificationsEnabled ? (
                   <div className="wpv-rename-locked-hint">
-                    🔒 Renaming is only allowed when push notifications are turned ON for this wallet.
+                    <LockIcon /> Renaming is only allowed when push notifications are turned ON for this wallet.
                   </div>
                 ) : (
                   <div className="wpv-rename-unlocked-hint">
-                    ✏️ Name saves with your profile & syncs across devices.
+                    <PencilIcon size={12} /> Name saves with your profile & syncs across devices.
                   </div>
                 )}
                 <input

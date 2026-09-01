@@ -19,6 +19,7 @@ const shortAddress = (address) => `${address.slice(0, 4)}…${address.slice(-4)}
 export const TrackedTradesProvider = ({ children }) => {
   const { trackedWallets } = useTrackedWallets();
   const [tradesByMint, setTradesByMint] = useState(new Map());
+  const [tradesLoaded, setTradesLoaded] = useState(false);
   const walletsKey = trackedWallets.map((w) => w.address).sort().join(',');
   const walletsRef = useRef(trackedWallets);
   walletsRef.current = trackedWallets;
@@ -26,6 +27,7 @@ export const TrackedTradesProvider = ({ children }) => {
   useEffect(() => {
     if (!walletsKey) {
       setTradesByMint(new Map());
+      setTradesLoaded(true);
       return undefined;
     }
     let cancelled = false;
@@ -42,6 +44,7 @@ export const TrackedTradesProvider = ({ children }) => {
             const isBuy = t.from?.address === SOL_MINT;
             const mint = isBuy ? t.to?.address : t.from?.address;
             if (!mint || mint === SOL_MINT) return null;
+            const tokenSide = isBuy ? t.to : t.from;
             return {
               mint,
               walletAddress: w.address,
@@ -49,6 +52,9 @@ export const TrackedTradesProvider = ({ children }) => {
               type: isBuy ? 'buy' : 'sell',
               priceUsd: Number(t.price?.usd) || 0,
               solAmount: Number(t.volume?.sol) || 0,
+              usdAmount: Number(t.volume?.usd) || 0,
+              symbol: tokenSide?.token?.symbol || 'Unknown',
+              image: tokenSide?.token?.image || null,
               time: Number(t.time) || 0, // ms
               signature: t.tx,
             };
@@ -66,6 +72,7 @@ export const TrackedTradesProvider = ({ children }) => {
       }
       for (const list of index.values()) list.sort((a, b) => a.time - b.time);
       setTradesByMint(index);
+      setTradesLoaded(true);
     };
 
     load();
@@ -79,7 +86,7 @@ export const TrackedTradesProvider = ({ children }) => {
   );
 
   return (
-    <TrackedTradesContext.Provider value={{ tradesByMint, getTradesForMint }}>
+    <TrackedTradesContext.Provider value={{ tradesByMint, tradesLoaded, getTradesForMint }}>
       {children}
     </TrackedTradesContext.Provider>
   );

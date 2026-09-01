@@ -409,20 +409,27 @@ function App() {
     // Store the transaction in localStorage for transaction history
     if (txid && coin) {
       try {
-        // Extract swap details from swapResult if available
-        const inputAmount = swapResult?.inputAmount 
-          ? parseFloat(swapResult.inputAmount) / 1e9 // Convert lamports to SOL
-          : 0;
+        const SOL_MINT = 'So11111111111111111111111111111111111111112';
+        const mint = coin.mintAddress || coin.address;
+        const inMint = swapResult?.inputMint || null;
+        const outMint = swapResult?.outputMint || null;
+        // Sells were previously mis-recorded as buys with token amounts treated as SOL.
+        let side = 'buy';
+        if (outMint === SOL_MINT || inMint === mint) side = 'sell';
+        else if (inMint === SOL_MINT || outMint === mint) side = 'buy';
+
         // A wrong decimals guess here silently corrupts the cost basis used for fill %.
         const decimals = Number.isInteger(coin.decimals)
           ? coin.decimals
-          : await fetchTokenDecimals(coin.mintAddress || coin.address);
-        const outputAmount = swapResult?.outputAmount 
-          ? parseFloat(swapResult.outputAmount) / (10 ** decimals)
-          : 0;
-        
+          : await fetchTokenDecimals(mint);
+
+        const rawIn = parseFloat(swapResult?.inputAmount) || 0;
+        const rawOut = parseFloat(swapResult?.outputAmount) || 0;
+        const solAmount = side === 'buy' ? rawIn / 1e9 : rawOut / 1e9;
+        const tokenAmount = side === 'buy' ? rawOut / (10 ** decimals) : rawIn / (10 ** decimals);
+
         // Calculate price per token
-        const pricePerToken = outputAmount > 0 ? inputAmount / outputAmount : 0;
+        const pricePerToken = tokenAmount > 0 ? solAmount / tokenAmount : 0;
         // Charts are denominated in USD, so pin the entry to USD at buy time too.
         const pricePerTokenUsd = pricePerToken * (await getSolUsdPrice());
         
@@ -433,15 +440,16 @@ function App() {
           storeTransaction({
             walletAddress: wallet,
             signature: txid,
-            type: 'buy',
-            tokenMint: coin.mintAddress || coin.address,
+            type: side,
+            tokenMint: mint,
             tokenSymbol: coin.symbol || 'Unknown',
             tokenName: coin.name || coin.symbol || 'Unknown',
             tokenImage: coin.image || coin.logoURI || null,
-            inputAmount,
-            outputAmount,
-            inputMint: 'So11111111111111111111111111111111111111112', // SOL
-            outputMint: coin.mintAddress || coin.address,
+            // inputAmount = what was spent (SOL for buys, tokens for sells); outputAmount = what was received.
+            inputAmount: side === 'buy' ? solAmount : tokenAmount,
+            outputAmount: side === 'buy' ? tokenAmount : solAmount,
+            inputMint: side === 'buy' ? SOL_MINT : mint,
+            outputMint: side === 'buy' ? mint : SOL_MINT,
             pricePerToken,
             pricePerTokenUsd,
           });
@@ -494,6 +502,17 @@ function App() {
     }
     setWalletProfile({ address, ...profileHint });
   };
+
+  // Lets deeply-nested components (e.g. the Tracked Wallets panel) open a wallet
+  // profile without threading a prop through every layer.
+  useEffect(() => {
+    const onOpenWalletProfile = (e) => {
+      const { address, displayName } = e.detail || {};
+      if (address) handleWalletClick(address, displayName ? { displayName } : {});
+    };
+    window.addEventListener('moonfeed:open-wallet-profile', onOpenWalletProfile);
+    return () => window.removeEventListener('moonfeed:open-wallet-profile', onOpenWalletProfile);
+  }, []);
 
   // Open the FOMO-style entry/exit position detail for a wallet's specific trade
   const handleOpenPosition = (wallet, mint, profileHint = {}) => {

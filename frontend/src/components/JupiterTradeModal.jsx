@@ -4,7 +4,6 @@ import { useWallet } from '../contexts/WalletContext';
 import { useWallet as useJupiterWallet } from '@jup-ag/wallet-adapter';
 import { useWalletConnectOnboarding } from './WalletConnectOnboarding';
 import ReferralTracker from '../utils/ReferralTracker';
-import { getFullApiUrl } from '../config/api';
 import './JupiterTradeModal.css';
 
 const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, initialTab, initialSolAmount, initialPercentage, initialSide, initialTriggerPrice }) => {
@@ -13,15 +12,10 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('swap'); // 'swap' or 'limit'
   const [swapSuccessInfo, setSwapSuccessInfo] = useState(null);
-  const [showLimitPanel, setShowLimitPanel] = useState(false);
-  const [limitPct, setLimitPct] = useState(5);
-  const [limitPctInput, setLimitPctInput] = useState('5');
-  const [limitLoading, setLimitLoading] = useState(false);
-  const [limitError, setLimitError] = useState(null);
-  const [limitSuccess, setLimitSuccess] = useState(false);
-  const [limitPriceInput, setLimitPriceInput] = useState('');
+  // Side to preselect on the Limit Order page when jumping there post-swap
+  const [limitPrefillSide, setLimitPrefillSide] = useState(null);
   const [pendingWallet, setPendingWallet] = useState(null); // Wallet name awaiting connect after select
-  const { walletAddress, signTransaction } = useWallet();
+  const { walletAddress } = useWallet();
 
   // Get the full Jupiter wallet adapter for passthrough to Terminal
   const jupiterWallet = useJupiterWallet();
@@ -257,13 +251,7 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
     setError(null);
     setActiveTab('swap');
     setSwapSuccessInfo(null);
-    setShowLimitPanel(false);
-    setLimitPct(5);
-    setLimitPctInput('5');
-    setLimitLoading(false);
-    setLimitError(null);
-    setLimitSuccess(false);
-    setLimitPriceInput('');
+    setLimitPrefillSide(null);
     onClose();
   };
 
@@ -273,95 +261,6 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
       setActiveTab('limit');
     }
   }, [isOpen, initialTab]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Base price from coin data (used for target price calculations)
-  const basePrice = coin?.priceUsd || coin?.price_usd || coin?.price || coin?.priceNative || 0;
-
-  const formatTargetPrice = (price) => {
-    if (!price || price <= 0) return '';
-    if (price < 0.000001) return price.toExponential(4);
-    if (price < 0.001) return price.toFixed(8);
-    if (price < 1) return price.toFixed(6);
-    return price.toFixed(4);
-  };
-
-  const handleLimitPctChange = (newPct) => {
-    setLimitPct(newPct);
-    setLimitPctInput(String(newPct));
-    if (basePrice > 0) {
-      setLimitPriceInput(formatTargetPrice(basePrice * (1 + newPct / 100)));
-    }
-  };
-
-  const handleLimitPriceInputChange = (value) => {
-    setLimitPriceInput(value);
-    const tp = parseFloat(value);
-    if (!isNaN(tp) && tp > 0 && basePrice > 0) {
-      const newPct = parseFloat((((tp - basePrice) / basePrice) * 100).toFixed(2));
-      if (newPct > 0) {
-        setLimitPct(newPct);
-        setLimitPctInput(newPct.toFixed(newPct % 1 === 0 ? 0 : 2));
-      }
-    }
-  };
-
-  const handleCreateLimitOrder = async () => {
-    if (!swapSuccessInfo || !walletAddress) return;
-    setLimitLoading(true);
-    setLimitError(null);
-
-    try {
-      const { swapResult } = swapSuccessInfo;
-      const SOL_MINT = 'So11111111111111111111111111111111111111112';
-      const makingAmount = String(swapResult.outputAmount); // tokens received, already in base units
-      const takingAmount = String(Math.floor(parseFloat(swapResult.inputAmount) * (1 + limitPct / 100)));
-
-      const response = await fetch(getFullApiUrl('/api/trigger/create-order'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          maker: walletAddress,
-          payer: walletAddress,
-          inputMint: coin.mintAddress,
-          outputMint: SOL_MINT,
-          makingAmount,
-          takingAmount,
-          expiredAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
-          orderType: 'limit',
-        }),
-      });
-
-      const result = await response.json();
-      if (!result.success) throw new Error(result.error || 'Failed to create order');
-
-      const signedTx = await signTransaction(result.data.transaction);
-
-      const executeResponse = await fetch(getFullApiUrl('/api/trigger/execute'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          signedTransaction: signedTx,
-          requestId: result.data.requestId,
-          orderMetadata: {
-            maker: walletAddress,
-            inputMint: coin.mintAddress,
-            outputMint: SOL_MINT,
-            side: 'sell',
-            orderType: 'limit',
-          },
-        }),
-      });
-
-      const executeResult = await executeResponse.json();
-      if (!executeResult.success) throw new Error(executeResult.error || 'Failed to execute order');
-
-      setLimitSuccess(true);
-    } catch (err) {
-      setLimitError(err.message);
-    } finally {
-      setLimitLoading(false);
-    }
-  };
 
   const handleTabChange = (tab) => {
     setActiveTab(tab);
@@ -607,7 +506,7 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
                     onOrderCreated={handleOrderCreated}
                     initialInputAmount={initialSolAmount}
                     initialPercentage={initialPercentage}
-                    initialSide={initialSide}
+                    initialSide={limitPrefillSide || initialSide}
                     initialTriggerPrice={initialTriggerPrice}
                   />
                   <div className="jupiter-modal-footer limit-order-footer">
@@ -651,127 +550,21 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
                     <span className="success-banner-title">Trade successful!</span>
                   </div>
 
-                  {!showLimitPanel && !limitSuccess && (
-                    <button
-                      className="setup-limit-link"
-                      onClick={() => {
-                        setShowLimitPanel(true);
-                        if (basePrice > 0) {
-                          setLimitPriceInput(formatTargetPrice(basePrice * 1.05));
-                        }
-                      }}
-                    >
-                      Setup limit order? →
-                    </button>
-                  )}
-
-                  {limitSuccess && (
-                    <p className="limit-success-confirm">Limit order set! 🎯</p>
-                  )}
-
-                  {showLimitPanel && !limitSuccess && (
-                    <div className="limit-order-panel">
-                      <p className="limit-panel-heading">Auto-sell {coin?.symbol} at profit</p>
-
-                      {/* Take Profit display */}
-                      <div className="tp-display">
-                        <div className="tp-display-side">
-                          <span className="tp-display-label">Entry</span>
-                          {basePrice > 0 && (
-                            <span className="tp-display-price">${formatTargetPrice(basePrice)}</span>
-                          )}
-                        </div>
-                        <div className="tp-display-arrow">→</div>
-                        <div className="tp-display-side tp-display-side--profit">
-                          <span className="tp-display-label">Take Profit</span>
-                          <span className="tp-display-pct">+{limitPct}%</span>
-                          {basePrice > 0 && (
-                            <span className="tp-display-price">${formatTargetPrice(basePrice * (1 + limitPct / 100))}</span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Single TP slider */}
-                      <div className="tp-slider-wrap">
-                        <input
-                          type="range"
-                          min={1}
-                          max={200}
-                          step={1}
-                          value={Math.min(limitPct, 200)}
-                          onChange={(e) => handleLimitPctChange(parseInt(e.target.value))}
-                          className="tp-slider"
-                        />
-                        <div className="tp-slider-labels">
-                          <span>+1%</span>
-                          <span>+200%</span>
-                        </div>
-                      </div>
-
-                      {/* Inputs: % gain and target price */}
-                      <div className="tp-inputs">
-                        <div className="limit-input-cell">
-                          <span className="limit-input-label">% gain</span>
-                          <div className="limit-custom-input-wrap dual-wrap--profit">
-                            <input
-                              type="number"
-                              min="0.01"
-                              step="0.1"
-                              value={limitPctInput}
-                              onChange={(e) => {
-                                setLimitPctInput(e.target.value);
-                                const v = parseFloat(e.target.value);
-                                if (!isNaN(v) && v > 0) {
-                                  setLimitPct(v);
-                                  if (basePrice > 0) {
-                                    setLimitPriceInput(formatTargetPrice(basePrice * (1 + v / 100)));
-                                  }
-                                }
-                              }}
-                              className="limit-pct-input"
-                            />
-                            <span className="limit-pct-symbol">%</span>
-                          </div>
-                        </div>
-                        <div className="limit-input-cell">
-                          <span className="limit-input-label">Target price</span>
-                          <div className="limit-custom-input-wrap dual-wrap--profit">
-                            <span className="limit-pct-symbol">$</span>
-                            <input
-                              type="number"
-                              min="0"
-                              step="any"
-                              value={limitPriceInput}
-                              onChange={(e) => handleLimitPriceInputChange(e.target.value)}
-                              className="limit-pct-input limit-price-field"
-                              placeholder="0.00"
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      {limitError && (
-                        <p className="limit-error-text">{limitError}</p>
-                      )}
-
-                      <div className="limit-action-row">
-                        <button
-                          className="create-limit-btn"
-                          onClick={handleCreateLimitOrder}
-                          disabled={limitLoading}
-                        >
-                          {limitLoading ? 'Creating...' : `Take Profit +${limitPct}%`}
-                        </button>
-                        <button
-                          className="limit-cancel-btn"
-                          onClick={() => setShowLimitPanel(false)}
-                          disabled={limitLoading}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                  <button
+                    className="setup-limit-link"
+                    onClick={() => {
+                      const SOL_MINT = 'So11111111111111111111111111111111111111112';
+                      const swapResult = swapSuccessInfo?.swapResult;
+                      // After a buy, preselect sell (take-profit) on the limit page
+                      if (swapResult?.inputMint === SOL_MINT || swapResult?.outputMint === coin?.mintAddress) {
+                        setLimitPrefillSide('sell');
+                      }
+                      setSwapSuccessInfo(null);
+                      setActiveTab('limit');
+                    }}
+                  >
+                    Setup limit order? →
+                  </button>
                 </div>
             </div>
           )}

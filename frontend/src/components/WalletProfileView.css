@@ -326,14 +326,18 @@ html:not(.dark-mode) .wpv-analytics-header {
 
 .wpv-copy-dismiss {
   flex-shrink: 0;
-  width: 28px;
-  height: 28px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 50%;
   background: transparent;
-  color: rgba(255, 255, 255, 0.65);
-  font-size: 20px;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 18px;
   line-height: 1;
+  padding: 0;
   cursor: pointer;
 }
 
@@ -765,13 +769,20 @@ html:not(.dark-mode) .wpv-name-heading {
 }
 
 .wpv-pencil-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
-  padding: 4px 8px;
-  font-size: 13px;
+  padding: 5px 8px;
+  color: #fff;
   cursor: pointer;
   transition: all 0.15s ease;
+}
+
+html:not(.dark-mode) .wpv-pencil-btn {
+  color: #111827;
 }
 
 .wpv-pencil-btn:hover {
@@ -872,7 +883,9 @@ html:not(.dark-mode) .wpv-modal-card {
 }
 
 .wpv-modal-icon {
-  font-size: 20px;
+  display: inline-flex;
+  align-items: center;
+  color: #fff;
 }
 
 .wpv-modal-close {
@@ -903,7 +916,10 @@ html:not(.dark-mode) .wpv-modal-card {
 }
 
 .wpv-notif-badge-icon {
-  font-size: 22px;
+  display: inline-flex;
+  align-items: center;
+  color: #fff;
+  flex-shrink: 0;
 }
 
 .wpv-notif-title {
@@ -940,6 +956,10 @@ html:not(.dark-mode) .wpv-modal-card {
 
 .wpv-test-push-btn {
   width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   padding: 10px;
   border-radius: 12px;
   background: rgba(79, 140, 255, 0.12);
@@ -969,6 +989,9 @@ html:not(.dark-mode) .wpv-modal-card {
 }
 
 .wpv-rename-locked-hint {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   font-size: 11px;
   color: #f59e0b;
   background: rgba(245, 158, 11, 0.1);
@@ -977,7 +1000,14 @@ html:not(.dark-mode) .wpv-modal-card {
   border: 1px solid rgba(245, 158, 11, 0.2);
 }
 
+.wpv-rename-locked-hint svg {
+  flex-shrink: 0;
+}
+
 .wpv-rename-unlocked-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 11px;
   color: rgba(255, 255, 255, 0.5);
 }

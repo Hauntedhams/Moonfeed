@@ -20,7 +20,8 @@ const affiliateSchema = new mongoose.Schema({
 
 const affiliateTradeSchema = new mongoose.Schema({
   tradeId: { type: String, required: true, unique: true },
-  referralCode: { type: String, required: true, index: true },
+  // null = no affiliate attribution; the trade still contributes to the main fee wallet
+  referralCode: { type: String, default: null, index: true },
   influencerWallet: { type: String, default: null },
   influencerName: { type: String, default: null },
   userWallet: { type: String, index: true },

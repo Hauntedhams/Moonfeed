@@ -23,31 +23,35 @@ export async function getSolUsdPrice() {
   return cachedSolUsd;
 }
 
-// Total SOL spent buying this mint before the order was placed. Comparing SOL in to
-// SOL out sidesteps token decimals entirely, unlike a per-token cost basis.
-function costInSol(tokenMint, transactions, before) {
-  return (transactions || [])
-    .filter((tx) => tx.tokenMint === tokenMint && tx.type === 'buy' && Number(tx.inputAmount) > 0)
-    .filter((tx) => !before || !tx.timestamp || tx.timestamp <= before)
-    .reduce((sum, tx) => sum + Number(tx.inputAmount), 0);
-}
-
-// Computes { percent, usdAmount, costUsd } for a filled order.
-// percent = realized gain, SOL proceeds vs SOL spent (needs local buy history; null otherwise).
-// usdAmount = the SOL value that changed hands, converted to USD.
+// Realized round-trip stats for a mint from the wallet's actual transactions.
+// costSol = total SOL spent buying; proceedsSol = total SOL received selling
+// (falls back to the order's fill value for executed orders whose fill isn't in
+// the wallet's swap list — Jupiter fills settle from escrow, not the wallet).
 export function computeFillStats(order, transactions, solUsdPrice = cachedSolUsd) {
-  const proceedsSol = Number(order.estimatedValue) || 0;
-  const usdAmount = proceedsSol * solUsdPrice;
+  const executed = order.status === 'executed' || order.status === 'completed';
+  const txs = (transactions || []).filter((tx) => tx.tokenMint === order.tokenMint);
 
-  const createdAt = order.createdAt ? new Date(order.createdAt).getTime() : null;
-  const costSol = costInSol(order.tokenMint, transactions, createdAt);
+  const costSol = txs
+    .filter((tx) => tx.type === 'buy' && Number(tx.inputAmount) > 0)
+    .reduce((sum, tx) => sum + Number(tx.inputAmount), 0);
+
+  let proceedsSol = txs
+    .filter((tx) => tx.type === 'sell' && Number(tx.outputAmount) > 0)
+    .reduce((sum, tx) => sum + Number(tx.outputAmount), 0);
+  if (executed && proceedsSol <= 0) proceedsSol = Number(order.estimatedValue) || 0;
 
   let percent = null;
-  if (order.type === 'sell' && costSol > 0 && proceedsSol > 0) {
+  if (costSol > 0 && proceedsSol > 0) {
     percent = ((proceedsSol - costSol) / costSol) * 100;
   }
 
-  return { percent, usdAmount, costUsd: costSol * solUsdPrice };
+  return {
+    percent,
+    usdAmount: proceedsSol * solUsdPrice,
+    costUsd: costSol * solUsdPrice,
+    proceedsSol,
+    costSol,
+  };
 }
 
 const NOTIFIED_KEY_PREFIX = 'moonfeed_notified_fills_';

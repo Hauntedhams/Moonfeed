@@ -33,10 +33,12 @@ export async function syncTransactionsWithAccount(walletAddress) {
       const data = await res.json();
       const remoteList = Array.isArray(data?.transactions) ? data.transactions : [];
 
-      // Merge local and remote without duplicates (by signature)
+      // Merge local and remote without duplicates (by signature).
+      // Local wins on conflict — the on-chain repair pass fixes records locally,
+      // and a stale remote copy must not resurrect corrupted amounts.
       const map = new Map();
       remoteList.forEach(t => { if (t && t.signature) map.set(t.signature, t); });
-      localList.forEach(t => { if (t && t.signature && !map.has(t.signature)) map.set(t.signature, t); });
+      localList.forEach(t => { if (t && t.signature) map.set(t.signature, t); });
 
       const merged = Array.from(map.values());
       merged.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));

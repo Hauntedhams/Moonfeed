@@ -1799,6 +1799,40 @@
   min-width: 0;
 }
 
+.tracked-wallet-row-info--clickable {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tracked-wallet-row-info--clickable:hover .tracked-wallet-row-addr {
+  color: #8b9bff;
+}
+
+/* ── Whale wallets explainer ── */
+.whale-info-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: rgba(102, 126, 234, 0.1);
+  border: 1px solid rgba(102, 126, 234, 0.28);
+  margin-bottom: 12px;
+}
+
+.whale-info-card__title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #8b9bff;
+}
+
+.whale-info-card__desc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.72);
+}
+
 .tracked-wallet-row-addr {
   font-size: 14px;
   font-weight: 600;

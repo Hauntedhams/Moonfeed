@@ -81,8 +81,8 @@ class AffiliateStorage {
       }
     }
 
-    const affiliate = await Affiliate.findOne({ code: referralCode }).lean();
-    if (!affiliate) {
+    const affiliate = referralCode ? await Affiliate.findOne({ code: referralCode }).lean() : null;
+    if (referralCode && !affiliate) {
       console.warn(`⚠️ Trade recorded with unknown referral code: ${referralCode}`);
     }
 
@@ -101,7 +101,7 @@ class AffiliateStorage {
 
     const trade = await AffiliateTrade.create({
       tradeId: `trade_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      referralCode,
+      referralCode: referralCode || null,
       influencerWallet: affiliate?.walletAddress || null,
       influencerName: affiliate?.name || null,
       userWallet,

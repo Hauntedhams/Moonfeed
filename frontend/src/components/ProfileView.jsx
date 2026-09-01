@@ -14,6 +14,7 @@ import './ProfileView.css';
 import './OrdersView.css';
 import { getTransactions, syncTransactionsWithAccount } from '../utils/transactionStorage';
 import { computeFillStats, getSolUsdPrice } from '../utils/orderFillTracking';
+import { WalletChip } from '../utils/walletIdentity';
 
 const ProfileView = ({ onTradeClick }) => {
   // Use Jupiter Wallet Kit adapter
@@ -46,6 +47,8 @@ const ProfileView = ({ onTradeClick }) => {
   const contentRef = useRef(null); // scrolled into view when a header stat is tapped
   const { trackedWallets, untrackWallet } = useTrackedWallets();
   const [trackedCoinsCount, setTrackedCoinsCount] = useState(0);
+  const [trackedCoins, setTrackedCoins] = useState([]);
+  const [trackedTab, setTrackedTab] = useState('wallets'); // 'wallets' | 'coins'
   const [selectedWallet, setSelectedWallet] = useState(null);
   const [profileTab, setProfileTab] = useState('history');
   const [transactions, setTransactions] = useState([]);
@@ -83,15 +86,17 @@ const ProfileView = ({ onTradeClick }) => {
   // combined with trackedWallets for the "Tracked" stat, so it reflects real
   // persisted data instead of only ever counting wallets.
   useEffect(() => {
-    if (!connected || !publicKey) { setTrackedCoinsCount(0); return; }
+    if (!connected || !publicKey) { setTrackedCoinsCount(0); setTrackedCoins([]); return; }
     let cancelled = false;
     fetch(getFullApiUrl(`/api/users/${publicKey.toString()}/tracked-coins`))
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (cancelled) return;
-        setTrackedCoinsCount(Array.isArray(data?.trackedCoins) ? data.trackedCoins.length : 0);
+        const coins = Array.isArray(data?.trackedCoins) ? data.trackedCoins : [];
+        setTrackedCoins(coins);
+        setTrackedCoinsCount(coins.length);
       })
-      .catch(() => { if (!cancelled) setTrackedCoinsCount(0); });
+      .catch(() => { if (!cancelled) { setTrackedCoinsCount(0); setTrackedCoins([]); } });
     return () => { cancelled = true; };
   }, [connected, publicKey]);
 
@@ -1206,22 +1211,22 @@ const ProfileView = ({ onTradeClick }) => {
                           </div>
                         </div>
 
-                        {status === 'executed' && (() => {
-                          const { percent, usdAmount, costUsd } = computeFillStats(order, transactions, solUsdPrice);
+                        {(() => {
+                          const isExecuted = status === 'executed';
+                          const { percent, usdAmount, costUsd, proceedsSol, costSol } = computeFillStats(order, transactions, solUsdPrice);
+                          if (!Number.isFinite(percent)) return null;
                           return (
                             <div className="order-hist-fulfilled-banner">
                               <div className="order-hist-fulfilled-row">
-                                <span className="order-hist-fulfilled-title">Fulfilled</span>
-                                {Number.isFinite(percent) && (
-                                  <span className={`order-hist-fulfilled-pct${percent >= 0 ? ' positive' : ' negative'}`}>
-                                    {percent >= 0 ? '+' : ''}{percent.toFixed(1)}%
-                                  </span>
-                                )}
+                                <span className="order-hist-fulfilled-title">{isExecuted ? 'Fulfilled' : 'Your trades'}</span>
+                                <span className={`order-hist-fulfilled-pct${percent >= 0 ? ' positive' : ' negative'}`}>
+                                  {percent >= 0 ? '+' : ''}{percent.toFixed(1)}%
+                                </span>
                               </div>
                               <div className="order-hist-fulfilled-flow">
-                                {costUsd > 0 && <span>Bought ${costUsd.toFixed(2)}</span>}
-                                {costUsd > 0 && usdAmount > 0 && <span className="order-hist-fulfilled-arrow">→</span>}
-                                {usdAmount > 0 && <span className="order-hist-fulfilled-usd">Sold ${usdAmount.toFixed(2)}</span>}
+                                <span>Bought ${costUsd.toFixed(2)} ({costSol.toFixed(4)} SOL)</span>
+                                <span className="order-hist-fulfilled-arrow">→</span>
+                                <span className="order-hist-fulfilled-usd">Sold ${usdAmount.toFixed(2)} ({proceedsSol.toFixed(4)} SOL)</span>
                               </div>
                             </div>
                           );
@@ -1237,6 +1242,19 @@ const ProfileView = ({ onTradeClick }) => {
                             <div className="order-hist-row">
                               <span className="order-hist-label">AMOUNT</span>
                               <span className="order-hist-val">{amount.toFixed(2)} {tokenSymbol}</span>
+                            </div>
+                          )}
+                          {estimatedValue > 0 && (
+                            <div className="order-hist-row">
+                              <span className="order-hist-label">
+                                {status === 'executed'
+                                  ? (orderType === 'sell' ? 'RECEIVED' : 'SPENT')
+                                  : (orderType === 'sell' ? 'TARGET PROCEEDS' : 'ORDER SIZE')}
+                              </span>
+                              <span className="order-hist-val">
+                                {estimatedValue.toFixed(4)} SOL
+                                <span className="order-hist-usd"> (${(estimatedValue * solUsdPrice).toFixed(2)})</span>
+                              </span>
                             </div>
                           )}
                           <div className="order-hist-row">
@@ -1942,43 +1960,84 @@ const ProfileView = ({ onTradeClick }) => {
         {/* ── TRACKED TAB ── */}
         {profileTab === 'tracked' && (
           <div className="pv-ig-tracked">
-            {trackedWallets.length === 0 ? (
-              <div className="pv-ig-empty">
-                <p>No tracked wallets</p>
-                <span>Click "Track" on any wallet to monitor it here</span>
-              </div>
-            ) : (
-              <div className="tracked-wallets-list">
-                {trackedWallets.map((wallet) => (
-                  <div key={wallet.address} className="tracked-wallet-item">
-                    <div className="tracked-wallet-info">
-                      <div className="tracked-wallet-address" onClick={() => setSelectedWallet(wallet.address)} title="Click to view analytics">
-                        <span className="wallet-icon">
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h7" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                            <circle cx="17" cy="17" r="4" stroke="currentColor" strokeWidth="2"/>
-                            <path d="M19 17h-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            <div className="pv-tracked-toggle">
+              <button
+                className={`pv-tracked-toggle-btn${trackedTab === 'wallets' ? ' pv-tracked-toggle-btn--active' : ''}`}
+                onClick={() => setTrackedTab('wallets')}
+              >
+                Wallets ({trackedWallets.length})
+              </button>
+              <button
+                className={`pv-tracked-toggle-btn${trackedTab === 'coins' ? ' pv-tracked-toggle-btn--active' : ''}`}
+                onClick={() => setTrackedTab('coins')}
+              >
+                Coins ({trackedCoins.length})
+              </button>
+            </div>
+
+            {trackedTab === 'wallets' && (
+              trackedWallets.length === 0 ? (
+                <div className="pv-ig-empty">
+                  <p>No tracked wallets</p>
+                  <span>Click "Track" on any wallet to monitor it here</span>
+                </div>
+              ) : (
+                <div className="pv-tracked-scroll">
+                  {trackedWallets.map((wallet) => (
+                    <div key={wallet.address} className="pv-tracked-row">
+                      <WalletChip
+                        address={wallet.address}
+                        size={38}
+                        onClick={() => window.dispatchEvent(new CustomEvent('moonfeed:open-wallet-profile', { detail: { address: wallet.address, displayName: wallet.label } }))}
+                      />
+                      <div className="pv-tracked-row-meta">
+                        {wallet.label && <span className="pv-tracked-row-label">{wallet.label}</span>}
+                        <span className="pv-tracked-row-date">Added {new Date(wallet.addedAt).toLocaleDateString()}</span>
+                      </div>
+                      <div className="pv-tracked-row-actions">
+                        <button className="pv-tracked-row-btn" onClick={() => setSelectedWallet(wallet.address)} title="View analytics">
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M3 3v18h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            <path d="m19 9-5 5-4-4-5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                           </svg>
-                        </span>
-                        <span className="wallet-addr">{wallet.address.slice(0, 4)}...{wallet.address.slice(-4)}</span>
-                      </div>
-                      <div className="tracked-wallet-meta">
-                        <span className="wallet-label">{wallet.label}</span>
-                        <span className="wallet-date">Added {new Date(wallet.addedAt).toLocaleDateString()}</span>
+                        </button>
+                        <button className="pv-tracked-row-btn pv-tracked-row-btn--remove" onClick={() => untrackWallet(wallet.address)} title="Untrack wallet">✕</button>
                       </div>
                     </div>
-                    <div className="tracked-wallet-actions">
-                      <button className="view-wallet-btn" onClick={() => setSelectedWallet(wallet.address)} title="View analytics">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M3 3v18h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                          <path d="m19 9-5 5-4-4-5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      </button>
-                      <button className="untrack-wallet-btn" onClick={() => untrackWallet(wallet.address)} title="Untrack wallet">✕</button>
+                  ))}
+                </div>
+              )
+            )}
+
+            {trackedTab === 'coins' && (
+              trackedCoins.length === 0 ? (
+                <div className="pv-ig-empty">
+                  <p>No tracked coins</p>
+                  <span>Tap "Track" on any coin to save it here</span>
+                </div>
+              ) : (
+                <div className="pv-tracked-scroll">
+                  {trackedCoins.map((c) => (
+                    <div key={c.mintAddress} className="pv-tracked-row">
+                      {c.image ? (
+                        <img src={c.image} alt={c.symbol} className="pv-tracked-coin-avatar" onError={(e) => { e.target.style.display = 'none'; }} />
+                      ) : (
+                        <div className="pv-tracked-coin-avatar pv-tracked-coin-avatar--ph">{(c.symbol || '?').slice(0, 2)}</div>
+                      )}
+                      <div className="pv-tracked-row-main">
+                        <span className="pv-tracked-coin-symbol">{c.symbol || 'Unknown'}</span>
+                        {c.name && <span className="pv-tracked-coin-name">{c.name}</span>}
+                      </div>
+                      <div className="pv-tracked-row-meta">
+                        {Number(c.trackedAtPrice) > 0 && (
+                          <span className="pv-tracked-row-label">Tracked at ${Number(c.trackedAtPrice) < 0.01 ? Number(c.trackedAtPrice).toFixed(8) : Number(c.trackedAtPrice).toFixed(4)}</span>
+                        )}
+                        {c.addedAt && <span className="pv-tracked-row-date">Added {new Date(c.addedAt).toLocaleDateString()}</span>}
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )
             )}
           </div>
         )}

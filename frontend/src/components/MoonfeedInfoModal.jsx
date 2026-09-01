@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useTrackedWallets } from '../contexts/TrackedWalletsContext';
 import { useDarkMode } from '../contexts/DarkModeContext';
 import { useCopyTrade } from '../contexts/CopyTradeContext';
-import { ORANGIE_WALLETS, ORANGIE_PROFILE } from '../data/orangieWallets';
+import { ORANGIE_WALLETS } from '../data/orangieWallets';
 
 import './MoonfeedInfoModal.css';
 
@@ -310,6 +310,11 @@ const TrackedWalletsPanel = ({ onClose }) => {
   const [howItWorksOpen, setHowItWorksOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('mine'); // 'mine' | 'orangie'
 
+  const openWalletProfile = (address, displayName) => {
+    onClose();
+    window.dispatchEvent(new CustomEvent('moonfeed:open-wallet-profile', { detail: { address, displayName } }));
+  };
+
   const isActive = trackedWallets.length > 0;
   const activeCount = trackedWallets.filter(w => w.copyTradeEnabled !== false).length;
 
@@ -343,14 +348,21 @@ const TrackedWalletsPanel = ({ onClose }) => {
 
         {activeTab === 'orangie' ? (
           <div className="menu-panel-body">
-            {/* ── Orangie profile card ─────────────────────── */}
-            <div className="orangie-card">
-              <div className="orangie-card__avatar">🍊</div>
-              <div className="orangie-card__info">
-                <span className="orangie-card__name">{ORANGIE_PROFILE.name}</span>
-                <span className="orangie-card__desc">{ORANGIE_PROFILE.description}</span>
-              </div>
-              <span className="orangie-card__count">{ORANGIE_WALLETS.length}</span>
+            {/* ── Whale wallets explainer ─────────────── */}
+            <div className="whale-info-card">
+              <span className="whale-info-card__title">What are whale wallets?</span>
+              <p className="whale-info-card__desc">
+                Whales are wallets with a proven track record of finding winning meme coins
+                before the crowd. Track one and Moonfeed watches its buys and sells in real
+                time — when it enters a new coin, you get a notification and can copy the
+                trade instantly via Jupiter.
+              </p>
+              <p className="whale-info-card__desc">
+                Their buys often signal a coin early in its run, so following whale entries is
+                one of the fastest ways to discover strong coins before they trend. Tap a
+                wallet's name to see its full trade history and PnL, or hit Track to add it to
+                My Wallets.
+              </p>
             </div>
 
             <ul className="tracked-wallet-list">
@@ -358,7 +370,12 @@ const TrackedWalletsPanel = ({ onClose }) => {
                 const tracked = isTracked(w.address);
                 return (
                   <li key={`${w.address}-${i}`} className="tracked-wallet-row">
-                    <div className="tracked-wallet-row-info">
+                    <div
+                      className="tracked-wallet-row-info tracked-wallet-row-info--clickable"
+                      onClick={() => openWalletProfile(w.address, w.name)}
+                      role="button"
+                      title="View wallet profile"
+                    >
                       <div className="twallet-addr-row">
                         <span className="tracked-wallet-row-addr">
                           {w.address.slice(0, 5)}…{w.address.slice(-5)}
@@ -450,7 +467,12 @@ const TrackedWalletsPanel = ({ onClose }) => {
                 const copyOn = w.copyTradeEnabled !== false;
                 return (
                 <li key={w.address} className="tracked-wallet-row">
-                  <div className="tracked-wallet-row-info">
+                  <div
+                    className="tracked-wallet-row-info tracked-wallet-row-info--clickable"
+                    onClick={() => openWalletProfile(w.address, w.label)}
+                    role="button"
+                    title="View wallet profile"
+                  >
                     <div className="twallet-addr-row">
                       <span className="tracked-wallet-row-addr">
                         {w.address.slice(0, 5)}…{w.address.slice(-5)}

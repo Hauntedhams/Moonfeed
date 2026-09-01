@@ -75,6 +75,13 @@
   </div>
 
   <div class="card">
+    <h2>Main fee wallet — contributors</h2>
+    <div class="muted" style="margin-bottom:8px">Every wallet whose Moonfeed trades generate the 1% fee — attributed or not. "Platform cut" is what's left after Jupiter's 20% and any influencer share.</div>
+    <div id="feeTotals" class="muted" style="margin-bottom:10px">—</div>
+    <div id="contributors" class="muted">—</div>
+  </div>
+
+  <div class="card">
     <h2>Recent attributed trades</h2>
     <div id="trades" class="muted">—</div>
   </div>
@@ -204,7 +211,7 @@ async function loadTrades() {
       ${trades.map(t => `
         <tr>
           <td class="muted">${new Date(t.timestamp).toLocaleString()}</td>
-          <td class="mono">${t.referralCode}</td>
+          <td class="mono">${t.referralCode || '<span class="muted">direct</span>'}</td>
           <td class="mono">${short(t.userWallet)}</td>
           <td>${solUsd(t.tradeVolume, t.tradeVolumeUsd)}</td>
           <td class="green">${solUsd(t.influencerShare, t.influencerShareUsd)}</td>
@@ -215,7 +222,32 @@ async function loadTrades() {
   } catch (e) { el.innerHTML = `<span class="muted">${e.message}</span>`; }
 }
 
-function loadAll() { loadAffiliates(); loadTrades(); }
+async function loadContributors() {
+  const el = document.getElementById('contributors');
+  const totalsEl = document.getElementById('feeTotals');
+  try {
+    const { contributors, totals } = await api('/api/affiliates/platform/contributors');
+    if (!contributors.length) { el.innerHTML = '<span class="muted">No fee-generating trades recorded yet.</span>'; return; }
+    totalsEl.innerHTML = `Total fees collected: <b class="green">${sol(totals.totalFees)}</b> (${usd(totals.totalFeesUsd)})
+      &nbsp;·&nbsp; Platform cut: <b class="green">${sol(totals.platformShare)}</b> (${usd(totals.platformShareUsd)})
+      &nbsp;·&nbsp; ${contributors.length} wallet${contributors.length === 1 ? '' : 's'}`;
+    el.innerHTML = `<table>
+      <tr><th>Wallet</th><th>Trades</th><th>Volume</th><th>Fees (1%)</th><th>Platform cut</th><th>Via</th><th>Last trade</th></tr>
+      ${contributors.map(c => `
+        <tr>
+          <td class="mono">${short(c.wallet)}<span class="copy" onclick="copyText('${c.wallet}')">copy</span></td>
+          <td>${c.trades}</td>
+          <td>${solUsd(c.totalVolume, c.totalVolumeUsd)}</td>
+          <td>${solUsd(c.totalFees, c.totalFeesUsd)}</td>
+          <td class="green">${solUsd(c.platformShare, c.platformShareUsd)}</td>
+          <td class="mono">${c.referralCodes.length ? c.referralCodes.join(', ') : '<span class="muted">direct</span>'}</td>
+          <td class="muted">${new Date(c.lastTradeAt).toLocaleString()}</td>
+        </tr>`).join('')}
+    </table>`;
+  } catch (e) { el.innerHTML = `<span class="muted">${e.message}</span>`; }
+}
+
+function loadAll() { loadAffiliates(); loadTrades(); loadContributors(); }
 
 document.getElementById('nCode').addEventListener('input', e => {
   document.getElementById('linkPreview').textContent = `${LINK_BASE}?ref=${e.target.value.trim() || '…'}`;

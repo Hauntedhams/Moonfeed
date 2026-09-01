@@ -5,6 +5,7 @@ import InteractiveTutorial from './InteractiveTutorial';
 import { API_CONFIG, getApiUrl } from '../config/api';
 import { useWallet } from '../contexts/WalletContext';
 import { useWalletConnectOnboarding } from './WalletConnectOnboarding';
+import { useTrackedTrades } from '../contexts/TrackedTradesContext';
 import './ModernTokenScroller.css';
 
 const SWIPE_HINT_SEEN_KEY = 'moonfeed_swipe_hint_seen';
@@ -42,6 +43,7 @@ const ModernTokenScroller = ({
 }) => {
   const { connected: walletConnected } = useWallet();
   const { openWalletConnect } = useWalletConnectOnboarding();
+  const { tradesByMint, tradesLoaded } = useTrackedTrades();
   // Debug: Log if onSearchClick is passed
   useEffect(() => {
     console.log('🔍 ModernTokenScroller: onSearchClick prop =', !!onSearchClick);
@@ -94,6 +96,7 @@ const ModernTokenScroller = ({
   const feedEndTriggerRef = useRef(null);
   const loadedFeedTypesRef = useRef([]);
   const isLoadingMoreFeedRef = useRef(false);
+  const trackedBuyAppliedRef = useRef(false); // one-shot per feed load: tracked-wallet buys woven in
 
   // Live mirrors of state the IntersectionObserver reads. Keeping these in refs
   // lets the observer be created ONCE (see effect below) instead of being torn
@@ -964,6 +967,7 @@ const ModernTokenScroller = ({
     setCurrentIndex(0);
     setSettledIndex(0);
     setPreloadIndex(null);
+    trackedBuyAppliedRef.current = false;
     feedEndTriggerRef.current = null;
     loadedFeedTypesRef.current = filters.type === 'custom' ? [] : [filters.type || feedOrder[0] || 'trending'];
     setExpandedCoin(null); // Close any expanded cards
@@ -977,6 +981,110 @@ const ModernTokenScroller = ({
     // Fetch new feed data
     fetchCoins();
   }, [filters.type, onlyFavorites, JSON.stringify(advancedFilters)]); // Use specific dependencies instead of fetchCoins
+
+  // ── Tracked-wallet buys woven into the feed ──────────────────────────────
+  // Once per feed load: tag feed coins a tracked wallet recently bought, and
+  // inject (up to 4) recently-bought coins that aren't in the feed as standard
+  // coin cards. CoinCard shows a "<wallet> recently bought in" banner for any
+  // coin carrying `trackedWalletBuy`.
+  useEffect(() => {
+    if (onlyFavorites || singleCoin) return undefined;
+    if (!tradesLoaded || loading || coins.length === 0) return undefined;
+    if (trackedBuyAppliedRef.current) return undefined;
+    trackedBuyAppliedRef.current = true;
+
+    const RECENT_BUY_MS = 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    const recentBuys = new Map(); // mint -> latest recent buy + distinct-wallet count
+    for (const [mint, trades] of tradesByMint) {
+      const buys = trades.filter((t) => t.type === 'buy' && now - t.time < RECENT_BUY_MS);
+      if (!buys.length) continue;
+      const latest = buys[buys.length - 1]; // trades are sorted ascending by time
+      recentBuys.set(mint, {
+        label: latest.label,
+        walletAddress: latest.walletAddress,
+        time: latest.time,
+        solAmount: latest.solAmount,
+        usdAmount: latest.usdAmount,
+        symbol: latest.symbol,
+        image: latest.image,
+        othersCount: new Set(buys.map((t) => t.walletAddress)).size - 1,
+      });
+    }
+    if (recentBuys.size === 0) return undefined;
+
+    const coinMint = (c) => c.mintAddress || c.tokenAddress || c.address;
+
+    const applyToFeed = (injectedCoins) => {
+      setCoins((prev) => {
+        const inFeed = new Set(prev.map(coinMint));
+        let next = prev.map((c) => {
+          const buy = recentBuys.get(coinMint(c));
+          return buy && !c.trackedWalletBuy ? { ...c, trackedWalletBuy: buy } : c;
+        });
+        const fresh = injectedCoins.filter((c) => !inFeed.has(coinMint(c)));
+        if (fresh.length) {
+          // Inject below the user's current position so indices they've seen don't shift
+          let pos = Math.max(currentIndexRef.current + 2, 2);
+          for (const c of fresh) {
+            next.splice(Math.min(pos, next.length), 0, c);
+            pos += 4;
+          }
+          onTotalCoinsChange?.(next.length);
+        }
+        return next;
+      });
+    };
+
+    const feedMints = new Set(coins.map(coinMint));
+    const missing = [...recentBuys.entries()]
+      .filter(([mint]) => !feedMints.has(mint))
+      .sort((a, b) => b[1].time - a[1].time)
+      .slice(0, 4);
+
+    if (!missing.length) {
+      applyToFeed([]);
+      return undefined;
+    }
+
+    let cancelled = false;
+    (async () => {
+      const enrichedList = await Promise.all(missing.map(async ([mint, buy]) => {
+        try {
+          const response = await fetch(`${API_BASE}/enrich-single`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              coin: {
+                mintAddress: mint,
+                tokenAddress: mint,
+                symbol: buy.symbol,
+                name: buy.symbol,
+                image: buy.image,
+              },
+            }),
+          });
+          if (!response.ok) return null;
+          const data = await response.json();
+          const full = data?.coin;
+          // Skip coins that couldn't be priced — a bare card would look broken
+          if (!full || !(Number(full.price_usd ?? full.priceUsd ?? full.price) > 0)) return null;
+          return {
+            ...full,
+            mintAddress: full.mintAddress || mint,
+            trackedWalletBuy: buy,
+            _moonfeedFeedType: filters.type || 'trending',
+          };
+        } catch (_) {
+          return null;
+        }
+      }));
+      if (cancelled) return;
+      applyToFeed(enrichedList.filter(Boolean));
+    })();
+
+    return () => { cancelled = true; };
+  }, [coins.length, tradesLoaded, tradesByMint, loading, onlyFavorites, singleCoin]);
 
   // Force enrich all coins after initial load - DISABLED to prevent white flash
   // useEffect(() => {

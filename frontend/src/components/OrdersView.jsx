@@ -135,25 +135,39 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
                   pricePerToken: tx.pricePerToken,
                   timestamp: tx.timestamp,
                 });
-              } else if (existing.tokenSymbol === 'Unknown' && tx.tokenSymbol !== 'Unknown') {
-                // Existing transaction has Unknown data - update it with better metadata
-                // Delete old and add new with better data
-                deleteTransaction(walletAddress, tx.signature);
-                storeTransaction({
-                  walletAddress,
-                  signature: tx.signature,
-                  type: tx.type,
-                  tokenMint: tx.tokenMint,
-                  tokenSymbol: tx.tokenSymbol,
-                  tokenName: tx.tokenName,
-                  tokenImage: tx.tokenImage,
-                  inputAmount: tx.inputAmount || existing.inputAmount,
-                  outputAmount: tx.outputAmount || existing.outputAmount,
-                  inputMint: tx.inputMint,
-                  outputMint: tx.outputMint,
-                  pricePerToken: tx.pricePerToken || existing.pricePerToken,
-                  timestamp: tx.timestamp || existing.timestamp,
-                });
+              } else {
+                // On-chain data is authoritative for side AND amounts — older app versions
+                // mis-recorded sells as buys and stored wrong units. Keep richer local metadata.
+                const amountsDiffer = (a, b) => {
+                  const x = Number(a) || 0;
+                  const y = Number(b) || 0;
+                  if (y <= 0) return false;
+                  return Math.abs(x - y) / y > 0.02;
+                };
+                const needsRepair =
+                  existing.type !== tx.type ||
+                  amountsDiffer(existing.inputAmount, tx.inputAmount) ||
+                  amountsDiffer(existing.outputAmount, tx.outputAmount) ||
+                  (existing.tokenSymbol === 'Unknown' && tx.tokenSymbol !== 'Unknown');
+                if (needsRepair) {
+                  deleteTransaction(walletAddress, tx.signature);
+                  storeTransaction({
+                    walletAddress,
+                    signature: tx.signature,
+                    type: tx.type,
+                    tokenMint: tx.tokenMint,
+                    tokenSymbol: (tx.tokenSymbol && tx.tokenSymbol !== 'Unknown') ? tx.tokenSymbol : existing.tokenSymbol,
+                    tokenName: (tx.tokenName && tx.tokenName !== 'Unknown') ? tx.tokenName : existing.tokenName,
+                    tokenImage: tx.tokenImage || existing.tokenImage,
+                    inputAmount: tx.inputAmount,
+                    outputAmount: tx.outputAmount,
+                    inputMint: tx.inputMint,
+                    outputMint: tx.outputMint,
+                    pricePerToken: tx.pricePerToken || existing.pricePerToken,
+                    pricePerTokenUsd: existing.pricePerTokenUsd,
+                    timestamp: tx.timestamp || existing.timestamp,
+                  });
+                }
               }
             }
             
@@ -775,6 +789,16 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
     return num.toFixed(2);
   };
 
+  // Meme-coin USD prices get vanishingly small — keep enough precision to be meaningful.
+  const formatUsdPrice = (usd) => {
+    const num = Number(usd) || 0;
+    if (num === 0) return '$0';
+    if (num < 0.000001) return `$${num.toExponential(2)}`;
+    if (num < 0.01) return `$${num.toFixed(8).replace(/0+$/, '').replace(/\.$/, '')}`;
+    if (num < 1) return `$${num.toFixed(4)}`;
+    return `$${num.toFixed(2)}`;
+  };
+
   // Token balances span huge ranges — keep them readable without losing small holdings.
   const formatTokenAmount = (value) => {
     const num = Number(value) || 0;
@@ -1163,6 +1187,21 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
                   const bannerSrc = dexBanner?.banner || order.tokenBannerImage || order.tokenImage || null;
                   const resolvedPairAddress = dexBanner?.pairAddress || order.tokenPairAddress || null;
 
+                  // Wallet's buy history for this coin — cost basis + performance since entry.
+                  const buys = transactions.filter((t) =>
+                    t.tokenMint === order.tokenMint && t.type === 'buy' &&
+                    Number(t.inputAmount) > 0 && Number(t.outputAmount) > 0);
+                  const buySol = buys.reduce((s, t) => s + Number(t.inputAmount), 0);
+                  const buyTokens = buys.reduce((s, t) => s + Number(t.outputAmount), 0);
+                  const avgBuyPriceSol = buyTokens > 0 ? buySol / buyTokens : 0;
+                  const sinceBuyPct = avgBuyPriceSol > 0 && currentPrice > 0
+                    ? ((currentPrice - avgBuyPriceSol) / avgBuyPriceSol) * 100
+                    : null;
+                  // The order's intent, relative to the live price (e.g. "sells if it drops 10%").
+                  const triggerPct = currentPrice > 0 && triggerPrice > 0
+                    ? ((triggerPrice - currentPrice) / currentPrice) * 100
+                    : null;
+
                   return (
                     <div
                       key={orderId}
@@ -1242,9 +1281,9 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
                       <div className="order-card-progress-section">
                         <div className="order-card-price-row">
                           <span className="order-card-price-label">Now</span>
-                          <span className="order-card-price-val">{formatPrice(currentPrice)} SOL</span>
+                          <span className="order-card-price-val">{formatUsdPrice(currentPrice * solUsdPrice)}</span>
                           <span className="order-card-price-arrow">›</span>
-                          <span className="order-card-price-val order-card-price-target">{formatPrice(triggerPrice)} SOL</span>
+                          <span className="order-card-price-val order-card-price-target">{formatUsdPrice(triggerPrice * solUsdPrice)}</span>
                           <span className="order-card-price-label">Target</span>
                         </div>
 
@@ -1263,6 +1302,40 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
                             ⏱ {expiryText}
                           </span>
                         </div>
+                      </div>
+
+                      {/* Order intent + position stats */}
+                      <div className="order-card-stats">
+                        {Number.isFinite(triggerPct) && (
+                          <div className="order-card-stats-row">
+                            <span className="order-card-stats-label">
+                              {orderType === 'sell'
+                                ? (triggerPct < 0 ? 'SELLS IF PRICE DROPS' : 'SELLS IF PRICE RISES')
+                                : (triggerPct < 0 ? 'BUYS IF PRICE DROPS' : 'BUYS IF PRICE RISES')}
+                            </span>
+                            <span className="order-card-stats-val">
+                              {Math.abs(triggerPct).toFixed(1)}%
+                              <span className="order-card-stats-sub"> ({formatUsdPrice(triggerPrice * solUsdPrice)})</span>
+                            </span>
+                          </div>
+                        )}
+                        {buySol > 0 && (
+                          <div className="order-card-stats-row">
+                            <span className="order-card-stats-label">BOUGHT FOR</span>
+                            <span className="order-card-stats-val">
+                              ${(buySol * solUsdPrice).toFixed(2)}
+                              <span className="order-card-stats-sub"> ({buySol.toFixed(4)} SOL)</span>
+                            </span>
+                          </div>
+                        )}
+                        {Number.isFinite(sinceBuyPct) && (
+                          <div className="order-card-stats-row">
+                            <span className="order-card-stats-label">SINCE BUY</span>
+                            <span className={`order-card-stats-val ${sinceBuyPct >= 0 ? 'order-card-stats-up' : 'order-card-stats-down'}`}>
+                              {sinceBuyPct >= 0 ? '+' : ''}{sinceBuyPct.toFixed(1)}%
+                            </span>
+                          </div>
+                        )}
                       </div>
 
                       {(isPriceAboveTrigger || parseFloat(priceDiffPercent) === 0) && (
@@ -1372,22 +1445,23 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
                       </div>
                     </div>
 
-                    {(status === 'executed' || status === 'completed') && (() => {
-                      const { percent, usdAmount, costUsd } = computeFillStats(order, transactions, solUsdPrice);
+                    {(() => {
+                      const isExecuted = status === 'executed' || status === 'completed';
+                      const { percent, usdAmount, costUsd, proceedsSol, costSol } = computeFillStats(order, transactions, solUsdPrice);
+                      // Only show when there's a real round trip to report.
+                      if (!Number.isFinite(percent)) return null;
                       return (
                         <div className="order-hist-fulfilled-banner">
                           <div className="order-hist-fulfilled-row">
-                            <span className="order-hist-fulfilled-title">Fulfilled</span>
-                            {Number.isFinite(percent) && (
-                              <span className={`order-hist-fulfilled-pct${percent >= 0 ? ' positive' : ' negative'}`}>
-                                {percent >= 0 ? '+' : ''}{percent.toFixed(1)}%
-                              </span>
-                            )}
+                            <span className="order-hist-fulfilled-title">{isExecuted ? 'Fulfilled' : 'Your trades'}</span>
+                            <span className={`order-hist-fulfilled-pct${percent >= 0 ? ' positive' : ' negative'}`}>
+                              {percent >= 0 ? '+' : ''}{percent.toFixed(1)}%
+                            </span>
                           </div>
                           <div className="order-hist-fulfilled-flow">
-                            {costUsd > 0 && <span>Bought ${costUsd.toFixed(2)}</span>}
-                            {costUsd > 0 && usdAmount > 0 && <span className="order-hist-fulfilled-arrow">→</span>}
-                            {usdAmount > 0 && <span className="order-hist-fulfilled-usd">Sold ${usdAmount.toFixed(2)}</span>}
+                            <span>Bought ${costUsd.toFixed(2)} ({costSol.toFixed(4)} SOL)</span>
+                            <span className="order-hist-fulfilled-arrow">→</span>
+                            <span className="order-hist-fulfilled-usd">Sold ${usdAmount.toFixed(2)} ({proceedsSol.toFixed(4)} SOL)</span>
                           </div>
                         </div>
                       );
@@ -1706,7 +1780,7 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
                           <span className="order-hist-label">
                             {status === 'executed' || status === 'completed'
                               ? (orderType === 'sell' ? 'RECEIVED' : 'SPENT')
-                              : 'ORDER SIZE'}
+                              : (orderType === 'sell' ? 'TARGET PROCEEDS' : 'ORDER SIZE')}
                           </span>
                           <span className="order-hist-val">
                             {estimatedValue.toFixed(4)} SOL
@@ -1867,18 +1941,7 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
             <div className="order-action-buttons">
               {selectedOrder.isHistory ? (
                 <>
-                  {/* History order actions: Trade History, Chart, Buy */}
-                  <button
-                    className="order-action-btn order-action-btn-trade-history"
-                    onClick={() => {
-                      setSelectedOrder(null);
-                      setActiveSection('transactions');
-                    }}
-                  >
-                    <span className="order-action-btn-icon">📋</span>
-                    <span>Trade History</span>
-                  </button>
-
+                  {/* History order actions: Chart, Buy */}
                   <button
                     className="order-action-btn order-action-btn-chart"
                     onClick={() => {
@@ -1894,7 +1957,6 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
                       });
                     }}
                   >
-                    <span className="order-action-btn-icon">📈</span>
                     <span>Chart</span>
                   </button>
 
@@ -1913,7 +1975,6 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
                       });
                     }}
                   >
-                    <span className="order-action-btn-icon">💰</span>
                     <span>Buy</span>
                   </button>
                 </>
@@ -1935,7 +1996,6 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
                       });
                     }}
                   >
-                    <span className="order-action-btn-icon">📈</span>
                     <span>View Chart</span>
                   </button>
 
@@ -1946,7 +2006,6 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
                     rel="noopener noreferrer"
                     onClick={() => setSelectedOrder(null)}
                   >
-                    <span className="order-action-btn-icon">🪐</span>
                     <span>View on Jupiter</span>
                   </a>
 
@@ -1959,9 +2018,6 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
                       handleCancelOrder(id);
                     }}
                   >
-                    <span className="order-action-btn-icon">
-                      {cancellingOrder === selectedOrder.orderId ? '⏳' : '🗑️'}
-                    </span>
                     <span>{cancellingOrder === selectedOrder.orderId ? 'Cancelling…' : 'Cancel Order'}</span>
                   </button>
                 </>

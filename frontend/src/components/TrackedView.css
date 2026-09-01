@@ -105,6 +105,87 @@
   margin: 0 auto;
 }
 
+/* ── Tracked wallets strip (above the trade timeline) ── */
+.tw-wallet-strip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding: 4px 14px 12px;
+  max-width: 640px;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+.tw-wallet-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.tw-wallet-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 4px 6px 4px 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.tw-wallet-chip-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.tw-wallet-chip-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.tw-wallet-chip-avatar svg,
+.tw-wallet-chip-avatar img {
+  width: 14px;
+  height: 14px;
+}
+
+.tw-wallet-chip-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+  white-space: nowrap;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tw-wallet-chip-x {
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 4px;
+  cursor: pointer;
+}
+
+.tw-wallet-chip-x:hover {
+  color: #f87171;
+}
+
+.tracked-empty--inline {
+  height: auto;
+  min-height: 0;
+  padding: 32px 20px;
+}
+
 /* ── Wallet "tweet" row ─────────────────────────────────────── */
 .tw-tweet {
   display: flex;

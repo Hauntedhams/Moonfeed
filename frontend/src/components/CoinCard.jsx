@@ -2059,6 +2059,34 @@ const CoinCard = memo(({
           </div>
         </div>
 
+        {/* Tracked-wallet buy indicator: a wallet the user follows recently bought this coin */}
+        {coin.trackedWalletBuy && (
+          <button
+            type="button"
+            className="tracked-buy-banner"
+            onClick={(e) => {
+              e.stopPropagation();
+              window.dispatchEvent(new CustomEvent('moonfeed:open-wallet-profile', {
+                detail: {
+                  address: coin.trackedWalletBuy.walletAddress,
+                  displayName: coin.trackedWalletBuy.label,
+                },
+              }));
+            }}
+            title="View this wallet's profile"
+          >
+            <span className="tracked-buy-banner-dot" />
+            <span className="tracked-buy-banner-text">
+              <strong>{coin.trackedWalletBuy.label}</strong>
+              {coin.trackedWalletBuy.othersCount > 0 && (
+                ` +${coin.trackedWalletBuy.othersCount} other wallet${coin.trackedWalletBuy.othersCount > 1 ? 's' : ''}`
+              )}
+              {' recently bought into this coin'}
+            </span>
+            <span className="tracked-buy-banner-time">{getTimeAgo(coin.trackedWalletBuy.time)} ago</span>
+          </button>
+        )}
+
         <div className="info-layer-header">
           {/* Top row: Profile, Price with Social Links, Expand Arrow */}
           <div className="header-top-row">

@@ -3,6 +3,7 @@ import { getFullApiUrl } from '../config/api';
 import { useWallet } from '../contexts/WalletContext';
 import { useWalletConnectOnboarding } from './WalletConnectOnboarding';
 import { getSolUsdPrice } from '../utils/orderFillTracking';
+import { fetchSolPerUsd } from '../utils/triggerOrders';
 import './TriggerOrderModal.css';
 
 const TriggerOrderModal = ({ 
@@ -94,6 +95,12 @@ const TriggerOrderModal = ({
       }
     }
   }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // React to a side prefill arriving while already mounted (e.g. "Setup limit
+  // order?" after a swap switches the pager to this page in sell mode).
+  useEffect(() => {
+    if (isOpen && initialSide) setSide(initialSide);
+  }, [initialSide]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Get current price from coin data - check multiple possible field names
   const currentPrice = coin?.priceUsd || coin?.price_usd || coin?.price || coin?.priceNative || fetchedPrice || 0;
@@ -242,8 +249,12 @@ const TriggerOrderModal = ({
         const res = await fetch(getFullApiUrl(`/api/wallet/${walletAddress}/balance?mint=${mint}`));
         const d = await res.json();
         if (!d.success) throw new Error(d.error || 'Failed to fetch balance');
+        // Round DOWN — rounding up at 100% asks to sell more than the wallet holds
+        // and the wallet rejects with "insufficient balance".
         const calc = d.amount * (pct / 100);
-        setInputAmount(calc < 1 ? calc.toFixed(4) : calc.toFixed(2));
+        const dp = calc < 1 ? 4 : 2;
+        const floored = Math.floor(calc * 10 ** dp) / 10 ** dp;
+        setInputAmount(floored.toFixed(dp));
         setError(d.amount === 0 ? `You don't hold any ${coin?.symbol || 'this token'} in this wallet yet` : null);
       }
     } catch (e) {
@@ -340,18 +351,27 @@ const TriggerOrderModal = ({
       } catch (_) { /* use default */ }
       const tokenMultiplier = Math.pow(10, tokenDecimals);
 
-      // Convert amounts to smallest unit using correct decimals
-      // SOL always uses 9 decimals (lamports); token uses fetched decimals
-      const makingAmount = side === 'buy'
-        ? (parseFloat(inputAmount) * 1e9).toFixed(0)          // SOL → lamports
-        : (parseFloat(inputAmount) * tokenMultiplier).toFixed(0); // token → smallest unit
+      // Jupiter orders are quoted in SOL per token; this modal's prices are USD per token.
+      const solPerUsd = await fetchSolPerUsd(coin.mintAddress);
+      if (!solPerUsd) throw new Error('Could not fetch the SOL price right now — try again in a moment');
+      const triggerPriceSol = parseFloat(triggerPrice) * solPerUsd;
+      if (!Number.isFinite(triggerPriceSol) || triggerPriceSol <= 0) {
+        throw new Error('Please enter a valid trigger price');
+      }
 
-      // Calculate minimum output based on trigger price
-      // For buy:  outputAmount = inputAmount / triggerPrice  (tokens out)
-      // For sell: outputAmount = inputAmount * triggerPrice  (SOL out in lamports)
+      // Convert amounts to smallest unit using correct decimals
+      // SOL always uses 9 decimals (lamports); token uses fetched decimals.
+      // Floor — .toFixed(0) rounds up and can exceed the wallet's real balance.
+      const makingAmount = side === 'buy'
+        ? String(Math.floor(parseFloat(inputAmount) * 1e9))
+        : String(Math.floor(parseFloat(inputAmount) * tokenMultiplier));
+
+      // Calculate minimum output based on trigger price (in SOL per token)
+      // For buy:  outputAmount = inputAmount / triggerPriceSol  (tokens out)
+      // For sell: outputAmount = inputAmount * triggerPriceSol  (SOL out in lamports)
       const minOutput = side === 'buy'
-        ? (parseFloat(inputAmount) / parseFloat(triggerPrice)) * tokenMultiplier
-        : (parseFloat(inputAmount) * parseFloat(triggerPrice)) * 1e9;
+        ? (parseFloat(inputAmount) / triggerPriceSol) * tokenMultiplier
+        : (parseFloat(inputAmount) * triggerPriceSol) * 1e9;
       const takingAmount = minOutput.toFixed(0);
 
       const expiredAt = getExpiryTimestamp();
@@ -436,8 +456,9 @@ const TriggerOrderModal = ({
       // ── Stop Loss order (second Jupiter trigger order) ──────────────
       if (stopLossEnabled && side === 'sell' && stopLossPrice && parseFloat(stopLossPrice) > 0) {
         try {
-          const slMakingAmount = (parseFloat(inputAmount) * tokenMultiplier).toFixed(0);
-          const slTakingAmount = ((parseFloat(inputAmount) * parseFloat(stopLossPrice)) * 1e9).toFixed(0);
+          const stopLossPriceSol = parseFloat(stopLossPrice) * solPerUsd;
+          const slMakingAmount = String(Math.floor(parseFloat(inputAmount) * tokenMultiplier));
+          const slTakingAmount = ((parseFloat(inputAmount) * stopLossPriceSol) * 1e9).toFixed(0);
           const slResponse = await fetch(getFullApiUrl('/api/trigger/create-order'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

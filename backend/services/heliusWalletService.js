@@ -621,110 +621,79 @@ class HeliusWalletService {
    */
   extractSwapDetails(tx, walletAddress, SOL_MINT) {
     const timestamp = tx.timestamp ? tx.timestamp * 1000 : Date.now();
-    
-    // Find what was spent and what was received
-    let inputToken = null;
-    let outputToken = null;
-    let inputAmount = 0;
-    let outputAmount = 0;
 
-    // Check token transfers
-    if (tx.tokenTransfers && tx.tokenTransfers.length > 0) {
-      for (const transfer of tx.tokenTransfers) {
-        const amount = parseFloat(transfer.tokenAmount || 0);
-        
-        // User sent tokens (input)
-        if (transfer.fromUserAccount === walletAddress && amount > 0) {
-          inputToken = {
-            mint: transfer.mint,
-            symbol: transfer.symbol || 'Unknown',
-            amount: amount,
-            decimals: transfer.decimals || 9
-          };
-          inputAmount = amount;
-        }
-        
-        // User received tokens (output)
-        if (transfer.toUserAccount === walletAddress && amount > 0) {
-          outputToken = {
-            mint: transfer.mint,
-            symbol: transfer.symbol || 'Unknown',
-            amount: amount,
-            decimals: transfer.decimals || 9
-          };
-          outputAmount = amount;
-        }
+    // The traded token = largest non-WSOL token movement in each direction.
+    // Never pick WSOL wrap/unwrap legs as "the token".
+    let sentToken = null;
+    let recvToken = null;
+    for (const transfer of tx.tokenTransfers || []) {
+      const amount = parseFloat(transfer.tokenAmount || 0);
+      if (!(amount > 0) || transfer.mint === SOL_MINT) continue;
+      if (transfer.fromUserAccount === walletAddress && (!sentToken || amount > sentToken.amount)) {
+        sentToken = { mint: transfer.mint, symbol: transfer.symbol || 'Unknown', amount, decimals: transfer.decimals || 9 };
+      }
+      if (transfer.toUserAccount === walletAddress && (!recvToken || amount > recvToken.amount)) {
+        recvToken = { mint: transfer.mint, symbol: transfer.symbol || 'Unknown', amount, decimals: transfer.decimals || 9 };
       }
     }
 
-    // Check native (SOL) transfers
-    if (tx.nativeTransfers && tx.nativeTransfers.length > 0) {
-      for (const transfer of tx.nativeTransfers) {
-        const amount = (transfer.amount || 0) / 1e9; // Convert lamports to SOL
-        
-        // User sent SOL (buying tokens)
-        if (transfer.fromUserAccount === walletAddress && amount > 0.001) {
-          if (!inputToken || inputToken.mint === SOL_MINT) {
-            inputToken = {
-              mint: SOL_MINT,
-              symbol: 'SOL',
-              amount: amount,
-              decimals: 9
-            };
-            inputAmount = amount;
-          }
-        }
-        
-        // User received SOL (selling tokens)
-        if (transfer.toUserAccount === walletAddress && amount > 0.001) {
-          if (!outputToken || outputToken.mint === SOL_MINT) {
-            outputToken = {
-              mint: SOL_MINT,
-              symbol: 'SOL',
-              amount: amount,
-              decimals: 9
-            };
-            outputAmount = amount;
-          }
-        }
+    // SOL side = the wallet's NET lamport change (excluding the network fee when
+    // the user paid it). Individual nativeTransfers include tips/platform fees and
+    // previously let a tiny fee transfer masquerade as the swap amount.
+    let netSol = 0;
+    const accountEntry = (tx.accountData || []).find((a) => a.account === walletAddress);
+    if (accountEntry && typeof accountEntry.nativeBalanceChange === 'number') {
+      netSol = accountEntry.nativeBalanceChange / 1e9;
+      if (tx.feePayer === walletAddress && tx.fee) netSol += tx.fee / 1e9;
+    } else {
+      for (const transfer of tx.nativeTransfers || []) {
+        const amount = (transfer.amount || 0) / 1e9;
+        if (transfer.fromUserAccount === walletAddress) netSol -= amount;
+        if (transfer.toUserAccount === walletAddress) netSol += amount;
       }
     }
 
-    // Need both input and output to be a valid swap
-    if (!inputToken || !outputToken) {
+    // Buy = SOL out + token in; Sell = token out + SOL in. Token-to-token swaps
+    // and wrap/unwrap-only txs don't fit the buy/sell model — skip them.
+    let isBuy;
+    let token;
+    let solAmount;
+    if (recvToken && !sentToken && netSol < 0) {
+      isBuy = true;
+      token = recvToken;
+      solAmount = -netSol;
+    } else if (sentToken && !recvToken && netSol > 0) {
+      isBuy = false;
+      token = sentToken;
+      solAmount = netSol;
+    } else {
       return null;
     }
 
-    // Determine if it's a buy or sell (from meme coin perspective)
-    // Buy = SOL -> Token, Sell = Token -> SOL
-    const isBuy = inputToken.mint === SOL_MINT;
-    const tokenMint = isBuy ? outputToken.mint : inputToken.mint;
-    const tokenSymbol = isBuy ? outputToken.symbol : inputToken.symbol;
-    const tokenAmount = isBuy ? outputAmount : inputAmount;
-    const solAmount = isBuy ? inputAmount : outputAmount;
+    if (!(solAmount > 0.000001) || !(token.amount > 0)) return null;
 
-    // Calculate price per token
-    const pricePerToken = tokenAmount > 0 ? solAmount / tokenAmount : 0;
+    const tokenAmount = token.amount;
+    const pricePerToken = solAmount / tokenAmount;
 
     return {
       id: `${tx.signature}_${timestamp}`,
       signature: tx.signature,
       type: isBuy ? 'buy' : 'sell',
-      tokenMint: tokenMint,
-      tokenSymbol: tokenSymbol,
-      tokenName: tokenSymbol, // Would need metadata lookup for full name
+      tokenMint: token.mint,
+      tokenSymbol: token.symbol,
+      tokenName: token.symbol, // Would need metadata lookup for full name
       tokenImage: null, // Would need metadata lookup
       inputAmount: isBuy ? solAmount : tokenAmount,
       outputAmount: isBuy ? tokenAmount : solAmount,
-      inputMint: inputToken.mint,
-      outputMint: outputToken.mint,
-      inputSymbol: inputToken.symbol,
-      outputSymbol: outputToken.symbol,
+      inputMint: isBuy ? SOL_MINT : token.mint,
+      outputMint: isBuy ? token.mint : SOL_MINT,
+      inputSymbol: isBuy ? 'SOL' : token.symbol,
+      outputSymbol: isBuy ? token.symbol : 'SOL',
       pricePerToken: pricePerToken,
       timestamp: timestamp,
       createdAt: new Date(timestamp).toISOString(),
       source: tx.source || 'Unknown DEX',
-      description: tx.description || `Swapped ${inputToken.symbol} for ${outputToken.symbol}`
+      description: tx.description || (isBuy ? `Bought ${token.symbol}` : `Sold ${token.symbol}`)
     };
   }
 }
