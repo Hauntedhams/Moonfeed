@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "97582450904",
+    "project_id": "moonfeed-5b3b9",
+    "storage_bucket": "moonfeed-5b3b9.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:97582450904:android:bc3d5a6bb505cfeff32fad",
+        "android_client_info": {
+          "package_name": "app.moonfeed.mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBXwNVaGAfftve3H0YbAfgwu5Iypb9Zkcg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -44,7 +44,7 @@ const tfIndexForHold = (secs) => {
  * markers plus PnL, avg entry/exit market cap, invested $ and tx count — for
  * a single wallet+token position.
  */
-function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onOpenProfile, onMimicTrade }) {
+function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onOpenProfile, onMimicTrade, onCoinClick }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -281,15 +281,24 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
       )}
 
       <div className="pdv-header">
-        {tokenImage ? (
-          <img className="pdv-token-img" src={tokenImage} alt={tokenSymbol} />
-        ) : (
-          <div className="pdv-token-img pdv-token-img--ph">{tokenSymbol?.[0] || '?'}</div>
-        )}
-        <div className="pdv-token-info">
-          <div className="pdv-token-symbol">{tokenSymbol}</div>
-          <div className="pdv-token-mcap">{formatMcap(position?.currentMarketCap)} <span className="pdv-token-mcap-label">Market cap</span></div>
-        </div>
+        <button
+          className="pdv-token-btn"
+          type="button"
+          onClick={() => onCoinClick?.({ mintAddress: mint, address: mint, symbol: tokenSymbol, name: tokenName, image: tokenImage })}
+          disabled={!onCoinClick || !mint}
+          title={`Open ${tokenSymbol}`}
+        >
+          {tokenImage ? (
+            <img className="pdv-token-img" src={tokenImage} alt={tokenSymbol} />
+          ) : (
+            <div className="pdv-token-img pdv-token-img--ph">{tokenSymbol?.[0] || '?'}</div>
+          )}
+          <div className="pdv-token-info">
+            <div className="pdv-token-symbol">{tokenSymbol}</div>
+            <div className="pdv-token-mcap">{formatMcap(position?.currentMarketCap)} <span className="pdv-token-mcap-label">Market cap</span></div>
+          </div>
+          {onCoinClick && mint && <span className="pdv-token-chevron">›</span>}
+        </button>
       </div>
 
       <div className="pdv-pnl-block">

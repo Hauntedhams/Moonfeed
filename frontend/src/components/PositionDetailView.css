@@ -143,6 +143,50 @@ html:not(.dark-mode) .pdv-loading, html:not(.dark-mode) .pdv-error {
   gap: 12px;
 }
 
+.pdv-token-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  padding: 4px;
+  margin: -4px;
+  border: none;
+  background: none;
+  border-radius: 12px;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition: background 0.15s ease;
+}
+
+.pdv-token-btn:disabled {
+  cursor: default;
+}
+
+.pdv-token-btn:not(:disabled):active {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+html:not(.dark-mode) .pdv-token-btn:not(:disabled):active {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.pdv-token-chevron {
+  flex-shrink: 0;
+  margin-left: auto;
+  color: rgba(255, 255, 255, 0.38);
+  font-size: 28px;
+  line-height: 1;
+}
+
+html:not(.dark-mode) .pdv-token-chevron {
+  color: rgba(0, 0, 0, 0.38);
+}
+
 .pdv-wallet-header {
   display: flex;
   align-items: center;

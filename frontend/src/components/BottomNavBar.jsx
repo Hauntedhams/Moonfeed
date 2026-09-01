@@ -15,11 +15,11 @@ function BottomNavBar({ activeTab, setActiveTab, onSearchClick, onOrdersClick, n
         </span>
         <span className="nav-label">Home</span>
       </button>
-      {/* Orders button - View active limit orders */}
+      {/* Trades button - Holdings, limit orders and history */}
       <button 
         className={`nav-btn${activeTab === 'orders' ? ' active' : ''}`} 
         onClick={onOrdersClick || (() => setActiveTab('profile'))}
-        title="View your active limit orders"
+        title="View your holdings, orders and trade history"
       >
         <span className="nav-icon">
           {/* Orders/List icon */}
@@ -28,7 +28,7 @@ function BottomNavBar({ activeTab, setActiveTab, onSearchClick, onOrdersClick, n
             <path d="M9 12h6m-6 4h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </span>
-        <span className="nav-label">Orders</span>
+        <span className="nav-label">Trades</span>
       </button>
       <button className={`nav-btn nav-btn-trade${activeTab === 'trade' ? ' active' : ''}`} onClick={() => setActiveTab('trade')}>
         <span className="nav-icon">

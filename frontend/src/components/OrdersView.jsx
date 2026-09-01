@@ -24,7 +24,7 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [loadingTransactions, setLoadingTransactions] = useState(false);
   const [ordersError, setOrdersError] = useState(null);
-  const [statusFilter, setStatusFilter] = useState('active'); // 'active' | 'history' | 'holdings'
+  const [statusFilter, setStatusFilter] = useState('holdings'); // 'holdings' | 'active' | 'history'
   const [holdings, setHoldings] = useState([]);
   const [loadingHoldings, setLoadingHoldings] = useState(false);
   const [holdingsError, setHoldingsError] = useState(null);
@@ -48,23 +48,90 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
     getSolUsdPrice().then(setSolUsdPrice);
   }, []);
 
-  // Horizontal swipe switches between the Active and History tabs.
-  const tabSwipeRef = React.useRef(null);
+  // Horizontal swipe moves between the Holdings / Orders / History tabs, with the
+  // page following the finger and sliding out/in on commit.
+  const TAB_ORDER = ['holdings', 'active', 'history'];
+  const SLIDE_MS = 190;
+  const pagesRef = React.useRef(null);
+  const swipeRef = React.useRef(null);
+  const slideTimersRef = React.useRef([]);
+  const [dragX, setDragX] = useState(0);
+  const [slidePhase, setSlidePhase] = useState('idle'); // idle | drag | settle | jump
 
-  const handleTabSwipeStart = (e) => {
-    const touch = e.touches?.[0];
-    tabSwipeRef.current = touch ? { x: touch.clientX, y: touch.clientY } : null;
+  const pushTimer = (fn, ms) => {
+    const id = setTimeout(fn, ms);
+    slideTimersRef.current.push(id);
+    return id;
   };
 
-  const handleTabSwipeEnd = (e) => {
-    const start = tabSwipeRef.current;
-    const touch = e.changedTouches?.[0];
-    tabSwipeRef.current = null;
-    if (!start || !touch) return;
-    const deltaX = touch.clientX - start.x;
-    const deltaY = touch.clientY - start.y;
-    if (Math.abs(deltaX) < 60 || Math.abs(deltaX) < Math.abs(deltaY) * 1.5) return;
-    setStatusFilter(deltaX < 0 ? 'history' : 'active');
+  useEffect(() => () => slideTimersRef.current.forEach(clearTimeout), []);
+
+  const pageWidth = () => pagesRef.current?.offsetWidth || window.innerWidth || 1;
+
+  const settleBack = () => {
+    setSlidePhase('settle');
+    setDragX(0);
+    pushTimer(() => setSlidePhase('idle'), SLIDE_MS);
+  };
+
+  // Slide the current page out in `dir`, swap tabs, then slide the new one in.
+  const animateToTab = (target, dir) => {
+    const width = pageWidth();
+    setSlidePhase('settle');
+    setDragX(-dir * width);
+    pushTimer(() => {
+      setStatusFilter(target);
+      setSlidePhase('jump');
+      setDragX(dir * width);
+      pushTimer(() => {
+        setSlidePhase('settle');
+        setDragX(0);
+        pushTimer(() => setSlidePhase('idle'), SLIDE_MS);
+      }, 20);
+    }, SLIDE_MS);
+  };
+
+  const selectTab = (target) => {
+    if (target === statusFilter) return;
+    const dir = TAB_ORDER.indexOf(target) > TAB_ORDER.indexOf(statusFilter) ? 1 : -1;
+    animateToTab(target, dir);
+  };
+
+  const handlePageTouchStart = (e) => {
+    if (slidePhase === 'settle' || slidePhase === 'jump') return;
+    const t = e.touches?.[0];
+    swipeRef.current = t ? { x: t.clientX, y: t.clientY, axis: null } : null;
+  };
+
+  const handlePageTouchMove = (e) => {
+    const start = swipeRef.current;
+    const t = e.touches?.[0];
+    if (!start || !t) return;
+    const dx = t.clientX - start.x;
+    const dy = t.clientY - start.y;
+    if (!start.axis) {
+      if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+      start.axis = Math.abs(dx) > Math.abs(dy) * 1.2 ? 'x' : 'y';
+      if (start.axis === 'x') setSlidePhase('drag');
+    }
+    if (start.axis !== 'x') return;
+    const idx = TAB_ORDER.indexOf(statusFilter);
+    const atEdge = (dx < 0 && idx === TAB_ORDER.length - 1) || (dx > 0 && idx === 0);
+    setDragX(atEdge ? dx * 0.28 : dx);
+  };
+
+  const handlePageTouchEnd = () => {
+    const start = swipeRef.current;
+    swipeRef.current = null;
+    if (!start || start.axis !== 'x') return;
+    const idx = TAB_ORDER.indexOf(statusFilter);
+    const dir = dragX < 0 ? 1 : -1;
+    const target = TAB_ORDER[idx + dir];
+    if (target && Math.abs(dragX) > Math.min(90, pageWidth() * 0.25)) {
+      animateToTab(target, dir);
+    } else {
+      settleBack();
+    }
   };
 
 
@@ -380,6 +447,8 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
           name,
           image,
           priceUsd,
+          priceChangeM5: Number(pair?.priceChange?.m5),
+          priceChangeH1: Number(pair?.priceChange?.h1),
           costBasisUsd,
           totalBoughtUsd: effectiveTotalBoughtUsd,
           totalCostSol,
@@ -901,11 +970,7 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
   }
 
   return (
-    <div
-      className="orders-view"
-      onTouchStart={handleTabSwipeStart}
-      onTouchEnd={handleTabSwipeEnd}
-    >
+    <div className="orders-view">
       <div className="orders-container">
         {/* Demo Mode banner */}
         {isDemoMode && (
@@ -934,22 +999,22 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
         <div className="orders-section">
           <div className="orders-filter">
             <button
-              className={`filter-btn ${statusFilter === 'active' ? 'active' : ''}`}
-              onClick={() => setStatusFilter('active')}
+              className={`filter-btn ${statusFilter === 'holdings' ? 'active' : ''}`}
+              onClick={() => selectTab('holdings')}
             >
-              Active
+              Holdings
+            </button>
+            <button
+              className={`filter-btn ${statusFilter === 'active' ? 'active' : ''}`}
+              onClick={() => selectTab('active')}
+            >
+              Orders
             </button>
             <button
               className={`filter-btn ${statusFilter === 'history' ? 'active' : ''}`}
-              onClick={() => setStatusFilter('history')}
+              onClick={() => selectTab('history')}
             >
               History
-            </button>
-            <button
-              className={`filter-btn ${statusFilter === 'holdings' ? 'active' : ''}`}
-              onClick={() => setStatusFilter('holdings')}
-            >
-              Holdings
             </button>
           </div>
 
@@ -962,6 +1027,21 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
             </div>
           )}
 
+          <div
+            className="orders-pages"
+            ref={pagesRef}
+            onTouchStart={handlePageTouchStart}
+            onTouchMove={handlePageTouchMove}
+            onTouchEnd={handlePageTouchEnd}
+            onTouchCancel={handlePageTouchEnd}
+          >
+          <div
+            className={`orders-page${slidePhase === 'drag' || slidePhase === 'jump' ? ' no-anim' : ''}`}
+            style={{
+              transform: `translate3d(${dragX}px, 0, 0)`,
+              opacity: 1 - Math.min(0.4, Math.abs(dragX) / 420),
+            }}
+          >
           {statusFilter === 'holdings' ? (
             loadingHoldings ? (
               <div className="orders-loading">
@@ -976,7 +1056,7 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
             ) : holdings.length === 0 ? (
               <div className="orders-empty">
                 <p>No token holdings found</p>
-                <span className="empty-hint">Buy meme coins on Moonfeed to track your portfolio holdings here</span>
+                <span className="empty-hint">Buy meme coins on Moonfeed to track them here — we'll notify you if one starts crashing</span>
               </div>
             ) : (
               <div className="holdings-list">
@@ -1000,10 +1080,16 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
                     return `$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
                   };
 
+                  const crashDrop = (Number.isFinite(item.priceChangeM5) && item.priceChangeM5 <= -15)
+                    ? { pct: item.priceChangeM5, window: '5m' }
+                    : (Number.isFinite(item.priceChangeH1) && item.priceChangeH1 <= -30)
+                      ? { pct: item.priceChangeH1, window: '1h' }
+                      : null;
+
                   return (
                     <div
                       key={item.mint}
-                      className="holding-card"
+                      className={`holding-card${crashDrop ? ' crashing' : ''}`}
                       onClick={() => onCoinClick?.({
                         mintAddress: item.mint,
                         symbol: item.symbol,
@@ -1020,6 +1106,11 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
                         <div className="holding-token-info">
                           <div className="holding-token-symbol">${item.symbol}</div>
                           <div className="holding-token-name">{item.name}</div>
+                          {crashDrop && (
+                            <div className="holding-crash-badge">
+                              Crashing {crashDrop.pct.toFixed(1)}% ({crashDrop.window})
+                            </div>
+                          )}
                           <div className="holding-token-prices">
                             <span className="holding-current-price-tag">
                               Price: <strong>{formatUsd(item.priceUsd)}</strong>
@@ -1905,6 +1996,8 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
               })}
             </div>
           )}
+          </div>
+          </div>
         </div>
       </div>
 

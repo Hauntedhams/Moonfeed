@@ -40,6 +40,8 @@ const affiliateRoutes = require('./routes/affiliates');
 const commentsRoutes = require('./routes/comments');
 const usersRoutes = require('./routes/users');
 const copyTradeRoutes = require('./routes/copyTrade');
+const pushRoutes = require('./routes/push');
+const pushMonitors = require('./services/pushMonitors');
 const onDemandEnrichment = require('./services/OnDemandEnrichmentService');
 const geckoTerminalService = require('./geckoTerminalService');
 const chartDataService = require('./chartDataService');
@@ -124,6 +126,9 @@ app.use('/api/comments', commentsRoutes);
 
 // Mount User profile routes
 app.use('/api/users', usersRoutes);
+
+// Mount push-notification device registry
+app.use('/api/push', pushRoutes);
 
 // ═══════════════════════════════════════════════════════════════
 // 🪐 JUPITER REFERRAL API ENDPOINTS
@@ -3187,6 +3192,9 @@ server.listen(PORT, async () => {
   
   // Connect to MongoDB for comments feature
   await connectDB();
+
+  // Start server-side push monitors (no-op until FIREBASE_SERVICE_ACCOUNT is set)
+  try { pushMonitors.start(); } catch (e) { console.error('[push] failed to start monitors:', e.message); }
   
   // Initialize feeds and start auto-refreshers
   initializeWithLatestBatch();

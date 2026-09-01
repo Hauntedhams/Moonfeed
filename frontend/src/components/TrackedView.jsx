@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import TopTabs from './TopTabs';
 import NativeChart from './NativeChart';
 import { useTrackedWallets } from '../contexts/TrackedWalletsContext';
@@ -346,6 +346,7 @@ function TrackedView({
 }) {
   const [activeFeed, setActiveFeed] = useState('wallets');
   const [coinSort, setCoinSort] = useState('newest');
+  const [walletSort, setWalletSort] = useState('newest');
   const { trackedWallets, untrackWallet } = useTrackedWallets();
   const { tradesByMint, tradesLoaded } = useTrackedTrades();
   const { connected: walletConnected } = useWallet();
@@ -441,14 +442,140 @@ function TrackedView({
     { id: 'losers', label: 'Losers' },
   ];
 
+  const WALLET_SORTS = [
+    { id: 'newest', label: 'Newest' },
+    { id: 'buys', label: 'Buys' },
+    { id: 'sells', label: 'Sells' },
+    { id: 'biggest', label: 'Biggest' },
+    { id: 'gainers', label: 'Top gainers' },
+  ];
+
+  // Wallets tab ordering/filtering — "since" uses the live Dexscreener price.
+  const visibleTrades = useMemo(() => {
+    const sinceOf = (t) => {
+      const now = livePrices.get(t.mint) || 0;
+      return now > 0 && t.priceUsd > 0 ? (now - t.priceUsd) / t.priceUsd : null;
+    };
+    let list = [...tradeFeed];
+    if (walletSort === 'buys') list = list.filter((t) => t.type !== 'sell');
+    else if (walletSort === 'sells') list = list.filter((t) => t.type === 'sell');
+    else if (walletSort === 'biggest') list.sort((a, b) => (b.usdAmount || 0) - (a.usdAmount || 0));
+    else if (walletSort === 'gainers') {
+      list.sort((a, b) => {
+        const sa = sinceOf(a);
+        const sb = sinceOf(b);
+        if (sa === null && sb === null) return b.time - a.time;
+        if (sa === null) return 1;
+        if (sb === null) return -1;
+        return sb - sa;
+      });
+    }
+    return list;
+  }, [tradeFeed, walletSort, livePrices]);
+
+  // Horizontal swipe between the Wallets / Coins feeds, page following the finger.
+  const FEED_ORDER = ['wallets', 'coins'];
+  const SLIDE_MS = 190;
+  const pagesRef = useRef(null);
+  const swipeRef = useRef(null);
+  const slideTimersRef = useRef([]);
+  const [dragX, setDragX] = useState(0);
+  const [slidePhase, setSlidePhase] = useState('idle'); // idle | drag | settle | jump
+
+  const pushTimer = (fn, ms) => {
+    const id = setTimeout(fn, ms);
+    slideTimersRef.current.push(id);
+    return id;
+  };
+
+  useEffect(() => () => slideTimersRef.current.forEach(clearTimeout), []);
+
+  const pageWidth = () => pagesRef.current?.offsetWidth || window.innerWidth || 1;
+
+  const animateToFeed = (target, dir) => {
+    const width = pageWidth();
+    setSlidePhase('settle');
+    setDragX(-dir * width);
+    pushTimer(() => {
+      setActiveFeed(target);
+      setSlidePhase('jump');
+      setDragX(dir * width);
+      pushTimer(() => {
+        setSlidePhase('settle');
+        setDragX(0);
+        pushTimer(() => setSlidePhase('idle'), SLIDE_MS);
+      }, 20);
+    }, SLIDE_MS);
+  };
+
+  const selectFeed = (target) => {
+    if (target === activeFeed) return;
+    animateToFeed(target, FEED_ORDER.indexOf(target) > FEED_ORDER.indexOf(activeFeed) ? 1 : -1);
+  };
+
+  const handlePageTouchStart = (e) => {
+    if (slidePhase === 'settle' || slidePhase === 'jump') return;
+    if (e.target.closest?.('.native-chart, .tw-wallet-strip, .tw-sort-bar')) { swipeRef.current = null; return; }
+    const t = e.touches?.[0];
+    swipeRef.current = t ? { x: t.clientX, y: t.clientY, axis: null } : null;
+  };
+
+  const handlePageTouchMove = (e) => {
+    const start = swipeRef.current;
+    const t = e.touches?.[0];
+    if (!start || !t) return;
+    const dx = t.clientX - start.x;
+    const dy = t.clientY - start.y;
+    if (!start.axis) {
+      if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+      start.axis = Math.abs(dx) > Math.abs(dy) * 1.2 ? 'x' : 'y';
+      if (start.axis === 'x') setSlidePhase('drag');
+    }
+    if (start.axis !== 'x') return;
+    const idx = FEED_ORDER.indexOf(activeFeed);
+    const atEdge = (dx < 0 && idx === FEED_ORDER.length - 1) || (dx > 0 && idx === 0);
+    setDragX(atEdge ? dx * 0.28 : dx);
+  };
+
+  const handlePageTouchEnd = () => {
+    const start = swipeRef.current;
+    swipeRef.current = null;
+    if (!start || start.axis !== 'x') return;
+    const idx = FEED_ORDER.indexOf(activeFeed);
+    const dir = dragX < 0 ? 1 : -1;
+    const target = FEED_ORDER[idx + dir];
+    if (target && Math.abs(dragX) > Math.min(90, pageWidth() * 0.25)) {
+      animateToFeed(target, dir);
+    } else {
+      setSlidePhase('settle');
+      setDragX(0);
+      pushTimer(() => setSlidePhase('idle'), SLIDE_MS);
+    }
+  };
+
   return (
     <div className="tracked-view">
       <TopTabs
         activeFilter={activeFeed}
-        onFilterChange={({ type }) => setActiveFeed(type)}
+        onFilterChange={({ type }) => selectFeed(type)}
         customTabs={TRACKED_TABS}
       />
 
+      <div
+        className="tw-pages"
+        ref={pagesRef}
+        onTouchStart={handlePageTouchStart}
+        onTouchMove={handlePageTouchMove}
+        onTouchEnd={handlePageTouchEnd}
+        onTouchCancel={handlePageTouchEnd}
+      >
+      <div
+        className={`tw-page${slidePhase === 'drag' || slidePhase === 'jump' ? ' no-anim' : ''}`}
+        style={{
+          transform: `translate3d(${dragX}px, 0, 0)`,
+          opacity: 1 - Math.min(0.4, Math.abs(dragX) / 420),
+        }}
+      >
       {activeFeed === 'wallets' ? (
         trackedWallets.length === 0 ? (
           <div className="tracked-empty">
@@ -488,9 +615,22 @@ function TrackedView({
               ))}
             </div>
 
+            <div className="tw-sort-bar">
+              {WALLET_SORTS.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  className={`tw-sort-chip ${walletSort === s.id ? 'active' : ''}`}
+                  onClick={() => setWalletSort(s.id)}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+
             <div className="tw-feed">
-              {tradeFeed.length > 0 ? (
-                tradeFeed.map((trade) => (
+              {visibleTrades.length > 0 ? (
+                visibleTrades.map((trade) => (
                   <TradeEventRow
                     key={`${trade.signature || trade.time}-${trade.walletAddress}-${trade.mint}`}
                     trade={trade}
@@ -502,7 +642,7 @@ function TrackedView({
                 ))
               ) : (
                 <div className="tracked-empty tracked-empty--inline">
-                  <p>{tradesLoaded ? 'No recent trades from your tracked wallets yet.' : 'Loading recent moves…'}</p>
+                  <p>{tradesLoaded ? (tradeFeed.length ? 'No trades match this filter.' : 'No recent trades from your tracked wallets yet.') : 'Loading recent moves…'}</p>
                 </div>
               )}
             </div>
@@ -545,6 +685,8 @@ function TrackedView({
           </div>
         </div>
       )}
+      </div>
+      </div>
     </div>
   );
 }

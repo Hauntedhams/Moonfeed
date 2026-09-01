@@ -126,6 +126,92 @@ export async function notifyOrderFilled(order, stats) {
   }
 }
 
+// Fire a native (or web) notification when a coin the user holds starts crashing.
+export async function notifyHoldingCrash({ mint, symbol, dropPct, windowLabel, valueUsd }) {
+  if (!permissionGranted) return;
+  const pct = Math.abs(Number(dropPct) || 0).toFixed(1);
+  const value = valueUsd > 0 ? ` Your position is worth ~$${Number(valueUsd).toFixed(2)}.` : '';
+  const title = `${symbol || 'A coin you hold'} is dropping fast`;
+  const body = `Down ${pct}% in the ${windowLabel}.${value}`;
+
+  try {
+    if (isNative) {
+      await LocalNotifications.schedule({
+        notifications: [
+          {
+            id: idFromSignature(`crash-${mint}-${Date.now()}`),
+            title,
+            body,
+            schedule: { at: new Date(Date.now() + 200) },
+            extra: { tokenMint: mint },
+          },
+        ],
+      });
+    } else if ('Notification' in window) {
+      const notificationOptions = {
+        body,
+        icon: '/android-chrome-192x192.png',
+        badge: '/favicon-32x32.png',
+        tag: `holding-crash-${mint}`,
+        renotify: true,
+        data: { tokenMint: mint, url: '/' },
+      };
+      const registration = await getServiceWorkerRegistration();
+      if (registration?.showNotification) {
+        await registration.showNotification(title, notificationOptions);
+      } else {
+        new Notification(title, notificationOptions);
+      }
+    }
+  } catch (err) {
+    console.debug('[TradeNotifications] crash schedule error:', err?.message);
+  }
+}
+
+// Fire a native (or web) notification when a tracked coin is up past a threshold.
+export async function notifyTrackedGain({ mint, symbol, gainPct, trackedAtPrice, price }) {
+  if (!permissionGranted) return;
+  const pct = Number(gainPct) || 0;
+  const title = `${symbol || 'A coin you track'} is up ${pct.toFixed(1)}%`;
+  const from = trackedAtPrice > 0 && price > 0
+    ? ` Tracked at $${Number(trackedAtPrice).toPrecision(3)}, now $${Number(price).toPrecision(3)}.`
+    : '';
+  const body = `Since you tracked it.${from}`;
+
+  try {
+    if (isNative) {
+      await LocalNotifications.schedule({
+        notifications: [
+          {
+            id: idFromSignature(`gain-${mint}-${Date.now()}`),
+            title,
+            body,
+            schedule: { at: new Date(Date.now() + 200) },
+            extra: { tokenMint: mint },
+          },
+        ],
+      });
+    } else if ('Notification' in window) {
+      const notificationOptions = {
+        body,
+        icon: '/android-chrome-192x192.png',
+        badge: '/favicon-32x32.png',
+        tag: `tracked-gain-${mint}`,
+        renotify: true,
+        data: { tokenMint: mint, url: '/' },
+      };
+      const registration = await getServiceWorkerRegistration();
+      if (registration?.showNotification) {
+        await registration.showNotification(title, notificationOptions);
+      } else {
+        new Notification(title, notificationOptions);
+      }
+    }
+  } catch (err) {
+    console.debug('[TradeNotifications] gain schedule error:', err?.message);
+  }
+}
+
 // Fire a native (or web) notification for a single detected swap.
 export async function notifyWalletTrade(swap) {
   if (!permissionGranted) return;

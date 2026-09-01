@@ -15,12 +15,15 @@ import { CopyTradeProvider } from './contexts/CopyTradeContext'
 import { AlertsProvider } from './contexts/AlertsContext'
 import CopyTradeToast from './components/CopyTradeToast'
 import ReferralTracker from './utils/ReferralTracker'
+import { initRemotePush } from './utils/pushNotifications'
 import MobileOptimizer from './utils/mobileOptimizer'
 import { initializePerformanceMonitoring } from './utils/mobileOptimizations'
 import { storeTransaction } from './utils/transactionStorage'
 import { fetchTokenDecimals } from './utils/triggerOrders'
 import { getSolUsdPrice } from './utils/orderFillTracking'
 import useOrderFillNotifications from './hooks/useOrderFillNotifications'
+import useHoldingsCrashNotifications from './hooks/useHoldingsCrashNotifications'
+import useTrackedGainNotifications from './hooks/useTrackedGainNotifications'
 
 // Lazy load heavy components that aren't needed immediately
 const WalletDebug = lazy(() => import('./components/WalletDebug'))
@@ -59,6 +62,8 @@ function App() {
   const { publicKey, connected } = useWallet();
   const walletAddress = publicKey?.toString() || null;
   useOrderFillNotifications(); // background: notifies when a limit order fills
+  useHoldingsCrashNotifications(); // background: notifies when a held coin starts crashing
+  useTrackedGainNotifications(favorites); // background: notifies when a tracked coin is up +10%
   const favoritesSyncedWalletRef = useRef(null); // account address we've already pulled synced favorites for
   const skipNextFavoritesSaveRef = useRef(false); // true right after loading remote data, to avoid an immediate re-save
   const favoritesHydratedRef = useRef(false); // blocks saving until the first remote read settles
@@ -102,6 +107,11 @@ function App() {
   useEffect(() => {
     if (!connected || !walletAddress) return;
     ReferralTracker.stampReferralOnAccount(walletAddress);
+  }, [connected, walletAddress]);
+
+  // Register the device for remote (closed-app) push and associate it with the account
+  useEffect(() => {
+    initRemotePush(connected ? walletAddress : null);
   }, [connected, walletAddress]);
 
   // Listen for favorites changes from TokenScroller
@@ -730,6 +740,13 @@ function App() {
               setPositionDetail(null);
             }}
             onMimicTrade={(coin) => { setPositionDetail(null); handleTradeClick(coin); }}
+            onCoinClick={(coinData) => {
+              setPositionDetail(null);
+              setPreviousTab(activeTab);
+              setSelectedCoin(coinData);
+              setCurrentViewedCoin(coinData);
+              setActiveTab('coin-detail');
+            }}
           />
         </Suspense>
       )}
