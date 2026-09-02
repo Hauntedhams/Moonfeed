@@ -12,14 +12,20 @@ let registered = false;
 let lastToken = null;
 let lastWallet = null;
 
+// NOTE: never return/resolve the plugin proxy from an async function —
+// Capacitor's plugin proxy traps EVERY property access, so resolving a promise
+// with it invokes plugin.then() and rejects with
+// '"FirebaseMessaging.then()" is not implemented on ios' (crashed boot on
+// TestFlight build 67). Store it in the module var and return a boolean.
 async function loadPlugin() {
-  if (FirebaseMessaging) return FirebaseMessaging;
+  if (FirebaseMessaging) return true;
   try {
-    ({ FirebaseMessaging } = await import('@capacitor-firebase/messaging'));
+    const mod = await import('@capacitor-firebase/messaging');
+    FirebaseMessaging = mod.FirebaseMessaging || null;
   } catch (_) {
     FirebaseMessaging = null;
   }
-  return FirebaseMessaging;
+  return !!FirebaseMessaging;
 }
 
 async function sendTokenToBackend(token, walletAddress) {
@@ -44,7 +50,8 @@ export async function initRemotePush(walletAddress = null) {
   lastWallet = walletAddress;
 
   if (!Capacitor.isNativePlatform()) return;
-  const plugin = await loadPlugin();
+  await loadPlugin();
+  const plugin = FirebaseMessaging;
   if (!plugin) return;
 
   // If we already have a token, just re-associate it with the new wallet.

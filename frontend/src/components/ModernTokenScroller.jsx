@@ -13,6 +13,11 @@ const EXPAND_HINT_SEEN_KEY = 'moonfeed_expand_hint_seen';
 const ANALYTICS_HINT_SEEN_KEY = 'moonfeed_analytics_hint_seen';
 const HELP_HINT_SEEN_KEY = 'moonfeed_help_hint_seen';
 
+// Where the user left off in each feed — restored on remount (back from another
+// page) and on cold app start, so scrolling position is never lost.
+const FEED_POS_KEY = 'moonfeed_feed_pos';
+const FEED_POS_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
 // Debounce utility for performance
 const debounce = (func, wait) => {
   let timeout;
@@ -97,6 +102,8 @@ const ModernTokenScroller = ({
   const loadedFeedTypesRef = useRef([]);
   const isLoadingMoreFeedRef = useRef(false);
   const trackedBuyAppliedRef = useRef(false); // one-shot per feed load: tracked-wallet buys woven in
+  const pendingFeedRestoreRef = useRef(false); // restore saved position once after a feed (re)loads
+  const lastSavedFeedPosRef = useRef(''); // dedupe localStorage writes
 
   // Live mirrors of state the IntersectionObserver reads. Keeping these in refs
   // lets the observer be created ONCE (see effect below) instead of being torn
@@ -971,6 +978,9 @@ const ModernTokenScroller = ({
     feedEndTriggerRef.current = null;
     loadedFeedTypesRef.current = filters.type === 'custom' ? [] : [filters.type || feedOrder[0] || 'trending'];
     setExpandedCoin(null); // Close any expanded cards
+
+    // Once the new feed's coins arrive, jump back to where the user last was in it
+    pendingFeedRestoreRef.current = !onlyFavorites && !singleCoin && !advancedFilters && filters.type !== 'custom';
     
     // Force garbage collection hint (not guaranteed, but helps)
     if (window.gc) {
@@ -981,6 +991,53 @@ const ModernTokenScroller = ({
     // Fetch new feed data
     fetchCoins();
   }, [filters.type, onlyFavorites, JSON.stringify(advancedFilters)]); // Use specific dependencies instead of fetchCoins
+
+  // ── Feed position persistence ────────────────────────────────────────────
+  // Save the coin the user is on (per feed) so we can return them to the exact
+  // same spot after visiting another page or fully closing the app.
+  useEffect(() => {
+    if (onlyFavorites || singleCoin || advancedFilters) return;
+    // Don't clobber the saved spot with index 0 before the restore effect has run
+    if (pendingFeedRestoreRef.current) return;
+    const feedType = filters.type || 'trending';
+    if (feedType === 'custom' || coins.length === 0) return;
+    const coin = coins[currentIndex];
+    if (!coin) return;
+    const mint = coin.mintAddress || coin.tokenAddress || coin.address;
+    const dedupeKey = `${feedType}:${mint}:${currentIndex}`;
+    if (lastSavedFeedPosRef.current === dedupeKey) return;
+    lastSavedFeedPosRef.current = dedupeKey;
+    try {
+      localStorage.setItem(FEED_POS_KEY, JSON.stringify({ feed: feedType, mint, index: currentIndex, ts: Date.now() }));
+    } catch (_) {}
+  }, [currentIndex, coins, filters.type, onlyFavorites, singleCoin, advancedFilters]);
+
+  // Restore the saved position once the feed's coins have loaded. Matches by
+  // mint first (feed order can change between sessions), falls back to index.
+  useEffect(() => {
+    if (!pendingFeedRestoreRef.current || loading || coins.length === 0) return;
+    pendingFeedRestoreRef.current = false;
+    const feedType = filters.type || 'trending';
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(FEED_POS_KEY) || 'null'); } catch (_) {}
+    if (!saved || saved.feed !== feedType) return;
+    if (saved.ts && Date.now() - saved.ts > FEED_POS_MAX_AGE_MS) return;
+    const mintOf = (c) => c.mintAddress || c.tokenAddress || c.address;
+    let idx = saved.mint ? coins.findIndex((c) => mintOf(c) === saved.mint) : -1;
+    if (idx < 0 && Number.isInteger(saved.index)) idx = Math.min(saved.index, coins.length - 1);
+    if (idx <= 0) return;
+    currentIndexRef.current = idx;
+    setCurrentIndex(idx);
+    setSettledIndex(idx);
+    const coin = coins[idx];
+    if (coin) onCurrentCoinChangeRef.current?.(coin, idx);
+    requestAnimationFrame(() => {
+      const container = scrollerRef.current;
+      if (!container) return;
+      const slideHeight = container.querySelector('.modern-coin-slide')?.offsetHeight || container.clientHeight || window.innerHeight;
+      container.scrollTop = idx * slideHeight;
+    });
+  }, [coins.length, loading]);
 
   // ── Tracked-wallet buys woven into the feed ──────────────────────────────
   // Once per feed load: tag feed coins a tracked wallet recently bought, and

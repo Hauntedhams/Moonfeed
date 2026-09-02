@@ -45,6 +45,17 @@ const openFullSite = (path = '') => window.open(`https://moonfeed.app${path}`, '
 // Per-account cache so switching wallets never shows the previous account's coins.
 const favoritesCacheKey = (address) => `moonfeed_tracked_coins_${address}`;
 
+// Remember which feed the user was browsing so reopening the app returns them there.
+const LAST_FEED_KEY = 'moonfeed_last_feed';
+const KNOWN_FEEDS = ['dextrending', 'whalefeed', 'graduating', 'new', 'trending'];
+const getInitialFilters = () => {
+  try {
+    const saved = localStorage.getItem(LAST_FEED_KEY);
+    if (saved && KNOWN_FEEDS.includes(saved)) return { type: saved };
+  } catch (_) {}
+  return { type: 'dextrending' }; // DEXtrending is the fastest-loading default
+};
+
 function App() {
   // Build timestamp - only log once on initial load
   if (!window.__MOONFEED_LOGGED__) {
@@ -70,7 +81,7 @@ function App() {
   const pendingFavoritesSaveTimerRef = useRef(null); // debounce timer for the backend save, flushable on backgrounding
   const latestFavoritesSaveRef = useRef({ walletAddress: null, favorites: [] }); // always up to date for the flush handler
   const [searchModalOpen, setSearchModalOpen] = useState(false);
-  const [filters, setFilters] = useState({ type: 'dextrending' }); // Start with DEXtrending (fastest loading)
+  const [filters, setFilters] = useState(getInitialFilters); // Restores the last feed the user was on
   const [advancedFilters, setAdvancedFilters] = useState(null); // For advanced filtering
   const [isAdvancedFilterActive, setIsAdvancedFilterActive] = useState(false);
   const [advancedFilterModalOpen, setAdvancedFilterModalOpen] = useState(false); // Control modal open/close
@@ -111,7 +122,9 @@ function App() {
 
   // Register the device for remote (closed-app) push and associate it with the account
   useEffect(() => {
-    initRemotePush(connected ? walletAddress : null);
+    initRemotePush(connected ? walletAddress : null).catch((err) => {
+      console.debug('[push] init failed:', err?.message);
+    });
   }, [connected, walletAddress]);
 
   // Listen for favorites changes from TokenScroller
@@ -328,6 +341,12 @@ function App() {
       setCurrentViewedCoin(selectedCoin);
     }
   }, [activeTab, selectedCoin]);
+
+  // Remember the active feed so the app reopens where the user left off
+  useEffect(() => {
+    if (!filters?.type || !KNOWN_FEEDS.includes(filters.type)) return;
+    try { localStorage.setItem(LAST_FEED_KEY, filters.type); } catch (_) {}
+  }, [filters?.type]);
 
   // Handle top tab filter changes
   const handleTopTabFilterChange = (newFilters) => {

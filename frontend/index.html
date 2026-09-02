@@ -44,7 +44,11 @@
         });
         window.addEventListener('unhandledrejection', function (e) {
           var r = e && e.reason;
-          show('App failed to start (promise)', (r && (r.stack || r.message)) || String(r));
+          // iOS JavaScriptCore stacks don't include the message — show both.
+          var detail = r
+            ? ((r.message || '') + (r.stack ? '\n' + r.stack : '')) || String(r)
+            : String(r);
+          show('App failed to start (promise)', detail);
         });
       })();
     </script>

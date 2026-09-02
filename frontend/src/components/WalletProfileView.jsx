@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { getFullApiUrl, fetchJsonWithTimeout } from '../config/api';
 import { useTrackedWallets } from '../contexts/TrackedWalletsContext';
 import { initTradeNotifications, sendPushNotification } from '../utils/tradeNotifications';
@@ -334,9 +334,93 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
     setShowRenameModal(true);
   };
 
+  // ── Swipe-right to go back ────────────────────────────────────────────────
+  // The page tracks the finger while dragging right, then slides out (back) or
+  // springs back into place. The underlying page stays mounted, so returning
+  // lands the user exactly where they were.
+  const rootRef = useRef(null);
+  const closingRef = useRef(false);
+  const dragRef = useRef(null);
+
+  const closeWithSlide = () => {
+    const el = rootRef.current;
+    if (closingRef.current) return;
+    if (!el) { onBack?.(); return; }
+    closingRef.current = true;
+    el.classList.remove('wpv-dragging', 'wpv-settling');
+    el.classList.add('wpv-closing');
+    el.style.transform = 'translateX(100%)';
+    setTimeout(() => onBack?.(), 220);
+  };
+
+  const handleSwipeStart = (e) => {
+    if (closingRef.current || showAnalyticsModal || showRenameModal || e.touches.length > 1) {
+      dragRef.current = null;
+      return;
+    }
+    const t = e.touches[0];
+    dragRef.current = { x: t.clientX, y: t.clientY, dragging: false, lastX: t.clientX, lastT: e.timeStamp, vx: 0 };
+  };
+
+  const handleSwipeMove = (e) => {
+    const d = dragRef.current;
+    if (!d) return;
+    const t = e.touches[0];
+    const dx = t.clientX - d.x;
+    const dy = t.clientY - d.y;
+    if (!d.dragging) {
+      // Axis lock: give up on clear vertical scrolls, engage on a dominant rightward drag
+      if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) { dragRef.current = null; return; }
+      if (dx > 12 && Math.abs(dx) > Math.abs(dy) * 1.2) {
+        d.dragging = true;
+        rootRef.current?.classList.add('wpv-dragging');
+      } else {
+        return;
+      }
+    }
+    const dt = Math.max(1, e.timeStamp - d.lastT);
+    d.vx = (t.clientX - d.lastX) / dt;
+    d.lastX = t.clientX;
+    d.lastT = e.timeStamp;
+    const el = rootRef.current;
+    if (el) el.style.transform = `translateX(${Math.max(0, dx)}px)`;
+  };
+
+  const handleSwipeEnd = (e) => {
+    const d = dragRef.current;
+    dragRef.current = null;
+    if (!d || !d.dragging) return;
+    const el = rootRef.current;
+    if (!el) return;
+    const t = e.changedTouches[0];
+    const dx = Math.max(0, t.clientX - d.x);
+    const width = el.clientWidth || window.innerWidth;
+    const flick = d.vx > 0.5 && dx > 40; // fast rightward flick commits early
+    el.classList.remove('wpv-dragging');
+    if (dx > Math.min(110, width * 0.3) || flick) {
+      closeWithSlide();
+    } else {
+      el.classList.add('wpv-settling');
+      el.style.transform = 'translateX(0px)';
+      setTimeout(() => {
+        el.classList.remove('wpv-settling');
+        // Leave no transform behind — it would become the containing block for
+        // the fixed-position modals/toast and break their anchoring.
+        el.style.transform = '';
+      }, 240);
+    }
+  };
+
   return (
-    <div className="wpv-root">
-      <button className="wpv-back" onClick={onBack} title="Back" aria-label="Back">
+    <div
+      className="wpv-root"
+      ref={rootRef}
+      onTouchStart={handleSwipeStart}
+      onTouchMove={handleSwipeMove}
+      onTouchEnd={handleSwipeEnd}
+      onTouchCancel={handleSwipeEnd}
+    >
+      <button className="wpv-back" onClick={closeWithSlide} title="Back" aria-label="Back">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="15 18 9 12 15 6" />
         </svg>

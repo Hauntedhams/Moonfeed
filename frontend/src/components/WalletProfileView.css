@@ -11,6 +11,35 @@
   padding: 0 0 90px; /* clear the bottom nav */
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+  /* Browser keeps vertical scrolling; horizontal drags feed the swipe-back gesture.
+     NOTE: no permanent will-change/transform here — it would become the containing
+     block for the fixed modals/toast inside and scroll-anchor them wrongly. */
+  touch-action: pan-y;
+  animation: wpvSlideIn 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+  box-shadow: -12px 0 32px rgba(0, 0, 0, 0.35);
+}
+
+@keyframes wpvSlideIn {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+/* Finger-tracked drag: transform is written inline per-frame, no easing */
+.wpv-root.wpv-dragging {
+  animation: none;
+  transition: none;
+}
+
+/* Released before the threshold: spring back into place */
+.wpv-root.wpv-settling {
+  animation: none;
+  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Committed back gesture (or back button): slide out to the right */
+.wpv-root.wpv-closing {
+  animation: none;
+  transition: transform 0.21s cubic-bezier(0.4, 0, 1, 1);
 }
 
 html:not(.dark-mode) .wpv-root {
@@ -46,11 +75,13 @@ html:not(.dark-mode) .wpv-root::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 0, 0, 0.32);
 }
 
-/* Back button — top-left, plain white arrow, no background */
+/* Back button — top-left, plain white arrow, no background.
+   Sticky (not fixed) so it stays on-screen while scrolled AND rides along with
+   the swipe-back drag transform instead of jumping out of view. */
 .wpv-back {
-  position: fixed;
+  position: sticky;
   top: 16px;
-  left: 16px;
+  margin: 16px 0 -58px 16px; /* visual spot of the old fixed 16/16, zero net flow height */
   z-index: 4010;
   width: 42px;
   height: 42px;
