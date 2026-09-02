@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import NativeChart from './NativeChart';
 import { getTransactions } from '../utils/transactionStorage';
 import { getSolUsdPrice } from '../utils/orderFillTracking';
@@ -63,6 +63,90 @@ function OrderDetailView({ order, walletAddress, solUsdPrice = 150, cancelling, 
   const currentPriceUsd = Number(order?.currentPrice) > 0 ? Number(order.currentPrice) * solUsdPrice : null;
   const isSell = (order?.orderType || 'buy') === 'sell';
 
+  // ── Drag-down to dismiss ────────────────────────────────────────────────
+  // The sheet follows the finger while dragging down, then either slides all
+  // the way out (back) or springs back into place, mirroring the buy/sell
+  // drawer's finger-tracking open gesture and WalletProfileView's swipe-back.
+  const rootRef = useRef(null);
+  const backdropRef = useRef(null);
+  const closingRef = useRef(false);
+  const dragRef = useRef(null);
+
+  const closeWithSlide = () => {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    const el = rootRef.current;
+    if (!el) { onBack?.(); return; }
+    el.classList.remove('odv-dragging', 'odv-settling');
+    el.classList.add('odv-closing');
+    el.style.transform = 'translateY(100%)';
+    if (backdropRef.current) backdropRef.current.style.background = 'rgba(3, 7, 16, 0)';
+    setTimeout(() => onBack?.(), 220);
+  };
+
+  const handleSwipeStart = (e) => {
+    if (closingRef.current || e.target.closest?.('.native-chart') || e.touches.length > 1) {
+      dragRef.current = null;
+      return;
+    }
+    const t = e.touches[0];
+    dragRef.current = { x: t.clientX, y: t.clientY, dragging: false, lastY: t.clientY, lastT: e.timeStamp, vy: 0 };
+  };
+
+  const handleSwipeMove = (e) => {
+    const d = dragRef.current;
+    if (!d) return;
+    const t = e.touches[0];
+    const dx = t.clientX - d.x;
+    const dy = t.clientY - d.y;
+    if (!d.dragging) {
+      // Axis lock: give up on a dominant horizontal drag, engage on downward motion.
+      if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy)) { dragRef.current = null; return; }
+      if (dy > 12 && Math.abs(dy) > Math.abs(dx) * 1.2) {
+        d.dragging = true;
+        rootRef.current?.classList.add('odv-dragging');
+      } else {
+        return;
+      }
+    }
+    const dt = Math.max(1, e.timeStamp - d.lastT);
+    d.vy = (t.clientY - d.lastY) / dt;
+    d.lastY = t.clientY;
+    d.lastT = e.timeStamp;
+    const el = rootRef.current;
+    const clamped = Math.max(0, dy);
+    if (el) el.style.transform = `translateY(${clamped}px)`;
+    if (backdropRef.current) {
+      const height = el?.clientHeight || window.innerHeight;
+      const fade = Math.max(0, 1 - clamped / (height * 0.7));
+      backdropRef.current.style.background = `rgba(3, 7, 16, ${0.48 * fade})`;
+    }
+  };
+
+  const handleSwipeEnd = (e) => {
+    const d = dragRef.current;
+    dragRef.current = null;
+    if (!d || !d.dragging) return;
+    const el = rootRef.current;
+    if (!el) return;
+    const t = e.changedTouches[0];
+    const dy = Math.max(0, t.clientY - d.y);
+    const height = el.clientHeight || window.innerHeight;
+    const flick = d.vy > 0.5 && dy > 40; // fast downward flick commits early
+    el.classList.remove('odv-dragging');
+    if (dy > Math.min(140, height * 0.3) || flick) {
+      closeWithSlide();
+    } else {
+      el.classList.add('odv-settling');
+      el.style.transform = 'translateY(0px)';
+      if (backdropRef.current) backdropRef.current.style.background = 'rgba(3, 7, 16, 0.48)';
+      setTimeout(() => {
+        el.classList.remove('odv-settling');
+        el.style.transform = '';
+      }, 240);
+    }
+  };
+
   const markers = useMemo(() => {
     if (!entryTime || !(entryPriceUsd > 0)) return null;
     return [{
@@ -85,9 +169,17 @@ function OrderDetailView({ order, walletAddress, solUsdPrice = 150, cancelling, 
   if (!order) return null;
 
   return (
-    <div className="odv-backdrop" onClick={onBack}>
-      <div className="odv-root" onClick={(e) => e.stopPropagation()}>
-        <button className="odv-back" onClick={onBack} title="Back" aria-label="Back">
+    <div className="odv-backdrop" ref={backdropRef} onClick={closeWithSlide}>
+      <div
+        className="odv-root"
+        ref={rootRef}
+        onClick={(e) => e.stopPropagation()}
+        onTouchStart={handleSwipeStart}
+        onTouchMove={handleSwipeMove}
+        onTouchEnd={handleSwipeEnd}
+        onTouchCancel={handleSwipeEnd}
+      >
+        <button className="odv-back" onClick={closeWithSlide} title="Back" aria-label="Back">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="15 18 9 12 15 6" />
           </svg>

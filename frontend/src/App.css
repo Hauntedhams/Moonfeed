@@ -136,10 +136,7 @@ html:not(.dark-mode) #root {
   }
   
   .coin-info-layer {
-    height: calc(100vh - clamp(260px, 40vh, 360px) + 24px);
-  }
-  
-  .coin-info-layer.expanded {
     height: calc(100vh - 80px);
+    --cil-collapsed-shift: calc(clamp(260px, 40vh, 360px) - 104px);
   }
 }

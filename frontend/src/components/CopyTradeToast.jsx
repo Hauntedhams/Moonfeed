@@ -79,7 +79,10 @@ const CopyTradeToast = ({ onShowTransaction }) => {
           onClick={handleTriggerClick}
           title="View this trade on the chart"
         >
-          <span className="ctt-money-icon">💸</span>
+          <svg className="ctt-money-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="1.7" />
+            <path d="M12 7.5v9M14.5 9.5c-.45-.75-1.3-1.15-2.4-1.15-1.25 0-2.1.58-2.1 1.45 0 2.25 4.5.82 4.5 3.05 0 .93-.85 1.55-2.2 1.55-1.1 0-2.05-.42-2.55-1.2" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" />
+          </svg>
           {queue.length > 1 && (
             <span className="ctt-badge-count">{queue.length}</span>
           )}

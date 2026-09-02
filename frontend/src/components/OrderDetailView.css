@@ -50,6 +50,22 @@ body.odv-open .native-chart-mobile-right-actions {
   to { transform: translateY(0); }
 }
 
+.odv-root.odv-dragging {
+  animation: none;
+  transition: none;
+  touch-action: none;
+}
+
+.odv-root.odv-settling {
+  animation: none;
+  transition: transform 0.24s cubic-bezier(0.2, 0.85, 0.3, 1);
+}
+
+.odv-root.odv-closing {
+  animation: none;
+  transition: transform 0.2s ease-in;
+}
+
 html:not(.dark-mode) .odv-root {
   background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 50%, #f8f9fa 100%);
   color: #111827;

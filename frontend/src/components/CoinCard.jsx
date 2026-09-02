@@ -72,6 +72,34 @@ function formatCompactNumber(num) {
   return num.toFixed(4);
 }
 
+const POPUP_FEED_ORDER = ['dextrending', 'whalefeed', 'graduating', 'new', 'trending'];
+
+function normalizeFeedId(feedType) {
+  const key = String(feedType || '').toLowerCase();
+  if (POPUP_FEED_ORDER.includes(key)) return key;
+  return POPUP_FEED_ORDER.find((feed) => key.includes(feed)) || 'dextrending';
+}
+
+function formatFeedLabel(feedType) {
+  const key = normalizeFeedId(feedType);
+  const labels = {
+    trending: 'Trending',
+    new: 'New',
+    graduating: 'Graduating',
+    dextrending: 'DEXtrending',
+    whalefeed: 'Whalefeed',
+    custom: 'Custom',
+  };
+  return labels[key] || feedType || 'Moonfeed';
+}
+
+function getAdjacentFeedId(feedType, direction) {
+  const currentId = normalizeFeedId(feedType);
+  const currentIndex = POPUP_FEED_ORDER.indexOf(currentId);
+  const nextIndex = (currentIndex + direction + POPUP_FEED_ORDER.length) % POPUP_FEED_ORDER.length;
+  return POPUP_FEED_ORDER[nextIndex];
+}
+
 const CoinCard = memo(({ 
   coin, 
   isFavorite, 
@@ -96,12 +124,15 @@ const CoinCard = memo(({
   const [isExpanded, setIsExpanded] = useState(false);
   const [showBannerModal, setShowBannerModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showCoinInfoPopup, setShowCoinInfoPopup] = useState(false);
   const [showPriceChangeModal, setShowPriceChangeModal] = useState(false);
   const [hoveredMetric, setHoveredMetric] = useState(null);
   const [pinnedMetric, setPinnedMetric] = useState(null);
   const [showGraduationInfo, setShowGraduationInfo] = useState(false);  const [graduationIconPosition, setGraduationIconPosition] = useState(null);
   const [priceFlash, setPriceFlash] = useState('');
   const [showLiveTransactions, setShowLiveTransactions] = useState(false);
+  const [txSortMode, setTxSortMode] = useState('recent'); // 'recent' (default) | 'biggest'
+  const [showTxSortMenu, setShowTxSortMenu] = useState(false);
   const [showInlineTopTraders, setShowInlineTopTraders] = useState(false);
   const [showComments, setShowComments] = useState(false); // TikTok-style comments bottom sheet
   const [comments, setComments] = useState([]); // Cached comments for count badge
@@ -112,6 +143,8 @@ const CoinCard = memo(({
   const [trackedPrice, setTrackedPrice] = useState(null);
   const [trackedTimeState, setTrackedTimeState] = useState(null);
   const [focusTrackedSignal, setFocusTrackedSignal] = useState(0);
+  const coinInfoSwipeRef = useRef(null);
+  const [coinInfoFeedDrag, setCoinInfoFeedDrag] = useState({ active: false, dx: 0 });
   // Local state gives instant feedback on tap; once the persisted value (from
   // the account's tracked-coins list) arrives it takes over so the "Tracked
   // at" price survives reloads/remounts instead of resetting to nothing.
@@ -542,6 +575,14 @@ const CoinCard = memo(({
     };
   }, [showLiveTransactions]);
 
+  // Reset the tx sort filter to the default (most recent) when the panel closes
+  useEffect(() => {
+    if (!showLiveTransactions) {
+      setShowTxSortMenu(false);
+      setTxSortMode('recent');
+    }
+  }, [showLiveTransactions]);
+
   // The transaction window lives below the chart inside the expanded card. Bring
   // it into view when opened from the floating action stack.
   useEffect(() => {
@@ -813,6 +854,11 @@ const CoinCard = memo(({
     });
   };
 
+  // Order mode: dragging up/down on the chart itself hands back an absolute target price.
+  const handleOrderTargetChange = (price) => {
+    if (Number.isFinite(price) && price > 0) setBuyOrderPrice(clampBuyOrderPrice(price));
+  };
+
   const adjustBuySolAmount = (direction) => {
     setBuySolAmount((current) => {
       const nextAmount = clampBuySolAmount(current + direction * BUY_AMOUNT_STEP);
@@ -837,6 +883,10 @@ const CoinCard = memo(({
   const handleBuyTouchStart = (e) => {
     const touch = e.touches?.[0];
     if (!touch) return;
+    if (e.target?.closest?.('.coin-info-popup')) {
+      buySwipeRef.current = { tracking: false, mode: null, progress: 0 };
+      return;
+    }
     // Panning/zooming the expanded chart must not drag the trade drawer out.
     if (e.target?.closest?.('.native-chart')) {
       buySwipeRef.current = { ...buySwipeRef.current, tracking: false, mode: null, progress: 0 };
@@ -1716,6 +1766,7 @@ const CoinCard = memo(({
       setPriceFlash('');
       setShowBannerModal(false);
       setShowProfileModal(false);
+      setShowCoinInfoPopup(false);
       setShowPriceChangeModal(false);
       setShowLiveTransactions(false);
       setShowInlineTopTraders(false);
@@ -1943,6 +1994,73 @@ const CoinCard = memo(({
   }
 
   const activeMetric = hoveredMetric || pinnedMetric;
+  const popupFeedId = normalizeFeedId(coin._moonfeedFeedType || coin.feedType || coin.source);
+  const popupFeedPreview = {
+    previous: getAdjacentFeedId(popupFeedId, -1),
+    current: popupFeedId,
+    next: getAdjacentFeedId(popupFeedId, 1),
+  };
+  const popupFeedShift = Math.max(-1, Math.min(1, coinInfoFeedDrag.dx / 78));
+  const popupFeedTrackStyle = {
+    transform: `translateX(calc(-33.333% + ${popupFeedShift * 33.333}%))`,
+  };
+  const updateCoinInfoFeedPreview = (clientX, clientY) => {
+    const start = coinInfoSwipeRef.current;
+    if (!start) return;
+    const dx = clientX - start.x;
+    const dy = clientY - start.y;
+    if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+    if (Math.abs(dx) < Math.abs(dy) * 1.15) {
+      setCoinInfoFeedDrag({ active: false, dx: 0 });
+      return;
+    }
+    setCoinInfoFeedDrag({ active: true, dx: Math.max(-78, Math.min(78, dx)) });
+  };
+  const commitCoinInfoFeedSwipe = (clientX, clientY) => {
+    const start = coinInfoSwipeRef.current;
+    coinInfoSwipeRef.current = null;
+    setCoinInfoFeedDrag({ active: false, dx: 0 });
+    if (!start) return;
+    const dx = clientX - start.x;
+    const dy = clientY - start.y;
+    if (Math.abs(dx) < 48 || Math.abs(dx) < Math.abs(dy) * 1.25) return;
+    window.dispatchEvent(new CustomEvent('moonfeed:swipe-feed', {
+      detail: { direction: dx < 0 ? 1 : -1 },
+    }));
+    setShowCoinInfoPopup(false);
+  };
+  const handleCoinInfoTouchStart = (e) => {
+    const touch = e.touches?.[0];
+    coinInfoSwipeRef.current = touch ? { x: touch.clientX, y: touch.clientY } : null;
+  };
+  const handleCoinInfoTouchMove = (e) => {
+    const touch = e.touches?.[0];
+    if (touch) updateCoinInfoFeedPreview(touch.clientX, touch.clientY);
+  };
+  const handleCoinInfoTouchEnd = (e) => {
+    const touch = e.changedTouches?.[0];
+    if (touch) commitCoinInfoFeedSwipe(touch.clientX, touch.clientY);
+  };
+  const handleCoinInfoTouchCancel = () => {
+    coinInfoSwipeRef.current = null;
+    setCoinInfoFeedDrag({ active: false, dx: 0 });
+  };
+  const handleCoinInfoPointerDown = (e) => {
+    if (e.pointerType === 'touch') return;
+    coinInfoSwipeRef.current = { x: e.clientX, y: e.clientY };
+  };
+  const handleCoinInfoPointerMove = (e) => {
+    if (e.pointerType === 'touch') return;
+    updateCoinInfoFeedPreview(e.clientX, e.clientY);
+  };
+  const handleCoinInfoPointerUp = (e) => {
+    if (e.pointerType === 'touch') return;
+    commitCoinInfoFeedSwipe(e.clientX, e.clientY);
+  };
+  const handleCoinInfoPointerCancel = () => {
+    coinInfoSwipeRef.current = null;
+    setCoinInfoFeedDrag({ active: false, dx: 0 });
+  };
 
   return (
     <div
@@ -2029,14 +2147,23 @@ const CoinCard = memo(({
             </div>
           );
         })()}
+
+        <button
+          type="button"
+          className="banner-coin-name clickable-name banner-coin-name-center"
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowCoinInfoPopup(true);
+          }}
+          title="View coin info"
+        >
+          {coin.name || coin.symbol || coin.ticker || 'Meme coin'}
+        </button>
         
         {/* Banner Text Overlay */}
         <div className="banner-text-overlay">
           <div className="banner-coin-info">
             <div className="banner-symbol-row">
-              <p className="banner-coin-symbol">
-                ${coin.symbol || coin.ticker || 'N/A'}
-              </p>
               {coin.description && (
                 <>
                   <span className="banner-coin-description-inline">
@@ -2155,30 +2282,43 @@ const CoinCard = memo(({
                 const profileSrcs = [...new Set([coin.profileImage, coin.image, coin.logo, coin.icon].filter(Boolean))];
                 const profileSrc = profileSrcs[profileSrcIndex] || null;
                 return (
-                  <div 
-                    className="info-layer-profile-image" 
-                    onClick={profileSrc ? handleProfileClick : undefined}
-                    style={{ cursor: profileSrc ? 'pointer' : 'default' }}
-                  >
-                    {/* Placeholder: visible until the real image loads */}
-                    <div
-                      className="info-layer-profile-placeholder"
-                      style={{ opacity: profileLoaded ? 0 : 1 }}
+                  <div className="info-layer-token-stack">
+                    <button
+                      type="button"
+                      className="info-layer-token-ticker"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowCoinInfoPopup(true);
+                      }}
+                      title="View coin info"
                     >
-                      {coin.symbol?.charAt(0) || coin.name?.charAt(0) || 'M'}
+                      ${coin.symbol || coin.ticker || 'N/A'}
+                    </button>
+                    <div 
+                      className="info-layer-profile-image" 
+                      onClick={profileSrc ? handleProfileClick : undefined}
+                      style={{ cursor: profileSrc ? 'pointer' : 'default' }}
+                    >
+                      {/* Placeholder: visible until the real image loads */}
+                      <div
+                        className="info-layer-profile-placeholder"
+                        style={{ opacity: profileLoaded ? 0 : 1 }}
+                      >
+                        {coin.symbol?.charAt(0) || coin.name?.charAt(0) || 'M'}
+                      </div>
+                      {/* Image: hidden until onLoad fires, then fades in */}
+                      {profileSrc && (
+                        <img
+                          key={profileSrc}
+                          src={profileSrc}
+                          alt={coin.name || 'Token logo'}
+                          decoding="async"
+                          style={{ opacity: profileLoaded ? 1 : 0 }}
+                          onLoad={() => setProfileLoaded(true)}
+                          onError={() => { setProfileSrcIndex(i => i + 1); setProfileLoaded(false); }}
+                        />
+                      )}
                     </div>
-                    {/* Image: hidden until onLoad fires, then fades in */}
-                    {profileSrc && (
-                      <img
-                        key={profileSrc}
-                        src={profileSrc}
-                        alt={coin.name || 'Token logo'}
-                        decoding="async"
-                        style={{ opacity: profileLoaded ? 1 : 0 }}
-                        onLoad={() => setProfileLoaded(true)}
-                        onError={() => { setProfileSrcIndex(i => i + 1); setProfileLoaded(false); }}
-                      />
-                    )}
                   </div>
                 );
               })()}
@@ -2282,20 +2422,6 @@ const CoinCard = memo(({
                       </svg>
                     </a>
                   )}
-                  {graduationPercentage !== null && (
-                    <div className="bonding-curve-pill" title={`Bonding curve: ${graduationPercentage.toFixed(1)}% — graduates to Raydium at 100%`}>
-                      <span className="bonding-curve-pill-label">{graduationPercentage.toFixed(0)}%</span>
-                      <div className="bonding-curve-pill-track">
-                        <div
-                          className="bonding-curve-pill-fill"
-                          style={{
-                            width: `${Math.min(graduationPercentage, 100)}%`,
-                            background: graduationColor,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  )}
                   <div className="follow-alert-wrap">
                     <button 
                       className={`banner-follow-button ${isFavorite ? 'following' : ''}`}
@@ -2359,6 +2485,28 @@ const CoinCard = memo(({
               />
             </div>
           </div>
+
+          {graduationPercentage !== null && (
+            <div
+              className="graduation-progress-row"
+              title={`Bonding curve: ${graduationPercentage.toFixed(1)}% — graduates to Raydium at 100%`}
+            >
+              <div className="graduation-progress-heading">
+                <span>Graduation progress</span>
+                <strong style={{ color: graduationColor }}>{graduationPercentage.toFixed(1)}%</strong>
+              </div>
+              <div className="graduation-progress-track" aria-label={`${graduationPercentage.toFixed(1)}% to graduation`}>
+                <div
+                  className="graduation-progress-fill"
+                  style={{
+                    width: `${Math.min(graduationPercentage, 100)}%`,
+                    background: graduationColor,
+                  }}
+                />
+              </div>
+              <span className="graduation-progress-caption">Live bonding curve</span>
+            </div>
+          )}
 
           {/* Bottom row: Full-width Metrics Grid */}
           <div className="header-metrics-row">
@@ -2532,6 +2680,36 @@ const CoinCard = memo(({
                 </svg>
               </span>
               Transactions
+              {showLiveTransactions && (
+                <span className="tx-filter-wrap">
+                  <button
+                    className="tx-filter-btn"
+                    onClick={(e) => { e.stopPropagation(); setShowTxSortMenu(v => !v); }}
+                    title="Sort transactions"
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+                    </svg>
+                    {txSortMode === 'biggest' ? 'Biggest' : 'Recent'}
+                  </button>
+                  {showTxSortMenu && (
+                    <span className="tx-filter-menu" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        className={txSortMode === 'recent' ? 'active' : ''}
+                        onClick={() => { setTxSortMode('recent'); setShowTxSortMenu(false); }}
+                      >
+                        Most recent
+                      </button>
+                      <button
+                        className={txSortMode === 'biggest' ? 'active' : ''}
+                        onClick={() => { setTxSortMode('biggest'); setShowTxSortMenu(false); }}
+                      >
+                        Biggest
+                      </button>
+                    </span>
+                  )}
+                </span>
+              )}
             </div>
             <div className="live-transactions-content">
                   {txError && (
@@ -2573,7 +2751,15 @@ const CoinCard = memo(({
                       </div>
                     ) : (() => {
                       const isOpen = showLiveTransactions;
-                      const previewTxns = isOpen ? transactions : transactions.slice(0, 8);
+                      const txUsdValue = (tx) => {
+                        const tokenAmt = tx.tokenAmount || tx.amount || 0;
+                        if (Number(tx.priceUsd) > 0) return tokenAmt * Number(tx.priceUsd);
+                        return (tx.solAmount || 0) * (solUsd > 0 ? solUsd : 1);
+                      };
+                      const sortedTxns = isOpen && txSortMode === 'biggest'
+                        ? [...transactions].sort((a, b) => txUsdValue(b) - txUsdValue(a))
+                        : transactions;
+                      const previewTxns = isOpen ? sortedTxns : transactions.slice(0, 8);
                       const canRoll = !isOpen && previewTxns.length > 0;
                       // Repeat the preview enough times to keep short lists filled while looping.
                       const rows = canRoll
@@ -3634,6 +3820,8 @@ const CoinCard = memo(({
               onCrosshairMove={handleChartCrosshairMove}
               focusOneMinute={orderChartFocused}
               targetPrice={orderChartFocused ? buyOrderPrice : null}
+              onOrderTargetChange={orderChartFocused ? handleOrderTargetChange : null}
+              onOrderTargetNudge={orderChartFocused ? adjustBuyOrderPrice : null}
               targetLabel={orderTargetLabel}
               targetColor={buyDrawerOrderSide === 'sell' ? '#22d3ee' : '#4ade80'}
               entryPrice={entryPrice}
@@ -3708,6 +3896,45 @@ const CoinCard = memo(({
               alt={coin.name || 'Token profile'}
               className="profile-modal-image"
             />
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Coin Info Popup */}
+      {showCoinInfoPopup && createPortal(
+        <div className="coin-info-popup-overlay" onClick={() => setShowCoinInfoPopup(false)}>
+          <div
+            className="coin-info-popup"
+            onClick={(e) => e.stopPropagation()}
+            onTouchStart={handleCoinInfoTouchStart}
+            onTouchMove={handleCoinInfoTouchMove}
+            onTouchEnd={handleCoinInfoTouchEnd}
+            onTouchCancel={handleCoinInfoTouchCancel}
+            onPointerDown={handleCoinInfoPointerDown}
+            onPointerMove={handleCoinInfoPointerMove}
+            onPointerUp={handleCoinInfoPointerUp}
+            onPointerCancel={handleCoinInfoPointerCancel}
+          >
+            <button className="coin-info-popup-close" onClick={() => setShowCoinInfoPopup(false)}>
+              ×
+            </button>
+            <div className="coin-info-popup-top">
+              <div>
+                <div className="coin-info-popup-symbol">${coin.symbol || coin.ticker || 'N/A'}</div>
+                <div className="coin-info-popup-name">{coin.name || coin.symbol || 'Meme coin'}</div>
+              </div>
+              <div className={`coin-info-popup-feed ${coinInfoFeedDrag.active ? 'dragging' : ''}`}>
+                <div className="coin-info-popup-feed-track" style={popupFeedTrackStyle}>
+                  <span>{formatFeedLabel(popupFeedPreview.previous)}</span>
+                  <span>{formatFeedLabel(popupFeedPreview.current)}</span>
+                  <span>{formatFeedLabel(popupFeedPreview.next)}</span>
+                </div>
+              </div>
+            </div>
+            <div className="coin-info-popup-bio">
+              {coin.description || 'No bio available yet.'}
+            </div>
           </div>
         </div>,
         document.body

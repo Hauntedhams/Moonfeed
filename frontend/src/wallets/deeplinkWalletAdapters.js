@@ -146,6 +146,14 @@ class DeeplinkWalletAdapter extends BaseSignerWalletAdapter {
     return applySignatures(transaction, signed);
   }
 
+  // Exposing this makes wallet-adapter (and WalletContext) report message-
+  // signing support, which Jupiter Trigger V2 auth prefers over the
+  // transaction challenge (wallets can rewrite txs but not messages).
+  async signMessage(message) {
+    const bytes = message instanceof Uint8Array ? message : new Uint8Array(message);
+    return mobileWallet.signMessage(bytes);
+  }
+
   async signAllTransactions(transactions) {
     const signed = await mobileWallet.signAllSerialized(transactions.map(serializeTx));
     return transactions.map((tx, i) => applySignatures(tx, signed[i]));

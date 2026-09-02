@@ -103,6 +103,8 @@ const NativeChart = ({
   targetPrice = null,
   targetLabel = '',
   targetColor = '#22d3ee',
+  onOrderTargetChange = null, // order mode: drag on the plot moves the target to this price
+  onOrderTargetNudge = null, // order mode: wheel over the plot steps the target up/down
   entryPrice = null,
   trackedPrice = null,
   trackedTime = null,
@@ -125,6 +127,7 @@ const NativeChart = ({
   const projShapeRef = useRef(null); // stable noise so scrolling stretches one path, not a new one
   const recentVolRef = useRef(0);
   const manualTfRef = useRef(false); // user picked a timeframe; auto-framing stands down
+  const autoDensityKeyRef = useRef(null); // pool/mint already auto-downgraded to a shorter TF once
   const lastOrderTargetRef = useRef(null);
   const lastFocusTimelineRef = useRef(null);
   const dataLengthRef = useRef(0);
@@ -148,6 +151,9 @@ const NativeChart = ({
 
   const [tfIndex, setTfIndex] = useState(initialTfIndex ?? DEFAULT_TF_INDEX);
   const [status, setStatus] = useState('idle'); // idle | loading | ready | empty | error
+  // Bumped on every successful data load — lets order-mode effects re-run after a
+  // "soft" reload that swaps data in place without cycling status through 'loading'.
+  const [dataRev, setDataRev] = useState(0);
   const [pool, setPool] = useState(() => resolvePool(coin));
   const [poolResolved, setPoolResolved] = useState(() => !!resolvePool(coin));
   // Live price badge: value + last tick direction ('up'|'down') + counter to replay the flash.
@@ -166,6 +172,10 @@ const NativeChart = ({
   // Mirror focusOneMinute into a ref so stable callbacks can read it without re-binding.
   const focusOneMinuteRef = useRef(focusOneMinute);
   focusOneMinuteRef.current = focusOneMinute;
+  const onOrderTargetChangeRef = useRef(onOrderTargetChange);
+  onOrderTargetChangeRef.current = onOrderTargetChange;
+  const onOrderTargetNudgeRef = useRef(onOrderTargetNudge);
+  onOrderTargetNudgeRef.current = onOrderTargetNudge;
 
   // Pin the price axis to exactly the candles currently in view. Called on each
   // user navigation step so zoom/pan still re-fits vertically like autoscale —
@@ -363,6 +373,7 @@ const NativeChart = ({
 
     // Direct mouse wheel zoom handling
     const onWheel = (e) => {
+      if (focusOneMinuteRef.current) return; // order mode: wheel steps the target instead
       e.preventDefault();
       e.stopPropagation();
 
@@ -526,6 +537,7 @@ const NativeChart = ({
     };
 
     const onTouchStartCapture = (e) => {
+      if (focusOneMinuteRef.current) return; // order mode owns plot touches (target drag)
       if (e.touches.length > 1) {
         mode = 'multi';
         endScrub();
@@ -575,6 +587,7 @@ const NativeChart = ({
     };
 
     const onTouchMoveCapture = (e) => {
+      if (focusOneMinuteRef.current && mode === null) return; // order mode owns plot touches
       if (e.touches.length === 2 && mode === 'multi' && initialPinchDist > 0 && initialLogicalRange) {
         e.stopPropagation();
         e.preventDefault();
@@ -643,6 +656,98 @@ const NativeChart = ({
       try { chart.applyOptions({ handleScroll: isExpanded, handleScale: isExpanded }); } catch (_) { /* disposed */ }
     };
   }, [isExpanded, status, onCrosshairMove, markUserNav]);
+
+  // Order mode turns the plot itself into a target picker: dragging up/down
+  // (finger or mouse) or scrolling the wheel over the chart moves the sell-at /
+  // buy-at price, mirroring the drawer's price wheel. The collapsed canvas is
+  // normally pointer-events:none, so interactivity is enabled inline for the
+  // duration and fully restored on exit.
+  useEffect(() => {
+    const el = containerRef.current;
+    const chart = chartRef.current;
+    if (!el || !chart || !focusOneMinute) return undefined;
+    if (!onOrderTargetChangeRef.current && !onOrderTargetNudgeRef.current) return undefined;
+
+    const prevPointerEvents = el.style.pointerEvents;
+    const prevTouchAction = el.style.touchAction;
+    el.style.pointerEvents = 'auto';
+    el.style.touchAction = 'none'; // vertical drags belong to the target, not the feed
+
+    let drag = null; // { startY, startTarget, pricePerPx }
+
+    const beginDrag = (clientY) => {
+      const height = el.getBoundingClientRect().height || 1;
+      const startTarget = Number(targetPriceRef.current) || Number(lastCandleRef.current?.close) || 0;
+      if (!(startTarget > 0)) return null;
+      // Freeze the price-per-pixel mapping at gesture start so the scale easing
+      // toward the moving target can't feed back into the drag itself.
+      let pricePerPx = null;
+      try {
+        const top = seriesRef.current?.coordinateToPrice(0);
+        const bottom = seriesRef.current?.coordinateToPrice(height);
+        if (Number.isFinite(top) && Number.isFinite(bottom) && top > bottom) {
+          pricePerPx = (top - bottom) / height;
+        }
+      } catch (_) { /* chart disposed / no data yet */ }
+      if (!pricePerPx) pricePerPx = (startTarget * 0.9) / height; // full-height drag ≈ ±90%
+      return { startY: clientY, startTarget, pricePerPx };
+    };
+
+    const applyDrag = (clientY) => {
+      if (!drag) return;
+      const next = drag.startTarget + (drag.startY - clientY) * drag.pricePerPx;
+      onOrderTargetChangeRef.current?.(next);
+    };
+
+    const onWheelOrder = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      onOrderTargetNudgeRef.current?.(e.deltaY < 0 ? 1 : -1);
+    };
+    const onTouchStart = (e) => {
+      if (e.touches.length !== 1) { drag = null; return; }
+      drag = beginDrag(e.touches[0].clientY);
+      if (drag) e.stopPropagation();
+    };
+    const onTouchMove = (e) => {
+      if (!drag || e.touches.length !== 1) return;
+      e.preventDefault();
+      e.stopPropagation();
+      applyDrag(e.touches[0].clientY);
+    };
+    const onTouchEnd = () => { drag = null; };
+    const onMouseDown = (e) => {
+      drag = beginDrag(e.clientY);
+      if (drag) { e.preventDefault(); e.stopPropagation(); }
+    };
+    const onMouseMove = (e) => {
+      if (!drag) return;
+      e.preventDefault();
+      applyDrag(e.clientY);
+    };
+    const onMouseUp = () => { drag = null; };
+
+    el.addEventListener('wheel', onWheelOrder, { capture: true, passive: false });
+    el.addEventListener('touchstart', onTouchStart, { capture: true, passive: false });
+    el.addEventListener('touchmove', onTouchMove, { capture: true, passive: false });
+    el.addEventListener('touchend', onTouchEnd, { capture: true, passive: true });
+    el.addEventListener('touchcancel', onTouchEnd, { capture: true, passive: true });
+    el.addEventListener('mousedown', onMouseDown, { capture: true });
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    return () => {
+      el.removeEventListener('wheel', onWheelOrder, { capture: true });
+      el.removeEventListener('touchstart', onTouchStart, { capture: true });
+      el.removeEventListener('touchmove', onTouchMove, { capture: true });
+      el.removeEventListener('touchend', onTouchEnd, { capture: true });
+      el.removeEventListener('touchcancel', onTouchEnd, { capture: true });
+      el.removeEventListener('mousedown', onMouseDown, { capture: true });
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      el.style.pointerEvents = prevPointerEvents;
+      el.style.touchAction = prevTouchAction;
+    };
+  }, [focusOneMinute]);
 
   // Feed the parent card's header with the historical candle under the
   // crosshair, and scrub the chart's own price badge to match — so hovering
@@ -735,9 +840,15 @@ const NativeChart = ({
   const load = useCallback(async () => {
     if (!chartRef.current || !poolResolved) return;
     const tf = TIMEFRAMES[tfIndex];
-    setStatus('loading');
-    lastCandleRef.current = null; // block live folding until fresh data lands
-    outlierTickRef.current = null;
+    // Order mode swaps timeframes as the target moves — keep the old candles on
+    // screen and glide to the new data instead of flashing a loading spinner.
+    const soft = focusOneMinuteRef.current && !!pool
+      && seriesTypeRef.current === 'candles' && !!lastCandleRef.current;
+    if (!soft) {
+      setStatus('loading');
+      lastCandleRef.current = null; // block live folding until fresh data lands
+      outlierTickRef.current = null;
+    }
     clearUserNav(); // fresh data/timeframe = fresh auto view
 
     // Candlestick mode: coin has a DEX pool → GeckoTerminal OHLCV.
@@ -762,10 +873,15 @@ const NativeChart = ({
         }
       }
       if (!chartRef.current) return; // unmounted mid-fetch
-      if (hadError) { setStatus('error'); return; }
+      if (hadError) {
+        if (!soft) setStatus('error'); // soft reload: keep the old candles instead
+        return;
+      }
       if (!Array.isArray(list) || list.length === 0) {
-        try { ensureSeries('candles')?.setData([]); } catch (e) { /* chart disposed mid-fetch */ }
-        setStatus('empty');
+        if (!soft) {
+          try { ensureSeries('candles')?.setData([]); } catch (e) { /* chart disposed mid-fetch */ }
+          setStatus('empty');
+        }
         return;
       }
       // GeckoTerminal returns [ts, open, high, low, close, volume], newest-first.
@@ -793,12 +909,34 @@ const NativeChart = ({
         const fitKey = `${mint}-${tf.label}-${pool}`;
         if (fittedMintTfRef.current !== fitKey) {
           fittedMintTfRef.current = fitKey;
-          chartRef.current?.timeScale().fitContent();
+          // Soft reload: skip the instant refit — the order-focus zoom effect
+          // animates to the new framing instead of jumping to it.
+          if (!soft) chartRef.current?.timeScale().fitContent();
         }
       } catch (e) {
         // Chart/series disposed mid-fetch (e.g. card scrolled away and unmounted) — nothing to draw into anymore.
         return;
       }
+      // A young/quiet pool at the default 15m resolution can render as just a
+      // couple of bars (looks empty/unreadable, as in a fresh pump.fun launch).
+      // Auto-drop to a shorter timeframe once so it reads as a fuller chart —
+      // only when the user hasn't picked a TF themselves and no other mode
+      // (order focus / position timeline) already owns tfIndex deliberately.
+      if (
+        tfIndex === DEFAULT_TF_INDEX
+        && !manualTfRef.current
+        && !focusOneMinute
+        && !focusTimelineFrom
+        && autoDensityKeyRef.current !== pool
+      ) {
+        autoDensityKeyRef.current = pool;
+        const nextIndex = deduped.length < 8 ? 0 : deduped.length < 20 ? 1 : null;
+        if (nextIndex !== null) {
+          setTfIndex(nextIndex);
+          return;
+        }
+      }
+      setDataRev((n) => n + 1);
       setStatus('ready');
       return;
     }
@@ -1352,7 +1490,7 @@ const NativeChart = ({
       cancelAnimationFrame(raf);
       observer.disconnect();
     };
-  }, [focusOneMinute, status, targetPrice, tfIndex]);
+  }, [focusOneMinute, status, targetPrice, tfIndex, dataRev]);
 
   // Wallet buys/sells shown on the chart: cluster dots that land within ~22px
   // of each other on screen (instead of stacking a separate arrow+label per
@@ -1529,7 +1667,7 @@ const NativeChart = ({
     return () => {
       if (focusAnimationRef.current) cancelAnimationFrame(focusAnimationRef.current);
     };
-  }, [focusOneMinute, status, targetPrice, tfIndex]);
+  }, [focusOneMinute, status, targetPrice, tfIndex, dataRev]);
 
   // When the order drawer closes (focusOneMinute true -> false), the chart was
   // left zoomed tight on the order-target view — animate it back out to the
@@ -1625,7 +1763,9 @@ const NativeChart = ({
     const start = last.close;
     const span = target - start;
     const vol = Math.max(recentVolRef.current, 0.002);
-    const wobble = Math.abs(span) * 0.16 + start * vol * 0.6;
+    // Kept subtle — just enough texture to read as candles without the ups and
+    // downs distracting from the actual drift toward the target.
+    const wobble = Math.abs(span) * 0.07 + start * vol * 0.35;
 
     const candles = [];
     let prevClose = start;
@@ -1635,8 +1775,8 @@ const NativeChart = ({
       const isLast = i === PROJECTION_BARS - 1;
       const close = isLast ? target : drift + wobble * noise[i];
       const open = prevClose;
-      const high = Math.max(open, close) + wobble * Math.abs(noise[PROJECTION_BARS + i]) * 0.45;
-      const low = Math.min(open, close) - wobble * Math.abs(noise[PROJECTION_BARS * 2 + i]) * 0.45;
+      const high = Math.max(open, close) + wobble * Math.abs(noise[PROJECTION_BARS + i]) * 0.3;
+      const low = Math.min(open, close) - wobble * Math.abs(noise[PROJECTION_BARS * 2 + i]) * 0.3;
       candles.push({
         time: last.time + interval * (i + 1),
         open,
@@ -1648,7 +1788,7 @@ const NativeChart = ({
     }
 
     try { projSeriesRef.current.setData(candles); } catch (e) { /* mid-teardown */ }
-  }, [focusOneMinute, targetPrice, status, tfIndex, mint]);
+  }, [focusOneMinute, targetPrice, status, tfIndex, mint, dataRev]);
 
   // Fold the live price into the last candle in real time (O(1) series.update).
   useEffect(() => {

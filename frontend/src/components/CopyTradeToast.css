@@ -5,16 +5,16 @@
 
 .ctt-wrap {
   position: fixed;
-  left: 50%;
+  left: 70%;
   transform: translateX(-50%);
-  width: 100%;
-  max-width: 430px;
+  width: auto;
+  max-width: none;
   bottom: calc(env(safe-area-inset-bottom) + 70px);
   z-index: 9999;
   pointer-events: none;
   display: flex;
-  justify-content: flex-end;
-  padding-right: 14px;
+  justify-content: center;
+  padding-right: 0;
   box-sizing: border-box;
 }
 
@@ -80,7 +80,9 @@
 }
 
 .ctt-bubble-icon-only .ctt-money-icon {
-  font-size: 22px;
+  width: 22px;
+  height: 22px;
+  color: currentColor;
 }
 
 @keyframes ctt-bubble-pop {

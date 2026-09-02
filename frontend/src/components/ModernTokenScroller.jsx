@@ -9,7 +9,9 @@ import { useTrackedTrades } from '../contexts/TrackedTradesContext';
 import './ModernTokenScroller.css';
 
 const SWIPE_HINT_SEEN_KEY = 'moonfeed_swipe_hint_seen';
+const FEED_HINT_SEEN_KEY = 'moonfeed_feed_hint_seen';
 const EXPAND_HINT_SEEN_KEY = 'moonfeed_expand_hint_seen';
+const TRADE_HINT_SEEN_KEY = 'moonfeed_trade_hint_seen';
 const ANALYTICS_HINT_SEEN_KEY = 'moonfeed_analytics_hint_seen';
 const HELP_HINT_SEEN_KEY = 'moonfeed_help_hint_seen';
 
@@ -74,9 +76,12 @@ const ModernTokenScroller = ({
     }
   });
   const [showExpandHint, setShowExpandHint] = useState(false);
+  const [showFeedHint, setShowFeedHint] = useState(false);
+  const [showTradeHint, setShowTradeHint] = useState(false);
   const [showAnalyticsHint, setShowAnalyticsHint] = useState(false);
   const [showHelpHint, setShowHelpHint] = useState(false);
   const [expandHintTargets, setExpandHintTargets] = useState({ top: null, bottom: null });
+  const [feedHintTarget, setFeedHintTarget] = useState(null);
   const [analyticsHintTarget, setAnalyticsHintTarget] = useState(null);
   const [helpHintTarget, setHelpHintTarget] = useState(null);
   
@@ -144,6 +149,36 @@ const ModernTokenScroller = ({
     } catch (_) {}
   }, []);
 
+  const hasSeenFeedHint = useCallback(() => {
+    try {
+      return localStorage.getItem(FEED_HINT_SEEN_KEY) === 'true';
+    } catch (_) {
+      return false;
+    }
+  }, []);
+
+  const dismissFeedHint = useCallback(() => {
+    setShowFeedHint(false);
+    try {
+      localStorage.setItem(FEED_HINT_SEEN_KEY, 'true');
+    } catch (_) {}
+  }, []);
+
+  const hasSeenTradeHint = useCallback(() => {
+    try {
+      return localStorage.getItem(TRADE_HINT_SEEN_KEY) === 'true';
+    } catch (_) {
+      return false;
+    }
+  }, []);
+
+  const dismissTradeHint = useCallback(() => {
+    setShowTradeHint(false);
+    try {
+      localStorage.setItem(TRADE_HINT_SEEN_KEY, 'true');
+    } catch (_) {}
+  }, []);
+
   const hasSeenAnalyticsHint = useCallback(() => {
     try {
       return localStorage.getItem(ANALYTICS_HINT_SEEN_KEY) === 'true';
@@ -177,11 +212,15 @@ const ModernTokenScroller = ({
   const restartOnboardingHints = useCallback(() => {
     try {
       localStorage.removeItem(SWIPE_HINT_SEEN_KEY);
+      localStorage.removeItem(FEED_HINT_SEEN_KEY);
       localStorage.removeItem(EXPAND_HINT_SEEN_KEY);
+      localStorage.removeItem(TRADE_HINT_SEEN_KEY);
       localStorage.removeItem(ANALYTICS_HINT_SEEN_KEY);
       localStorage.removeItem(HELP_HINT_SEEN_KEY);
     } catch (_) {}
+    setShowFeedHint(false);
     setShowExpandHint(false);
+    setShowTradeHint(false);
     setShowAnalyticsHint(false);
     setShowHelpHint(false);
     setCurrentIndex(0);
@@ -210,11 +249,79 @@ const ModernTokenScroller = ({
   useEffect(() => {
     if (showSwipeHint && currentIndex > 0) {
       dismissSwipeHint();
-      if (!hasSeenExpandHint()) {
+      if (!hasSeenFeedHint()) {
+        setShowFeedHint(true);
+      } else if (!hasSeenExpandHint()) {
         setShowExpandHint(true);
       }
     }
-  }, [showSwipeHint, currentIndex, dismissSwipeHint, hasSeenExpandHint]);
+  }, [showSwipeHint, currentIndex, dismissSwipeHint, hasSeenFeedHint, hasSeenExpandHint]);
+
+  // Feed-switch hint: ring around the coin's name at the top of the card.
+  useEffect(() => {
+    if (!showFeedHint || onlyFavorites || isTutorialActive) return;
+
+    const updateTarget = () => {
+      const nameButton = document.querySelector('.modern-coin-slide.active .banner-coin-name');
+      if (!nameButton) {
+        setFeedHintTarget(null);
+        return;
+      }
+      const rect = nameButton.getBoundingClientRect();
+      setFeedHintTarget({
+        left: rect.left + rect.width / 2,
+        top: rect.top + rect.height / 2,
+        width: rect.width,
+        height: rect.height
+      });
+    };
+
+    updateTarget();
+    const targetTimer = setInterval(updateTarget, 300);
+    window.addEventListener('resize', updateTarget);
+
+    return () => {
+      clearInterval(targetTimer);
+      window.removeEventListener('resize', updateTarget);
+    };
+  }, [showFeedHint, onlyFavorites, isTutorialActive]);
+
+  useEffect(() => {
+    if (!showFeedHint) return;
+    const hintTimer = setTimeout(() => {
+      dismissFeedHint();
+      if (!hasSeenExpandHint()) setShowExpandHint(true);
+    }, 10000);
+    return () => clearTimeout(hintTimer);
+  }, [showFeedHint, dismissFeedHint, hasSeenExpandHint]);
+
+  // Tapping the coin's name (opens the feed-switch popup) completes this step.
+  useEffect(() => {
+    if (!showFeedHint) return;
+    const handleNameClick = (event) => {
+      if (event.target.closest('.banner-coin-name') || event.target.closest('.info-layer-token-ticker')) {
+        dismissFeedHint();
+        if (!hasSeenExpandHint()) {
+          setShowExpandHint(true);
+        }
+      }
+    };
+
+    document.addEventListener('click', handleNameClick, true);
+    return () => document.removeEventListener('click', handleNameClick, true);
+  }, [showFeedHint, dismissFeedHint, hasSeenExpandHint]);
+
+  // Skipping ahead: expanding the card while the feed hint is up moves the
+  // chain straight to the trade hint.
+  useEffect(() => {
+    if (showFeedHint && expandedCoin) {
+      dismissFeedHint();
+      dismissExpandHint();
+      if (isMobile && !hasSeenTradeHint()) {
+        setShowTradeHint(true);
+      }
+    }
+  }, [showFeedHint, expandedCoin, isMobile, dismissFeedHint, dismissExpandHint, hasSeenTradeHint]);
 
   useEffect(() => {
     if (!showExpandHint || onlyFavorites || isTutorialActive) return;
@@ -258,11 +365,42 @@ const ModernTokenScroller = ({
   useEffect(() => {
     if (showExpandHint && expandedCoin) {
       dismissExpandHint();
-      if (!hasSeenAnalyticsHint()) {
+      if (isMobile && !hasSeenTradeHint()) {
+        setShowTradeHint(true);
+      } else if (!hasSeenAnalyticsHint()) {
         setShowAnalyticsHint(true);
       }
     }
-  }, [showExpandHint, expandedCoin, dismissExpandHint, hasSeenAnalyticsHint]);
+  }, [showExpandHint, expandedCoin, isMobile, dismissExpandHint, hasSeenTradeHint, hasSeenAnalyticsHint]);
+
+  // Trade hint: swipe right to buy / swipe left for the slide-over limit order.
+  useEffect(() => {
+    if (!showTradeHint) return;
+    const hintTimer = setTimeout(() => {
+      dismissTradeHint();
+      if (!hasSeenAnalyticsHint()) setShowAnalyticsHint(true);
+    }, 11000);
+    return () => clearTimeout(hintTimer);
+  }, [showTradeHint, dismissTradeHint, hasSeenAnalyticsHint]);
+
+  // First interaction after the trade hint appears (a swipe or a tap) completes it.
+  // Short grace period so the tap that expanded the card doesn't dismiss it unread.
+  useEffect(() => {
+    if (!showTradeHint || !expandedCoin) return;
+    const shownAt = Date.now();
+    const handleInteraction = () => {
+      if (Date.now() - shownAt < 1200) return;
+      dismissTradeHint();
+      if (!hasSeenAnalyticsHint()) setShowAnalyticsHint(true);
+    };
+
+    document.addEventListener('touchend', handleInteraction, true);
+    document.addEventListener('click', handleInteraction, true);
+    return () => {
+      document.removeEventListener('touchend', handleInteraction, true);
+      document.removeEventListener('click', handleInteraction, true);
+    };
+  }, [showTradeHint, expandedCoin, dismissTradeHint, hasSeenAnalyticsHint]);
 
   useEffect(() => {
     if (!showAnalyticsHint || onlyFavorites || isTutorialActive || !expandedCoin) return;
@@ -1636,6 +1774,18 @@ const ModernTokenScroller = ({
     };
   };
 
+  const getFeedCalloutStyle = (target) => {
+    if (!target) return {};
+    const viewportWidth = window.innerWidth;
+    const calloutWidth = Math.min(300, viewportWidth - 32);
+
+    return {
+      left: Math.max(16, Math.min(viewportWidth - calloutWidth - 16, target.left - calloutWidth / 2)),
+      top: Math.max(18, target.top + target.height / 2 + 34),
+      width: calloutWidth
+    };
+  };
+
   const getHelpCalloutStyle = (target) => {
     if (!target) return {};
     const viewportWidth = window.innerWidth;
@@ -1714,6 +1864,24 @@ const ModernTokenScroller = ({
         </div>
       )}
 
+      {showFeedHint && !onlyFavorites && !isTutorialActive && !expandedCoin && feedHintTarget && (
+        <div className="feed-switch-hint" aria-hidden="true">
+          <div className="feed-switch-hint-backdrop" />
+          <div
+            className="feed-switch-target-ring"
+            style={{
+              left: feedHintTarget.left,
+              top: feedHintTarget.top,
+              width: Math.min(feedHintTarget.width + 26, window.innerWidth - 28),
+              height: feedHintTarget.height + 14
+            }}
+          />
+          <div className="feed-switch-callout" style={getFeedCalloutStyle(feedHintTarget)}>
+            Tap the coin's name to switch feeds — then swipe the feed name left or right
+          </div>
+        </div>
+      )}
+
       {showExpandHint && !onlyFavorites && !isTutorialActive && !expandedCoin && (
         <div className="expand-card-hint" aria-hidden="true">
           <div className="expand-card-hint-backdrop" />
@@ -1745,6 +1913,32 @@ const ModernTokenScroller = ({
               </div>
             </>
           )}
+        </div>
+      )}
+
+      {showTradeHint && !onlyFavorites && !isTutorialActive && expandedCoin && (
+        <div className="trade-swipe-hint" aria-hidden="true">
+          <div className="trade-swipe-hint-backdrop" />
+          <div className="trade-swipe-hint-card">
+            <div className="trade-swipe-row">
+              <span className="trade-swipe-arrow trade-swipe-arrow-right">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M5 12h14" />
+                  <path d="M13 6l6 6-6 6" />
+                </svg>
+              </span>
+              <span className="trade-swipe-row-text">Swipe <strong>right</strong> to buy instantly</span>
+            </div>
+            <div className="trade-swipe-row">
+              <span className="trade-swipe-arrow trade-swipe-arrow-left">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M19 12H5" />
+                  <path d="M11 6l-6 6 6 6" />
+                </svg>
+              </span>
+              <span className="trade-swipe-row-text">Swipe <strong>left</strong> to slide out a limit order</span>
+            </div>
+          </div>
         </div>
       )}
 

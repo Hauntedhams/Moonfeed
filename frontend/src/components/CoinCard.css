@@ -1864,11 +1864,39 @@ html:not(.dark-mode) .coin-card-left-panel::-webkit-scrollbar-thumb:hover {
   transform: translateY(0);
 }
 
+.banner-coin-name.clickable-name.banner-coin-name-center {
+  position: absolute;
+  top: max(28px, calc(env(safe-area-inset-top, 0px) + 10px));
+  left: 0;
+  right: 0;
+  transform: none;
+  width: fit-content;
+  max-width: min(68vw, 260px);
+  margin: 0 auto;
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  z-index: 2;
+}
+
+.banner-coin-name.clickable-name.banner-coin-name-center:hover {
+  transform: none !important;
+}
+
+.banner-coin-name.clickable-name.banner-coin-name-center:active {
+  transform: none !important;
+}
+
 .banner-symbol-row {
   display: flex;
   align-items: flex-start; /* Changed from center - align charts to top */
   gap: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  width: 100%;
 }
 
 .banner-coin-symbol {
@@ -1883,43 +1911,76 @@ html:not(.dark-mode) .coin-card-left-panel::-webkit-scrollbar-thumb:hover {
   margin-left: 8px;
 }
 
-/* Bonding Curve Pill - shown next to follow button for pump.fun tokens */
-.bonding-curve-pill {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 8px;
-  border-radius: 20px;
-  background: rgba(0, 0, 0, 0.06);
-  border: 1.5px solid rgba(0, 0, 0, 0.12);
-  flex-shrink: 0;
-  white-space: nowrap;
-  cursor: default;
+/* Full-width live graduation progress for tokens still on the bonding curve. */
+.graduation-progress-row {
+  width: 100%;
+  margin: 8px 0 2px;
+  padding: 7px 0 8px;
+  border-top: 1px solid rgba(0, 0, 0, 0.12);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
   pointer-events: auto;
 }
 
-.bonding-curve-pill-label {
-  font-size: 0.72rem;
+.graduation-progress-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 5px;
+  color: rgba(0, 0, 0, 0.64);
+  font-size: 0.64rem;
   font-weight: 700;
-  color: rgba(0, 0, 0, 0.75);
-  min-width: 26px;
-  text-align: right;
-  flex-shrink: 0;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
-.bonding-curve-pill-track {
-  width: 44px;
-  height: 5px;
-  background: rgba(0, 0, 0, 0.1);
-  border-radius: 3px;
+.graduation-progress-heading strong {
+  font-size: 0.7rem;
+  letter-spacing: 0;
+}
+
+.graduation-progress-track {
+  width: 100%;
+  height: 7px;
   overflow: hidden;
-  flex-shrink: 0;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
 }
 
-.bonding-curve-pill-fill {
+.graduation-progress-fill {
   height: 100%;
-  border-radius: 3px;
-  transition: width 0.5s ease-out;
+  min-width: 2px;
+  border-radius: inherit;
+  transition: width 0.5s ease-out, background-color 0.3s ease;
+}
+
+.graduation-progress-caption {
+  display: block;
+  margin-top: 4px;
+  color: rgba(0, 0, 0, 0.48);
+  font-size: 0.58rem;
+}
+
+html.dark-mode .graduation-progress-row,
+body.dark-mode .graduation-progress-row {
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+html.dark-mode .graduation-progress-heading,
+body.dark-mode .graduation-progress-heading {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+html.dark-mode .graduation-progress-track,
+body.dark-mode .graduation-progress-track {
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+html.dark-mode .graduation-progress-caption,
+body.dark-mode .graduation-progress-caption {
+  color: rgba(255, 255, 255, 0.48);
 }
 
 /* Coin name shown inline to the left of the Follow button */
@@ -2259,13 +2320,17 @@ html:not(.dark-mode) .coin-card-left-panel::-webkit-scrollbar-thumb:hover {
   left: 0;
   right: 0;
   background: #ffffff;
-  backdrop-filter: blur(20px);
   border-top-left-radius: 24px;
   border-top-right-radius: 24px;
-  transition: height 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-  /* Adjust height to work with the new shorter banner size */
-  /* +24px overlap so rounded corners tuck under the banner, hiding exposed corners */
-  height: calc(100dvh - clamp(180px, 30vh, 250px) + 24px);
+  /* SMOOTH EXPAND: the layer is always the expanded size and slides down by
+     --cil-collapsed-shift when collapsed. Animating transform is GPU-only —
+     the old height animation reflowed the entire card content every frame
+     (percentage heights, chart section, transactions) and looked glitchy.
+     Shift = bannerHeight - 24px overlap - 80px expanded top offset. */
+  --cil-collapsed-shift: calc(clamp(180px, 30vh, 250px) - 104px);
+  height: calc(100dvh - 80px);
+  transform: translateY(var(--cil-collapsed-shift));
+  transition: transform 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
   z-index: 50; /* Increased z-index to ensure it's above other elements */
   overflow: hidden;
   box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
@@ -2276,7 +2341,9 @@ html:not(.dark-mode) .coin-card-left-panel::-webkit-scrollbar-thumb:hover {
 /* 🔥 FIX: When expanded, enable pointer events for scrolling within */
 .coin-info-layer.expanded {
   pointer-events: auto;
-  height: calc(100dvh - 80px); /* Fill viewport minus bottom nav bar */
+  /* none (identity) rather than translateY(0) so the at-rest expanded layer
+     doesn't act as a containing block for any fixed-position descendants */
+  transform: none;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
@@ -2401,8 +2468,38 @@ html:not(.dark-mode) .coin-card-left-panel::-webkit-scrollbar-thumb:hover {
 .header-left {
   display: flex;
   align-items: flex-start;
-  gap: 16px;
+  gap: 14px;
   flex: 1;
+}
+
+.info-layer-token-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  pointer-events: auto;
+}
+
+.info-layer-token-ticker {
+  max-width: 76px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: rgba(0, 0, 0, 0.72);
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.info-layer-token-ticker:hover {
+  color: rgba(0, 0, 0, 0.95);
 }
 
 .price-and-social-section {
@@ -3385,13 +3482,21 @@ html:not(.dark-mode) .twelve-chart-section {
 .transactions-section.expanded {
   transform: none;
   position: relative;
-  z-index: 60;
+  z-index: 61; /* above the sticky .info-layer-header (60) so the header row stays tappable */
+  pointer-events: auto; /* .coin-info-layer is pointer-events:none — opt back in */
   border-color: rgba(79, 195, 247, 0.5);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(79, 195, 247, 0.25);
 }
 
 .transactions-section.expanded:hover {
   transform: none;
+}
+
+/* .info-layer-content (z-55) caps children below the sticky .info-layer-header
+   (z-60) — lift it while the tx panel is expanded so the panel header row
+   (filter + close buttons) isn't occluded/untappable under the sticky header. */
+.info-layer-content:has(.transactions-section.expanded) {
+  z-index: 61;
 }
 
 .transactions-section-header {
@@ -3437,6 +3542,81 @@ html:not(.dark-mode) .twelve-chart-section {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+/* Transactions sort filter (Recent | Biggest) */
+.tx-filter-wrap {
+  margin-left: auto;
+  position: relative;
+  display: inline-flex;
+}
+
+/* Keep clear of the absolute-positioned ✕ close button when expanded */
+.transactions-section.expanded .tx-filter-wrap {
+  margin-right: 24px;
+}
+
+.tx-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(79, 195, 247, 0.08);
+  border: 1px solid rgba(79, 195, 247, 0.25);
+  border-radius: 8px;
+  color: #667eea;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: inherit;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.tx-filter-btn:hover {
+  border-color: rgba(79, 195, 247, 0.5);
+  color: #8b9bff;
+}
+
+.tx-filter-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 70;
+  min-width: 136px;
+  display: flex;
+  flex-direction: column;
+  background: #12141c;
+  border: 1px solid rgba(79, 195, 247, 0.3);
+  border-radius: 10px;
+  padding: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.tx-filter-menu button {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.75);
+  text-align: left;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  text-transform: none;
+  letter-spacing: 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.tx-filter-menu button:hover {
+  background: rgba(79, 195, 247, 0.12);
+  color: #fff;
+}
+
+.tx-filter-menu button.active {
+  color: #4fc3f7;
+  font-weight: 700;
 }
 
 .auto-loaded-badge {
@@ -4119,8 +4299,8 @@ html:not(.dark-mode) .twelve-chart-section {
   }
   
   .coin-info-layer {
-    /* Adjust height for mobile banner (+24px overlap to hide exposed corners) */
-    height: calc(100dvh - clamp(180px, 32vh, 250px) + 24px);
+    /* Match the mobile banner height (+24px overlap to hide exposed corners) */
+    --cil-collapsed-shift: calc(clamp(180px, 32vh, 250px) - 104px);
   }
 
   /* Collapsed card: the transactions section flows directly under the chart and is
@@ -4138,8 +4318,8 @@ html:not(.dark-mode) .twelve-chart-section {
     height: clamp(140px, 24vh, 190px);
   }
 
-  .coin-info-layer:not(.expanded) {
-    height: calc(100dvh - clamp(140px, 24vh, 190px) + 24px);
+  .coin-info-layer {
+    --cil-collapsed-shift: calc(clamp(140px, 24vh, 190px) - 104px);
   }
 }
 
@@ -4734,6 +4914,137 @@ html.dark-mode .description-modal-body,
   border-radius: 12px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
   animation: slideUp 0.3s ease;
+}
+
+/* =============================================================================
+   COIN INFO POPUP
+   ============================================================================= */
+
+.coin-info-popup-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  z-index: 10001;
+  padding: max(88px, calc(env(safe-area-inset-top, 0px) + 68px)) 18px 18px;
+  animation: fadeIn 0.16s ease;
+}
+
+.coin-info-popup {
+  position: relative;
+  width: min(340px, 100%);
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(15, 18, 28, 0.96);
+  color: #fff;
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.42);
+  padding: 16px;
+  animation: alertFlyoutIn 0.18s ease-out;
+  touch-action: pan-y;
+  user-select: none;
+}
+
+.coin-info-popup-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.coin-info-popup-close:hover {
+  background: transparent;
+  color: #ffffff;
+}
+
+.coin-info-popup-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding-right: 28px;
+}
+
+.coin-info-popup-symbol {
+  font-size: 1.05rem;
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.coin-info-popup-name {
+  margin-top: 3px;
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.coin-info-popup-feed {
+  flex-shrink: 0;
+  width: 112px;
+  height: 27px;
+  padding: 0;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.2);
+  border: 1px solid rgba(96, 165, 250, 0.34);
+  color: #bfdbfe;
+  font-size: 0.68rem;
+  font-weight: 800;
+  overflow: hidden;
+  cursor: grab;
+  position: relative;
+}
+
+.coin-info-popup-feed.dragging {
+  cursor: grabbing;
+  border-color: rgba(147, 197, 253, 0.7);
+  box-shadow: 0 0 0 1px rgba(147, 197, 253, 0.18), 0 8px 18px rgba(37, 99, 235, 0.2);
+}
+
+.coin-info-popup-feed-track {
+  display: flex;
+  width: 300%;
+  height: 100%;
+  will-change: transform;
+  transition: transform 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.coin-info-popup-feed.dragging .coin-info-popup-feed-track {
+  transition: none;
+}
+
+.coin-info-popup-feed-track span {
+  width: 33.333%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 9px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.coin-info-popup-bio {
+  margin-top: 12px;
+  color: rgba(255, 255, 255, 0.84);
+  font-size: 0.86rem;
+  line-height: 1.42;
+  max-height: 132px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overflow-wrap: anywhere;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* =============================================================================

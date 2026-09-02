@@ -343,6 +343,29 @@ class MobileWalletDeeplink {
     return result.transactions.map((t) => bs58.decode(t));
   }
 
+  // messageBytes: Uint8Array of the raw message. Returns the 64-byte ed25519
+  // signature as a Uint8Array. Both Phantom and Solflare support this deeplink,
+  // and unlike transactions the wallet cannot modify a message before signing —
+  // which is why Jupiter Trigger V2 auth must use this instead of the
+  // transaction challenge whenever possible.
+  async signMessage(messageBytes) {
+    this._assertConnected();
+    const cfg = this.getProviderConfig();
+    const { nonce, payload } = this._encrypt({
+      session: this.session,
+      message: bs58.encode(messageBytes),
+      display: 'utf8',
+    });
+    const params = new URLSearchParams({
+      dapp_encryption_public_key: bs58.encode(this.dappKeyPair.publicKey),
+      nonce,
+      redirect_link: this._redirectLink('signMessage'),
+      payload,
+    });
+    const result = await this._open(`${cfg.base}/signMessage?${params.toString()}`, 'signMessage');
+    return bs58.decode(result.signature);
+  }
+
   _assertConnected() {
     if (!this.isConnected()) throw new Error('Wallet not connected');
   }

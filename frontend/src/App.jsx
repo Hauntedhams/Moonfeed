@@ -348,6 +348,25 @@ function App() {
     try { localStorage.setItem(LAST_FEED_KEY, filters.type); } catch (_) {}
   }, [filters?.type]);
 
+  // CoinCard's name popup can swipe horizontally through the same home feeds
+  // controlled by FeedSelector.
+  useEffect(() => {
+    const onSwipeFeed = (event) => {
+      const direction = Number(event.detail?.direction) || 1;
+      setActiveTab('home');
+      setAdvancedFilters(null);
+      setIsAdvancedFilterActive(false);
+      setFilters((prev) => {
+        const current = KNOWN_FEEDS.includes(prev?.type) ? prev.type : FEED_ORDER[0];
+        const currentIndex = FEED_ORDER.indexOf(current);
+        const nextIndex = (currentIndex + direction + FEED_ORDER.length) % FEED_ORDER.length;
+        return { type: FEED_ORDER[nextIndex] };
+      });
+    };
+    window.addEventListener('moonfeed:swipe-feed', onSwipeFeed);
+    return () => window.removeEventListener('moonfeed:swipe-feed', onSwipeFeed);
+  }, []);
+
   // Handle top tab filter changes
   const handleTopTabFilterChange = (newFilters) => {
     setFilters(newFilters);

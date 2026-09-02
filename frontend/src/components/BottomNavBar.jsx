@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import './BottomNavBar.css';
 import { useAlerts } from '../contexts/AlertsContext';
+import { useCopyTrade } from '../contexts/CopyTradeContext';
 
 function BottomNavBar({ activeTab, setActiveTab, onSearchClick, onOrdersClick, notificationCount }) {
   const { unreadCount, markAllRead } = useAlerts();
+  const { dismissAll: dismissCopyTradeNotifications } = useCopyTrade();
   const badgeCount = notificationCount ?? unreadCount ?? 0;
 
   return (
@@ -37,7 +39,7 @@ function BottomNavBar({ activeTab, setActiveTab, onSearchClick, onOrdersClick, n
         </span>
         <span className="nav-label">Trade</span>
       </button>
-      <button className={`nav-btn${activeTab === 'tracked' ? ' active' : ''}`} onClick={() => { setActiveTab('tracked'); markAllRead(); }}>
+      <button className={`nav-btn${activeTab === 'tracked' ? ' active' : ''}`} onClick={() => { setActiveTab('tracked'); markAllRead(); dismissCopyTradeNotifications(); }}>
         <span className="nav-icon">
           {/* Radar/Track icon */}
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="10" cy="10" r="7" stroke="currentColor" strokeWidth="1.5"/><circle cx="10" cy="10" r="3" stroke="currentColor" strokeWidth="1.5"/><path d="M10 1.5V4M10 16V18.5M1.5 10H4M16 10H18.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>

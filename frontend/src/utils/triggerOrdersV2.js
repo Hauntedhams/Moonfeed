@@ -1,4 +1,5 @@
 import { getFullApiUrl } from '../config/api';
+import bs58 from 'bs58';
 import { SOL_MINT, fetchTokenDecimals } from './triggerOrders';
 
 /**
@@ -50,6 +51,31 @@ const bytesToB64 = (bytes) => {
   for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
   return btoa(bin);
 };
+
+// Wallets return message signatures in wildly different shapes: Uint8Array,
+// { signature }, base58 strings (deeplink wallets), base64 strings, plain
+// arrays, Buffers. Normalize to a 64-byte Uint8Array or null — anything else
+// would reach Jupiter as garbage and come back as a bare "Invalid signature".
+function toSignatureBytes(raw) {
+  if (raw == null) return null;
+  if (raw instanceof Uint8Array) return raw.length === 64 ? raw : null;
+  if (typeof raw === 'object' && raw.signature != null) return toSignatureBytes(raw.signature);
+  if (typeof raw === 'string') {
+    try {
+      const b = bs58.decode(raw);
+      if (b.length === 64) return new Uint8Array(b);
+    } catch (_) { /* not base58 */ }
+    try {
+      const b = b64ToBytes(raw);
+      if (b.length === 64) return b;
+    } catch (_) { /* not base64 */ }
+    return null;
+  }
+  if (ArrayBuffer.isView(raw)) return toSignatureBytes(new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength));
+  if (raw instanceof ArrayBuffer) return toSignatureBytes(new Uint8Array(raw));
+  if (Array.isArray(raw)) return toSignatureBytes(new Uint8Array(raw));
+  return null;
+}
 
 // The message part of a serialized tx (everything after the shortvec-prefixed
 // signature array). Lets us detect wallet-side transaction modification by
@@ -210,21 +236,47 @@ export async function ensureTriggerAuth({ walletAddress, signMessage, signTransa
     const challenge = await apiPost('/api/trigger/v2/auth/challenge', { walletPubkey: walletAddress, type: 'message' });
     const message = new TextEncoder().encode(challenge.challenge);
     const rawSig = await signMessage(message);
-    const sigBytes = rawSig instanceof Uint8Array ? rawSig : (rawSig?.signature instanceof Uint8Array ? rawSig.signature : new Uint8Array(rawSig));
-    const verified = await apiPost('/api/trigger/v2/auth/verify', {
-      type: 'message',
-      walletPubkey: walletAddress,
-      signature: base58Encode(sigBytes),
-    });
+    const sigBytes = toSignatureBytes(rawSig);
+    if (!sigBytes) {
+      console.warn('[TriggerV2] Unusable signMessage result:', typeof rawSig, rawSig);
+      throw new Error('Your wallet returned an unusable signature — try reconnecting your wallet');
+    }
+    let verified;
+    try {
+      verified = await apiPost('/api/trigger/v2/auth/verify', {
+        type: 'message',
+        walletPubkey: walletAddress,
+        signature: base58Encode(sigBytes),
+      });
+    } catch (err) {
+      throw new Error(`Wallet sign-in failed (${err.message}) — try again`);
+    }
     token = verified.token;
   } else if (signTransaction) {
     const challenge = await apiPost('/api/trigger/v2/auth/challenge', { walletPubkey: walletAddress, type: 'transaction' });
     const signedTransaction = await signAnyTransaction(signTransaction, challenge.transaction);
-    const verified = await apiPost('/api/trigger/v2/auth/verify', {
-      type: 'transaction',
-      walletPubkey: walletAddress,
-      signedTransaction,
-    });
+    // Jupiter verifies the signed challenge byte-for-byte — a wallet that
+    // injects priority-fee instructions breaks it with a bare "Invalid
+    // signature". Catch it locally so the user gets an actionable message.
+    const origMsg = extractMessageB64(challenge.transaction);
+    const signedMsg = extractMessageB64(signedTransaction);
+    if (origMsg && signedMsg && origMsg !== signedMsg) {
+      await logTxDiff(challenge.transaction, signedTransaction);
+      throw new Error(
+        'Your wallet altered the sign-in transaction before signing. ' +
+        'In your wallet settings, set Priority Fee to "None" and disable transaction protection, then try again.'
+      );
+    }
+    let verified;
+    try {
+      verified = await apiPost('/api/trigger/v2/auth/verify', {
+        type: 'transaction',
+        walletPubkey: walletAddress,
+        signedTransaction,
+      });
+    } catch (err) {
+      throw new Error(`Wallet sign-in failed (${err.message}) — try again`);
+    }
     token = verified.token;
   } else {
     throw new Error('Wallet cannot sign — reconnect your wallet');

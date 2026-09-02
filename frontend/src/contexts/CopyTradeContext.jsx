@@ -158,6 +158,10 @@ export const CopyTradeProvider = ({ children, onCopyTrade }) => {
     setQueue(prev => prev.filter(n => n.id !== id));
   }, []);
 
+  const dismissAll = useCallback(() => {
+    setQueue([]);
+  }, []);
+
   // Stable callback — reads onCopyTrade from ref so it never becomes stale
   const copyTrade = useCallback(
     notification => {
@@ -168,7 +172,7 @@ export const CopyTradeProvider = ({ children, onCopyTrade }) => {
   );
 
   return (
-    <CopyTradeContext.Provider value={{ queue, dismiss, copyTrade }}>
+    <CopyTradeContext.Provider value={{ queue, dismiss, dismissAll, copyTrade }}>
       {children}
     </CopyTradeContext.Provider>
   );

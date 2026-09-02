@@ -207,13 +207,18 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
   };
 
   // Dragging the pull handle down past a threshold dismisses the sheet, like a
-  // native bottom sheet.
+  // native bottom sheet — the sheet follows the finger the whole way, then
+  // either slides fully out (back) or springs back into place.
   const [dragY, setDragY] = useState(0);
   const [dragging, setDragging] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const pdvRootRef = useRef(null);
   const dragStartYRef = useRef(null);
+  const dragLastRef = useRef(null);
   const handleHandleTouchStart = (e) => {
     const t = e.touches?.[0];
     dragStartYRef.current = t ? t.clientY : null;
+    dragLastRef.current = t ? { y: t.clientY, t: e.timeStamp, vy: 0 } : null;
     setDragging(true);
   };
   const handleHandleTouchMove = (e) => {
@@ -221,22 +226,44 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
     const t = e.touches?.[0];
     if (!t) return;
     const dy = t.clientY - dragStartYRef.current;
+    if (dragLastRef.current) {
+      const dt = Math.max(1, e.timeStamp - dragLastRef.current.t);
+      dragLastRef.current.vy = (t.clientY - dragLastRef.current.y) / dt;
+      dragLastRef.current.y = t.clientY;
+      dragLastRef.current.t = e.timeStamp;
+    }
     if (dy > 0) setDragY(dy);
   };
   const handleHandleTouchEnd = () => {
+    const vy = dragLastRef.current?.vy || 0;
+    const flick = vy > 0.5 && dragY > 30;
     dragStartYRef.current = null;
+    dragLastRef.current = null;
     setDragging(false);
-    if (dragY > 90) {
-      onBack?.();
+    if (dragY > 90 || flick) {
+      setClosing(true);
+      const height = pdvRootRef.current?.clientHeight || window.innerHeight;
+      setDragY(height);
+      setTimeout(() => onBack?.(), 200);
+    } else {
+      setDragY(0);
     }
-    setDragY(0);
+  };
+  const closeWithSlide = () => {
+    if (closing) return;
+    setClosing(true);
+    setDragging(false);
+    const height = pdvRootRef.current?.clientHeight || window.innerHeight;
+    setDragY(height);
+    setTimeout(() => onBack?.(), 200);
   };
 
   return (
-    <div className="pdv-backdrop" onClick={onBack}>
+    <div className="pdv-backdrop" onClick={closeWithSlide}>
     <div
       className="pdv-root"
-      style={dragY ? { transform: `translateY(${dragY}px)`, transition: dragging ? 'none' : undefined } : undefined}
+      ref={pdvRootRef}
+      style={dragY ? { transform: `translateY(${dragY}px)`, transition: (dragging && !closing) ? 'none' : undefined } : undefined}
       onClick={(event) => event.stopPropagation()}
       onTouchStart={handleSwipeTouchStart}
       onTouchEnd={handleSwipeTouchEnd}
@@ -247,7 +274,7 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
         onTouchMove={handleHandleTouchMove}
         onTouchEnd={handleHandleTouchEnd}
       />
-      <button className="pdv-back" onClick={onBack} title="Back" aria-label="Back">
+      <button className="pdv-back" onClick={closeWithSlide} title="Back" aria-label="Back">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="15 18 9 12 15 6" />
         </svg>
