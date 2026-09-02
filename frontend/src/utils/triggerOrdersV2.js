@@ -98,32 +98,71 @@ function extractMessageB64(txB64) {
   }
 }
 
-// Names exactly what the wallet changed (blockhash refresh vs injected
-// instructions) so failures are diagnosable from the console.
+// Names exactly what the wallet changed (blockhash refresh, injected/removed
+// instructions, or rewritten compute-budget values) and RETURNS a compact
+// summary so it can be surfaced in the on-device error message, where there
+// is no console to read.
 async function logTxDiff(origB64, signedB64) {
   try {
     const { VersionedTransaction } = await import('@solana/web3.js');
-    const info = (b64) => {
+    const COMPUTE_BUDGET = 'ComputeBudget111111111111111111111111111111';
+    const parse = (b64) => {
       const tx = VersionedTransaction.deserialize(b64ToBytes(b64));
       const keys = tx.message.staticAccountKeys.map((k) => k.toBase58());
+      const ixs = tx.message.compiledInstructions.map((ix) => ({
+        program: keys[ix.programIdIndex],
+        data: ix.data instanceof Uint8Array ? ix.data : new Uint8Array(ix.data || []),
+      }));
+      // Decode compute-budget values: discriminator 2 = unit limit (u32),
+      // 3 = unit price in microlamports (u64).
+      const budget = {};
+      for (const ix of ixs) {
+        if (ix.program !== COMPUTE_BUDGET || !ix.data.length) continue;
+        const view = new DataView(ix.data.buffer, ix.data.byteOffset, ix.data.byteLength);
+        if (ix.data[0] === 2 && ix.data.length >= 5) budget.unitLimit = view.getUint32(1, true);
+        else if (ix.data[0] === 3 && ix.data.length >= 9) budget.unitPrice = Number(view.getBigUint64(1, true));
+      }
       return {
         blockhash: tx.message.recentBlockhash,
         accounts: keys.length,
-        instructions: tx.message.compiledInstructions.length,
-        programs: tx.message.compiledInstructions.map((ix) => keys[ix.programIdIndex]),
+        ixs,
+        budget,
       };
     };
-    const a = info(origB64);
-    const b = info(signedB64);
+    const a = parse(origB64);
+    const b = parse(signedB64);
+    const parts = [];
+    if (a.blockhash !== b.blockhash) parts.push('blockhash replaced');
+    if (a.accounts !== b.accounts) parts.push(`accounts ${a.accounts}→${b.accounts}`);
+    if (a.ixs.length !== b.ixs.length) {
+      parts.push(`instructions ${a.ixs.length}→${b.ixs.length}`);
+      const progsA = a.ixs.map((ix) => ix.program);
+      const progsB = b.ixs.map((ix) => ix.program);
+      const added = progsB.filter((p) => !progsA.includes(p));
+      if (added.length) parts.push(`added program ${added.map((p) => p.slice(0, 8)).join(',')}`);
+    }
+    if (a.budget.unitPrice !== b.budget.unitPrice) {
+      parts.push(`priority fee ${a.budget.unitPrice ?? 'none'}→${b.budget.unitPrice ?? 'none'} µlam`);
+    }
+    if (a.budget.unitLimit !== b.budget.unitLimit) {
+      parts.push(`CU limit ${a.budget.unitLimit ?? 'none'}→${b.budget.unitLimit ?? 'none'}`);
+    }
+    if (!parts.length) {
+      // Same shape — find which instruction's data bytes changed.
+      for (let i = 0; i < a.ixs.length; i++) {
+        const da = a.ixs[i].data, db = b.ixs[i].data;
+        const same = da.length === db.length && da.every((v, j) => v === db[j]);
+        if (!same) parts.push(`ix[${i}] (${a.ixs[i].program.slice(0, 8)}) data changed`);
+      }
+    }
+    const summary = parts.join(', ') || 'unknown byte-level change';
     console.warn('[TriggerV2] Crafted tx:', a);
     console.warn('[TriggerV2] Wallet-returned tx:', b);
-    console.warn('[TriggerV2] Changed:', {
-      blockhash: a.blockhash !== b.blockhash,
-      accounts: a.accounts !== b.accounts,
-      instructions: a.instructions !== b.instructions,
-    });
+    console.warn('[TriggerV2] Changed:', summary);
+    return summary;
   } catch (e) {
     console.warn('[TriggerV2] Could not diff transactions:', e.message);
+    return null;
   }
 }
 
@@ -255,17 +294,13 @@ export async function ensureTriggerAuth({ walletAddress, signMessage, signTransa
   } else if (signTransaction) {
     const challenge = await apiPost('/api/trigger/v2/auth/challenge', { walletPubkey: walletAddress, type: 'transaction' });
     const signedTransaction = await signAnyTransaction(signTransaction, challenge.transaction);
-    // Jupiter verifies the signed challenge byte-for-byte — a wallet that
-    // injects priority-fee instructions breaks it with a bare "Invalid
-    // signature". Catch it locally so the user gets an actionable message.
+    // Note any wallet-side modification, but let Jupiter's verify decide —
+    // its bare "Invalid signature" is only enriched with the diff on failure.
     const origMsg = extractMessageB64(challenge.transaction);
     const signedMsg = extractMessageB64(signedTransaction);
+    let diffSummary = null;
     if (origMsg && signedMsg && origMsg !== signedMsg) {
-      await logTxDiff(challenge.transaction, signedTransaction);
-      throw new Error(
-        'Your wallet altered the sign-in transaction before signing. ' +
-        'Solflare mobile may not expose a setting to disable this. Try Phantom, or use the Solflare browser extension and approve the site as trusted.'
-      );
+      diffSummary = await logTxDiff(challenge.transaction, signedTransaction);
     }
     let verified;
     try {
@@ -275,7 +310,10 @@ export async function ensureTriggerAuth({ walletAddress, signMessage, signTransa
         signedTransaction,
       });
     } catch (err) {
-      throw new Error(`Wallet sign-in failed (${err.message}) — try again`);
+      throw new Error(
+        `Wallet sign-in failed (${err.message})` +
+        (diffSummary ? ` — your wallet changed the sign-in transaction before signing (${diffSummary})` : ' — try again')
+      );
     }
     token = verified.token;
   } else {
@@ -350,13 +388,16 @@ export async function placeTriggerOrderV2({
 
   await apiGet('/api/trigger/v2/vault', jwt); // registers on first use
 
-  // Jupiter validates the signed deposit byte-for-byte against what it crafted.
-  // Some wallets (Solflare especially, on sites they don't recognize) inject
-  // priority-fee/protection instructions before signing, which gets rejected as
-  // "Transaction accounts modified". Each retry needs a FRESH deposit (requestId
-  // is single-use) — often the wallet stops modifying once the site is trusted.
+  // Mobile wallets (Phantom/Solflare) often rewrite the deposit's compute-budget
+  // fee values before signing, with no user-facing setting to disable it. The
+  // docs never promise byte-exact validation — the observed rejection was
+  // "Transaction accounts modified" — so a value-only rewrite may well pass.
+  // ALWAYS submit and let Jupiter be the authority; keep a local diff of what
+  // the wallet changed purely to make a rejection diagnosable. Each retry needs
+  // a FRESH deposit (requestId is single-use).
   const MAX_ATTEMPTS = 2;
   let created = null;
+  let lastDiffSummary = null;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     // Rapid app↔wallet deeplink ping-pong can crash wallet apps (Phantom shows
     // "Unknown Error") — give it a moment between attempts.
@@ -379,22 +420,11 @@ export async function placeTriggerOrderV2({
       throw new Error(`Wallet could not sign the order deposit: ${err.message}`);
     }
 
-    // Catch wallet modification locally — no point submitting a tx Jupiter will
-    // reject, and this tells us definitively whether the wallet is the culprit.
     const origMsg = extractMessageB64(deposit.transaction);
     const signedMsg = extractMessageB64(depositSignedTx);
-    const locallyModified = origMsg && signedMsg && origMsg !== signedMsg;
-    if (locallyModified) {
-      console.warn(`[TriggerV2] Wallet returned a MODIFIED transaction (attempt ${attempt}/${MAX_ATTEMPTS})`, {
-        originalBytes: origMsg.length,
-        signedBytes: signedMsg.length,
-      });
-      await logTxDiff(deposit.transaction, depositSignedTx);
-      if (attempt < MAX_ATTEMPTS) continue;
-      throw new Error(
-        'Your wallet altered the transaction before signing, so Jupiter would reject it. ' +
-        'Solflare mobile may not expose a setting to disable this. Try Phantom, or use the Solflare browser extension and tick "I trust this site" on the approval popup.'
-      );
+    if (origMsg && signedMsg && origMsg !== signedMsg) {
+      console.warn(`[TriggerV2] Wallet returned a modified transaction (attempt ${attempt}/${MAX_ATTEMPTS}) — submitting anyway`);
+      lastDiffSummary = await logTxDiff(deposit.transaction, depositSignedTx);
     }
 
     const body = {
@@ -422,16 +452,17 @@ export async function placeTriggerOrderV2({
       created = await apiPost('/api/trigger/v2/order', body, jwt);
       break;
     } catch (err) {
-      const walletModified = /accounts modified|invalid.*deposit/i.test(err.message || '');
-      if (walletModified) {
-        // Our local byte-compare said the message was untouched, so this isn't
-        // the wallet — surface Jupiter's raw error for diagnosis.
-        console.warn('[TriggerV2] Jupiter rejected an UNMODIFIED deposit:', err.message);
+      const depositRejected = /accounts modified|invalid.*deposit|deposit.*invalid|signature/i.test(err.message || '');
+      if (depositRejected) {
+        console.warn('[TriggerV2] Jupiter rejected the deposit:', err.message, '| wallet changes:', lastDiffSummary || 'none detected');
         if (attempt < MAX_ATTEMPTS) {
           console.warn(`[TriggerV2] Retrying with a fresh deposit (attempt ${attempt}/${MAX_ATTEMPTS})`);
           continue;
         }
-        throw new Error(`Jupiter rejected the order deposit: ${err.message}. Try again in a moment.`);
+        throw new Error(
+          `Jupiter rejected the order deposit: ${err.message}.` +
+          (lastDiffSummary ? ` Your wallet changed the transaction before signing (${lastDiffSummary}).` : ' Try again in a moment.')
+        );
       }
       throw err;
     }

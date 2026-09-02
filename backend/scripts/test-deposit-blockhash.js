@@ -57,9 +57,53 @@ async function post(url, body, jwt) {
   const bh = tx.message.recentBlockhash;
   console.log('deposit blockhash:', bh);
 
+  // Decode the crafted tx's instructions — if it lacks ComputeBudget
+  // (priority fee) instructions, mobile wallets inject their own, which
+  // changes the message bytes and breaks Jupiter's byte-exact check.
+  const keys = tx.message.staticAccountKeys.map((k) => k.toBase58());
+  console.log('version:', tx.version, '| signatures required:', tx.message.header.numRequiredSignatures);
+  console.log('address table lookups:', tx.message.addressTableLookups?.length || 0);
+  tx.message.compiledInstructions.forEach((ix, i) => {
+    const prog = keys[ix.programIdIndex];
+    let detail = '';
+    if (prog === 'ComputeBudget111111111111111111111111111111') {
+      const d = Buffer.from(ix.data);
+      if (d[0] === 2) detail = ` setComputeUnitLimit(${d.readUInt32LE(1)})`;
+      else if (d[0] === 3) detail = ` setComputeUnitPrice(${d.readBigUInt64LE(1)} microLamports)`;
+      else detail = ` discriminator=${d[0]}`;
+    }
+    console.log(`  ix[${i}] program=${prog}${detail}`);
+  });
+  const hasComputeBudget = tx.message.compiledInstructions.some(
+    (ix) => keys[ix.programIdIndex] === 'ComputeBudget111111111111111111111111111111'
+  );
+  console.log('has ComputeBudget instructions:', hasComputeBudget);
+
   // Round-trip fidelity check of our own deserialize->serialize path
   const roundTrip = Buffer.from(tx.serialize()).toString('base64');
   console.log('deserialize->serialize byte-identical:', roundTrip === dep.json.transaction);
+
+  // Legacy-recompile check: wallets that parse a LEGACY tx into web3.js's
+  // Transaction and re-serialize will RECOMPILE the message (canonical account
+  // re-sort). If that alone changes the bytes, every such wallet "modifies"
+  // the tx without touching it — and Jupiter's byte-exact check fails.
+  try {
+    const { Transaction } = require('@solana/web3.js');
+    const legacyTx = Transaction.from(Buffer.from(dep.json.transaction, 'base64'));
+    const recompiled = legacyTx.serialize({ requireAllSignatures: false, verifySignatures: false });
+    const identical = recompiled.toString('base64') === dep.json.transaction;
+    console.log('legacy Transaction.from -> serialize byte-identical:', identical);
+    if (!identical) {
+      const re = VersionedTransaction.deserialize(recompiled);
+      const origKeys = tx.message.staticAccountKeys.map((k) => k.toBase58());
+      const reKeys = re.message.staticAccountKeys.map((k) => k.toBase58());
+      console.log('  original accounts:', origKeys.length, '| recompiled accounts:', reKeys.length);
+      console.log('  account order changed:', JSON.stringify(origKeys) !== JSON.stringify(reKeys));
+      console.log('  orig ix count:', tx.message.compiledInstructions.length, '| recompiled ix count:', re.message.compiledInstructions.length);
+    }
+  } catch (e) {
+    console.log('legacy recompile check failed:', e.message);
+  }
 
   const rpc = async (method, params) => {
     const res = await fetch(HELIUS, {
