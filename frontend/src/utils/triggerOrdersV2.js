@@ -194,6 +194,25 @@ async function signAnyTransaction(signTransaction, base64Tx) {
   return bytesToB64(signed.serialize());
 }
 
+// Phantom injects Lighthouse guard instructions into single signTransaction
+// deeplinks on domains it hasn't reviewed (docs.phantom.com/developer-powertools/
+// lighthouse), which Jupiter rejects ("Transaction accounts modified"). Batch
+// signing is not augmented, so on native deeplink sessions try
+// signAllTransactions first, falling back to the normal single-sign path.
+async function signDepositBase64(signTransaction, base64Tx) {
+  try {
+    const { mobileWallet, base64ToBytes, bytesToBase64 } = await import('../services/mobileWalletDeeplink');
+    if (mobileWallet.isConnected()) {
+      const [signed] = await mobileWallet.signAllSerialized([base64ToBytes(base64Tx)]);
+      if (signed?.length) return bytesToBase64(signed);
+    }
+  } catch (err) {
+    if (/reject|denied|cancell/i.test(err?.message || '')) throw err;
+    console.warn('[TriggerV2] Batch deposit sign failed, falling back to signTransaction:', err?.message);
+  }
+  return signAnyTransaction(signTransaction, base64Tx);
+}
+
 // ── JWT cache (in-memory + sessionStorage, 24h with safety margin) ─────────
 const tokenCache = new Map(); // wallet -> { token, expiresAt }
 const SESSION_KEY = (wallet) => `mf_trigger_jwt_${wallet}`;
@@ -402,6 +421,7 @@ export async function placeTriggerOrderV2({
     // Rapid app↔wallet deeplink ping-pong can crash wallet apps (Phantom shows
     // "Unknown Error") — give it a moment between attempts.
     if (attempt > 1) await new Promise((r) => setTimeout(r, 1200));
+    lastDiffSummary = null;
     const deposit = await apiPost('/api/trigger/v2/deposit', {
       inputMint,
       outputMint,
@@ -414,7 +434,7 @@ export async function placeTriggerOrderV2({
 
     let depositSignedTx;
     try {
-      depositSignedTx = await signAnyTransaction(signTransaction, deposit.transaction);
+      depositSignedTx = await signDepositBase64(signTransaction, deposit.transaction);
     } catch (err) {
       if (/reject|denied|cancell/i.test(err?.message || '')) throw err;
       throw new Error(`Wallet could not sign the order deposit: ${err.message}`);
@@ -455,9 +475,18 @@ export async function placeTriggerOrderV2({
       const depositRejected = /accounts modified|invalid.*deposit|deposit.*invalid|signature/i.test(err.message || '');
       if (depositRejected) {
         console.warn('[TriggerV2] Jupiter rejected the deposit:', err.message, '| wallet changes:', lastDiffSummary || 'none detected');
-        if (attempt < MAX_ATTEMPTS) {
+        // A wallet that injected guard instructions will do so again on a fresh
+        // deposit — retrying just burns extra wallet round-trips. Only retry
+        // when no modification was detected (transient failure).
+        if (!lastDiffSummary && attempt < MAX_ATTEMPTS) {
           console.warn(`[TriggerV2] Retrying with a fresh deposit (attempt ${attempt}/${MAX_ATTEMPTS})`);
           continue;
+        }
+        if (lastDiffSummary && /added program L2TEx/i.test(lastDiffSummary)) {
+          throw new Error(
+            "Phantom added its transaction-protection instructions before signing, which Jupiter's order system rejects. " +
+            'This happens on apps Phantom has not reviewed yet — please try again with Solflare, or retry later.'
+          );
         }
         throw new Error(
           `Jupiter rejected the order deposit: ${err.message}.` +
