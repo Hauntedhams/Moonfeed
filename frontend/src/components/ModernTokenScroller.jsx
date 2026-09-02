@@ -328,7 +328,7 @@ const ModernTokenScroller = ({
 
     const updateTargets = () => {
       const topButton = document.querySelector('.modern-coin-slide.active .expand-handle');
-      const bottomButton = document.querySelector('.chart-expand-card-btn');
+      const bottomButton = document.querySelector('.coin-expand-swipe-arrow') || document.querySelector('.chart-expand-card-btn');
       const toTarget = (element) => {
         if (!element) return null;
         const rect = element.getBoundingClientRect();
@@ -1877,7 +1877,7 @@ const ModernTokenScroller = ({
             }}
           />
           <div className="feed-switch-callout" style={getFeedCalloutStyle(feedHintTarget)}>
-            Tap the coin's name to switch feeds — then swipe the feed name left or right
+            Tap the coin's name, then tap the feed pill to swipe between feeds
           </div>
         </div>
       )}
@@ -1909,7 +1909,7 @@ const ModernTokenScroller = ({
                 className="expand-card-callout expand-card-callout-bottom"
                 style={getExpandCalloutStyle(expandHintTargets.bottom, -66)}
               >
-                or tap here
+                or slide up from here
               </div>
             </>
           )}

@@ -73,6 +73,9 @@ function formatCompactNumber(num) {
 }
 
 const POPUP_FEED_ORDER = ['dextrending', 'whalefeed', 'graduating', 'new', 'trending'];
+// Feed picker geometry: expanded pill width and per-feed slot width (px)
+const FEED_PICKER_OPEN_W = 200;
+const FEED_PICKER_SLOT_W = 100;
 
 function normalizeFeedId(feedType) {
   const key = String(feedType || '').toLowerCase();
@@ -138,13 +141,16 @@ const CoinCard = memo(({
   const [comments, setComments] = useState([]); // Cached comments for count badge
   const [showActionButtons, setShowActionButtons] = useState(false); // Hidden in collapsed/preview state; shown only when card is expanded
   const [hasToggledActions, setHasToggledActions] = useState(false); // Track if user has toggled (avoids mount animation)
+  const expandSwipeRef = useRef(null); // touch tracking for the slide-up-to-expand arrow
   const [selectedWallet, setSelectedWallet] = useState(null);
   const [showDescriptionModal, setShowDescriptionModal] = useState(false);
   const [trackedPrice, setTrackedPrice] = useState(null);
   const [trackedTimeState, setTrackedTimeState] = useState(null);
   const [focusTrackedSignal, setFocusTrackedSignal] = useState(0);
-  const coinInfoSwipeRef = useRef(null);
-  const [coinInfoFeedDrag, setCoinInfoFeedDrag] = useState({ active: false, dx: 0 });
+  // Feed picker inside the coin-info popup: null = closed pill; open = { index (float
+  // while dragging), dragging }. The picked feed only applies on tap-outside.
+  const [feedPicker, setFeedPicker] = useState(null);
+  const feedPickerDragRef = useRef(null);
   // Local state gives instant feedback on tap; once the persisted value (from
   // the account's tracked-coins list) arrives it takes over so the "Tracked
   // at" price survives reloads/remounts instead of resetting to nothing.
@@ -176,6 +182,10 @@ const CoinCard = memo(({
   const [sellFundingUsdInput, setSellFundingUsdInput] = useState('');
   const [solUsd, setSolUsd] = useState(0);
   const [sellOrderPending, setSellOrderPending] = useState(false);
+  // Wallet's existing balance of this coin — when the user already holds it,
+  // the "Sell at" flow sells those tokens directly instead of buying in first.
+  const [heldTokenAmount, setHeldTokenAmount] = useState(null);
+  const [sellTokenAmountInput, setSellTokenAmountInput] = useState('');
   const pendingSellOrderRef = useRef(null);
   const [orderExpiry, setOrderExpiry] = useState('7d');
   const [orderSubmitting, setOrderSubmitting] = useState(false);
@@ -765,18 +775,57 @@ const CoinCard = memo(({
     setOrderAmountInput('0.10');
     setSellFundingSolInput('0.10');
     setSellFundingUsdInput('');
+    setSellTokenAmountInput('');
   };
 
   const orderChartFocused = buyDrawerOpen && buyDrawerMode === 'orders';
   const orderTargetPercent = displayPrice > 0 ? ((buyOrderPrice - displayPrice) / displayPrice) * 100 : 0;
 
-  // The sell flow is framed in dollars: you wager USD and the wheel picks what the
-  // whole position cashes out for, with the per-token trigger price derived from it.
+  // Holder mode: the wallet already owns this coin (beyond dust), so "Sell at"
+  // places a sell order on the existing tokens — no buy-in step.
+  const heldTokens = Number(heldTokenAmount) || 0;
+  const heldValueUsd = displayPrice > 0 ? heldTokens * displayPrice : 0;
+  const holderSellMode = buyDrawerOrderSide === 'sell' && heldTokens > 0 && heldValueUsd >= 0.5;
+  const sellTokenAmount = Math.max(0, parseFloat(sellTokenAmountInput) || 0);
+
+  // The sell flow is framed in dollars: you wager USD (or, for holders, pick how
+  // many of your tokens to sell) and the wheel shows what that cashes out for,
+  // with the per-token trigger price derived from it.
   const sellFundingSol = Math.max(0, parseFloat(sellFundingSolInput) || 0);
-  const wageredUsd = solUsd > 0 ? sellFundingSol * solUsd : 0;
+  const wageredUsd = holderSellMode
+    ? sellTokenAmount * displayPrice
+    : (solUsd > 0 ? sellFundingSol * solUsd : 0);
   const sellProceedsUsd = displayPrice > 0 && wageredUsd > 0
     ? wageredUsd * (buyOrderPrice / displayPrice)
     : 0;
+
+  // Recognize existing holders when the order drawer opens.
+  useEffect(() => {
+    setHeldTokenAmount(null);
+    setSellTokenAmountInput('');
+  }, [mintAddress]);
+
+  useEffect(() => {
+    if (!buyDrawerOpen || buyDrawerMode !== 'orders' || !walletAddress || !mintAddress) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_CONFIG.BASE_URL}/api/wallet/${walletAddress}/balance?mint=${mintAddress}`);
+        const d = await res.json();
+        if (!cancelled) setHeldTokenAmount(d.success ? Number(d.amount) || 0 : 0);
+      } catch (_) {
+        if (!cancelled) setHeldTokenAmount(0);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [buyDrawerOpen, buyDrawerMode, walletAddress, mintAddress]);
+
+  // Default the sell amount to the full held balance once it's known.
+  useEffect(() => {
+    if (holderSellMode && heldTokens > 0 && !sellTokenAmountInput) {
+      setSellTokenAmountInput(String(Math.floor(heldTokens * 1e6) / 1e6));
+    }
+  }, [holderSellMode, heldTokens]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if ((buyDrawerOpen || transactions.length > 0) && !solUsd) getSolUsdPrice().then(setSolUsd);
@@ -1121,8 +1170,57 @@ const CoinCard = memo(({
     setBuyDrawerOpen(false);
   };
 
+  // Holder path: sell tokens the wallet already owns — one order, no buy-in.
+  const submitHolderSellOrder = async () => {
+    if (orderSubmitting || buyOrderPrice <= 0) return;
+    setOrderError(null);
+    setOrderSuccess(null);
+
+    if (!walletConnected || !walletAddress) {
+      setOrderError('Connect your wallet to place a limit order.');
+      return;
+    }
+    const amount = Math.min(sellTokenAmount, heldTokens);
+    if (!(amount > 0)) {
+      setOrderError(`Enter how many ${coin.symbol || 'tokens'} to sell.`);
+      return;
+    }
+
+    setOrderSubmitting(true);
+    try {
+      // Floor so a 100% sell never asks to escrow more than the wallet holds.
+      const floored = Math.floor(amount * 1e6) / 1e6;
+      await placeTriggerOrderV2({
+        walletAddress,
+        signMessage,
+        signTransaction,
+        mintAddress,
+        side: 'sell',
+        inputAmount: floored,
+        triggerPriceUsd: buyOrderPrice,
+        currentPriceUsd: displayPrice > 0 ? displayPrice : null,
+        expiredAt: getExpiryTimestamp(orderExpiry),
+      });
+      setOrderSuccess(`Sell order placed at ${formatPrice(buyOrderPrice)}`);
+      // Escrowed tokens leave the wallet — reflect the remaining balance.
+      setHeldTokenAmount((h) => Math.max(0, (Number(h) || 0) - floored));
+      setSellTokenAmountInput('');
+    } catch (err) {
+      setOrderError(err.message || 'Failed to place sell order');
+    } finally {
+      setOrderSubmitting(false);
+    }
+  };
+
   const handleDrawerAmountPctClick = async (pct) => {
-    if (!walletAddress || !connection) return;
+    if (!walletAddress) return;
+    // Holders sell a share of what they already own — no RPC needed.
+    if (holderSellMode) {
+      const calc = heldTokens * (pct / 100);
+      setSellTokenAmountInput(String(Math.floor(calc * 1e6) / 1e6));
+      return;
+    }
+    if (!connection) return;
     try {
       const { PublicKey } = await import('@solana/web3.js');
       const pk = new PublicKey(walletAddress);
@@ -2000,66 +2098,66 @@ const CoinCard = memo(({
     current: popupFeedId,
     next: getAdjacentFeedId(popupFeedId, 1),
   };
-  const popupFeedShift = Math.max(-1, Math.min(1, coinInfoFeedDrag.dx / 78));
-  const popupFeedTrackStyle = {
-    transform: `translateX(calc(-33.333% + ${popupFeedShift * 33.333}%))`,
+  const feedPickerMax = POPUP_FEED_ORDER.length - 1;
+  const feedPickerSnapped = feedPicker
+    ? POPUP_FEED_ORDER[Math.max(0, Math.min(feedPickerMax, Math.round(feedPicker.index)))]
+    : null;
+
+  const openFeedPicker = () => {
+    setFeedPicker({ index: Math.max(0, POPUP_FEED_ORDER.indexOf(popupFeedId)), dragging: false });
   };
-  const updateCoinInfoFeedPreview = (clientX, clientY) => {
-    const start = coinInfoSwipeRef.current;
-    if (!start) return;
-    const dx = clientX - start.x;
-    const dy = clientY - start.y;
-    if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
-    if (Math.abs(dx) < Math.abs(dy) * 1.15) {
-      setCoinInfoFeedDrag({ active: false, dx: 0 });
-      return;
-    }
-    setCoinInfoFeedDrag({ active: true, dx: Math.max(-78, Math.min(78, dx)) });
-  };
-  const commitCoinInfoFeedSwipe = (clientX, clientY) => {
-    const start = coinInfoSwipeRef.current;
-    coinInfoSwipeRef.current = null;
-    setCoinInfoFeedDrag({ active: false, dx: 0 });
-    if (!start) return;
-    const dx = clientX - start.x;
-    const dy = clientY - start.y;
-    if (Math.abs(dx) < 48 || Math.abs(dx) < Math.abs(dy) * 1.25) return;
-    window.dispatchEvent(new CustomEvent('moonfeed:swipe-feed', {
-      detail: { direction: dx < 0 ? 1 : -1 },
-    }));
+
+  // Applies the feed the picker landed on (if it changed) and closes the popup —
+  // called from any press outside the picker window (overlay, popup body, ×).
+  const closeCoinInfoPopup = () => {
+    const picked = feedPickerSnapped;
+    setFeedPicker(null);
     setShowCoinInfoPopup(false);
+    if (picked && picked !== popupFeedId) {
+      window.dispatchEvent(new CustomEvent('moonfeed:swipe-feed', { detail: { feed: picked } }));
+    }
   };
-  const handleCoinInfoTouchStart = (e) => {
-    const touch = e.touches?.[0];
-    coinInfoSwipeRef.current = touch ? { x: touch.clientX, y: touch.clientY } : null;
+
+  const handleFeedPickerPointerDown = (e) => {
+    if (!feedPicker) return;
+    e.preventDefault();
+    e.stopPropagation();
+    try { e.currentTarget.setPointerCapture?.(e.pointerId); } catch (_) { /* inactive pointer */ }
+    feedPickerDragRef.current = {
+      startX: e.clientX,
+      startIndex: feedPicker.index,
+      lastX: e.clientX,
+      lastT: performance.now(),
+      vx: 0,
+    };
+    setFeedPicker((p) => (p ? { ...p, dragging: true } : p));
   };
-  const handleCoinInfoTouchMove = (e) => {
-    const touch = e.touches?.[0];
-    if (touch) updateCoinInfoFeedPreview(touch.clientX, touch.clientY);
+
+  const handleFeedPickerPointerMove = (e) => {
+    const d = feedPickerDragRef.current;
+    if (!d) return;
+    const now = performance.now();
+    if (now > d.lastT) {
+      d.vx = (e.clientX - d.lastX) / (now - d.lastT);
+      d.lastX = e.clientX;
+      d.lastT = now;
+    }
+    const raw = d.startIndex - (e.clientX - d.startX) / FEED_PICKER_SLOT_W;
+    // Rubber-band past the first/last feed
+    const idx = raw < 0 ? raw * 0.3 : raw > feedPickerMax ? feedPickerMax + (raw - feedPickerMax) * 0.3 : raw;
+    setFeedPicker({ index: idx, dragging: true });
   };
-  const handleCoinInfoTouchEnd = (e) => {
-    const touch = e.changedTouches?.[0];
-    if (touch) commitCoinInfoFeedSwipe(touch.clientX, touch.clientY);
-  };
-  const handleCoinInfoTouchCancel = () => {
-    coinInfoSwipeRef.current = null;
-    setCoinInfoFeedDrag({ active: false, dx: 0 });
-  };
-  const handleCoinInfoPointerDown = (e) => {
-    if (e.pointerType === 'touch') return;
-    coinInfoSwipeRef.current = { x: e.clientX, y: e.clientY };
-  };
-  const handleCoinInfoPointerMove = (e) => {
-    if (e.pointerType === 'touch') return;
-    updateCoinInfoFeedPreview(e.clientX, e.clientY);
-  };
-  const handleCoinInfoPointerUp = (e) => {
-    if (e.pointerType === 'touch') return;
-    commitCoinInfoFeedSwipe(e.clientX, e.clientY);
-  };
-  const handleCoinInfoPointerCancel = () => {
-    coinInfoSwipeRef.current = null;
-    setCoinInfoFeedDrag({ active: false, dx: 0 });
+
+  const handleFeedPickerPointerUp = () => {
+    const d = feedPickerDragRef.current;
+    feedPickerDragRef.current = null;
+    setFeedPicker((p) => {
+      if (!p || !p.dragging) return p;
+      // A quick flick advances one more feed even on a short drag
+      const bias = d && Math.abs(d.vx) > 0.35 ? (d.vx < 0 ? 0.5 : -0.5) : 0;
+      const snapped = Math.max(0, Math.min(feedPickerMax, Math.round(p.index + bias)));
+      return { index: snapped, dragging: false };
+    });
   };
 
   return (
@@ -3445,7 +3543,9 @@ const CoinCard = memo(({
                         <>
                           <div className="coin-buy-price" onClick={beginPriceEdit} title="Tap to type an amount">${sellProceedsUsd.toFixed(2)}</div>
                           <div className="coin-buy-price-unit">
-                            for all your {coin.symbol || 'tokens'} at {formatPrice(buyOrderPrice)}
+                            {holderSellMode
+                              ? `for ${formatCompact(sellTokenAmount)} ${coin.symbol || 'tokens'} you hold at ${formatPrice(buyOrderPrice)}`
+                              : `for all your ${coin.symbol || 'tokens'} at ${formatPrice(buyOrderPrice)}`}
                           </div>
                         </>
                       ) : (
@@ -3460,10 +3560,14 @@ const CoinCard = memo(({
                       <button className="coin-buy-step" onClick={() => adjustBuyOrderPrice(-1)} aria-label="Decrease buy price">⌄</button>
                     </div>
 
+                    {buyDrawerOrderSide === 'buy' && heldTokens > 0 && heldValueUsd >= 0.5 && (
+                      <div className="coin-buy-order-side-note">
+                        You hold {formatCompact(heldTokens)} {coin.symbol || 'tokens'} (~${heldValueUsd.toFixed(2)}) — a limit buy adds to your position.
+                      </div>
+                    )}
                     {buyDrawerOrderSide === 'buy' && (
                       <label className="coin-buy-custom-amount">
-                        <span>Amount to spend</span>
-                        <div className="coin-buy-custom-input-wrap">
+                        <span>Amount to spend</span>                        <div className="coin-buy-custom-input-wrap">
                           <input
                             type="number"
                             min="0"
@@ -3496,8 +3600,47 @@ const CoinCard = memo(({
                     {buyDrawerOrderSide === 'sell' && (
                       <>
                       <div className="coin-buy-order-side-note">
-                        Sell at buys in first — the sell order is placed automatically once the buy confirms.
+                        {holderSellMode
+                          ? `You already hold ${formatCompact(heldTokens)} ${coin.symbol || 'tokens'} (~$${heldValueUsd.toFixed(2)}) — this sells from your existing tokens.`
+                          : 'Sell at buys in first — the sell order is placed automatically once the buy confirms.'}
                       </div>
+                      {holderSellMode ? (
+                        <label className="coin-buy-custom-amount">
+                          <span>Step 2 · Amount to sell</span>
+                          <div className="coin-buy-custom-input-wrap">
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              value={sellTokenAmountInput}
+                              onChange={(e) => setSellTokenAmountInput(e.target.value)}
+                              onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                              aria-label={`Amount of ${coin.symbol || 'tokens'} to sell`}
+                            />
+                            <strong>{coin.symbol || 'TOKENS'}</strong>
+                          </div>
+                          <div className="amount-pct-chips">
+                            {[25, 50, 75, 100].map((pct) => (
+                              <button
+                                key={pct}
+                                type="button"
+                                className="amount-pct-chip"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDrawerAmountPctClick(pct);
+                                }}
+                              >
+                                {pct}%
+                              </button>
+                            ))}
+                          </div>
+                          <div className="coin-buy-balance-line">
+                            {sellTokenAmount > heldTokens
+                              ? `You only hold ${formatCompact(heldTokens)} ${coin.symbol || 'tokens'}.`
+                              : `Sells ${formatCompact(sellTokenAmount)} of your ${formatCompact(heldTokens)} ${coin.symbol || 'tokens'} at ${formatPrice(buyOrderPrice)}.`}
+                          </div>
+                        </label>
+                      ) : (
                       <label className="coin-buy-custom-amount">
                         <span>Step 2 · Amount to wager</span>
                         <div className="coin-buy-custom-input-wrap">
@@ -3534,6 +3677,7 @@ const CoinCard = memo(({
                             : `Buys ~${formatPrice(displayPrice)} entry, then sells everything you get at ${formatPrice(buyOrderPrice)}.`}
                         </div>
                       </label>
+                      )}
                       </>
                     )}
 
@@ -3562,6 +3706,14 @@ const CoinCard = memo(({
                         disabled={orderSubmitting || buyOrderPrice <= 0 || !(parseFloat(orderAmountInput) > 0)}
                       >
                         {orderSubmitting ? 'Placing order…' : 'Place limit buy'}
+                      </button>
+                    ) : holderSellMode ? (
+                      <button
+                        className="coin-buy-submit"
+                        onClick={submitHolderSellOrder}
+                        disabled={orderSubmitting || buyOrderPrice <= 0 || !(sellTokenAmount > 0) || sellTokenAmount > heldTokens * 1.000001}
+                      >
+                        {orderSubmitting ? 'Placing sell order…' : 'Place sell order'}
                       </button>
                     ) : (
                       <button
@@ -3743,26 +3895,89 @@ const CoinCard = memo(({
               <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
             </svg>
           </button>
-          <button
-            className="native-chart-expand-card-btn"
-            onClick={handleExpandToggle}
-            title={isExpanded ? 'Collapse details' : 'Expand details'}
-            aria-label={isExpanded ? 'Collapse details' : 'Expand details'}
-          >
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
+          {isExpanded && (
+            <button
+              className="native-chart-expand-card-btn"
+              onClick={handleExpandToggle}
+              title="Collapse details"
+              aria-label="Collapse details"
             >
-              <polyline points="18 15 12 9 6 15" />
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{ transform: 'rotate(180deg)' }}
+              >
+                <polyline points="18 15 12 9 6 15" />
+              </svg>
+            </button>
+          )}
+        </div>
+      )}
+      {USE_NATIVE_CHART && _mobilePortal && !isExpanded && (
+        <div
+          className="coin-expand-swipe-arrow"
+          style={{
+            opacity: isScrolling ? 0 : 1,
+            transition: isScrolling ? 'none' : 'opacity 0.15s ease',
+          }}
+          role="button"
+          tabIndex={0}
+          title="Slide up to expand"
+          aria-label="Slide up to expand coin details"
+          onClick={(e) => {
+            // Ignore the synthetic click that can follow a committed swipe.
+            if (expandSwipeRef.current?.firedAt && Date.now() - expandSwipeRef.current.firedAt < 500) return;
+            handleExpandToggle(e);
+          }}
+          onTouchStart={(e) => {
+            e.stopPropagation();
+            const t = e.touches[0];
+            expandSwipeRef.current = { x: t.clientX, y: t.clientY, fired: false };
+          }}
+          onTouchMove={(e) => {
+            e.stopPropagation();
+            const s = expandSwipeRef.current;
+            if (!s || s.fired) return;
+            const t = e.touches[0];
+            const dy = s.y - t.clientY;
+            if (dy > 26 && dy > Math.abs(t.clientX - s.x)) {
+              s.fired = true;
+              s.firedAt = Date.now();
+              handleExpandToggle(e);
+            }
+          }}
+          onTouchEnd={(e) => {
+            e.stopPropagation();
+            const s = expandSwipeRef.current;
+            if (s && !s.fired && e.changedTouches[0]) {
+              const dy = s.y - e.changedTouches[0].clientY;
+              // Short-but-deliberate upward slide also commits.
+              if (dy > 16 && dy > Math.abs(e.changedTouches[0].clientX - s.x)) {
+                s.fired = true;
+                s.firedAt = Date.now();
+                handleExpandToggle(e);
+              }
+            }
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              handleExpandToggle(e);
+            }
+          }}
+        >
+          <span className="coin-expand-swipe-arrow-icon" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M10 16.5V3.5" />
+              <path d="M4.5 9L10 3.5L15.5 9" />
             </svg>
-          </button>
+          </span>
         </div>
       )}
       {USE_NATIVE_CHART && _mobilePortal && nativeChartFullscreen && (
@@ -3903,35 +4118,65 @@ const CoinCard = memo(({
 
       {/* Coin Info Popup */}
       {showCoinInfoPopup && createPortal(
-        <div className="coin-info-popup-overlay" onClick={() => setShowCoinInfoPopup(false)}>
+        <div className="coin-info-popup-overlay" onClick={closeCoinInfoPopup}>
           <div
             className="coin-info-popup"
-            onClick={(e) => e.stopPropagation()}
-            onTouchStart={handleCoinInfoTouchStart}
-            onTouchMove={handleCoinInfoTouchMove}
-            onTouchEnd={handleCoinInfoTouchEnd}
-            onTouchCancel={handleCoinInfoTouchCancel}
-            onPointerDown={handleCoinInfoPointerDown}
-            onPointerMove={handleCoinInfoPointerMove}
-            onPointerUp={handleCoinInfoPointerUp}
-            onPointerCancel={handleCoinInfoPointerCancel}
+            onClick={(e) => {
+              e.stopPropagation();
+              // Landing on a feed is confirmed by pressing anywhere outside the picker window.
+              if (feedPicker && !e.target.closest?.('.coin-info-popup-feed')) closeCoinInfoPopup();
+            }}
           >
-            <button className="coin-info-popup-close" onClick={() => setShowCoinInfoPopup(false)}>
+            <button className="coin-info-popup-close" onClick={closeCoinInfoPopup}>
               ×
             </button>
             <div className="coin-info-popup-top">
-              <div>
+              <div className="coin-info-popup-idcol">
                 <div className="coin-info-popup-symbol">${coin.symbol || coin.ticker || 'N/A'}</div>
                 <div className="coin-info-popup-name">{coin.name || coin.symbol || 'Meme coin'}</div>
               </div>
-              <div className={`coin-info-popup-feed ${coinInfoFeedDrag.active ? 'dragging' : ''}`}>
-                <div className="coin-info-popup-feed-track" style={popupFeedTrackStyle}>
-                  <span>{formatFeedLabel(popupFeedPreview.previous)}</span>
-                  <span>{formatFeedLabel(popupFeedPreview.current)}</span>
-                  <span>{formatFeedLabel(popupFeedPreview.next)}</span>
-                </div>
+              <div
+                className={`coin-info-popup-feed${feedPicker ? ' open' : ''}${feedPicker?.dragging ? ' dragging' : ''}`}
+                role="button"
+                tabIndex={0}
+                aria-label={feedPicker ? 'Swipe left or right to browse feeds' : `Feed: ${formatFeedLabel(popupFeedId)} — tap to switch`}
+                onClick={!feedPicker ? (e) => { e.stopPropagation(); openFeedPicker(); } : undefined}
+                onPointerDown={feedPicker ? handleFeedPickerPointerDown : undefined}
+                onPointerMove={feedPicker ? handleFeedPickerPointerMove : undefined}
+                onPointerUp={feedPicker ? handleFeedPickerPointerUp : undefined}
+                onPointerCancel={feedPicker ? handleFeedPickerPointerUp : undefined}
+              >
+                {feedPicker ? (
+                  <div
+                    className="coin-info-popup-feed-track picker"
+                    style={{ transform: `translateX(${(FEED_PICKER_OPEN_W - FEED_PICKER_SLOT_W) / 2 - feedPicker.index * FEED_PICKER_SLOT_W}px)` }}
+                  >
+                    {POPUP_FEED_ORDER.map((feed, i) => (
+                      <span
+                        key={feed}
+                        className={`coin-info-popup-feed-slot${feedPickerSnapped === feed ? ' active' : ''}`}
+                        style={{ opacity: 1 - Math.min(1, Math.abs(i - feedPicker.index)) * 0.6 }}
+                      >
+                        {formatFeedLabel(feed)}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="coin-info-popup-feed-track">
+                    <span>{formatFeedLabel(popupFeedPreview.previous)}</span>
+                    <span>{formatFeedLabel(popupFeedPreview.current)}</span>
+                    <span>{formatFeedLabel(popupFeedPreview.next)}</span>
+                  </div>
+                )}
               </div>
             </div>
+            {feedPicker && (
+              <div className="coin-info-popup-feed-hint">
+                {feedPickerSnapped === popupFeedId
+                  ? 'Swipe the pill to browse feeds'
+                  : `Tap anywhere else to switch to ${formatFeedLabel(feedPickerSnapped)}`}
+              </div>
+            )}
             <div className="coin-info-popup-bio">
               {coin.description || 'No bio available yet.'}
             </div>
@@ -4118,7 +4363,7 @@ const CoinCard = memo(({
             {/* Header */}
             <div className="tiktok-sheet-header">
               <span className="tiktok-sheet-title">
-                💬 {comments.length} {comments.length === 1 ? 'Comment' : 'Comments'}
+                {comments.length} {comments.length === 1 ? 'Comment' : 'Comments'}
               </span>
               <button className="tiktok-sheet-close" onClick={() => setShowComments(false)}>✕</button>
             </div>
@@ -4211,7 +4456,7 @@ const CoinCard = memo(({
                         style={{ cursor: comment.walletAddress ? 'pointer' : 'default' }}
                         title={comment.walletAddress ? 'Click to view wallet stats' : undefined}
                       >
-                        👛 {comment.walletAddress ? 
+                        {comment.walletAddress ? 
                           `${comment.walletAddress.substring(0, 4)}..${comment.walletAddress.slice(-4)}` 
                           : 'Anon'}
                       </span>

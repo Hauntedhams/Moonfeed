@@ -56,6 +56,33 @@ const getInitialFilters = () => {
   return { type: 'dextrending' }; // DEXtrending is the fastest-loading default
 };
 
+// If the page silently reloads while a coin-detail view is open (WKWebView
+// memory-pressure crash on iOS reloads the page with no warning), restore the
+// exact coin the user was looking at instead of dumping them back on the feed.
+const LAST_COIN_DETAIL_KEY = 'moonfeed_coin_detail';
+const COIN_DETAIL_RESTORE_MAX_AGE = 24 * 60 * 60 * 1000;
+const snapshotCoinForRestore = (coin) => ({
+  mintAddress: coin.mintAddress || coin.address,
+  address: coin.address || coin.mintAddress,
+  symbol: coin.symbol,
+  name: coin.name,
+  image: coin.image || coin.logo || coin.profileImage,
+  banner: coin.banner,
+  pairAddress: coin.pairAddress,
+  price_usd: coin.price_usd || coin.priceUsd,
+  trackedAtPrice: coin.trackedAtPrice,
+});
+const getInitialCoinDetail = () => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(LAST_COIN_DETAIL_KEY));
+    if (
+      saved?.coin?.mintAddress &&
+      Date.now() - (saved.ts || 0) < COIN_DETAIL_RESTORE_MAX_AGE
+    ) return saved;
+  } catch (_) {}
+  return null;
+};
+
 function App() {
   // Build timestamp - only log once on initial load
   if (!window.__MOONFEED_LOGGED__) {
@@ -68,7 +95,8 @@ function App() {
   }
 
 
-  const [activeTab, setActiveTab] = useState('home');
+  const [restoredCoinDetail] = useState(getInitialCoinDetail); // read once per page load
+  const [activeTab, setActiveTab] = useState(restoredCoinDetail ? 'coin-detail' : 'home');
   const [favorites, setFavorites] = useState([]);
   const { publicKey, connected } = useWallet();
   const walletAddress = publicKey?.toString() || null;
@@ -85,8 +113,8 @@ function App() {
   const [advancedFilters, setAdvancedFilters] = useState(null); // For advanced filtering
   const [isAdvancedFilterActive, setIsAdvancedFilterActive] = useState(false);
   const [advancedFilterModalOpen, setAdvancedFilterModalOpen] = useState(false); // Control modal open/close
-  const [selectedCoin, setSelectedCoin] = useState(null); // For full coin view
-  const [currentViewedCoin, setCurrentViewedCoin] = useState(null); // For current viewing
+  const [selectedCoin, setSelectedCoin] = useState(restoredCoinDetail?.coin || null); // For full coin view
+  const [currentViewedCoin, setCurrentViewedCoin] = useState(restoredCoinDetail?.coin || null); // For current viewing
   const [visibleCoins, setVisibleCoins] = useState([]); // Track currently visible coins
   const [tradeModalOpen, setTradeModalOpen] = useState(false); // Jupiter trade modal
   const [coinToTrade, setCoinToTrade] = useState(null); // Coin selected for trading
@@ -95,7 +123,7 @@ function App() {
   const [coinListModalFilter, setCoinListModalFilter] = useState(null); // Filter type for coin list modal
   const [currentCoinIndex, setCurrentCoinIndex] = useState(0); // Current coin index in scroller
   const [totalCoinsInList, setTotalCoinsInList] = useState(0); // Total coins in current list
-  const [previousTab, setPreviousTab] = useState('home'); // Tab to go back to from coin-detail
+  const [previousTab, setPreviousTab] = useState(restoredCoinDetail?.previousTab || 'home'); // Tab to go back to from coin-detail
   const [walletProfile, setWalletProfile] = useState(null); // Wallet profile overlay state: { address, displayName? }
   const [positionDetail, setPositionDetail] = useState(null); // { wallet, mint } to show a single position's entry/exit detail
 
@@ -348,15 +376,33 @@ function App() {
     try { localStorage.setItem(LAST_FEED_KEY, filters.type); } catch (_) {}
   }, [filters?.type]);
 
+  // Persist the open coin-detail view so a silent page reload (WKWebView
+  // memory-pressure crash) can restore it; cleared when the user leaves it.
+  useEffect(() => {
+    try {
+      if (activeTab === 'coin-detail' && selectedCoin && (selectedCoin.mintAddress || selectedCoin.address)) {
+        localStorage.setItem(LAST_COIN_DETAIL_KEY, JSON.stringify({
+          coin: snapshotCoinForRestore(selectedCoin),
+          previousTab,
+          ts: Date.now(),
+        }));
+      } else {
+        localStorage.removeItem(LAST_COIN_DETAIL_KEY);
+      }
+    } catch (_) {}
+  }, [activeTab, selectedCoin, previousTab]);
+
   // CoinCard's name popup can swipe horizontally through the same home feeds
   // controlled by FeedSelector.
   useEffect(() => {
     const onSwipeFeed = (event) => {
+      const explicitFeed = KNOWN_FEEDS.includes(event.detail?.feed) ? event.detail.feed : null;
       const direction = Number(event.detail?.direction) || 1;
       setActiveTab('home');
       setAdvancedFilters(null);
       setIsAdvancedFilterActive(false);
       setFilters((prev) => {
+        if (explicitFeed) return { type: explicitFeed };
         const current = KNOWN_FEEDS.includes(prev?.type) ? prev.type : FEED_ORDER[0];
         const currentIndex = FEED_ORDER.indexOf(current);
         const nextIndex = (currentIndex + direction + FEED_ORDER.length) % FEED_ORDER.length;

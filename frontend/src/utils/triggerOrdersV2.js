@@ -264,7 +264,7 @@ export async function ensureTriggerAuth({ walletAddress, signMessage, signTransa
       await logTxDiff(challenge.transaction, signedTransaction);
       throw new Error(
         'Your wallet altered the sign-in transaction before signing. ' +
-        'In your wallet settings, set Priority Fee to "None" and disable transaction protection, then try again.'
+        'Solflare mobile may not expose a setting to disable this. Try Phantom, or use the Solflare browser extension and approve the site as trusted.'
       );
     }
     let verified;
@@ -358,6 +358,9 @@ export async function placeTriggerOrderV2({
   const MAX_ATTEMPTS = 2;
   let created = null;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    // Rapid app↔wallet deeplink ping-pong can crash wallet apps (Phantom shows
+    // "Unknown Error") — give it a moment between attempts.
+    if (attempt > 1) await new Promise((r) => setTimeout(r, 1200));
     const deposit = await apiPost('/api/trigger/v2/deposit', {
       inputMint,
       outputMint,
@@ -368,7 +371,13 @@ export async function placeTriggerOrderV2({
     }, jwt);
     if (!deposit.requestId || !deposit.transaction) throw new Error('Could not prepare the order deposit');
 
-    const depositSignedTx = await signAnyTransaction(signTransaction, deposit.transaction);
+    let depositSignedTx;
+    try {
+      depositSignedTx = await signAnyTransaction(signTransaction, deposit.transaction);
+    } catch (err) {
+      if (/reject|denied|cancell/i.test(err?.message || '')) throw err;
+      throw new Error(`Wallet could not sign the order deposit: ${err.message}`);
+    }
 
     // Catch wallet modification locally — no point submitting a tx Jupiter will
     // reject, and this tells us definitively whether the wallet is the culprit.
@@ -384,8 +393,7 @@ export async function placeTriggerOrderV2({
       if (attempt < MAX_ATTEMPTS) continue;
       throw new Error(
         'Your wallet altered the transaction before signing, so Jupiter would reject it. ' +
-        'In Solflare: open Settings → set Priority Fee to "None" and disable transaction protection ' +
-        '(or tick "I trust this site" on the approval popup), then try again.'
+        'Solflare mobile may not expose a setting to disable this. Try Phantom, or use the Solflare browser extension and tick "I trust this site" on the approval popup.'
       );
     }
 

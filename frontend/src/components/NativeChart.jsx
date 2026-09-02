@@ -98,6 +98,8 @@ const NativeChart = ({
   initialTfIndex = null,
   focusOneMinute = false,
   focusTimelineFrom = null,
+  focusTimelineTo = null,
+  focusTimelineAt = null,
   refocusSignal = 0,
   resetViewSignal = 0,
   targetPrice = null,
@@ -164,6 +166,10 @@ const NativeChart = ({
   const [dotClusters, setDotClusters] = useState([]);
   const [openCluster, setOpenCluster] = useState(null);
   const [trackedBubble, setTrackedBubble] = useState(null);
+  // One-tap "watch live" zoom: 1m timeframe framed tight on the newest candles.
+  const [liveZoom, setLiveZoom] = useState(false);
+  const liveZoomPrevTfRef = useRef(null); // timeframe to restore on zoom-out
+  const liveZoomPendingRef = useRef(false); // zoom deferred until 1m data lands
   const resolvedMintRef = useRef(null);
   const fittedMintTfRef = useRef('');
 
@@ -1006,10 +1012,8 @@ const NativeChart = ({
     if (isActive) load();
   }, [isActive, load]);
 
-  // Position detail opens at the trader's entry point, leaving the subsequent
-  // price action visible and scrollable instead of always fitting all history.
-  // The entry sits ~20% in from the left edge (proportional to the total span)
-  // rather than jammed against it with only a fixed few-candle buffer.
+  // Position detail opens around the trader's entry and exit points, leaving
+  // both markers comfortably inside the viewport instead of at its edges.
   // `refocusSignal` lets a caller re-run this on demand (e.g. a "recenter"
   // button) after the user has panned/zoomed away from the entry point.
   useEffect(() => {
@@ -1020,18 +1024,48 @@ const NativeChart = ({
 
     const entry = Math.floor(entryMs / 1000);
     const interval = tfSeconds(TIMEFRAMES[tfIndex]);
-    const to = last.time + interval * 6;
-    const targetFraction = 0.2;
-    let from = (entry - targetFraction * to) / (1 - targetFraction);
-    from = Math.min(from, entry - interval);
-    from = Math.max(0, from);
+    const focusMs = Number(focusTimelineAt);
+    if (Number.isFinite(focusMs) && focusMs > 0) {
+      const target = Math.floor(focusMs / 1000);
+      const span = interval * 40;
+      try {
+        chart.timeScale().setVisibleRange({
+          from: Math.max(0, target - span * 0.4),
+          to: target + span * 0.6,
+        });
+      } catch (_) {
+        // The selected timeframe may not retain the requested trade candle.
+      }
+      return;
+    }
+    const exitMs = Number(focusTimelineTo);
+    const exit = Number.isFinite(exitMs) && exitMs > 0 ? Math.floor(exitMs / 1000) : null;
+    let from;
+    let to;
+    if (exit !== null) {
+      // Frame around the trade itself (not out to the latest candle) so the
+      // entry and exit markers sit comfortably centered instead of at the edges.
+      const tradeStart = Math.min(entry, exit);
+      const tradeEnd = Math.max(entry, exit);
+      const tradeSpan = Math.max(interval * 8, tradeEnd - tradeStart);
+      const padding = Math.max(interval * 10, tradeSpan * 0.55);
+      from = Math.max(0, tradeStart - padding);
+      to = tradeEnd + padding;
+    } else {
+      const defaultTo = last.time + interval * 6;
+      const targetFraction = 0.2;
+      to = defaultTo;
+      from = (entry - targetFraction * to) / (1 - targetFraction);
+      from = Math.min(from, entry - interval);
+      from = Math.max(0, from);
+    }
     try {
       chart.timeScale().setVisibleRange({ from, to });
     } catch (_) {
       // The selected timeframe may not retain an old entry candle; fitContent
       // from load() remains a useful fallback until the user changes timeframe.
     }
-  }, [focusTimelineFrom, status, tfIndex, refocusSignal]);
+  }, [focusTimelineFrom, focusTimelineTo, focusTimelineAt, status, tfIndex, refocusSignal]);
 
   // "Reset chart view" button: snap pan/zoom back to default framing
   // (skipped the very first time so it doesn't fight the initial fitContent).
@@ -1302,6 +1336,69 @@ const NativeChart = ({
     }
   }, [status, tfIndex, performEntryZoom]);
 
+  // Frame the view tight on the newest 1m candles so live ticks are easy to watch.
+  const performLiveZoom = useCallback(() => {
+    const chart = chartRef.current;
+    const series = seriesRef.current;
+    if (!chart || !series || status !== 'ready') return;
+    const last = lastCandleRef.current;
+    if (!last) return;
+    clearUserNav();
+    try { series.applyOptions({ autoscaleInfoProvider: undefined }); } catch (_) {}
+    const interval = tfSeconds(TIMEFRAMES[0]);
+    const from = Math.max(0, last.time - interval * 28);
+    const to = last.time + interval * 4;
+    try {
+      chart.timeScale().setVisibleRange({ from, to });
+    } catch (_) {
+      try { chart.timeScale().fitContent(); } catch (_) {}
+    }
+  }, [status, clearUserNav]);
+
+  // Middle-right chart button: one tap in to the live 1m view, one tap back out.
+  const toggleLiveZoom = useCallback(() => {
+    if (!liveZoom) {
+      setLiveZoom(true);
+      liveZoomPrevTfRef.current = tfIndex;
+      if (tfIndex !== 0) {
+        liveZoomPendingRef.current = true;
+        manualTfRef.current = true; // keep auto-framing hands off while zoomed
+        setTfIndex(0);
+      } else {
+        performLiveZoom();
+      }
+    } else {
+      setLiveZoom(false);
+      liveZoomPendingRef.current = false;
+      const prev = liveZoomPrevTfRef.current ?? DEFAULT_TF_INDEX;
+      if (prev !== 0 && prev !== tfIndex) {
+        setTfIndex(prev); // load() refits the full view on the timeframe switch
+      } else {
+        clearUserNav();
+        try { seriesRef.current?.applyOptions({ autoscaleInfoProvider: undefined }); } catch (_) {}
+        try { chartRef.current?.timeScale().fitContent(); } catch (_) {}
+      }
+    }
+  }, [liveZoom, tfIndex, performLiveZoom, clearUserNav]);
+
+  // Run the deferred live zoom once the 1m data lands. Keyed off status/dataRev
+  // (NOT tfIndex) so it doesn't fire in the same render as the tf switch, while
+  // the old timeframe's data is still on screen and load()'s fitContent is pending.
+  useEffect(() => {
+    if (liveZoomPendingRef.current && status === 'ready' && tfIndex === 0) {
+      liveZoomPendingRef.current = false;
+      performLiveZoom();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, dataRev, performLiveZoom]);
+
+  // New coin = back to the standard zoomed-out state.
+  useEffect(() => {
+    setLiveZoom(false);
+    liveZoomPendingRef.current = false;
+    liveZoomPrevTfRef.current = null;
+  }, [mint]);
+
   // Clicking anywhere along the "Your buy in" price line zooms into that spot.
   useEffect(() => {
     const chart = chartRef.current;
@@ -1564,7 +1661,12 @@ const NativeChart = ({
 
   // Order mode drives its own scale animation — release any user-pinned view first.
   useEffect(() => {
-    if (focusOneMinute) clearUserNav();
+    if (focusOneMinute) {
+      clearUserNav();
+      // Order mode owns the timeframe/framing — drop any live-zoom state.
+      setLiveZoom(false);
+      liveZoomPendingRef.current = false;
+    }
   }, [focusOneMinute, clearUserNav]);
 
   useEffect(() => {
@@ -1840,7 +1942,7 @@ const NativeChart = ({
             key={tf.label}
             type="button"
             className={`native-chart-tf ${i === tfIndex ? 'active' : ''}`}
-            onClick={(e) => { e.stopPropagation(); manualTfRef.current = true; setTfIndex(i); }}
+            onClick={(e) => { e.stopPropagation(); manualTfRef.current = true; liveZoomPendingRef.current = false; setLiveZoom(false); setTfIndex(i); }}
           >
             {tf.label}
           </button>
@@ -1857,6 +1959,30 @@ const NativeChart = ({
         )}
       </div>
       <div className="native-chart-canvas" ref={containerRef} />
+      {!isExpanded && !focusOneMinute && status === 'ready' && (
+        <button
+          type="button"
+          className={`native-chart-live-zoom-btn ${liveZoom ? 'active' : ''}`}
+          onClick={(e) => { e.stopPropagation(); toggleLiveZoom(); }}
+          title={liveZoom ? 'Back to full chart' : 'Zoom in to live 1m price'}
+          aria-label={liveZoom ? 'Back to full chart' : 'Zoom in to live 1m price'}
+        >
+          {liveZoom ? (
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="7" />
+              <line x1="16.5" y1="16.5" x2="21" y2="21" />
+              <line x1="8" y1="11" x2="14" y2="11" />
+            </svg>
+          ) : (
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="7" />
+              <line x1="16.5" y1="16.5" x2="21" y2="21" />
+              <line x1="11" y1="8" x2="11" y2="14" />
+              <line x1="8" y1="11" x2="14" y2="11" />
+            </svg>
+          )}
+        </button>
+      )}
       {orderGuide && (
         <svg className="native-chart-order-guide" viewBox={`0 0 ${orderGuide.width} ${orderGuide.height}`} preserveAspectRatio="none" aria-hidden="true">
           <text x={orderGuide.toX - 4} y={orderGuide.toY - 8} textAnchor="end">{targetLabel}</text>

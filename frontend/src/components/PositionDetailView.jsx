@@ -49,6 +49,13 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [chartPrice, setChartPrice] = useState(null);
+  const [chartFocusTime, setChartFocusTime] = useState(null);
+  const [chartFocusNonce, setChartFocusNonce] = useState(0);
+  const zoomToTradeTime = (timeMs) => {
+    if (!timeMs) return;
+    setChartFocusTime(timeMs);
+    setChartFocusNonce((n) => n + 1); // re-zoom even when tapping the same point again
+  };
   const { trackWallet, isTracked } = useTrackedWallets();
   const [tracked, setTracked] = useState(false);
 
@@ -87,6 +94,7 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
     setError(null);
     setData(null);
     setChartPrice(null);
+    setChartFocusTime(null);
     fetchJsonWithTimeout(getFullApiUrl(`/api/wallet/${walletAddress}/position/${mint}`))
       .then((d) => { if (!cancelled) setData(d); })
       .catch((e) => { if (!cancelled) setError(e.message); })
@@ -102,7 +110,7 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
         position: 'belowBar',
         color: '#26a69a',
         shape: 'arrowUp',
-        text: `Entry ${formatMcap(data.avgEntryMarketCap)}`,
+        text: `Avg entry ${formatMcap(data.avgEntryMarketCap)} MC`,
       });
     }
     if (data?.timing?.lastSell && data.avgExitPrice) {
@@ -111,7 +119,7 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
         position: 'aboveBar',
         color: '#ef5350',
         shape: 'arrowDown',
-        text: `Exit ${formatMcap(data.avgExitMarketCap)}`,
+        text: `Avg exit ${formatMcap(data.avgExitMarketCap)} MC`,
       });
     }
     // Fallback: if no timing from API, plot the swap marker from notification/profileHint
@@ -345,18 +353,55 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
           markers={markers}
           initialTfIndex={tfIndexForHold(position?.timing?.holdTimeSecs)}
           focusTimelineFrom={position?.timing?.firstBuy || (profileHint?.timestamp ? (profileHint.timestamp < 1e12 ? profileHint.timestamp * 1000 : profileHint.timestamp) : null)}
+          focusTimelineTo={position?.timing?.lastSell || null}
+          focusTimelineAt={chartFocusTime}
+          refocusSignal={chartFocusNonce}
           onCrosshairMove={handleChartCrosshairMove}
         />
       </div>
 
       <div className="pdv-entryexit">
         <div className="pdv-entryexit-item">
-          <span className="pdv-entryexit-label">Avg entry</span>
-          <span className="pdv-entryexit-value">{position ? `${formatMcap(position.avgEntryMarketCap)} MC` : '—'}</span>
+          <div className="pdv-entryexit-text">
+            <span className="pdv-entryexit-label">Entry</span>
+            <span className="pdv-entryexit-value">{position ? `${formatMcap(position.avgEntryMarketCap)} MC` : '—'}</span>
+          </div>
+          <button
+            type="button"
+            className="pdv-entryexit-zoom"
+            onClick={() => zoomToTradeTime(position?.timing?.firstBuy)}
+            disabled={!position?.timing?.firstBuy}
+            title="Zoom chart to the buy"
+            aria-label="Zoom chart to the buy"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="7" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              <line x1="8" y1="11" x2="14" y2="11" />
+              <line x1="11" y1="8" x2="11" y2="14" />
+            </svg>
+          </button>
         </div>
         <div className="pdv-entryexit-item">
-          <span className="pdv-entryexit-label">Avg exit</span>
-          <span className="pdv-entryexit-value">{position ? `${formatMcap(position.avgExitMarketCap)} MC` : '—'}</span>
+          <div className="pdv-entryexit-text">
+            <span className="pdv-entryexit-label">Exit</span>
+            <span className="pdv-entryexit-value">{position ? `${formatMcap(position.avgExitMarketCap)} MC` : '—'}</span>
+          </div>
+          <button
+            type="button"
+            className="pdv-entryexit-zoom"
+            onClick={() => zoomToTradeTime(position?.timing?.lastSell)}
+            disabled={!position?.timing?.lastSell}
+            title="Zoom chart to the sell"
+            aria-label="Zoom chart to the sell"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="7" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              <line x1="8" y1="11" x2="14" y2="11" />
+              <line x1="11" y1="8" x2="11" y2="14" />
+            </svg>
+          </button>
         </div>
       </div>
 

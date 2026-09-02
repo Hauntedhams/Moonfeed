@@ -24,9 +24,9 @@
   
   /* Disable most transitions on mobile for instant interactions
      BUT exempt TikTok action bar, expand-handle & info layer so they animate in BOTH directions */
-  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content):not(.coin-buy-drawer),
-  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content):not(.coin-buy-drawer)::before,
-  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content):not(.coin-buy-drawer)::after {
+  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content):not(.coin-buy-drawer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track),
+  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content):not(.coin-buy-drawer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track)::before,
+  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content):not(.coin-buy-drawer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track)::after {
     transition: none !important;
     transition-duration: 0s !important;
   }
@@ -349,6 +349,37 @@
 
 .native-chart-expand-card-btn:active {
   transform: scale(0.94);
+}
+
+/* Collapsed-state expand affordance: a static arrow sitting just above the
+   bottom-nav Profile button, styled like the nav icons. Slide up from it
+   (or tap) to expand the card; the action buttons then pop out as usual. */
+.coin-expand-swipe-arrow {
+  position: fixed;
+  /* Center over the Profile button: last of 5 equal flex buttons inside the
+     centered bottom nav (max-width 430px, 16px side padding, 4 × 8px gaps). */
+  right: calc((100vw - min(100vw, 430px)) / 2 + 16px + (min(100vw, 430px) - 64px) / 10 - 20px);
+  bottom: calc(env(safe-area-inset-bottom) + 62px);
+  width: 40px;
+  height: 40px;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.coin-expand-swipe-arrow-icon {
+  display: flex;
+  color: rgba(0, 0, 0, 0.6); /* matches light-mode nav icons */
+}
+
+.dark-mode .coin-expand-swipe-arrow-icon {
+  color: rgba(255, 255, 255, 0.85); /* matches dark-mode nav icons */
 }
 
 .native-chart-mobile-right-actions {
@@ -4975,6 +5006,10 @@ html.dark-mode .description-modal-body,
   padding-right: 28px;
 }
 
+.coin-info-popup-idcol {
+  min-width: 0;
+}
+
 .coin-info-popup-symbol {
   font-size: 1.05rem;
   font-weight: 900;
@@ -4986,6 +5021,9 @@ html.dark-mode .description-modal-body,
   color: rgba(255, 255, 255, 0.66);
   font-size: 0.8rem;
   font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .coin-info-popup-feed {
@@ -5000,8 +5038,31 @@ html.dark-mode .description-modal-body,
   font-size: 0.68rem;
   font-weight: 800;
   overflow: hidden;
-  cursor: grab;
+  cursor: pointer;
   position: relative;
+  transition: width 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), height 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Tapped open: the pill grows into a swipeable picker with a center "window" */
+.coin-info-popup-feed.open {
+  width: 200px;
+  height: 32px;
+  cursor: grab;
+  touch-action: none;
+  background: rgba(59, 130, 246, 0.26);
+  border-color: rgba(147, 197, 253, 0.6);
+}
+
+.coin-info-popup-feed.open::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: calc(50% - 47px);
+  width: 94px;
+  border-radius: 999px;
+  border: 1px solid rgba(191, 219, 254, 0.55);
+  pointer-events: none;
 }
 
 .coin-info-popup-feed.dragging {
@@ -5015,11 +5076,35 @@ html.dark-mode .description-modal-body,
   width: 300%;
   height: 100%;
   will-change: transform;
+  transform: translateX(-33.333%);
   transition: transform 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .coin-info-popup-feed.dragging .coin-info-popup-feed-track {
   transition: none;
+}
+
+/* Open picker: fixed-width slots the finger drags through, snapping per feed */
+.coin-info-popup-feed-track.picker {
+  width: auto;
+  transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.coin-info-popup-feed-track.picker span {
+  width: 100px;
+  flex: 0 0 100px;
+}
+
+.coin-info-popup-feed-slot.active {
+  color: #ffffff;
+}
+
+.coin-info-popup-feed-hint {
+  margin-top: 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: rgba(191, 219, 254, 0.88);
+  text-align: right;
 }
 
 .coin-info-popup-feed-track span {

@@ -3,7 +3,8 @@
 /* Hide the feed's floating action buttons/swipe hint while this overlay is open. */
 body.odv-open .tiktok-action-buttons,
 body.odv-open .coin-buy-swipe-hotzone,
-body.odv-open .native-chart-mobile-right-actions {
+body.odv-open .native-chart-mobile-right-actions,
+body.odv-open .coin-expand-swipe-arrow {
   display: none !important;
 }
 

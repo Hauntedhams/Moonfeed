@@ -110,6 +110,54 @@
   pointer-events: none;
 }
 
+/* One-tap live-zoom button — middle of the chart's right edge (collapsed view).
+   Needs its own pointer-events since the collapsed canvas passes touches through. */
+.native-chart-live-zoom-btn {
+  position: absolute;
+  /* No transform centering — a global mobile rule forces transform:none on :hover,
+     which made the button jump 15px under the cursor. */
+  top: calc(50% - 15px);
+  right: 8px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(15, 23, 41, 0.78);
+  color: #cbd5e1;
+  cursor: pointer;
+  pointer-events: auto;
+  z-index: 14;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.native-chart-live-zoom-btn:hover {
+  background: rgba(30, 41, 66, 0.9);
+  color: #ffffff;
+}
+
+.native-chart-live-zoom-btn.active {
+  background: #4f8cff;
+  border-color: transparent;
+  color: #ffffff;
+}
+
+.native-chart.light .native-chart-live-zoom-btn {
+  background: rgba(255, 255, 255, 0.88);
+  border-color: rgba(0, 0, 0, 0.12);
+  color: #374151;
+}
+
+.native-chart.light .native-chart-live-zoom-btn.active {
+  background: #4f8cff;
+  border-color: transparent;
+  color: #ffffff;
+}
+
 .native-chart-order-guide {
   position: absolute;
   top: 34px;

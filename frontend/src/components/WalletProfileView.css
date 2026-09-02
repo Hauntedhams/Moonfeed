@@ -222,7 +222,8 @@ body.wpv-open .coin-buy-swipe-hotzone {
 /* Also hide the feed's floating chart action cluster (upload/full-chart/expand) —
    it's position:fixed and would otherwise bleed through here too. A Follow
    button next to the address chip replaces the "expand" action for this page. */
-body.wpv-open .native-chart-mobile-right-actions {
+body.wpv-open .native-chart-mobile-right-actions,
+body.wpv-open .coin-expand-swipe-arrow {
   display: none !important;
 }
 

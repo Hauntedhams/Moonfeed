@@ -12,7 +12,8 @@ body.pdv-open .tiktok-action-buttons {
   display: none !important;
 }
 
-body.pdv-open .native-chart-mobile-right-actions {
+body.pdv-open .native-chart-mobile-right-actions,
+body.pdv-open .coin-expand-swipe-arrow {
   display: none !important;
 }
 
@@ -397,8 +398,9 @@ html:not(.dark-mode) .pdv-chart-wrap {
 .pdv-entryexit-item {
   flex: 1;
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   padding: 12px 14px;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.04);
@@ -406,6 +408,49 @@ html:not(.dark-mode) .pdv-chart-wrap {
 
 html:not(.dark-mode) .pdv-entryexit-item {
   background: rgba(0, 0, 0, 0.04);
+}
+
+.pdv-entryexit-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.pdv-entryexit-zoom {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: rgba(79, 140, 255, 0.16);
+  color: #4f8cff;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pdv-entryexit-zoom:not(:disabled):active {
+  transform: scale(0.92);
+}
+
+.pdv-entryexit-zoom:not(:disabled):hover,
+.pdv-entryexit-zoom:focus-visible {
+  background: rgba(79, 140, 255, 0.3);
+}
+
+.pdv-entryexit-zoom:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+html:not(.dark-mode) .pdv-entryexit-zoom {
+  background: rgba(37, 99, 235, 0.12);
+  color: #2563eb;
 }
 
 .pdv-entryexit-label {

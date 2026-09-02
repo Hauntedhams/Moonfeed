@@ -52,8 +52,9 @@ class MobileWalletDeeplink {
     this.sharedSecret = null;        // Uint8Array
     this.session = null;             // opaque wallet session token
     this.publicKey = null;           // base58 Solana address
-    this.pending = null;             // { action, resolve, reject }
+    this.pending = null;             // { action, resolve, reject, wentBackground }
     this.listenerReady = false;
+    this._resumeTimer = null;
 
     this._restore();
   }
@@ -121,6 +122,31 @@ class MobileWalletDeeplink {
         this._rejectPending(err);
       }
     });
+    // Watchdog: if the wallet app errors internally (e.g. Phantom's "Unknown
+    // Error" screen) it never redirects back — without this, the pending
+    // promise (and the UI spinner) would hang forever.
+    await App.addListener('appStateChange', ({ isActive }) => {
+      if (!isActive) {
+        if (this.pending) this.pending.wentBackground = true;
+        this._clearResumeTimer();
+        return;
+      }
+      if (this.pending && this.pending.wentBackground) {
+        this._clearResumeTimer();
+        this._resumeTimer = setTimeout(() => {
+          this._rejectPending(new Error(
+            'The wallet closed without completing the request — it may have hit an error. Please try again.'
+          ));
+        }, 3500);
+      }
+    });
+  }
+
+  _clearResumeTimer() {
+    if (this._resumeTimer) {
+      clearTimeout(this._resumeTimer);
+      this._resumeTimer = null;
+    }
   }
 
   _handleRedirect(url) {
@@ -198,12 +224,14 @@ class MobileWalletDeeplink {
   // Pending request plumbing (one deeplink round-trip at a time)
   // -------------------------------------------------------------------------
   _resolvePending(value) {
+    this._clearResumeTimer();
     const p = this.pending;
     this.pending = null;
     if (p) p.resolve(value);
   }
 
   _rejectPending(err) {
+    this._clearResumeTimer();
     const p = this.pending;
     this.pending = null;
     if (p) p.reject(err);
@@ -219,7 +247,8 @@ class MobileWalletDeeplink {
       if (this.pending) {
         this.pending.reject(new Error('Cancelled by a newer wallet request'));
       }
-      this.pending = { action, resolve, reject };
+      this._clearResumeTimer();
+      this.pending = { action, resolve, reject, wentBackground: false };
       AppLauncher.openUrl({ url }).catch((err) => {
         this._rejectPending(new Error(`Could not open wallet app: ${err.message || err}`));
       });
