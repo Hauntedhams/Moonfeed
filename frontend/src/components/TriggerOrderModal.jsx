@@ -3,7 +3,7 @@ import { getFullApiUrl } from '../config/api';
 import { useWallet } from '../contexts/WalletContext';
 import { useWalletConnectOnboarding } from './WalletConnectOnboarding';
 import { getSolUsdPrice } from '../utils/orderFillTracking';
-import { placeTriggerOrderV2 } from '../utils/triggerOrdersV2';
+import { createSoftOrder } from '../utils/softOrders';
 import CautionTapeBanner from './CautionTapeBanner';
 import './TriggerOrderModal.css';
 
@@ -338,38 +338,49 @@ const TriggerOrderModal = ({
     try {
       const expiredAt = getExpiryTimestamp();
 
-      console.log('🎯 Creating trigger order (V2):', {
+      console.log('🎯 Creating soft order:', {
         side,
         inputAmount,
         triggerPrice,
         stopLoss: stopLossEnabled && side === 'sell' ? stopLossPrice : 'none',
-        expiredAt: expiredAt ? new Date(expiredAt).toISOString() : 'default (30d)'
+        expiredAt: expiredAt ? new Date(expiredAt).toISOString() : 'none'
       });
 
-      // Trigger V2 is USD-native and supports downside sells (real stop-losses).
-      // An upside sell target + enabled Stop Loss becomes one OCO pair: whichever
-      // side fills first cancels the other.
-      const result = await placeTriggerOrderV2({
+      // Soft orders: server-monitored price alerts — no escrow, no wallet
+      // signing, so every wallet works (V2 deposits get broken by Lighthouse).
+      const orderMeta = {
         walletAddress,
-        signMessage,
-        signTransaction,
-        mintAddress: coin.mintAddress,
-        side,
-        inputAmount,
-        triggerPriceUsd: parseFloat(triggerPrice),
+        mint: coin.mintAddress,
+        tokenSymbol: coin.symbol || null,
+        tokenName: coin.name || null,
+        tokenImage: coin.image || coin.profileImage || coin.logo || null,
         currentPriceUsd: currentPrice > 0 ? currentPrice : null,
-        stopLossPriceUsd: stopLossEnabled && side === 'sell' && parseFloat(stopLossPrice) > 0
-          ? parseFloat(stopLossPrice)
-          : null,
-        expiredAt,
+        expiresAt: expiredAt,
+      };
+      const result = await createSoftOrder({
+        ...orderMeta,
+        side,
+        triggerPriceUsd: parseFloat(triggerPrice),
+        amountSol: side === 'buy' ? parseFloat(inputAmount) : null,
+        amountTokens: side === 'sell' ? parseFloat(inputAmount) : null,
       });
 
-      console.log('✅ Order created!', result.orderId, result.signature);
+      // Stop loss = a second downside sell alert (both are just notifications,
+      // so no OCO pairing is needed).
+      if (stopLossEnabled && side === 'sell' && parseFloat(stopLossPrice) > 0) {
+        await createSoftOrder({
+          ...orderMeta,
+          side: 'sell',
+          triggerPriceUsd: parseFloat(stopLossPrice),
+          amountTokens: parseFloat(inputAmount),
+        });
+      }
+
+      console.log('✅ Order created!', result.id);
 
       setSuccess(true);
       onOrderCreated?.({
-        orderId: result.orderId,
-        signature: result.signature
+        orderId: result.id
       });
 
       setTimeout(() => {
@@ -422,7 +433,7 @@ const TriggerOrderModal = ({
               <button className="close-btn-compact" onClick={onClose}>✕</button>
             </div>
 
-            <CautionTapeBanner message="IN PROGRESS — LIMIT ORDERS UNDER MAINTENANCE" compact />
+            <CautionTapeBanner message="LIMIT ORDERS ALERT YOU — TAP THE NOTIFICATION TO EXECUTE" compact />
 
             {/* Quick Action Row: Buy/Sell */}
             <div className="action-row">
