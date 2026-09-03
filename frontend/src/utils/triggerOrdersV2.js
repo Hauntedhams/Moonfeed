@@ -483,9 +483,10 @@ export async function placeTriggerOrderV2({
           continue;
         }
         if (lastDiffSummary && /added program L2TEx/i.test(lastDiffSummary)) {
+          // Both Phantom and Solflare inject Lighthouse guards on unreviewed domains.
           throw new Error(
-            "Phantom added its transaction-protection instructions before signing, which Jupiter's order system rejects. " +
-            'This happens on apps Phantom has not reviewed yet — please try again with Solflare, or retry later.'
+            "Your wallet added its transaction-protection (Lighthouse) instructions before signing, which Jupiter's order system rejects. " +
+            'This happens on apps the wallet has not reviewed yet — Moonfeed is pending review. Please try again in a few days.'
           );
         }
         throw new Error(
