@@ -41,6 +41,7 @@ const commentsRoutes = require('./routes/comments');
 const usersRoutes = require('./routes/users');
 const copyTradeRoutes = require('./routes/copyTrade');
 const pushRoutes = require('./routes/push');
+const softOrderRoutes = require('./routes/softOrders');
 const pushMonitors = require('./services/pushMonitors');
 const onDemandEnrichment = require('./services/OnDemandEnrichmentService');
 const geckoTerminalService = require('./geckoTerminalService');
@@ -129,6 +130,9 @@ app.use('/api/users', usersRoutes);
 
 // Mount push-notification device registry
 app.use('/api/push', pushRoutes);
+
+// Mount soft (server-monitored) limit orders
+app.use('/api/soft-orders', softOrderRoutes);
 
 // ═══════════════════════════════════════════════════════════════
 // 🪐 JUPITER REFERRAL API ENDPOINTS

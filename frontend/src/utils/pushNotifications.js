@@ -78,6 +78,15 @@ export async function initRemotePush(walletAddress = null) {
       if (lastToken) sendTokenToBackend(lastToken, lastWallet);
     });
 
+    // Fires when the user taps a notification (app backgrounded or closed).
+    // App.jsx routes the payload (e.g. soft-order triggered → prefilled swap).
+    await plugin.addListener('notificationActionPerformed', (event) => {
+      const data = event?.notification?.data || {};
+      try {
+        window.dispatchEvent(new CustomEvent('moonfeed:push-action', { detail: data }));
+      } catch (_) { /* non-fatal */ }
+    });
+
     const { token } = await plugin.getToken();
     if (token) {
       lastToken = token;

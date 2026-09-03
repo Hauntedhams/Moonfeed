@@ -7,6 +7,7 @@ import { getTransactions, deleteTransaction, storeTransaction, clearTransactions
 import { useDemoMode } from '../contexts/DemoModeContext';
 import { computeFillStats, getSolUsdPrice } from '../utils/orderFillTracking';
 import { fetchTriggerOrdersV2, cancelTriggerOrderV2, ensureTriggerAuth } from '../utils/triggerOrdersV2';
+import { fetchSoftOrders, cancelSoftOrder } from '../utils/softOrders';
 import OrderDetailView from './OrderDetailView';
 import CautionTapeBanner from './CautionTapeBanner';
 import './OrdersView.css';
@@ -620,17 +621,26 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
         return list;
       })();
 
-      const [v1Result, v2Result] = await Promise.allSettled([v1Promise, v2Promise]);
+      const [v1Result, v2Result, softResult] = await Promise.allSettled([
+        v1Promise,
+        v2Promise,
+        fetchSoftOrders(walletAddress, statusFilter === 'active' ? 'active' : 'past'),
+      ]);
       const v1Orders = v1Result.status === 'fulfilled' ? v1Result.value : [];
       const v2Orders = v2Result.status === 'fulfilled' ? v2Result.value : [];
-      if (v1Result.status === 'rejected' && v2Result.status === 'rejected') {
+      const softOrders = softResult.status === 'fulfilled' ? softResult.value : [];
+      if (v1Result.status === 'rejected' && v2Result.status === 'rejected' && softResult.status === 'rejected') {
         throw v1Result.reason;
       }
       if (v2Result.status === 'rejected') {
         console.warn('[Orders] V2 fetch failed:', v2Result.reason?.message);
       }
+      if (softResult.status === 'rejected') {
+        console.warn('[Orders] Soft-order fetch failed:', softResult.reason?.message);
+      }
 
       let merged = [
+        ...softOrders,
         ...v2Orders,
         ...v1Orders.map((o) => ({ ...o, source: o.source || 'v1' })),
       ].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
@@ -679,13 +689,30 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
 
   // Handle cancel order
   const handleCancelOrder = async (orderId) => {
+    const orderToCancel = orders.find((o) => (o.orderId || o.id) === orderId);
+
+    // Soft orders: plain API delete — nothing escrowed, no signing needed.
+    if (orderToCancel?.source === 'soft') {
+      if (!publicKey) { alert('Please connect your wallet first'); return; }
+      setCancellingOrder(orderId);
+      try {
+        await cancelSoftOrder(orderId, publicKey.toString());
+        await fetchOrders();
+      } catch (err) {
+        console.error('[Cancel Soft Order] ❌ Error:', err);
+        alert('Failed to cancel order: ' + (err.message || err));
+      } finally {
+        setCancellingOrder(null);
+      }
+      return;
+    }
+
     if (!publicKey || !signTransaction) {
       alert('Please connect your wallet first');
       return;
     }
 
     // V2 orders use the two-step cancel: initiate → sign withdrawal → confirm.
-    const orderToCancel = orders.find((o) => (o.orderId || o.id) === orderId);
     if (orderToCancel?.source === 'v2') {
       setCancellingOrder(orderId);
       try {
@@ -1511,8 +1538,10 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
                       {(targetReached || parseFloat(priceDiffPercent) === 0) && (
                         <div className="order-card-executing-banner">
                           <span className="order-card-executing-dot" />
-                          Target reached — pending fill
-                          <span className="order-card-executing-sub">Will appear in History once sold</span>
+                          {order.source === 'soft' ? 'Target reached — check your notifications' : 'Target reached — pending fill'}
+                          <span className="order-card-executing-sub">
+                            {order.source === 'soft' ? 'Tap the alert to execute the trade' : 'Will appear in History once sold'}
+                          </span>
                         </div>
                       )}
 
@@ -1525,7 +1554,11 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
                         }}
                         disabled={isCancelling}
                       >
-                        {isCancelling ? 'Cashing out…' : (
+                        {isCancelling
+                          ? (order.source === 'soft' ? 'Removing…' : 'Cashing out…')
+                          : order.source === 'soft'
+                            ? 'Remove order'
+                            : (
                           <>
                             Cashout
                             {cashoutUsd > 0 && (

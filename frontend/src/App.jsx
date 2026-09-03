@@ -608,6 +608,31 @@ function App() {
     return () => window.removeEventListener('moonfeed:open-wallet-profile', onOpenWalletProfile);
   }, []);
 
+  // Push-notification taps (dispatched from pushNotifications.js). A triggered
+  // soft order deep-links straight into a prefilled instant swap.
+  useEffect(() => {
+    const onPushAction = (e) => {
+      const d = e.detail || {};
+      if (d.type === 'softOrderTriggered' && d.mint) {
+        const coin = {
+          mintAddress: d.mint,
+          tokenAddress: d.mint,
+          address: d.mint,
+          symbol: d.symbol || '',
+          name: d.symbol || '',
+        };
+        const solAmount = parseFloat(d.amountSol);
+        handleTradeClick(coin, {
+          tab: 'swap',
+          side: d.side === 'buy' ? 'buy' : 'sell',
+          ...(solAmount > 0 ? { solAmount } : {}),
+        });
+      }
+    };
+    window.addEventListener('moonfeed:push-action', onPushAction);
+    return () => window.removeEventListener('moonfeed:push-action', onPushAction);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Open the FOMO-style entry/exit position detail for a wallet's specific trade
   const handleOpenPosition = (wallet, mint, profileHint = {}) => {
     if (wallet && mint) setPositionDetail({ wallet, mint, profileHint });

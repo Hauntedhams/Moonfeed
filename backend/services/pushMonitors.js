@@ -7,10 +7,12 @@ const User = require('../models/User');
 const DeviceToken = require('../models/DeviceToken');
 const PushAlertState = require('../models/PushAlertState');
 const PushWalletCursor = require('../models/PushWalletCursor');
+const SoftOrder = require('../models/SoftOrder');
 const pushService = require('./pushService');
 
 const POLL_INTERVAL_MS = 90 * 1000;
 const WALLET_POLL_INTERVAL_MS = 60 * 1000;
+const SOFT_ORDER_POLL_INTERVAL_MS = 30 * 1000;
 const CHUNK = 30;
 
 const HELIUS_API_KEY = process.env.HELIUS_API_KEY || '05a97104-cba1-4284-aed6-e0ad21af8b33';
@@ -27,6 +29,7 @@ const CRASH_REARM_M5 = -5;
 
 let timer = null;
 let walletTimer = null;
+let softOrderTimer = null;
 const symbolCache = new Map(); // mint -> { symbol, ts }
 const SYMBOL_TTL = 60 * 60 * 1000;
 
@@ -264,10 +267,76 @@ async function runWalletTradesOnce() {
   }
 }
 
+// ── Soft-order monitor ─────────────────────────────────────────────────
+// Server-monitored buy-at / sell-at / stop-loss alerts. When a trigger hits,
+// the order flips to 'triggered' and every registered device gets a push that
+// deep-links into a prefilled instant swap. Runs even when FCM is disabled so
+// the in-app orders list still reflects triggered state.
+
+async function runSoftOrdersOnce() {
+  await SoftOrder.updateMany(
+    { status: 'active', expiresAt: { $ne: null, $lt: new Date() } },
+    { $set: { status: 'expired' } }
+  );
+
+  const orders = await SoftOrder.find({ status: 'active' }).lean();
+  if (!orders.length) return;
+
+  const prices = await deepestPairs([...new Set(orders.map((o) => o.mint))]);
+  if (!prices.size) return;
+
+  for (const o of orders) {
+    const live = prices.get(o.mint);
+    if (!live || !(live.price > 0)) continue;
+
+    const hit = o.triggerCondition === 'below'
+      ? live.price <= o.triggerPriceUsd
+      : live.price >= o.triggerPriceUsd;
+    if (!hit) continue;
+
+    // Atomic flip guards against double-notify if two polls overlap.
+    const updated = await SoftOrder.findOneAndUpdate(
+      { _id: o._id, status: 'active' },
+      { $set: { status: 'triggered', triggeredAt: new Date(), triggeredPriceUsd: live.price } }
+    );
+    if (!updated) continue;
+
+    if (!pushService.isEnabled()) continue;
+    const symbol = o.tokenSymbol || live.symbol || o.mint.slice(0, 6);
+    const action = o.side === 'buy' ? 'buy' : 'sell';
+    const priceStr = live.price >= 0.01 ? live.price.toFixed(4) : live.price.toPrecision(3);
+    try {
+      await sendToWallet(o.walletAddress, 'orderFill', {
+        title: `${symbol} hit your ${action} target`,
+        body: `Now $${priceStr} — tap to ${action} ${o.side === 'buy' ? `with ${o.amountSol} SOL` : 'now'}.`,
+        data: {
+          type: 'softOrderTriggered',
+          orderId: String(o._id),
+          mint: o.mint,
+          symbol,
+          side: o.side,
+          ...(o.amountSol ? { amountSol: String(o.amountSol) } : {}),
+          ...(o.amountTokens ? { amountTokens: String(o.amountTokens) } : {}),
+        },
+      });
+    } catch (e) {
+      console.error('[push] soft-order notify error:', e.message);
+    }
+  }
+}
+
 function start() {
-  if (timer) return;
+  if (timer || softOrderTimer) return;
+
+  // Soft orders run regardless of FCM — triggered state must update either way.
+  console.log('[push] soft-order monitor started');
+  runSoftOrdersOnce().catch((e) => console.error('[push] soft-order monitor error:', e.message));
+  softOrderTimer = setInterval(() => {
+    runSoftOrdersOnce().catch((e) => console.error('[push] soft-order monitor error:', e.message));
+  }, SOFT_ORDER_POLL_INTERVAL_MS);
+
   if (!pushService.isEnabled()) {
-    console.log('[push] monitors not started (FCM disabled — set FIREBASE_SERVICE_ACCOUNT)');
+    console.log('[push] price/wallet monitors not started (FCM disabled — set FIREBASE_SERVICE_ACCOUNT)');
     return;
   }
   console.log('[push] price monitors started (tracked-gain + crash)');
@@ -286,8 +355,10 @@ function start() {
 function stop() {
   if (timer) clearInterval(timer);
   if (walletTimer) clearInterval(walletTimer);
+  if (softOrderTimer) clearInterval(softOrderTimer);
   timer = null;
   walletTimer = null;
+  softOrderTimer = null;
 }
 
-module.exports = { start, stop, runOnce, runWalletTradesOnce };
+module.exports = { start, stop, runOnce, runWalletTradesOnce, runSoftOrdersOnce };

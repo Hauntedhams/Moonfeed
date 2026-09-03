@@ -14,7 +14,7 @@ import { useSolanaTransactions } from '../hooks/useSolanaTransactions.jsx';
 import { useOnDemandPrice } from '../hooks/useOnDemandPrice.js';
 import { useWallet } from '../contexts/WalletContext';
 import { getExpiryTimestamp, EXPIRY_OPTIONS, fetchTokenDecimals } from '../utils/triggerOrders.js';
-import { placeTriggerOrderV2 } from '../utils/triggerOrdersV2.js';
+import { createSoftOrder } from '../utils/softOrders.js';
 import { getTransactions } from '../utils/transactionStorage';
 import { getSolUsdPrice } from '../utils/orderFillTracking';
 import { WalletChip } from '../utils/walletIdentity';
@@ -1064,36 +1064,21 @@ const CoinCard = memo(({
         if (!(tokenAmount > 0)) tokenAmount = await fetchTokenBalance();
         if (!(tokenAmount > 0)) throw new Error('Could not read your new balance — place the sell order manually.');
 
-        // Wait for the bought tokens to actually settle in the wallet. Crafting
-        // the vault deposit before the buy confirms makes the wallet's simulation
-        // fail — Solflare then rewrites the tx and Jupiter rejects it as modified.
-        let settledAmount = null;
-        for (let i = 0; i < 8 && settledAmount === null; i++) {
-          try {
-            const res = await fetch(`${API_CONFIG.BASE_URL}/api/wallet/${walletAddress}/balance?mint=${mintAddress}`);
-            const d = await res.json();
-            if (d.success && Number(d.amount) >= tokenAmount * 0.98) settledAmount = Number(d.amount);
-          } catch (_) { /* keep polling */ }
-          if (settledAmount === null) await new Promise((r) => setTimeout(r, 1500));
-        }
-        // Never ask to escrow more than the wallet verifiably holds.
-        if (settledAmount !== null && settledAmount < tokenAmount) {
-          tokenAmount = Math.floor(settledAmount * 1e6) / 1e6;
-        }
-
-        await placeTriggerOrderV2({
+        // Soft order: no escrow, no wallet signing — the backend watches the
+        // price and pushes a notification to execute the sell.
+        await createSoftOrder({
           walletAddress,
-          signMessage,
-          signTransaction,
-          mintAddress,
+          mint: mintAddress,
+          tokenSymbol: coin.symbol || null,
+          tokenName: coin.name || null,
+          tokenImage: coin.image || coin.logo || coin.profileImage || null,
           side: 'sell',
-          inputAmount: tokenAmount,
           triggerPriceUsd: pending.triggerPrice,
           currentPriceUsd: displayPrice > 0 ? displayPrice : null,
-          expiredAt: pending.expiredAt,
-          tokenDecimals: decimals,
+          amountTokens: tokenAmount,
+          expiresAt: pending.expiredAt,
         });
-        setOrderSuccess(`Sell order placed at ${formatPrice(pending.triggerPrice)}`);
+        setOrderSuccess(`Sell order set at ${formatPrice(pending.triggerPrice)} — we'll notify you to execute`);
         emitAutoOrder('placed');
       } catch (err) {
         setOrderError(err.message || 'Failed to place sell order');
@@ -1142,18 +1127,22 @@ const CoinCard = memo(({
 
     setOrderSubmitting(true);
     try {
-      await placeTriggerOrderV2({
+      const amt = parseFloat(orderAmountInput);
+      if (!(amt > 0)) throw new Error('Enter an amount for the order.');
+      await createSoftOrder({
         walletAddress,
-        signMessage,
-        signTransaction,
-        mintAddress,
+        mint: mintAddress,
+        tokenSymbol: coin.symbol || null,
+        tokenName: coin.name || null,
+        tokenImage: coin.image || coin.logo || coin.profileImage || null,
         side: buyDrawerOrderSide,
-        inputAmount: orderAmountInput,
         triggerPriceUsd: buyOrderPrice,
         currentPriceUsd: displayPrice > 0 ? displayPrice : null,
-        expiredAt: getExpiryTimestamp(orderExpiry),
+        amountSol: buyDrawerOrderSide === 'buy' ? amt : null,
+        amountTokens: buyDrawerOrderSide === 'sell' ? amt : null,
+        expiresAt: getExpiryTimestamp(orderExpiry),
       });
-      setOrderSuccess(`Limit ${buyDrawerOrderSide} placed at ${formatPrice(buyOrderPrice)}`);
+      setOrderSuccess(`Limit ${buyDrawerOrderSide} set at ${formatPrice(buyOrderPrice)} — we'll notify you to execute`);
     } catch (err) {
       setOrderError(err.message || 'Failed to place order');
     } finally {
@@ -1189,22 +1178,21 @@ const CoinCard = memo(({
 
     setOrderSubmitting(true);
     try {
-      // Floor so a 100% sell never asks to escrow more than the wallet holds.
+      // Floor to a clean amount; tokens stay in the wallet (no escrow).
       const floored = Math.floor(amount * 1e6) / 1e6;
-      await placeTriggerOrderV2({
+      await createSoftOrder({
         walletAddress,
-        signMessage,
-        signTransaction,
-        mintAddress,
+        mint: mintAddress,
+        tokenSymbol: coin.symbol || null,
+        tokenName: coin.name || null,
+        tokenImage: coin.image || coin.logo || coin.profileImage || null,
         side: 'sell',
-        inputAmount: floored,
         triggerPriceUsd: buyOrderPrice,
         currentPriceUsd: displayPrice > 0 ? displayPrice : null,
-        expiredAt: getExpiryTimestamp(orderExpiry),
+        amountTokens: floored,
+        expiresAt: getExpiryTimestamp(orderExpiry),
       });
-      setOrderSuccess(`Sell order placed at ${formatPrice(buyOrderPrice)}`);
-      // Escrowed tokens leave the wallet — reflect the remaining balance.
-      setHeldTokenAmount((h) => Math.max(0, (Number(h) || 0) - floored));
+      setOrderSuccess(`Sell order set at ${formatPrice(buyOrderPrice)} — we'll notify you to execute`);
       setSellTokenAmountInput('');
     } catch (err) {
       setOrderError(err.message || 'Failed to place sell order');
