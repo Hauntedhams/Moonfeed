@@ -4,6 +4,7 @@ import { useWallet } from '../contexts/WalletContext';
 import { useWalletConnectOnboarding } from './WalletConnectOnboarding';
 import { getSolUsdPrice } from '../utils/orderFillTracking';
 import { placeTriggerOrderV2 } from '../utils/triggerOrdersV2';
+import CautionTapeBanner from './CautionTapeBanner';
 import './TriggerOrderModal.css';
 
 const TriggerOrderModal = ({ 
@@ -420,6 +421,8 @@ const TriggerOrderModal = ({
               </div>
               <button className="close-btn-compact" onClick={onClose}>✕</button>
             </div>
+
+            <CautionTapeBanner message="IN PROGRESS — LIMIT ORDERS UNDER MAINTENANCE" compact />
 
             {/* Quick Action Row: Buy/Sell */}
             <div className="action-row">

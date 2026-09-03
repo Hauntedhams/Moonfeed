@@ -63,12 +63,12 @@ function buildMessage(swap) {
   const action = swap.type === 'sell' ? 'sold' : 'bought';
   const symbol = swap.tokenSymbol || 'a token';
   const sol =
-    swap.solAmount != null && !Number.isNaN(Number(swap.solAmount))
+    swap.solAmount != null && !Number.isNaN(Number(swap.solAmount)) && Number(swap.solAmount) > 0
       ? ` for ${Number(swap.solAmount).toFixed(3)} SOL`
       : '';
   return {
-    title: 'Your tracked wallet just made a trade!',
-    body: `${label} ${action} ${symbol}${sol}`,
+    title: `🚨 Tracked Wallet Trade: ${label}`,
+    body: `${label} ${action} $${symbol}${sol}`,
   };
 }
 
@@ -209,6 +209,50 @@ export async function notifyTrackedGain({ mint, symbol, gainPct, trackedAtPrice,
     }
   } catch (err) {
     console.debug('[TradeNotifications] gain schedule error:', err?.message);
+  }
+}
+
+// Fire a native (or web) notification when a tracked coin is down past a threshold.
+export async function notifyTrackedDrop({ mint, symbol, dropPct, trackedAtPrice, price }) {
+  if (!permissionGranted) return;
+  const pct = Math.abs(Number(dropPct) || 0);
+  const title = `📉 ${symbol || 'Tracked coin'} is down ${pct.toFixed(1)}%`;
+  const from = trackedAtPrice > 0 && price > 0
+    ? ` Tracked at $${Number(trackedAtPrice).toPrecision(3)}, now $${Number(price).toPrecision(3)}.`
+    : '';
+  const body = `Down ${pct.toFixed(1)}% since you tracked it.${from}`;
+
+  try {
+    if (isNative) {
+      await LocalNotifications.schedule({
+        notifications: [
+          {
+            id: idFromSignature(`drop-${mint}-${Date.now()}`),
+            title,
+            body,
+            schedule: { at: new Date(Date.now() + 200) },
+            extra: { tokenMint: mint },
+          },
+        ],
+      });
+    } else if ('Notification' in window) {
+      const notificationOptions = {
+        body,
+        icon: '/android-chrome-192x192.png',
+        badge: '/favicon-32x32.png',
+        tag: `tracked-drop-${mint}`,
+        renotify: true,
+        data: { tokenMint: mint, url: '/' },
+      };
+      const registration = await getServiceWorkerRegistration();
+      if (registration?.showNotification) {
+        await registration.showNotification(title, notificationOptions);
+      } else {
+        new Notification(title, notificationOptions);
+      }
+    }
+  } catch (err) {
+    console.debug('[TradeNotifications] drop schedule error:', err?.message);
   }
 }
 

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import NativeChart from './NativeChart';
 import { getTransactions } from '../utils/transactionStorage';
 import { getSolUsdPrice } from '../utils/orderFillTracking';
+import CautionTapeBanner from './CautionTapeBanner';
 import './OrderDetailView.css';
 
 const formatUsd = (n) => {
@@ -184,6 +185,8 @@ function OrderDetailView({ order, walletAddress, solUsdPrice = 150, cancelling, 
             <polyline points="15 18 9 12 15 6" />
           </svg>
         </button>
+
+        <CautionTapeBanner message="IN PROGRESS — LIMIT ORDERS UNDER MAINTENANCE" compact />
 
         <div className="odv-header">
           <button

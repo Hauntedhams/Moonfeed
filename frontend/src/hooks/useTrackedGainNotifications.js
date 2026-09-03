@@ -1,15 +1,15 @@
 // Background watcher for tracked (favorited) coins: fires a local notification
-// when one is up +10% from the price it was tracked at.
+// when one is up +10% or down -10% from the price it was tracked at.
 import { useEffect, useRef } from 'react';
-import { initTradeNotifications, notifyTrackedGain } from '../utils/tradeNotifications';
+import { initTradeNotifications, notifyTrackedGain, notifyTrackedDrop } from '../utils/tradeNotifications';
 import { addNotification } from '../utils/alertStorage';
 
-const POLL_INTERVAL_MS = 90000;
+const POLL_INTERVAL_MS = 60000;
 const CHUNK = 30;
 const GAIN_PCT = 10;
-// Re-arm once the coin falls back under this, so a coin hovering at +10%
-// can't fire repeatedly.
-const REARM_PCT = 5;
+const DROP_PCT = -10;
+const GAIN_REARM_PCT = 5;
+const DROP_REARM_PCT = -5;
 const STATE_KEY = 'moonfeed_tracked_gain_alerts';
 
 function readState() {
@@ -69,35 +69,65 @@ export default function useTrackedGainNotifications(favorites = []) {
         const live = prices.get(coin.mint);
         if (!live) continue;
         const gainPct = ((live.price - coin.trackedAtPrice) / coin.trackedAtPrice) * 100;
-        const entry = state[coin.mint] || { notified: false };
+        const entry = state[coin.mint] || { gainNotified: false, dropNotified: false };
 
-        if (gainPct < REARM_PCT && entry.notified) {
-          state[coin.mint] = { notified: false };
+        // ── GAIN ALERT (+10%) ──
+        if (gainPct < GAIN_REARM_PCT && entry.gainNotified) {
+          entry.gainNotified = false;
           changed = true;
-          continue;
+        } else if (gainPct >= GAIN_PCT && !entry.gainNotified) {
+          entry.gainNotified = true;
+          entry.gainAt = Date.now();
+          changed = true;
+
+          const symbol = live.symbol || coin.symbol || coin.mint.slice(0, 6);
+          await notifyTrackedGain({
+            mint: coin.mint,
+            symbol,
+            gainPct,
+            trackedAtPrice: coin.trackedAtPrice,
+            price: live.price,
+          });
+          addNotification({
+            id: `gain-${coin.mint}-${Date.now()}`,
+            mint: coin.mint,
+            coin: { symbol, name: symbol, image: live.image || null },
+            level: 'gain',
+            price: live.price,
+            message: `${symbol} is up ${gainPct.toFixed(1)}% since you tracked it`,
+            timestamp: Date.now(),
+          });
         }
-        if (gainPct < GAIN_PCT || entry.notified) continue;
 
-        state[coin.mint] = { notified: true, at: Date.now() };
-        changed = true;
+        // ── DROP ALERT (-10%) ──
+        if (gainPct > DROP_REARM_PCT && entry.dropNotified) {
+          entry.dropNotified = false;
+          changed = true;
+        } else if (gainPct <= DROP_PCT && !entry.dropNotified) {
+          entry.dropNotified = true;
+          entry.dropAt = Date.now();
+          changed = true;
 
-        const symbol = live.symbol || coin.symbol || coin.mint.slice(0, 6);
-        await notifyTrackedGain({
-          mint: coin.mint,
-          symbol,
-          gainPct,
-          trackedAtPrice: coin.trackedAtPrice,
-          price: live.price,
-        });
-        addNotification({
-          id: `gain-${coin.mint}-${Date.now()}`,
-          mint: coin.mint,
-          coin: { symbol, name: symbol, image: live.image || null },
-          level: 'gain',
-          price: live.price,
-          message: `${symbol} is up ${gainPct.toFixed(1)}% since you tracked it`,
-          timestamp: Date.now(),
-        });
+          const symbol = live.symbol || coin.symbol || coin.mint.slice(0, 6);
+          await notifyTrackedDrop({
+            mint: coin.mint,
+            symbol,
+            dropPct: gainPct,
+            trackedAtPrice: coin.trackedAtPrice,
+            price: live.price,
+          });
+          addNotification({
+            id: `drop-${coin.mint}-${Date.now()}`,
+            mint: coin.mint,
+            coin: { symbol, name: symbol, image: live.image || null },
+            level: 'crash',
+            price: live.price,
+            message: `${symbol} dropped ${Math.abs(gainPct).toFixed(1)}% since you tracked it`,
+            timestamp: Date.now(),
+          });
+        }
+
+        state[coin.mint] = entry;
       }
 
       if (changed) writeState(state);

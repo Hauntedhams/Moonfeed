@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import TriggerOrderModal from './TriggerOrderModal';
+import CautionTapeBanner from './CautionTapeBanner';
 import { useWallet } from '../contexts/WalletContext';
 import { useWallet as useJupiterWallet } from '@jup-ag/wallet-adapter';
 import { useWalletConnectOnboarding } from './WalletConnectOnboarding';
@@ -344,6 +345,7 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
                 >
                   <span className="tab-icon">🎯</span>
                   Limit Order
+                  <span className="caution-tape-badge">IN PROGRESS</span>
                 </button>
               </div>
             </>
@@ -510,6 +512,7 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
 
                 {/* Page 2 — Limit Order (swipe left to reach) */}
                 <div className="jt-swipe-page jt-swipe-page--limit">
+                  <CautionTapeBanner message="IN PROGRESS — LIMIT ORDERS UNDER MAINTENANCE" />
                   <TriggerOrderModal
                     embedded
                     isOpen={isOpen}

@@ -15,6 +15,7 @@ import './OrdersView.css';
 import { getTransactions, syncTransactionsWithAccount } from '../utils/transactionStorage';
 import { computeFillStats, getSolUsdPrice } from '../utils/orderFillTracking';
 import { fetchTriggerOrdersV2, cancelTriggerOrderV2 } from '../utils/triggerOrdersV2';
+import CautionTapeBanner from './CautionTapeBanner';
 import { WalletChip } from '../utils/walletIdentity';
 
 const ProfileView = ({ onTradeClick }) => {
@@ -1016,6 +1017,7 @@ const ProfileView = ({ onTradeClick }) => {
         {/* ── ORDERS TAB ── */}
         {profileTab === 'orders' && (
           <div className="pv-ig-orders">
+            <CautionTapeBanner message="IN PROGRESS — LIMIT ORDERS UNDER MAINTENANCE" />
             <div className="orders-filter">
               <button className={`filter-btn ${statusFilter === 'active' ? 'active' : ''}`} onClick={() => setStatusFilter('active')}>Active</button>
               <button className={`filter-btn ${statusFilter === 'history' ? 'active' : ''}`} onClick={() => setStatusFilter('history')}>History</button>

@@ -7,11 +7,11 @@ import { getTransactions } from '../utils/transactionStorage';
 import { initTradeNotifications, notifyHoldingCrash } from '../utils/tradeNotifications';
 import { addNotification } from '../utils/alertStorage';
 
-const POLL_INTERVAL_MS = 90000;
+const POLL_INTERVAL_MS = 45000;
 const MAX_MINTS = 30;
 // A position counts as "crashing" when either window drops past these.
-const CRASH_M5_PCT = -15;
-const CRASH_H1_PCT = -30;
+const CRASH_M5_PCT = -10;
+const CRASH_H1_PCT = -15;
 // Don't re-alert the same coin more often than this.
 const COOLDOWN_MS = 30 * 60 * 1000;
 

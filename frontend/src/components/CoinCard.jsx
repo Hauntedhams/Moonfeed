@@ -28,6 +28,7 @@ import {
 } from '../utils/graduationCalculator.js';
 import debug from '../utils/debug.js';
 import { rafManager, eventListenerManager, cleanupManager } from '../utils/mobileOptimizations.js';
+import CautionTapeBanner from './CautionTapeBanner';
 
 // Shared across ALL CoinCard instances: a wheel gesture over the action buttons
 // must advance exactly one card, even though every mounted card registers its own
@@ -3387,7 +3388,7 @@ const CoinCard = memo(({
                       className={`coin-buy-mode-tab${buyDrawerMode === 'orders' ? ' active' : ''}`}
                       onClick={() => setBuyDrawerMode('orders')}
                     >
-                      Orders
+                      Orders <span className="caution-tape-badge">IN PROGRESS</span>
                     </button>
                   </div>
                   <button className="coin-buy-close" onClick={() => setBuyDrawerOpen(false)} aria-label="Close">×</button>
@@ -3447,6 +3448,7 @@ const CoinCard = memo(({
                   </>
                 ) : (
                   <>
+                    <CautionTapeBanner message="IN PROGRESS — LIMIT ORDERS UNDER MAINTENANCE" compact />
                     <div className="coin-buy-order-side-toggle" aria-label="Order side">
                       <button
                         className={`coin-buy-order-side-btn${buyDrawerOrderSide === 'buy' ? ' active' : ''}`}
@@ -3919,7 +3921,7 @@ const CoinCard = memo(({
           )}
         </div>
       )}
-      {USE_NATIVE_CHART && _mobilePortal && !isExpanded && (
+      {_mobilePortal && !isExpanded && (
         <div
           className="coin-expand-swipe-arrow"
           style={{
@@ -3928,8 +3930,8 @@ const CoinCard = memo(({
           }}
           role="button"
           tabIndex={0}
-          title="Slide up to expand"
-          aria-label="Slide up to expand coin details"
+          title="Swipe up to expand"
+          aria-label="Swipe up to expand coin details"
           onClick={(e) => {
             // Ignore the synthetic click that can follow a committed swipe.
             if (expandSwipeRef.current?.firedAt && Date.now() - expandSwipeRef.current.firedAt < 500) return;
@@ -3946,7 +3948,7 @@ const CoinCard = memo(({
             if (!s || s.fired) return;
             const t = e.touches[0];
             const dy = s.y - t.clientY;
-            if (dy > 26 && dy > Math.abs(t.clientX - s.x)) {
+            if (dy > 14 && dy > Math.abs(t.clientX - s.x)) {
               s.fired = true;
               s.firedAt = Date.now();
               handleExpandToggle(e);
@@ -3958,11 +3960,26 @@ const CoinCard = memo(({
             if (s && !s.fired && e.changedTouches[0]) {
               const dy = s.y - e.changedTouches[0].clientY;
               // Short-but-deliberate upward slide also commits.
-              if (dy > 16 && dy > Math.abs(e.changedTouches[0].clientX - s.x)) {
+              if (dy > 10 && dy > Math.abs(e.changedTouches[0].clientX - s.x)) {
                 s.fired = true;
                 s.firedAt = Date.now();
                 handleExpandToggle(e);
               }
+            }
+          }}
+          onPointerDown={(e) => {
+            if (e.pointerType === 'mouse') {
+              expandSwipeRef.current = { x: e.clientX, y: e.clientY, fired: false };
+            }
+          }}
+          onPointerMove={(e) => {
+            const s = expandSwipeRef.current;
+            if (!s || s.fired || e.pointerType !== 'mouse') return;
+            const dy = s.y - e.clientY;
+            if (dy > 14 && dy > Math.abs(e.clientX - s.x)) {
+              s.fired = true;
+              s.firedAt = Date.now();
+              handleExpandToggle(e);
             }
           }}
           onKeyDown={(e) => {
@@ -3972,10 +3989,21 @@ const CoinCard = memo(({
             }
           }}
         >
+          {/* Sloped background shape matching bottom nav bar color */}
+          <svg className="coin-expand-sloped-bg" width="60" height="28" viewBox="0 0 60 28" fill="none" preserveAspectRatio="none">
+            <path
+              d="M 0 28 C 10 28 14 3 22 3 L 38 3 C 46 3 50 28 60 28 Z"
+              className="sloped-bg-fill"
+            />
+            <path
+              d="M 0 28 C 10 28 14 3 22 3 L 38 3 C 46 3 50 28 60 28"
+              className="sloped-bg-stroke"
+              fill="none"
+            />
+          </svg>
           <span className="coin-expand-swipe-arrow-icon" aria-hidden="true">
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M10 16.5V3.5" />
-              <path d="M4.5 9L10 3.5L15.5 9" />
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="18 15 12 9 6 15" />
             </svg>
           </span>
         </div>

@@ -8,6 +8,7 @@ import { useDemoMode } from '../contexts/DemoModeContext';
 import { computeFillStats, getSolUsdPrice } from '../utils/orderFillTracking';
 import { fetchTriggerOrdersV2, cancelTriggerOrderV2, ensureTriggerAuth } from '../utils/triggerOrdersV2';
 import OrderDetailView from './OrderDetailView';
+import CautionTapeBanner from './CautionTapeBanner';
 import './OrdersView.css';
 
 const OrdersView = ({ onCoinClick, onTradeClick }) => {
@@ -1008,7 +1009,7 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
               className={`filter-btn ${statusFilter === 'active' ? 'active' : ''}`}
               onClick={() => selectTab('active')}
             >
-              Orders
+              Orders <span className="caution-tape-badge">IN PROGRESS</span>
             </button>
             <button
               className={`filter-btn ${statusFilter === 'history' ? 'active' : ''}`}
@@ -1017,6 +1018,10 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
               History
             </button>
           </div>
+
+          {statusFilter === 'active' && (
+            <CautionTapeBanner message="IN PROGRESS — LIMIT ORDERS UNDER MAINTENANCE" />
+          )}
 
           {statusFilter !== 'holdings' && needsV2Auth && !isDemoMode && connected && (
             <div className="orders-v2-unlock">

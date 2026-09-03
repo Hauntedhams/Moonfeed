@@ -351,17 +351,17 @@
   transform: scale(0.94);
 }
 
-/* Collapsed-state expand affordance: a static arrow sitting just above the
-   bottom-nav Profile button, styled like the nav icons. Slide up from it
-   (or tap) to expand the card; the action buttons then pop out as usual. */
+/* Collapsed-state expand affordance: a sloped shape sitting right above the
+   bottom-nav Profile button with an upward chevron arrow matching the top-right expand button.
+   Swipe up from it or tap to expand the coin card. */
 .coin-expand-swipe-arrow {
   position: fixed;
   /* Center over the Profile button: last of 5 equal flex buttons inside the
      centered bottom nav (max-width 430px, 16px side padding, 4 × 8px gaps). */
-  right: calc((100vw - min(100vw, 430px)) / 2 + 16px + (min(100vw, 430px) - 64px) / 10 - 20px);
-  bottom: calc(env(safe-area-inset-bottom) + 62px);
-  width: 40px;
-  height: 40px;
+  right: calc((100vw - min(100vw, 430px)) / 2 + 16px + (min(100vw, 430px) - 32px) / 10 - 30px);
+  bottom: calc(env(safe-area-inset-bottom) + 56px);
+  width: 60px;
+  height: 28px;
   z-index: 9999;
   display: flex;
   align-items: center;
@@ -371,15 +371,62 @@
   user-select: none;
   -webkit-user-select: none;
   -webkit-tap-highlight-color: transparent;
+  filter: drop-shadow(0 -2px 6px rgba(0, 0, 0, 0.25));
+}
+
+.coin-expand-sloped-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.sloped-bg-fill {
+  fill: rgba(255, 255, 255, 0.95);
+  transition: fill 0.2s ease;
+}
+
+.dark-mode .sloped-bg-fill,
+html.dark-mode .sloped-bg-fill {
+  fill: rgba(0, 0, 0, 0.95);
+}
+
+.sloped-bg-stroke {
+  stroke: rgba(0, 0, 0, 0.1);
+  stroke-width: 1px;
+  transition: stroke 0.2s ease;
+}
+
+.dark-mode .sloped-bg-stroke,
+html.dark-mode .sloped-bg-stroke {
+  stroke: rgba(255, 255, 255, 0.12);
 }
 
 .coin-expand-swipe-arrow-icon {
+  position: relative;
+  z-index: 2;
   display: flex;
-  color: rgba(0, 0, 0, 0.6); /* matches light-mode nav icons */
+  align-items: center;
+  justify-content: center;
+  color: rgba(0, 0, 0, 0.75);
+  margin-top: -1px;
+  transition: transform 0.2s ease, color 0.2s ease;
 }
 
-.dark-mode .coin-expand-swipe-arrow-icon {
-  color: rgba(255, 255, 255, 0.85); /* matches dark-mode nav icons */
+.dark-mode .coin-expand-swipe-arrow-icon,
+html.dark-mode .coin-expand-swipe-arrow-icon {
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.coin-expand-swipe-arrow:hover .coin-expand-swipe-arrow-icon {
+  transform: translateY(-2px);
+  color: #ffffff;
+}
+
+.coin-expand-swipe-arrow:active .coin-expand-swipe-arrow-icon {
+  transform: translateY(0);
 }
 
 .native-chart-mobile-right-actions {
