@@ -129,16 +129,16 @@ function App() {
 
   // Initialize referral tracking, mobile optimizer, and performance monitoring on app load
   useEffect(() => {
-    ReferralTracker.initialize();
-    
-    // Initialize performance monitoring for mobile
-    initializePerformanceMonitoring();
-    
-    // Log mobile optimizer status
-    if (MobileOptimizer.isMobile) {
-      console.log('📱 Mobile mode active - aggressive optimizations enabled');
-      console.log('💾 Memory:', MobileOptimizer.getMemoryStats());
-      console.log('🔍 Performance monitoring initialized');
+    try {
+      ReferralTracker.initialize();
+      initializePerformanceMonitoring();
+      if (MobileOptimizer.isMobile) {
+        console.log('📱 Mobile mode active - aggressive optimizations enabled');
+        console.log('💾 Memory:', MobileOptimizer.getMemoryStats());
+        console.log('🔍 Performance monitoring initialized');
+      }
+    } catch (err) {
+      console.debug('Initialization error:', err?.message);
     }
   }, []);
 

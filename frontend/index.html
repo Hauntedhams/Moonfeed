@@ -40,15 +40,17 @@
           } catch (e) {}
         }
         window.addEventListener('error', function (e) {
-          show('App failed to start', (e && e.message) + '\n' + ((e && e.error && e.error.stack) || (e && e.filename + ':' + e.lineno)));
+          // Only show for critical script loading/syntax errors that prevent DOM rendering
+          if (!document.getElementById('root') || !document.getElementById('root').hasChildNodes()) {
+            show('App failed to start', (e && e.message) + '\n' + ((e && e.error && e.error.stack) || (e && e.filename + ':' + e.lineno)));
+          } else {
+            console.error('[Startup Error]', e);
+          }
         });
         window.addEventListener('unhandledrejection', function (e) {
+          // Background promise rejections (e.g. network/push) are non-fatal and should never block app startup UI
           var r = e && e.reason;
-          // iOS JavaScriptCore stacks don't include the message — show both.
-          var detail = r
-            ? ((r.message || '') + (r.stack ? '\n' + r.stack : '')) || String(r)
-            : String(r);
-          show('App failed to start (promise)', detail);
+          console.warn('[Unhandled Rejection]', r);
         });
       })();
     </script>
