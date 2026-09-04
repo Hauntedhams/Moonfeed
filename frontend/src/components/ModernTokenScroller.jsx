@@ -14,6 +14,11 @@ const EXPAND_HINT_SEEN_KEY = 'moonfeed_expand_hint_seen';
 const TRADE_HINT_SEEN_KEY = 'moonfeed_trade_hint_seen';
 const ANALYTICS_HINT_SEEN_KEY = 'moonfeed_analytics_hint_seen';
 const HELP_HINT_SEEN_KEY = 'moonfeed_help_hint_seen';
+const TOP_TRADERS_HINT_SEEN_KEY = 'moonfeed_top_traders_hint_seen';
+const TRADER_ROW_HINT_SEEN_KEY = 'moonfeed_trader_row_hint_seen';
+const TRADER_PROFILE_HINT_SEEN_KEY = 'moonfeed_trader_profile_hint_seen';
+const PROFILE_CLOSE_HINT_SEEN_KEY = 'moonfeed_profile_close_hint_seen';
+const LIVE_ZOOM_HINT_SEEN_KEY = 'moonfeed_live_zoom_hint_seen';
 
 // Where the user left off in each feed — restored on remount (back from another
 // page) and on cold app start, so scrolling position is never lost.
@@ -28,6 +33,31 @@ const debounce = (func, wait) => {
     timeout = setTimeout(() => func(...args), wait);
   };
 };
+
+// First element matching `selector` whose box is actually inside the viewport.
+// Multiple mounted CoinCards can portal duplicate action buttons — only the
+// visible one is a valid tour target.
+const pickVisibleElement = (selector) => {
+  const elements = document.querySelectorAll(selector);
+  for (const element of elements) {
+    const rect = element.getBoundingClientRect();
+    if (
+      rect.width > 0 && rect.height > 0 &&
+      rect.bottom > 0 && rect.top < window.innerHeight &&
+      rect.right > 0 && rect.left < window.innerWidth
+    ) {
+      return element;
+    }
+  }
+  return null;
+};
+
+const rectToTarget = (rect) => ({
+  left: rect.left + rect.width / 2,
+  top: rect.top + rect.height / 2,
+  width: rect.width,
+  height: rect.height
+});
 
 // Modern TikTok-style token scroller with DexScreener integration
 const ModernTokenScroller = ({ 
@@ -84,6 +114,17 @@ const ModernTokenScroller = ({
   const [feedHintTarget, setFeedHintTarget] = useState(null);
   const [analyticsHintTarget, setAnalyticsHintTarget] = useState(null);
   const [helpHintTarget, setHelpHintTarget] = useState(null);
+  const [showTopTradersHint, setShowTopTradersHint] = useState(false);
+  const [showTraderRowHint, setShowTraderRowHint] = useState(false);
+  const [showTraderProfileHint, setShowTraderProfileHint] = useState(false);
+  const [showProfileCloseHint, setShowProfileCloseHint] = useState(false);
+  const [showLiveZoomHint, setShowLiveZoomHint] = useState(false);
+  const [topTradersHintTarget, setTopTradersHintTarget] = useState(null);
+  const [traderRowHintTarget, setTraderRowHintTarget] = useState(null);
+  const [traderProfileHintTarget, setTraderProfileHintTarget] = useState(null);
+  const [profileCloseHintTarget, setProfileCloseHintTarget] = useState(null);
+  const [liveZoomHintTarget, setLiveZoomHintTarget] = useState(null);
+  const liveZoomAutoCollapseRef = useRef(false); // one-shot: collapse the card so the zoom button exists
   
   // Chart preload: activate the next card's chart shortly after landing so it's
   // ready before the user scrolls. Only 1 card ahead — avoids simultaneous
@@ -209,6 +250,96 @@ const ModernTokenScroller = ({
     } catch (_) {}
   }, []);
 
+  // Generic seen/dismiss helpers + chain starters for the extended tour steps:
+  // top traders button → tap a trader → trader profile → close → live 1m zoom.
+  // Each starter silently skips steps the user has already seen and falls
+  // through to the next sensible one.
+  const hasSeenHintKey = useCallback((key) => {
+    try {
+      return localStorage.getItem(key) === 'true';
+    } catch (_) {
+      return false;
+    }
+  }, []);
+
+  const markHintKeySeen = useCallback((key) => {
+    try {
+      localStorage.setItem(key, 'true');
+    } catch (_) {}
+  }, []);
+
+  const dismissTopTradersHint = useCallback(() => {
+    setShowTopTradersHint(false);
+    markHintKeySeen(TOP_TRADERS_HINT_SEEN_KEY);
+  }, [markHintKeySeen]);
+
+  const dismissTraderRowHint = useCallback(() => {
+    setShowTraderRowHint(false);
+    markHintKeySeen(TRADER_ROW_HINT_SEEN_KEY);
+  }, [markHintKeySeen]);
+
+  const dismissTraderProfileHint = useCallback(() => {
+    setShowTraderProfileHint(false);
+    markHintKeySeen(TRADER_PROFILE_HINT_SEEN_KEY);
+  }, [markHintKeySeen]);
+
+  const dismissProfileCloseHint = useCallback(() => {
+    setShowProfileCloseHint(false);
+    markHintKeySeen(PROFILE_CLOSE_HINT_SEEN_KEY);
+  }, [markHintKeySeen]);
+
+  const dismissLiveZoomHint = useCallback(() => {
+    setShowLiveZoomHint(false);
+    markHintKeySeen(LIVE_ZOOM_HINT_SEEN_KEY);
+  }, [markHintKeySeen]);
+
+  const startHelpHint = useCallback(() => {
+    if (!hasSeenHintKey(HELP_HINT_SEEN_KEY)) setShowHelpHint(true);
+  }, [hasSeenHintKey]);
+
+  const startLiveZoomHint = useCallback(() => {
+    if (!hasSeenHintKey(LIVE_ZOOM_HINT_SEEN_KEY)) {
+      setShowLiveZoomHint(true);
+    } else {
+      startHelpHint();
+    }
+  }, [hasSeenHintKey, startHelpHint]);
+
+  const startProfileCloseHint = useCallback(() => {
+    if (!hasSeenHintKey(PROFILE_CLOSE_HINT_SEEN_KEY)) {
+      setShowProfileCloseHint(true);
+    } else {
+      startLiveZoomHint();
+    }
+  }, [hasSeenHintKey, startLiveZoomHint]);
+
+  const startTraderProfileHint = useCallback(() => {
+    if (!hasSeenHintKey(TRADER_PROFILE_HINT_SEEN_KEY)) {
+      setShowTraderProfileHint(true);
+    } else {
+      startProfileCloseHint();
+    }
+  }, [hasSeenHintKey, startProfileCloseHint]);
+
+  const startTraderRowHint = useCallback(() => {
+    if (!hasSeenHintKey(TRADER_ROW_HINT_SEEN_KEY)) {
+      setShowTraderRowHint(true);
+    } else {
+      startLiveZoomHint();
+    }
+  }, [hasSeenHintKey, startLiveZoomHint]);
+
+  // Entry point for the extended section. If the button step was already seen
+  // the mid-flow steps (row/profile/close) can't meaningfully resume, so the
+  // fallthrough jumps straight to the live-zoom step.
+  const startTraderTour = useCallback(() => {
+    if (!hasSeenHintKey(TOP_TRADERS_HINT_SEEN_KEY)) {
+      setShowTopTradersHint(true);
+    } else {
+      startLiveZoomHint();
+    }
+  }, [hasSeenHintKey, startLiveZoomHint]);
+
   const restartOnboardingHints = useCallback(() => {
     try {
       localStorage.removeItem(SWIPE_HINT_SEEN_KEY);
@@ -217,12 +348,23 @@ const ModernTokenScroller = ({
       localStorage.removeItem(TRADE_HINT_SEEN_KEY);
       localStorage.removeItem(ANALYTICS_HINT_SEEN_KEY);
       localStorage.removeItem(HELP_HINT_SEEN_KEY);
+      localStorage.removeItem(TOP_TRADERS_HINT_SEEN_KEY);
+      localStorage.removeItem(TRADER_ROW_HINT_SEEN_KEY);
+      localStorage.removeItem(TRADER_PROFILE_HINT_SEEN_KEY);
+      localStorage.removeItem(PROFILE_CLOSE_HINT_SEEN_KEY);
+      localStorage.removeItem(LIVE_ZOOM_HINT_SEEN_KEY);
     } catch (_) {}
     setShowFeedHint(false);
     setShowExpandHint(false);
     setShowTradeHint(false);
     setShowAnalyticsHint(false);
     setShowHelpHint(false);
+    setShowTopTradersHint(false);
+    setShowTraderRowHint(false);
+    setShowTraderProfileHint(false);
+    setShowProfileCloseHint(false);
+    setShowLiveZoomHint(false);
+    liveZoomAutoCollapseRef.current = false;
     setCurrentIndex(0);
     setSettledIndex(0);
     setPreloadIndex(null);
@@ -433,24 +575,25 @@ const ModernTokenScroller = ({
 
   useEffect(() => {
     if (!showAnalyticsHint) return;
-    const hintTimer = setTimeout(dismissAnalyticsHint, 10000);
+    const hintTimer = setTimeout(() => {
+      dismissAnalyticsHint();
+      startTraderTour();
+    }, 10000);
     return () => clearTimeout(hintTimer);
-  }, [showAnalyticsHint, dismissAnalyticsHint]);
+  }, [showAnalyticsHint, dismissAnalyticsHint, startTraderTour]);
 
   useEffect(() => {
     if (!showAnalyticsHint) return;
     const handleMetricClick = (event) => {
       if (event.target.closest('.header-metric')) {
         dismissAnalyticsHint();
-        if (!hasSeenHelpHint()) {
-          setShowHelpHint(true);
-        }
+        startTraderTour();
       }
     };
 
     document.addEventListener('click', handleMetricClick, true);
     return () => document.removeEventListener('click', handleMetricClick, true);
-  }, [showAnalyticsHint, dismissAnalyticsHint, hasSeenHelpHint]);
+  }, [showAnalyticsHint, dismissAnalyticsHint, startTraderTour]);
 
   useEffect(() => {
     const handleRestartOnboarding = () => {
@@ -495,6 +638,260 @@ const ModernTokenScroller = ({
     const hintTimer = setTimeout(dismissHelpHint, 10000);
     return () => clearTimeout(hintTimer);
   }, [showHelpHint, dismissHelpHint]);
+
+  // Users who finished the original tour before the trader/live-zoom steps
+  // existed: pick the chain up at the first unseen new step, once, shortly
+  // after the feed loads. (Fresh users reach these steps through the chain
+  // itself, so this only fires when the old chain's final step — the help
+  // hint — was already seen.)
+  useEffect(() => {
+    if (onlyFavorites || isTutorialActive || coins.length === 0) return;
+    if (!hasSeenHintKey(HELP_HINT_SEEN_KEY)) return;
+    if (hasSeenHintKey(TOP_TRADERS_HINT_SEEN_KEY) && hasSeenHintKey(LIVE_ZOOM_HINT_SEEN_KEY)) return;
+    const startTimer = setTimeout(startTraderTour, 2200);
+    return () => clearTimeout(startTimer);
+  }, [coins.length, onlyFavorites, isTutorialActive, hasSeenHintKey, startTraderTour]);
+
+  // Top-traders hint: ring around the trophy action button. Completed by
+  // tapping the button (or the panel opening via any other path).
+  useEffect(() => {
+    if (!showTopTradersHint || onlyFavorites || isTutorialActive) return;
+
+    const updateTarget = () => {
+      if (document.querySelector('.top-traders-container.open')) {
+        dismissTopTradersHint();
+        startTraderRowHint();
+        return;
+      }
+      const button = pickVisibleElement('.tiktok-action-btn[aria-label="Open top PnL traders"]');
+      setTopTradersHintTarget(button ? rectToTarget(button.getBoundingClientRect()) : null);
+    };
+
+    updateTarget();
+    const targetTimer = setInterval(updateTarget, 300);
+    window.addEventListener('resize', updateTarget);
+
+    return () => {
+      clearInterval(targetTimer);
+      window.removeEventListener('resize', updateTarget);
+    };
+  }, [showTopTradersHint, onlyFavorites, isTutorialActive, dismissTopTradersHint, startTraderRowHint]);
+
+  useEffect(() => {
+    if (!showTopTradersHint) return;
+    const handleTopTradersClick = (event) => {
+      if (event.target.closest('.tiktok-action-btn[aria-label="Open top PnL traders"]')) {
+        dismissTopTradersHint();
+        startTraderRowHint();
+      }
+    };
+
+    document.addEventListener('click', handleTopTradersClick, true);
+    return () => document.removeEventListener('click', handleTopTradersClick, true);
+  }, [showTopTradersHint, dismissTopTradersHint, startTraderRowHint]);
+
+  useEffect(() => {
+    if (!showTopTradersHint) return;
+    const hintTimer = setTimeout(() => {
+      dismissTopTradersHint();
+      startLiveZoomHint();
+    }, 12000);
+    return () => clearTimeout(hintTimer);
+  }, [showTopTradersHint, dismissTopTradersHint, startLiveZoomHint]);
+
+  // Trader-row hint: ring around the first row of the open Top Traders panel.
+  // Completed by tapping a trader (or the profile opening via any path).
+  useEffect(() => {
+    if (!showTraderRowHint || isTutorialActive) return;
+    let panelMisses = 0;
+
+    const updateTarget = () => {
+      // Tapping a top trader opens the wallet profile OR the position detail
+      // sheet (when a mint is attached) — either counts for this step.
+      if (document.querySelector('.wpv-root, .pdv-root')) {
+        dismissTraderRowHint();
+        startTraderProfileHint();
+        return;
+      }
+      const panel = document.querySelector('.top-traders-container.open');
+      if (!panel) {
+        // The panel can take a beat to appear after the button tap (a
+        // collapsed card expands first) — only skip ahead if it stays closed.
+        panelMisses += 1;
+        if (panelMisses >= 10) {
+          dismissTraderRowHint();
+          startLiveZoomHint();
+        }
+        return;
+      }
+      panelMisses = 0;
+      const row = panel.querySelector('.traders-scroll-window .table-row');
+      setTraderRowHintTarget(row ? rectToTarget(row.getBoundingClientRect()) : null);
+    };
+
+    updateTarget();
+    const targetTimer = setInterval(updateTarget, 300);
+    return () => clearInterval(targetTimer);
+  }, [showTraderRowHint, isTutorialActive, dismissTraderRowHint, startTraderProfileHint, startLiveZoomHint]);
+
+  useEffect(() => {
+    if (!showTraderRowHint) return;
+    const handleTraderClick = (event) => {
+      if (event.target.closest('.top-traders-container.open .col-wallet')) {
+        dismissTraderRowHint();
+        startTraderProfileHint();
+      }
+    };
+
+    document.addEventListener('click', handleTraderClick, true);
+    return () => document.removeEventListener('click', handleTraderClick, true);
+  }, [showTraderRowHint, dismissTraderRowHint, startTraderProfileHint]);
+
+  useEffect(() => {
+    if (!showTraderRowHint) return;
+    const hintTimer = setTimeout(() => {
+      dismissTraderRowHint();
+      startLiveZoomHint();
+    }, 12000);
+    return () => clearTimeout(hintTimer);
+  }, [showTraderRowHint, dismissTraderRowHint, startLiveZoomHint]);
+
+  // Trader-profile callout: shown while the wallet profile overlay is open.
+  // Informational only — auto-advances to the close-button step.
+  useEffect(() => {
+    if (!showTraderProfileHint || isTutorialActive) return;
+    let profileMisses = 0;
+
+    const updateTarget = () => {
+      const profile = document.querySelector('.wpv-root, .pdv-root');
+      if (!profile) {
+        // The profile opens a beat after the row tap (React render + slide-in
+        // animation) — only skip ahead if it never shows up / stays closed.
+        profileMisses += 1;
+        if (profileMisses >= 8) {
+          dismissTraderProfileHint();
+          startLiveZoomHint();
+        }
+        return;
+      }
+      profileMisses = 0;
+      const header = profile.querySelector('.pv-ig-top-row, .pdv-hero-banner');
+      setTraderProfileHintTarget(header ? rectToTarget(header.getBoundingClientRect()) : null);
+    };
+
+    updateTarget();
+    const targetTimer = setInterval(updateTarget, 400);
+    return () => clearInterval(targetTimer);
+  }, [showTraderProfileHint, isTutorialActive, dismissTraderProfileHint, startLiveZoomHint]);
+
+  useEffect(() => {
+    if (!showTraderProfileHint) return;
+    const hintTimer = setTimeout(() => {
+      dismissTraderProfileHint();
+      startProfileCloseHint();
+    }, 5500);
+    return () => clearTimeout(hintTimer);
+  }, [showTraderProfileHint, dismissTraderProfileHint, startProfileCloseHint]);
+
+  // Profile-close hint: ring around the profile's back button. Completed by
+  // tapping it (or the profile closing via its swipe-back gesture).
+  useEffect(() => {
+    if (!showProfileCloseHint || isTutorialActive) return;
+    let profileMisses = 0;
+
+    const updateTarget = () => {
+      const profile = document.querySelector('.wpv-root, .pdv-root');
+      if (!profile) {
+        profileMisses += 1;
+        if (profileMisses >= 8) {
+          dismissProfileCloseHint();
+          startLiveZoomHint();
+        }
+        return;
+      }
+      profileMisses = 0;
+      const back = profile.querySelector('.wpv-back, .pdv-back');
+      setProfileCloseHintTarget(back ? rectToTarget(back.getBoundingClientRect()) : null);
+    };
+
+    updateTarget();
+    const targetTimer = setInterval(updateTarget, 300);
+    return () => clearInterval(targetTimer);
+  }, [showProfileCloseHint, isTutorialActive, dismissProfileCloseHint, startLiveZoomHint]);
+
+  useEffect(() => {
+    if (!showProfileCloseHint) return;
+    const handleCloseClick = (event) => {
+      if (event.target.closest('.wpv-back, .pdv-back')) {
+        dismissProfileCloseHint();
+        startLiveZoomHint();
+      }
+    };
+
+    document.addEventListener('click', handleCloseClick, true);
+    return () => document.removeEventListener('click', handleCloseClick, true);
+  }, [showProfileCloseHint, dismissProfileCloseHint, startLiveZoomHint]);
+
+  useEffect(() => {
+    if (!showProfileCloseHint) return;
+    const hintTimer = setTimeout(() => {
+      dismissProfileCloseHint();
+      startLiveZoomHint();
+    }, 10000);
+    return () => clearTimeout(hintTimer);
+  }, [showProfileCloseHint, dismissProfileCloseHint, startLiveZoomHint]);
+
+  // Live 1m zoom hint: ring around the collapsed chart's zoom button. The
+  // button only exists on a collapsed, loaded chart, so this polls until it
+  // appears and moves on to the help step if it never does.
+  useEffect(() => {
+    if (!showLiveZoomHint || onlyFavorites || isTutorialActive) return;
+
+    const updateTarget = () => {
+      const button = pickVisibleElement('.native-chart-live-zoom-btn');
+      if (!button && isMobile && !liveZoomAutoCollapseRef.current) {
+        // The tour reaches this step with the card still expanded (the top
+        // traders flow expands it) — collapse it once so the button exists.
+        const collapseControl = pickVisibleElement('.coin-expand-swipe-arrow');
+        if (document.querySelector('.modern-coin-slide.expanded') && collapseControl) {
+          liveZoomAutoCollapseRef.current = true;
+          collapseControl.click();
+        }
+      }
+      setLiveZoomHintTarget(button ? rectToTarget(button.getBoundingClientRect()) : null);
+    };
+
+    updateTarget();
+    const targetTimer = setInterval(updateTarget, 300);
+    window.addEventListener('resize', updateTarget);
+
+    return () => {
+      clearInterval(targetTimer);
+      window.removeEventListener('resize', updateTarget);
+    };
+  }, [showLiveZoomHint, onlyFavorites, isTutorialActive, isMobile]);
+
+  useEffect(() => {
+    if (!showLiveZoomHint) return;
+    const handleLiveZoomClick = (event) => {
+      if (event.target.closest('.native-chart-live-zoom-btn')) {
+        dismissLiveZoomHint();
+        startHelpHint();
+      }
+    };
+
+    document.addEventListener('click', handleLiveZoomClick, true);
+    return () => document.removeEventListener('click', handleLiveZoomClick, true);
+  }, [showLiveZoomHint, dismissLiveZoomHint, startHelpHint]);
+
+  useEffect(() => {
+    if (!showLiveZoomHint) return;
+    const hintTimer = setTimeout(() => {
+      dismissLiveZoomHint();
+      startHelpHint();
+    }, 12000);
+    return () => clearTimeout(hintTimer);
+  }, [showLiveZoomHint, dismissLiveZoomHint, startHelpHint]);
 
   // Update mobile detection on window resize
   useEffect(() => {
@@ -1701,7 +2098,10 @@ const ModernTokenScroller = ({
   if (loading && coins.length === 0) {
     return (
       <div className="modern-scroller-loading">
-        <div className="loading-spinner"></div>
+        <div className="moonfeed-loader" aria-hidden="true">
+          <div className="moonfeed-loader-ring"></div>
+          <div className="moonfeed-loader-core"></div>
+        </div>
         <p>Loading moonfeed...</p>
       </div>
     );
@@ -1711,7 +2111,10 @@ const ModernTokenScroller = ({
   if (isBackendLoading && coins.length === 0) {
     return (
       <div className="modern-scroller-loading">
-        <div className="loading-spinner"></div>
+        <div className="moonfeed-loader" aria-hidden="true">
+          <div className="moonfeed-loader-ring"></div>
+          <div className="moonfeed-loader-core"></div>
+        </div>
         <p>Backend is loading NEW coins...</p>
         <p style={{fontSize: '12px', opacity: 0.7, marginTop: '10px'}}>
           This may take up to 30 seconds on first load
@@ -1794,6 +2197,26 @@ const ModernTokenScroller = ({
     return {
       left: Math.max(16, Math.min(viewportWidth - calloutWidth - 16, target.left + 18)),
       top: Math.max(18, target.top + target.height / 2 + 14),
+      width: calloutWidth
+    };
+  };
+
+  // Shared positioner for the extended tour callouts: sits above targets in
+  // the bottom half of the screen, below targets in the top half, clamped to
+  // the viewport.
+  const getTourCalloutStyle = (target, placement = 'auto') => {
+    if (!target) return {};
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const calloutWidth = Math.min(280, viewportWidth - 32);
+    const above = placement === 'above' || (placement === 'auto' && target.top > viewportHeight / 2);
+    const preferredTop = above
+      ? target.top - target.height / 2 - 86
+      : target.top + target.height / 2 + 20;
+
+    return {
+      left: Math.max(16, Math.min(viewportWidth - calloutWidth - 16, target.left - calloutWidth / 2)),
+      top: Math.max(18, Math.min(viewportHeight - 96, preferredTop)),
       width: calloutWidth
     };
   };
@@ -1906,6 +2329,12 @@ const ModernTokenScroller = ({
                 style={{ left: expandHintTargets.bottom.left, top: expandHintTargets.bottom.top }}
               />
               <div
+                className="expand-card-swipe-demo"
+                style={{ left: expandHintTargets.bottom.left, top: expandHintTargets.bottom.top }}
+              >
+                <div className="expand-card-swipe-finger" />
+              </div>
+              <div
                 className="expand-card-callout expand-card-callout-bottom"
                 style={getExpandCalloutStyle(expandHintTargets.bottom, -66)}
               >
@@ -1960,6 +2389,86 @@ const ModernTokenScroller = ({
         </div>
       )}
 
+      {showTopTradersHint && !onlyFavorites && !isTutorialActive && topTradersHintTarget && (
+        <div className="tour-hint" aria-hidden="true">
+          <div className="tour-hint-backdrop" />
+          <div
+            className="tour-hint-ring tour-hint-ring--round"
+            style={{ left: topTradersHintTarget.left, top: topTradersHintTarget.top }}
+          />
+          <div className="tour-hint-callout" style={getTourCalloutStyle(topTradersHintTarget)}>
+            Tap <strong>Top Traders</strong> to see this coin's most profitable wallets
+          </div>
+        </div>
+      )}
+
+      {showTraderRowHint && !isTutorialActive && traderRowHintTarget && (
+        <div className="tour-hint" aria-hidden="true">
+          <div className="tour-hint-backdrop" />
+          <div
+            className="tour-hint-ring"
+            style={{
+              left: traderRowHintTarget.left,
+              top: traderRowHintTarget.top,
+              width: Math.min(traderRowHintTarget.width + 16, window.innerWidth - 20),
+              height: traderRowHintTarget.height + 12
+            }}
+          />
+          <div className="tour-hint-callout" style={getTourCalloutStyle(traderRowHintTarget, 'below')}>
+            Tap a top trader to open their profile
+          </div>
+        </div>
+      )}
+
+      {showTraderProfileHint && !isTutorialActive && (
+        <div className="tour-hint tour-hint--overlay" aria-hidden="true">
+          {traderProfileHintTarget && (
+            <div
+              className="tour-hint-ring"
+              style={{
+                left: traderProfileHintTarget.left,
+                top: traderProfileHintTarget.top,
+                width: Math.min(traderProfileHintTarget.width + 18, window.innerWidth - 20),
+                height: traderProfileHintTarget.height + 14
+              }}
+            />
+          )}
+          <div
+            className="tour-hint-callout"
+            style={traderProfileHintTarget
+              ? getTourCalloutStyle(traderProfileHintTarget, 'below')
+              : { left: 16, top: 120, width: window.innerWidth - 32 }}
+          >
+            Trader profile — their position, PnL & every coin they trade
+          </div>
+        </div>
+      )}
+
+      {showProfileCloseHint && !isTutorialActive && profileCloseHintTarget && (
+        <div className="tour-hint tour-hint--overlay" aria-hidden="true">
+          <div
+            className="tour-hint-ring tour-hint-ring--round"
+            style={{ left: profileCloseHintTarget.left, top: profileCloseHintTarget.top }}
+          />
+          <div className="tour-hint-callout" style={getTourCalloutStyle(profileCloseHintTarget, 'below')}>
+            Close to jump right back into the action
+          </div>
+        </div>
+      )}
+
+      {showLiveZoomHint && !onlyFavorites && !isTutorialActive && liveZoomHintTarget && (
+        <div className="tour-hint" aria-hidden="true">
+          <div className="tour-hint-backdrop" />
+          <div
+            className="tour-hint-ring tour-hint-ring--round"
+            style={{ left: liveZoomHintTarget.left, top: liveZoomHintTarget.top }}
+          />
+          <div className="tour-hint-callout" style={getTourCalloutStyle(liveZoomHintTarget)}>
+            Zoom to the <strong>live 1m price</strong> — tap again to zoom back out
+          </div>
+        </div>
+      )}
+
       {showHelpHint && !onlyFavorites && !isTutorialActive && helpHintTarget && (
         <div className="help-section-hint" onClick={dismissHelpHint}>
           <div className="help-section-hint-backdrop" />
@@ -1968,7 +2477,7 @@ const ModernTokenScroller = ({
             style={{ left: helpHintTarget.left, top: helpHintTarget.top }}
           />
           <div className="help-section-callout" style={getHelpCalloutStyle(helpHintTarget)}>
-            This information is always available in the Help section
+            More guides & info anytime — tap the lines in the top-left
           </div>
         </div>
       )}

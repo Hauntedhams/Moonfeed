@@ -144,6 +144,7 @@ const CoinCard = memo(({
   const [hasToggledActions, setHasToggledActions] = useState(false); // Track if user has toggled (avoids mount animation)
   const expandSwipeRef = useRef(null); // touch tracking for the slide-up-to-expand arrow
   const expandArrowRef = useRef(null); // measured/positioned to sit centered over the Profile nav button
+  const nativeActionsRef = useRef(null); // native chart controls row (trade/fullscreen/reset/comments/copy) — right-anchored so it visually emerges leftward from the arrow
   const [selectedWallet, setSelectedWallet] = useState(null);
   const [showDescriptionModal, setShowDescriptionModal] = useState(false);
   const [trackedPrice, setTrackedPrice] = useState(null);
@@ -297,8 +298,10 @@ const CoinCard = memo(({
     coin.price_usd || coin.priceUsd || coin.price || 0
   );
 
-  // Full tx stream (history + trade table + ticks): expanded, or desktop current card.
-  const wantsFullTxStream = isExpanded || showLiveTransactions || (!isMobile && isCurrentCard);
+  // Full tx stream (history + trade table + ticks): expanded, or desktop ACTIVE card.
+  // isActiveCard (not isCurrentCard) so the off-screen preload card doesn't open a
+  // 100-credit Helius history fetch + live tx stream on every scroll step.
+  const wantsFullTxStream = isExpanded || showLiveTransactions || (!isMobile && isActiveCard);
   // Mobile collapsed current card: lean per-trade PRICE TICK stream only (log-decoded
   // server-side, no getTransaction credits). Gated on the settled chart mount AND a
   // 300ms debounce so fast scrolls never churn WebSockets (the old WKWebView crash).
@@ -1634,24 +1637,61 @@ const CoinCard = memo(({
     }
   };
 
-  // Keep the slide-up-to-expand arrow centered exactly over the bottom-nav
-  // Profile button — its width isn't a fixed fraction of the nav (the Trade
-  // button carries extra margin), so measure the real button instead of
-  // relying on a CSS calc() guess.
+  // Keep the expand/collapse arrow AND the Trades/Top-Traders stack fixed
+  // directly over it, centered exactly over the bottom-nav Profile button —
+  // its width isn't a fixed fraction of the nav (the Trade button carries
+  // extra margin), so measure the real button instead of a CSS calc() guess.
+  // The native chart controls row shares Top Traders' vertical level (it's
+  // the LAST/bottom item of the stack) and is right-anchored just to its
+  // LEFT (using its REAL measured rect, not an assumed width), with the same
+  // gap as the row's own inter-button spacing, so it fans out leftward
+  // beside Top Traders at an even distance when revealed.
   useEffect(() => {
-    if (isDesktopMode || !isActiveCard || isExpanded) return undefined;
+    if (isDesktopMode || !(isActiveCard || isExpanded)) return undefined;
+    const ROW_GAP = 12; // matches .native-chart-mobile-right-actions CSS gap
     const align = () => {
-      const el = expandArrowRef.current;
       const target = document.querySelector('.bottom-nav .nav-btn:last-child');
-      if (!el || !target) return;
+      if (!target) return;
       const rect = target.getBoundingClientRect();
       const centerX = rect.left + rect.width / 2;
-      el.style.left = `${centerX - el.offsetWidth / 2}px`;
-      el.style.right = 'auto';
+      const arrowEl = expandArrowRef.current;
+      if (arrowEl) {
+        arrowEl.style.left = `${centerX - arrowEl.offsetWidth / 2}px`;
+        arrowEl.style.right = 'auto';
+      }
+      const btnsEl = actionButtonsRef.current;
+      if (btnsEl) {
+        btnsEl.style.left = `${centerX}px`;
+        btnsEl.style.right = 'auto';
+        btnsEl.style.transform = 'translateX(-50%)';
+      }
+      const nativeEl = nativeActionsRef.current;
+      const topTradersBtn = btnsEl?.lastElementChild;
+      if (nativeEl && topTradersBtn) {
+        // Measure Top Traders' ACTUAL rendered rect (post-centering) rather
+        // than assuming a width, so the gap is pixel-exact either way.
+        const topTradersRect = topTradersBtn.getBoundingClientRect();
+        const rightEdge = topTradersRect.left - ROW_GAP;
+        const margin = 8;
+        const left = Math.max(margin, rightEdge - nativeEl.offsetWidth);
+        nativeEl.style.left = `${left}px`;
+        nativeEl.style.right = 'auto';
+        nativeEl.style.transform = 'none';
+      }
     };
+    // Run now, then again after the expand/collapse layout settles (the card's
+    // own transform transition + any scrollIntoView briefly shift the bottom
+    // nav's measured rect, which otherwise leaves these buttons stuck at a
+    // stale position until something else happens to re-trigger this effect).
     align();
+    const t1 = setTimeout(align, 60);
+    const t2 = setTimeout(align, 320);
     window.addEventListener('resize', align);
-    return () => window.removeEventListener('resize', align);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      window.removeEventListener('resize', align);
+    };
   }, [isDesktopMode, isActiveCard, isExpanded]);
 
   // Expand toggle
@@ -3811,7 +3851,7 @@ const CoinCard = memo(({
            is already on document.body at z-index 60-70; putting buttons there at
            z-index 9999 guarantees they always paint on top.
            On desktop: rendered in-place (no chart z-index conflict). */}
-      {!buyDrawerOpen && (function() {
+      {!buyDrawerOpen && !useAdvancedGeckoChart && (function() {
         // Keep the buttons portaled while the card is expanded, even if the
         // scroller's "active card" tracking briefly flips (e.g. triggered by
         // scrollIntoView when opening the Top Traders/Transactions panels).
@@ -3822,13 +3862,14 @@ const CoinCard = memo(({
       <>
       <div
         ref={actionButtonsRef}
-        className="tiktok-action-buttons"
+        className={`tiktok-action-buttons ${hasToggledActions ? (showActionButtons ? 'releasing' : 'absorbing') : ''}`}
         style={_mobilePortal ? {
           position: 'fixed',
-          // Anchor to the bottom-right, just above the fixed Expand button, so the
-          // buttons appear to fly out of it. Stack upward (bottom-up reveal).
-          right: '14px',
-          bottom: 'calc(env(safe-area-inset-bottom) + 132px)',
+          // Centered (via the alignment effect, which sets left/transform)
+          // directly over the expand/collapse curve, so the buttons appear
+          // to fly straight up out of it. Fixed regardless of expand state —
+          // this pair must never move when the card expands/collapses.
+          bottom: 'calc(env(safe-area-inset-bottom) + 94px)',
           top: 'auto',
           flexDirection: 'column',
           justifyContent: 'flex-end',
@@ -3865,7 +3906,7 @@ const CoinCard = memo(({
           <span className="tiktok-action-label">Trades</span>
         </button>
 
-        {/* Top PnL traders window — same expand-then-open behavior. */}
+        {/* Top PnL traders window — shares the same vertical line as Trades, over the arrow. */}
         <button
           className={`tiktok-action-btn ${showInlineTopTraders ? 'active' : ''}`}
           onClick={(e) => {
@@ -3884,11 +3925,10 @@ const CoinCard = memo(({
               <path d="M7 4H4a2 2 0 0 0 2 4h1" />
             </svg>
           </span>
-          <span className="tiktok-action-label">PnL</span>
         </button>
       </div>
       {USE_NATIVE_CHART && _mobilePortal && (
-        <div className="native-chart-mobile-right-actions">
+        <div ref={nativeActionsRef} className="native-chart-mobile-right-actions">
           <button
             className={`native-chart-action-btn ${nativeChartControlsVisible ? 'visible' : ''}`}
             onClick={openMobileTradeDrawer}
@@ -3962,31 +4002,9 @@ const CoinCard = memo(({
               <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
             </svg>
           </button>
-          {isExpanded && (
-            <button
-              className="native-chart-expand-card-btn"
-              onClick={handleExpandToggle}
-              title="Collapse details"
-              aria-label="Collapse details"
-            >
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                style={{ transform: 'rotate(180deg)' }}
-              >
-                <polyline points="18 15 12 9 6 15" />
-              </svg>
-            </button>
-          )}
         </div>
       )}
-      {_mobilePortal && !isExpanded && (
+      {_mobilePortal && (
         <div
           ref={expandArrowRef}
           className="coin-expand-swipe-arrow"
@@ -3996,8 +4014,8 @@ const CoinCard = memo(({
           }}
           role="button"
           tabIndex={0}
-          title="Swipe up to expand"
-          aria-label="Swipe up to expand coin details"
+          title={isExpanded ? 'Collapse coin details' : 'Swipe up to expand'}
+          aria-label={isExpanded ? 'Collapse coin details' : 'Swipe up to expand coin details'}
           onClick={(e) => {
             // Ignore the synthetic click that can follow a committed swipe.
             if (expandSwipeRef.current?.firedAt && Date.now() - expandSwipeRef.current.firedAt < 500) return;
@@ -4013,8 +4031,9 @@ const CoinCard = memo(({
             const s = expandSwipeRef.current;
             if (!s || s.fired) return;
             const t = e.touches[0];
-            const dy = s.y - t.clientY;
-            if (dy > 14 && dy > Math.abs(t.clientX - s.x)) {
+            // Collapsed: slide up commits (expand). Expanded: slide down commits (collapse).
+            const d = isExpanded ? (t.clientY - s.y) : (s.y - t.clientY);
+            if (d > 14 && d > Math.abs(t.clientX - s.x)) {
               s.fired = true;
               s.firedAt = Date.now();
               handleExpandToggle(e);
@@ -4024,9 +4043,9 @@ const CoinCard = memo(({
             e.stopPropagation();
             const s = expandSwipeRef.current;
             if (s && !s.fired && e.changedTouches[0]) {
-              const dy = s.y - e.changedTouches[0].clientY;
-              // Short-but-deliberate upward slide also commits.
-              if (dy > 10 && dy > Math.abs(e.changedTouches[0].clientX - s.x)) {
+              const d = isExpanded ? (e.changedTouches[0].clientY - s.y) : (s.y - e.changedTouches[0].clientY);
+              // Short-but-deliberate slide also commits.
+              if (d > 10 && d > Math.abs(e.changedTouches[0].clientX - s.x)) {
                 s.fired = true;
                 s.firedAt = Date.now();
                 handleExpandToggle(e);
@@ -4041,8 +4060,8 @@ const CoinCard = memo(({
           onPointerMove={(e) => {
             const s = expandSwipeRef.current;
             if (!s || s.fired || e.pointerType !== 'mouse') return;
-            const dy = s.y - e.clientY;
-            if (dy > 14 && dy > Math.abs(e.clientX - s.x)) {
+            const d = isExpanded ? (e.clientY - s.y) : (s.y - e.clientY);
+            if (d > 14 && d > Math.abs(e.clientX - s.x)) {
               s.fired = true;
               s.firedAt = Date.now();
               handleExpandToggle(e);
@@ -4068,7 +4087,17 @@ const CoinCard = memo(({
             />
           </svg>
           <span className="coin-expand-swipe-arrow-icon" aria-hidden="true">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.25s ease' }}
+            >
               <polyline points="18 15 12 9 6 15" />
             </svg>
           </span>
@@ -4171,6 +4200,7 @@ const CoinCard = memo(({
           marketBuyAmount={buySolAmount}
           limitOrderSide={buyDrawerOrderSide}
           onOpenBuyDrawer={openBuyDrawer}
+          showMobileControls={false}
         />,
         mobileChartTargetRef.current
         );

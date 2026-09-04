@@ -4,7 +4,7 @@ import { useWallet } from '../contexts/WalletContext';
 import { useWalletConnectOnboarding } from './WalletConnectOnboarding';
 import { getSolUsdPrice } from '../utils/orderFillTracking';
 import { createSoftOrder } from '../utils/softOrders';
-import CautionTapeBanner from './CautionTapeBanner';
+import NotificationPromptBanner from './NotificationPromptBanner';
 import './TriggerOrderModal.css';
 
 const TriggerOrderModal = ({ 
@@ -433,7 +433,7 @@ const TriggerOrderModal = ({
               <button className="close-btn-compact" onClick={onClose}>✕</button>
             </div>
 
-            <CautionTapeBanner message="LIMIT ORDERS ALERT YOU — TAP THE NOTIFICATION TO EXECUTE" compact />
+            <NotificationPromptBanner compact />
 
             {/* Quick Action Row: Buy/Sell */}
             <div className="action-row">

@@ -4,6 +4,33 @@ const nacl = require('tweetnacl');
 const { PublicKey } = require('@solana/web3.js');
 const User = require('../models/User');
 
+// GET /api/users/:walletAddress/profile-picture — FCM/APNs need a public image URL.
+router.get('/:walletAddress/profile-picture', async (req, res) => {
+  try {
+    const { walletAddress } = req.params;
+    if (!walletAddress || walletAddress.length < 32) {
+      return res.status(400).json({ error: 'Invalid wallet address' });
+    }
+
+    const user = await User.findOne({ walletAddress }).select('profilePicture').lean();
+    const picture = user?.profilePicture;
+    if (!picture) return res.status(404).json({ error: 'No profile picture' });
+    if (/^https?:\/\//i.test(picture)) return res.redirect(302, picture);
+
+    const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(picture);
+    if (!match) return res.status(404).json({ error: 'No profile picture' });
+
+    const [, contentType, base64] = match;
+    const image = Buffer.from(base64, 'base64');
+    res.set('Content-Type', contentType);
+    res.set('Cache-Control', 'public, max-age=3600');
+    res.send(image);
+  } catch (err) {
+    console.error('❌ Error fetching profile picture:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // GET /api/users/:walletAddress — fetch profile (public, no auth needed)
 router.get('/:walletAddress', async (req, res) => {
   try {

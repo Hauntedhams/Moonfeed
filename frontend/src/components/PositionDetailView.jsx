@@ -339,6 +339,10 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
           <polyline points="15 18 9 12 15 6" />
         </svg>
       </button>
+      <div className="pdv-moonfeed-brand" aria-label="Moonfeed">
+        <span>Moonfeed</span>
+        <img src="/new logo.jpeg" alt="" />
+      </div>
 
       <div className="pdv-wallet-header">
         <button
@@ -464,14 +468,16 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
             Trade {tokenSymbol}
           </button>
         )}
-        <button className="pdv-share-btn" type="button" onClick={handleShare}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7" />
-            <polyline points="16 6 12 2 8 6" />
-            <line x1="12" y1="2" x2="12" y2="15" />
-          </svg>
-          {shareCopied ? 'Copied!' : 'Share'}
-        </button>
+        <div className="pdv-share-group">
+          <button className="pdv-share-btn" type="button" onClick={handleShare}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7" />
+              <polyline points="16 6 12 2 8 6" />
+              <line x1="12" y1="2" x2="12" y2="15" />
+            </svg>
+            {shareCopied ? 'Copied!' : 'Share'}
+          </button>
+        </div>
       </div>
     </div>
     </div>

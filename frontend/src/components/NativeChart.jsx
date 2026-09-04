@@ -121,6 +121,11 @@ const NativeChart = ({
   const { isDarkMode } = useDarkMode();
   const containerRef = useRef(null);
   const chartRef = useRef(null);
+  // True once chart.remove() has run. React fires effect cleanups in declaration
+  // order, so cleanups declared below the chart-creation effect run against an
+  // already-destroyed chart; calling applyOptions there would schedule a draw
+  // frame that then throws "Object is disposed" asynchronously.
+  const chartDisposedRef = useRef(false);
   const seriesRef = useRef(null);
   const seriesTypeRef = useRef(null); // 'candles' | 'area'
   const targetLineRef = useRef(null);
@@ -329,6 +334,7 @@ const NativeChart = ({
       handleScale: isExpanded,
     });
     chartRef.current = chart;
+    chartDisposedRef.current = false;
     const resizeObserver = new ResizeObserver(() => {
       try {
         chart.resize(container.clientWidth || 1, container.clientHeight || 1);
@@ -337,11 +343,10 @@ const NativeChart = ({
     resizeObserver.observe(container);
     return () => {
       resizeObserver.disconnect();
-      // lightweight-charts 5.x can throw from its internal pane/canvas
-      // disposal after a chart has been removed during a mobile card change.
-      // Detach the chart DOM instead; cancelling our work below lets the
-      // detached chart become unreachable without entering that bad teardown.
-      try { container.replaceChildren(); } catch (_) { /* already detached */ }
+      chartDisposedRef.current = true;
+      // Null the refs BEFORE disposing so any in-flight async work (fetch
+      // resolutions, rAF loops, later effect cleanups) sees a disposed chart
+      // and bails instead of touching a half-torn-down instance.
       chartRef.current = null;
       seriesRef.current = null;
       seriesTypeRef.current = null;
@@ -355,6 +360,15 @@ const NativeChart = ({
       if (targetScaleAnimationRef.current) cancelAnimationFrame(targetScaleAnimationRef.current);
       if (exitFocusAnimationRef.current) cancelAnimationFrame(exitFocusAnimationRef.current);
       if (pinRafRef.current) { cancelAnimationFrame(pinRafRef.current); pinRafRef.current = 0; }
+      // MUST call remove(): lightweight-charts holds its canvases (several MB
+      // each at mobile DPR), the loaded candle data and document/media-query
+      // listeners until the chart is disposed. Merely detaching the DOM leaked
+      // every chart the user ever scrolled past, which is what eventually made
+      // WKWebView kill the page (silent reload -> "app jumped back to an
+      // earlier coin"). remove() can throw from its own internal teardown, so
+      // it stays guarded and the DOM detach remains as a fallback.
+      try { chart.remove(); } catch (_) { /* already torn down */ }
+      try { container.replaceChildren(); } catch (_) { /* already detached */ }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -663,7 +677,9 @@ const NativeChart = ({
       el.removeEventListener('touchend', onTouchEndCapture, { capture: true });
       el.removeEventListener('touchcancel', onTouchEndCapture, { capture: true });
       if (rafId) cancelAnimationFrame(rafId);
-      try { chart.applyOptions({ handleScroll: isExpanded, handleScale: isExpanded }); } catch (_) { /* disposed */ }
+      if (!chartDisposedRef.current) {
+        try { chart.applyOptions({ handleScroll: isExpanded, handleScale: isExpanded }); } catch (_) { /* disposed */ }
+      }
     };
   }, [isExpanded, status, onCrosshairMove, markUserNav]);
 
@@ -1123,7 +1139,7 @@ const NativeChart = ({
     try { series.applyOptions({ autoscaleInfoProvider }); } catch (_) { /* chart disposed */ }
     return () => {
       // Leave a user-pinned range alone — clearUserNav()/reset handles it.
-      if (userNavRef.current) return;
+      if (userNavRef.current || chartDisposedRef.current) return;
       try { series.applyOptions({ autoscaleInfoProvider: undefined }); } catch (_) { /* chart disposed */ }
     };
   }, [focusOneMinute, status, entryPrice, targetPrice, refocusSignal, resetViewSignal]);
@@ -1813,6 +1829,7 @@ const NativeChart = ({
     return () => {
       if (targetScaleAnimationRef.current) cancelAnimationFrame(targetScaleAnimationRef.current);
       targetScaleAnimationRef.current = null;
+      if (chartDisposedRef.current) return;
       try { series.applyOptions({ autoscaleInfoProvider: undefined }); } catch (error) { /* chart disposed */ }
     };
   }, [focusOneMinute, status, tfIndex]);

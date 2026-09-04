@@ -95,7 +95,9 @@ const CopyTradeToast = ({ onShowTransaction }) => {
               className="ctt-avatar-mini"
               style={top.walletAddress ? { background: gradientForWallet(top.walletAddress) } : undefined}
             >
-              {top.walletAddress ? (
+              {top.walletProfileImage ? (
+                <img src={top.walletProfileImage} alt="" className="ctt-avatar-img" />
+              ) : top.walletAddress ? (
                 <AnimalSilhouetteAvatar address={top.walletAddress} className="ctt-animal-avatar-mini" />
               ) : (
                 <span className="ctt-dot" />

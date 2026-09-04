@@ -122,16 +122,21 @@
   margin: 0 auto;
 }
 
-/* Wallets tab: scrollable feed of position trade cards. The placeholder keeps
-   roughly the final card height so the scrollbar doesn't jump while cards
-   lazily mount as they approach the viewport. */
-.tw-card-feed .tw-card-placeholder {
-  min-height: 640px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+/* Wallets tab: one full-height position card per snap page. */
+.tw-card-scroller {
+  scroll-snap-type: y mandatory;
+  scroll-padding-top: 58px;
+  overscroll-behavior-y: contain;
 }
 
-html:not(.dark-mode) .tw-card-feed .tw-card-placeholder {
-  border-bottom-color: rgba(0, 0, 0, 0.06);
+.tw-card-scroller .tw-card-slot {
+  height: calc(100dvh - 58px - 96px - env(safe-area-inset-bottom, 0px));
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+
+.tw-card-feed .tw-card-placeholder {
+  height: 100%;
 }
 
 /* Top-right filter control for the active Wallets or Coins tab. */
@@ -165,6 +170,8 @@ html:not(.dark-mode) .tw-card-feed .tw-card-placeholder {
 .tw-activity-item { display: grid; grid-template-columns: 7px 34px minmax(0, 1fr) auto; align-items: center; width: 100%; min-height: 58px; gap: 9px; padding: 9px 12px 9px 10px; border: 0; border-bottom: 1px solid rgba(255, 255, 255, 0.06); background: rgba(96, 165, 250, 0.1); color: #fff; text-align: left; cursor: pointer; }
 .tw-activity-item:active { background: rgba(96, 165, 250, 0.19); }
 .tw-activity-item img { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; background: rgba(255, 255, 255, 0.08); }
+.tw-activity-avatar { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; overflow: hidden; background: rgba(255, 255, 255, 0.08); }
+.tw-activity-avatar svg { width: 21px; height: 21px; fill: #ffffff; }
 .tw-activity-dot { width: 7px; height: 7px; border-radius: 50%; background: #3b82f6; }
 .tw-activity-copy { display: grid; gap: 2px; min-width: 0; }
 .tw-activity-copy strong, .tw-activity-copy span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

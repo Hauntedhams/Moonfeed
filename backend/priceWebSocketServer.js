@@ -238,8 +238,9 @@ class PriceWebSocketServer {
    */
   async subscribeTxs(ws, tokenAddress) {
     try {
-      // 1. Send recent history immediately
-      const history = await solanaTransactionService.getRecentTransactions(tokenAddress, 100);
+      // 1. Send recent history immediately. 50 swaps ≈ one Enhanced API page
+      // (100 credits) instead of up to three at limit=100.
+      const history = await solanaTransactionService.getRecentTransactions(tokenAddress, 50);
       this.sendMessage(ws, {
         type: 'tx-history',
         token: tokenAddress,

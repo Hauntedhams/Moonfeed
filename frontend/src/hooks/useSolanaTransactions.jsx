@@ -36,6 +36,16 @@ export const useSolanaTransactions = (mintAddress, isActive, mode = 'full') => {
   const [isConnected, setIsConnected] = useState(false);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [error, setError] = useState(null);
+  // Backgrounded app = no visible chart, but an open stream still bills Helius
+  // per event (LaserStream). Tear down while hidden, reconnect on return.
+  const [pageVisible, setPageVisible] = useState(
+    typeof document === 'undefined' || document.visibilityState !== 'hidden'
+  );
+  useEffect(() => {
+    const onVisibility = () => setPageVisible(document.visibilityState !== 'hidden');
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, []);
   const wsRef = useRef(null);
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimerRef = useRef(null);
@@ -178,7 +188,7 @@ export const useSolanaTransactions = (mintAddress, isActive, mode = 'full') => {
       reconnectTimerRef.current = null;
     }
 
-    if (!mintAddress || !isActive) {
+    if (!mintAddress || !isActive || !pageVisible) {
       if (priceTimerRef.current) {
         clearTimeout(priceTimerRef.current);
         priceTimerRef.current = null;
@@ -227,7 +237,7 @@ export const useSolanaTransactions = (mintAddress, isActive, mode = 'full') => {
         ws.close();
       }
     };
-  }, [mintAddress, isActive, mode, connect]);
+  }, [mintAddress, isActive, pageVisible, mode, connect]);
 
   return { transactions, livePrice, isConnected, historyLoaded, error, clearTransactions };
 };

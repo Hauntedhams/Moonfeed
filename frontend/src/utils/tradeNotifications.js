@@ -18,6 +18,20 @@ function idFromSignature(signature) {
   return Math.abs(hash) % 2147483647 || 1;
 }
 
+// Check current permission status without prompting the user.
+export async function hasNotificationPermission() {
+  try {
+    if (isNative) {
+      const check = await LocalNotifications.checkPermissions();
+      return check.display === 'granted';
+    }
+    if ('Notification' in window) return Notification.permission === 'granted';
+  } catch (err) {
+    console.debug('[TradeNotifications] permission check error:', err?.message);
+  }
+  return false;
+}
+
 // Request notification permission once. Safe to call multiple times.
 export async function initTradeNotifications() {
   if (initialized) return permissionGranted;
@@ -66,9 +80,10 @@ function buildMessage(swap) {
     swap.solAmount != null && !Number.isNaN(Number(swap.solAmount)) && Number(swap.solAmount) > 0
       ? ` for ${Number(swap.solAmount).toFixed(3)} SOL`
       : '';
+  const actionLabel = action[0].toUpperCase() + action.slice(1);
   return {
-    title: `🚨 Tracked Wallet Trade: ${label}`,
-    body: `${label} ${action} $${symbol}${sol}`,
+    title: `${label} • Following`,
+    body: `${actionLabel} $${symbol}${sol}`,
   };
 }
 
@@ -270,6 +285,7 @@ export async function notifyWalletTrade(swap) {
             title,
             body,
             schedule: { at: new Date(Date.now() + 200) },
+            largeIcon: swap.walletProfileImage || undefined,
             extra: { signature: swap.signature, walletAddress: swap.walletAddress },
           },
         ],
@@ -277,7 +293,7 @@ export async function notifyWalletTrade(swap) {
     } else if ('Notification' in window && permissionGranted) {
       const notificationOptions = {
         body,
-        icon: '/android-chrome-192x192.png',
+        icon: swap.walletProfileImage || '/android-chrome-192x192.png',
         badge: '/favicon-32x32.png',
         tag: `tracked-wallet-${swap.signature || swap.walletAddress || Date.now()}`,
         renotify: true,

@@ -23,20 +23,27 @@
   }
   
   /* Disable most transitions on mobile for instant interactions
-     BUT exempt TikTok action bar, expand-handle & info layer so they animate in BOTH directions */
-  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content):not(.coin-buy-drawer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track):not(.feed-swipe-container),
-  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content):not(.coin-buy-drawer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track):not(.feed-swipe-container)::before,
-  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content):not(.coin-buy-drawer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track):not(.feed-swipe-container)::after {
+     BUT exempt TikTok action bar, expand-handle & info layer so they animate in BOTH directions.
+     The full-screen sheets (pdv/wpv/odv) are exempt too — their drag-dismiss
+     spring-back and slide-out rely on the transform transition. */
+  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content):not(.coin-buy-drawer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track):not(.feed-swipe-container):not(.pdv-root):not(.wpv-root):not(.odv-root),
+  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content):not(.coin-buy-drawer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track):not(.feed-swipe-container):not(.pdv-root):not(.wpv-root):not(.odv-root)::before,
+  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content):not(.coin-buy-drawer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track):not(.feed-swipe-container):not(.pdv-root):not(.wpv-root):not(.odv-root)::after {
     transition: none !important;
     transition-duration: 0s !important;
   }
   
-  /* Disable hover effects on touch devices (exempt TikTok action elements & expand-handle) */
+  /* Disable hover effects on touch devices (exempt TikTok action elements & expand-handle).
+     NOTE: :hover also matches ANCESTORS of the hovered element, so .tiktok-action-buttons
+     (the JS-centered translateX(-50%) container around the action buttons) must be excluded
+     too, else hovering a child button strips the parent's centering transform.
+     The sheets (pdv/wpv/odv) must be excluded because a touch sets :hover on iOS, which
+     would strip the inline translate that makes them follow the finger. */
   .coin-banner:hover,
   .info-layer-profile-image:hover,
   .header-metric:hover,
   .header-social-icon:hover,
-  *:not(.tiktok-action-btn):not(.expand-handle):not(.coin-info-layer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track):not(.feed-swipe-container):hover {
+  *:not(.tiktok-action-btn):not(.tiktok-action-buttons):not(.expand-handle):not(.coin-info-layer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track):not(.feed-swipe-container):not(.pdv-root):not(.wpv-root):not(.odv-root):hover {
     transform: none !important;
     opacity: 1 !important;
   }
@@ -189,6 +196,38 @@
   animation: toggleRelease 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) 0s both;
 }
 
+/* Trades/PnL buttons stay visible+tappable in both states (so they can also
+   expand the card on tap from the standard/collapsed view), but still bounce
+   out/in like they're emerging from the expand curve whenever it's toggled.
+   The container is horizontally centered via an inline `transform: translateX(-50%)`
+   set by JS (see the nav-button alignment effect) — the plain toggleAbsorb/
+   toggleRelease keyframes only set `transform: scale(...)`, which overwrites
+   that centering for the animation's duration and makes the whole button
+   stack visibly jump to the right (losing its -50% offset) every time it
+   plays. Dedicated *Centered keyframes keep the translateX baked into every
+   step so the stack bounces in place instead of drifting. */
+@keyframes toggleAbsorbCentered {
+  0%   { transform: translateX(-50%) scale(1); }
+  35%  { transform: translateX(-50%) scale(1.28); }
+  65%  { transform: translateX(-50%) scale(0.9); }
+  100% { transform: translateX(-50%) scale(1); }
+}
+
+@keyframes toggleReleaseCentered {
+  0%   { transform: translateX(-50%) scale(1); }
+  25%  { transform: translateX(-50%) scale(0.82); }
+  55%  { transform: translateX(-50%) scale(1.15); }
+  100% { transform: translateX(-50%) scale(1); }
+}
+
+.tiktok-action-buttons.absorbing {
+  animation: toggleAbsorbCentered 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) 0.3s both;
+}
+
+.tiktok-action-buttons.releasing {
+  animation: toggleReleaseCentered 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) 0s both;
+}
+
 /* --- Expanded state: buttons pop back into place, revealed by clip-path opening from top → bottom --- */
 .tiktok-action-buttons:not(.collapsed) .tiktok-action-btn {
   opacity: 1;
@@ -309,46 +348,15 @@
 .tiktok-action-buttons .tiktok-action-btn:hover {
   background: rgba(10, 10, 20, 0.95) !important;
   border-color: rgba(255, 255, 255, 0.85) !important;
+  /* Override the base .tiktok-action-btn:hover scale — combined with the
+     bouncy overshoot easing on the resting transform transition below, the
+     scale-up visibly wobbled/moved the button instead of just highlighting it. */
+  transform: none;
 }
 
 .tiktok-action-buttons .tiktok-action-btn.active {
   border-color: rgba(196, 181, 253, 0.88) !important;
   background: rgba(91, 73, 150, 0.4) !important;
-}
-
-/* Native charts do not render TwelveDataChart's fixed expand control, so
-   CoinCard restores it beneath the comments/copy action stack. */
-.native-chart-expand-card-btn {
-  width: 44px;
-  height: 44px;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 2px solid rgba(255, 255, 255, 0.55);
-  border-radius: 50%;
-  background: rgba(10, 10, 20, 0.82);
-  color: rgba(255, 255, 255, 0.95);
-  cursor: pointer;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.native-chart-expand-card-btn svg {
-  transition: transform 0.3s ease;
-}
-
-.native-chart-expand-card-btn:hover {
-  background: rgba(10, 10, 20, 0.95);
-  border-color: rgba(255, 255, 255, 0.85);
-  transform: scale(1.08);
-}
-
-.native-chart-expand-card-btn:active {
-  transform: scale(0.94);
 }
 
 /* Collapsed-state expand affordance: a sloped shape sitting right above the
@@ -431,8 +439,8 @@ html.dark-mode .coin-expand-swipe-arrow-icon {
 
 .native-chart-mobile-right-actions {
   position: fixed;
-  right: 14px;
-  bottom: calc(env(safe-area-inset-bottom) + 78px);
+  /* left set by the alignment effect so this row sits just left of the Top Traders button */
+  bottom: calc(env(safe-area-inset-bottom) + 94px);
   z-index: 9999;
   display: flex;
   align-items: center;
@@ -699,8 +707,7 @@ html.dark-mode .coin-expand-swipe-arrow-icon {
 .coin-buy-swipe-handle {
   position: absolute;
   left: 0;
-  top: 50%;
-  transform: translateY(-50%);
+  top: calc(50% + 80px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -708,11 +715,10 @@ html.dark-mode .coin-expand-swipe-arrow-icon {
   height: 56px;
   padding: 0;
   color: rgba(255, 255, 255, 0.85);
-  background: rgba(15, 23, 42, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-left: none;
-  border-radius: 0 12px 12px 0;
-  box-shadow: 2px 0 12px rgba(0, 0, 0, 0.35);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
   cursor: pointer;
   pointer-events: auto;
 }
@@ -721,8 +727,8 @@ html.dark-mode .coin-expand-swipe-arrow-icon {
 .coin-buy-swipe-handle:hover,
 .coin-buy-swipe-handle:active {
   animation: none;
-  transform: translateY(-50%) translateX(0);
-  background: rgba(30, 41, 59, 0.9);
+  transform: none;
+  background: transparent;
   color: #ffffff;
 }
 

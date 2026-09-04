@@ -10,8 +10,12 @@ const PushWalletCursor = require('../models/PushWalletCursor');
 const SoftOrder = require('../models/SoftOrder');
 const pushService = require('./pushService');
 
+const PUBLIC_API_BASE_URL = (process.env.PUBLIC_API_BASE_URL || process.env.BACKEND_PUBLIC_URL || 'https://api.moonfeed.app').replace(/\/$/, '');
+
 const POLL_INTERVAL_MS = 90 * 1000;
-const WALLET_POLL_INTERVAL_MS = 60 * 1000;
+// Each cycle costs 100 Helius credits (Enhanced API) PER tracked wallet, 24/7 —
+// at 60s this alone burned ~1M credits/day. 180s cuts it 3x.
+const WALLET_POLL_INTERVAL_MS = 180 * 1000;
 const SOFT_ORDER_POLL_INTERVAL_MS = 30 * 1000;
 const CHUNK = 30;
 
@@ -32,6 +36,25 @@ let walletTimer = null;
 let softOrderTimer = null;
 const symbolCache = new Map(); // mint -> { symbol, ts }
 const SYMBOL_TTL = 60 * 60 * 1000;
+
+function shortWallet(address) {
+  return address ? `${address.slice(0, 4)}…${address.slice(-4)}` : 'Tracked wallet';
+}
+
+function pushSafeImage(url) {
+  return typeof url === 'string' && /^https?:\/\//i.test(url) ? url : null;
+}
+
+function profileImageForPush(profile, walletAddress) {
+  const picture = profile?.profilePicture;
+  if (!picture) return null;
+  const remoteUrl = pushSafeImage(picture);
+  if (remoteUrl) return remoteUrl;
+  if (typeof picture === 'string' && picture.startsWith('data:image/')) {
+    return `${PUBLIC_API_BASE_URL}/api/users/${encodeURIComponent(walletAddress)}/profile-picture`;
+  }
+  return null;
+}
 
 
 async function deepestPairs(mints) {
@@ -205,7 +228,12 @@ async function fetchRecentSwaps(address) {
 async function runWalletTradesOnce() {
   if (!pushService.isEnabled()) return;
 
-  const walletsWithDevices = await DeviceToken.distinct('walletAddress', { walletAddress: { $ne: null } });
+  // Only poll for accounts that can actually RECEIVE a walletTrade push —
+  // every polled wallet costs 100 Helius credits per cycle.
+  const walletsWithDevices = await DeviceToken.distinct('walletAddress', {
+    walletAddress: { $ne: null },
+    'prefs.walletTrade': { $ne: false },
+  });
   if (!walletsWithDevices.length) return;
 
   // Map tracked wallet -> [{ userWallet, label }] for everyone who tracks it (and has a device).
@@ -225,6 +253,11 @@ async function runWalletTradesOnce() {
   }
 
   const trackedWallets = [...followersOf.keys()].slice(0, MAX_TRACKED_WALLETS);
+
+  const profiles = await User.find({ walletAddress: { $in: trackedWallets } })
+    .select('walletAddress displayName profilePicture')
+    .lean();
+  const profileByWallet = new Map(profiles.map((p) => [p.walletAddress, p]));
 
   for (const w of trackedWallets) {
     let swaps;
@@ -256,11 +289,23 @@ async function runWalletTradesOnce() {
       const action = swap.type === 'sell' ? 'sold' : 'bought';
       const sol = swap.solAmount > 0 ? ` for ${swap.solAmount.toFixed(3)} SOL` : '';
       for (const f of followers) {
-        const label = f.label || `${w.slice(0, 4)}…${w.slice(-4)}`;
+        const profile = profileByWallet.get(w);
+        const label = profile?.displayName || f.label || shortWallet(w);
+        const profileImage = profileImageForPush(profile, w);
         await sendToWallet(f.userWallet, 'walletTrade', {
-          title: 'A wallet you track just traded',
-          body: `${label} ${action} $${sym}${sol}`,
-          data: { type: 'walletTrade', wallet: w, mint: swap.tokenMint, signature: swap.signature },
+          title: `${label} • Following`,
+          body: `${action[0].toUpperCase()}${action.slice(1)} $${sym}${sol}`,
+          image: profileImage,
+          data: {
+            type: 'walletTrade',
+            wallet: w,
+            mint: swap.tokenMint,
+            signature: swap.signature,
+            walletLabel: label,
+            tokenSymbol: sym,
+            action,
+            ...(profileImage ? { walletProfileImage: profileImage } : {}),
+          },
         });
       }
     }

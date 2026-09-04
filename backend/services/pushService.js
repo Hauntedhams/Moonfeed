@@ -52,23 +52,27 @@ function isEnabled() {
 
 // Send one notification to a list of device tokens. Returns the tokens FCM
 // reported as permanently invalid (unregistered) so the caller can prune them.
-async function sendToTokens(tokens, { title, body, data = {} } = {}) {
+async function sendToTokens(tokens, { title, body, image, data = {} } = {}) {
   if (!init() || !tokens?.length) return { invalidTokens: [] };
 
   const stringData = {};
   for (const [k, v] of Object.entries(data)) stringData[k] = String(v);
 
+  const imageUrl = typeof image === 'string' && /^https?:\/\//i.test(image) ? image : null;
+
   const message = {
     tokens: [...new Set(tokens)].slice(0, 500), // FCM multicast cap
-    notification: { title, body },
+    notification: imageUrl ? { title, body, imageUrl } : { title, body },
     data: stringData,
     apns: {
-      payload: { aps: { sound: 'default', 'content-available': 1 } },
+      payload: { aps: { sound: 'default', 'content-available': 1, ...(imageUrl ? { 'mutable-content': 1 } : {}) } },
+      ...(imageUrl ? { fcmOptions: { imageUrl } } : {}),
     },
     android: {
       priority: 'high',
-      notification: { sound: 'default', channelId: 'moonfeed_alerts' },
+      notification: { sound: 'default', channelId: 'moonfeed_alerts', ...(imageUrl ? { imageUrl } : {}) },
     },
+    ...(imageUrl ? { webpush: { notification: { icon: imageUrl, image: imageUrl } } } : {}),
   };
 
   const invalidTokens = [];

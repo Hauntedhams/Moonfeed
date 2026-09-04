@@ -16,9 +16,11 @@ const router = express.Router();
 const HELIUS_API_KEY = process.env.HELIUS_API_KEY || '05a97104-cba1-4284-aed6-e0ad21af8b33';
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
 
-// Per-wallet swap cache (20s TTL) — prevents hammering Helius on rapid polls
+// Per-wallet swap cache — prevents hammering Helius on rapid polls.
+// Each cache miss = 100 Helius credits (Enhanced API); keep TTL in sync with
+// the frontend CopyTradeContext poll interval.
 const swapCache = new Map();
-const SWAP_CACHE_TTL = 20000;
+const SWAP_CACHE_TTL = 60000;
 
 // Token symbol cache (1 hour TTL)
 const symbolCache = new Map();

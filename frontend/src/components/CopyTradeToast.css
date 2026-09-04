@@ -108,6 +108,12 @@
   fill: #ffffff;
 }
 
+.ctt-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .ctt-avatar-mini {
   display: flex;
   align-items: center;

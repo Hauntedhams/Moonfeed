@@ -75,26 +75,24 @@ const parseTrade = (t) => {
   };
 };
 
-/** Defers mounting a heavy trade card (position fetch + OHLCV chart) until it
- * scrolls near the viewport — the feed holds up to 60 cards, so they can't all
- * fetch/render at once. Once mounted it stays mounted. */
+/** Mounts a heavy trade card (position fetch + OHLCV chart) only while it is
+ * near the viewport — the feed holds up to 60 cards, and each mounted chart
+ * costs several MB, so far-away cards are unmounted again to keep memory flat
+ * no matter how far the user scrolls. */
 function LazyTradeCard({ children }) {
   const ref = useRef(null);
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    if (visible) return undefined;
     const el = ref.current;
     if (!el || typeof IntersectionObserver === 'undefined') { setVisible(true); return undefined; }
     const obs = new IntersectionObserver((entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) {
-        setVisible(true);
-        obs.disconnect();
-      }
-    }, { rootMargin: '900px 0px' });
+      const entry = entries[entries.length - 1];
+      if (entry) setVisible(entry.isIntersecting);
+    }, { rootMargin: '1200px 0px' });
     obs.observe(el);
     return () => obs.disconnect();
-  }, [visible]);
+  }, []);
 
   return (
     <div ref={ref} className="tw-card-slot">
@@ -589,7 +587,17 @@ function TrackedView({
               {activityPanel.notifications.map((notification) => (
                 <button key={notification.id} type="button" className="tw-activity-item" onClick={() => handleActivityClick(notification)}>
                   <span className="tw-activity-dot" aria-hidden="true" />
-                  {notification.coin?.image && <img src={notification.coin.image} alt="" />}
+                  {notification.walletProfileImage ? (
+                    <img src={notification.walletProfileImage} alt="" />
+                  ) : notification.target === 'wallets' && notification.walletAddress ? (
+                    <span className="tw-activity-avatar" style={{ background: gradientForWallet(notification.walletAddress) }}>
+                      <AnimalSilhouetteAvatar address={notification.walletAddress} />
+                    </span>
+                  ) : notification.coin?.image ? (
+                    <img src={notification.coin.image} alt="" />
+                  ) : (
+                    <span className="tw-activity-avatar" aria-hidden="true" />
+                  )}
                   <span className="tw-activity-copy">
                     <strong>{notification.walletLabel || notification.coin?.symbol || 'Tracked activity'}</strong>
                     <span>{notification.message}</span>
@@ -659,7 +667,7 @@ function TrackedView({
             )}
           </div>
         ) : (
-          <div className="tw-feed-scroller">
+          <div className="tw-feed-scroller tw-card-scroller">
             <div className="tw-feed tw-card-feed">
               {visibleTrades.length > 0 ? (
                 visibleTrades.map((trade) => (

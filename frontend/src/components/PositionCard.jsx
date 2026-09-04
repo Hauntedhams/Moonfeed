@@ -297,42 +297,44 @@ function PositionCard({ walletAddress, mint, profileHint = {}, embedded = false,
         <div className="pdv-inline-note">Showing fast trader stats while detailed entry and exit data catches up.</div>
       )}
 
-      <div className="pdv-header">
-        <button
-          className="pdv-token-btn"
-          type="button"
-          onClick={() => onCoinClick?.({ mintAddress: mint, address: mint, symbol: tokenSymbol, name: tokenName, image: tokenImage })}
-          disabled={!onCoinClick || !mint}
-          title={`Open ${tokenSymbol}`}
-        >
-          {tokenImage ? (
-            <img className="pdv-token-img" src={tokenImage} alt={tokenSymbol} />
-          ) : (
-            <div className="pdv-token-img pdv-token-img--ph">{tokenSymbol?.[0] || '?'}</div>
-          )}
-          <div className="pdv-token-info">
-            <div className="pdv-token-symbol">{tokenSymbol}</div>
-            <div className="pdv-token-mcap">{formatMcap(position?.currentMarketCap)} <span className="pdv-token-mcap-label">Market cap</span></div>
-          </div>
-          {onCoinClick && mint && <span className="pdv-token-chevron">›</span>}
-        </button>
-      </div>
+      <div className="pdv-hero-banner" style={tokenBanner ? { '--pdv-banner-image': `url("${tokenBanner}")` } : undefined}>
+        <div className="pdv-header">
+          <button
+            className="pdv-token-btn"
+            type="button"
+            onClick={() => onCoinClick?.({ mintAddress: mint, address: mint, symbol: tokenSymbol, name: tokenName, image: tokenImage })}
+            disabled={!onCoinClick || !mint}
+            title={`Open ${tokenSymbol}`}
+          >
+            {tokenImage ? (
+              <img className="pdv-token-img" src={tokenImage} alt={tokenSymbol} />
+            ) : (
+              <div className="pdv-token-img pdv-token-img--ph">{tokenSymbol?.[0] || '?'}</div>
+            )}
+            <div className="pdv-token-info">
+              <div className="pdv-token-symbol">{tokenSymbol}</div>
+              <div className="pdv-token-mcap">{formatMcap(position?.currentMarketCap)} <span className="pdv-token-mcap-label">Market cap</span></div>
+            </div>
+            {onCoinClick && mint && <span className="pdv-token-chevron">›</span>}
+          </button>
+        </div>
 
-      <div className="pdv-position-banner" style={tokenBanner ? { '--pdv-banner-image': `url("${tokenBanner}")` } : undefined}>
-        <div className="pdv-invested">
-          <span className="pdv-topline-label">Invested</span>
-          <span className="pdv-topline-value">{position ? formatCurrency(position.invested) : '—'}</span>
-        </div>
-        <div className="pdv-pnl-block">
-          <div className={`pdv-pnl-amount ${position ? (isProfit ? 'pos' : 'neg') : 'loading'}`}>
-            {position ? `${isProfit ? '+' : ''}${formatCurrency(pnlTotal)}${isOpenPosition ? '*' : ''}` : 'Loading PnL'}
+        <div className="pdv-position-banner">
+          <div className="pdv-invested">
+            <span className="pdv-topline-label">Invested</span>
+            <span className="pdv-topline-value">{position ? formatCurrency(position.invested) : '—'}</span>
           </div>
-        </div>
-        <div className="pdv-pnl-pct-block">
-          <div className={`pdv-pnl-pct ${position ? (isProfit ? 'pos' : 'neg') : 'loading'}`}>
-            {position ? formatPercent(roi) : 'Fetching wallet position'}
+          <div className="pdv-pnl-block">
+            <div className={`pdv-pnl-amount ${position ? (isProfit ? 'pos' : 'neg') : 'loading'}`}>
+              {position ? `${isProfit ? '+' : ''}${formatCurrency(pnlTotal)}${isOpenPosition ? '*' : ''}` : 'Loading PnL'}
+            </div>
           </div>
-          {isOpenPosition && <div className="pdv-pnl-note">*Theoretical — position not sold yet</div>}
+          <div className="pdv-pnl-pct-block">
+            <div className={`pdv-pnl-pct ${position ? (isProfit ? 'pos' : 'neg') : 'loading'}`}>
+              {position ? formatPercent(roi) : 'Fetching wallet position'}
+            </div>
+            {isOpenPosition && <div className="pdv-pnl-note">*Theoretical — position not sold yet</div>}
+          </div>
         </div>
       </div>
 
@@ -392,14 +394,16 @@ function PositionCard({ walletAddress, mint, profileHint = {}, embedded = false,
             Trade {tokenSymbol}
           </button>
         )}
-        <button className="pdv-share-btn" type="button" onClick={handleShare}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7" />
-            <polyline points="16 6 12 2 8 6" />
-            <line x1="12" y1="2" x2="12" y2="15" />
-          </svg>
-          {shareCopied ? 'Copied!' : 'Share'}
-        </button>
+        <div className="pdv-share-group">
+          <button className="pdv-share-btn" type="button" onClick={handleShare}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7" />
+              <polyline points="16 6 12 2 8 6" />
+              <line x1="12" y1="2" x2="12" y2="15" />
+            </svg>
+            {shareCopied ? 'Copied!' : 'Share'}
+          </button>
+        </div>
       </div>
     </div>
   );

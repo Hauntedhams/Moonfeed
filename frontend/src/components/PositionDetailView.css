@@ -88,6 +88,27 @@ html:not(.dark-mode) .pdv-root {
   padding: 0;
 }
 
+.pdv-moonfeed-brand {
+  position: absolute;
+  top: 18px;
+  right: 16px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: inherit;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 20px;
+}
+
+.pdv-moonfeed-brand img {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
 .pdv-drag-handle {
   position: absolute;
   top: 0;
@@ -534,6 +555,14 @@ html:not(.dark-mode) .pdv-bottom-stat-label {
   gap: 10px;
 }
 
+.pdv-share-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
 .pdv-mimic-btn {
   flex: 1;
   padding: 13px;
@@ -547,7 +576,7 @@ html:not(.dark-mode) .pdv-bottom-stat-label {
 }
 
 .pdv-share-btn {
-  flex: 1;
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -577,6 +606,31 @@ html:not(.dark-mode) .pdv-share-btn:active {
   background: rgba(0, 0, 0, 0.1);
 }
 
+.pdv-share-attribution {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 16px;
+  color: rgba(255, 255, 255, 0.52);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.pdv-share-attribution img {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  border-radius: 50%;
+  object-fit: cover;
+  opacity: 0.9;
+}
+
+html:not(.dark-mode) .pdv-share-attribution {
+  color: rgba(0, 0, 0, 0.48);
+}
+
 /* ── PositionCard layout ──
    PositionCard renders the card content (wallet header → actions) as a column. */
 .pdv-card {
@@ -586,37 +640,22 @@ html:not(.dark-mode) .pdv-share-btn:active {
 }
 
 /* ── Embedded feed-card variant (Tracked > Wallets timeline) ──
-   The same card rendered inline in a scrollable feed instead of the sheet. */
+   Same proportions as the sheet, sized to fill one snap page of the feed. */
 .pdv-card--embedded {
-  padding: 14px 14px 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-html:not(.dark-mode) .pdv-card--embedded {
-  border-bottom-color: rgba(0, 0, 0, 0.08);
+  height: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
 }
 
 .pdv-card--embedded .pdv-wallet-header {
   margin: 0;
-  padding: 2px 4px 12px;
+  padding: 0 0 4px;
 }
 
-.pdv-card--embedded .pdv-wallet-avatar {
-  width: 44px;
-  height: 44px;
-}
-
-.pdv-card--embedded .pdv-wallet-name {
-  font-size: 17px;
-}
-
-.pdv-card--embedded .pdv-pnl-amount {
-  font-size: 26px;
-}
-
-/* Feed cards get a fixed-height chart (the existing scoped
-   `.pdv-chart-wrap .native-chart { height: 100% }` override fills it). */
+/* The chart takes whatever space the rest of the card leaves, exactly like the
+   sheet (the scoped `.pdv-chart-wrap .native-chart { height: 100% }` fills it). */
 .pdv-card--embedded .pdv-chart-wrap {
-  flex: none;
-  height: 300px;
+  flex: 1 1 200px;
+  min-height: 180px;
 }

@@ -19,7 +19,7 @@ export const useCopyTrade = () => {
   return ctx;
 };
 
-const POLL_INTERVAL_MS = 20000; // 20 seconds
+const POLL_INTERVAL_MS = 60000; // 60s — each backend cache miss costs 100 Helius credits per wallet
 const LS_KEY = 'moonfeed_copytrade_seen';
 
 function loadLastSeen() {
@@ -59,6 +59,35 @@ export const CopyTradeProvider = ({ children, onCopyTrade }) => {
   // Keep lastSeen in a ref so poll() always reads the freshest value
   const lastSeenRef = useRef(loadLastSeen());
   const pollRef = useRef(null);
+  const walletProfilesRef = useRef({});
+
+  useEffect(() => {
+    const activeWallets = trackedWallets.filter(w => w.copyTradeEnabled !== false && w.address);
+    if (!activeWallets.length) {
+      walletProfilesRef.current = {};
+      return;
+    }
+
+    let cancelled = false;
+    Promise.all(activeWallets.map(async (wallet) => {
+      try {
+        const res = await fetch(getFullApiUrl(`/api/users/${wallet.address}`));
+        if (!res.ok) return null;
+        const profile = await res.json();
+        return [wallet.address, {
+          displayName: profile?.displayName || '',
+          profilePicture: profile?.profilePicture || null,
+        }];
+      } catch {
+        return null;
+      }
+    })).then((entries) => {
+      if (cancelled) return;
+      walletProfilesRef.current = Object.fromEntries(entries.filter(Boolean));
+    });
+
+    return () => { cancelled = true; };
+  }, [trackedWallets]);
 
   // Store onCopyTrade in a ref to keep copyTrade() callback stable
   const onCopyTradeRef = useRef(onCopyTrade);
@@ -110,12 +139,15 @@ export const CopyTradeProvider = ({ children, onCopyTrade }) => {
           .filter(s => !seen.has(s.signature))
           .map(s => {
             const wallet = trackedWallets.find(w => w.address === s.walletAddress);
+            const profile = walletProfilesRef.current[s.walletAddress] || {};
             return {
               id: s.signature,
               ...s,
               walletLabel:
+                profile.displayName ||
                 wallet?.label ||
                 `${s.walletAddress.slice(0, 4)}...${s.walletAddress.slice(-4)}`,
+              walletProfileImage: profile.profilePicture || null,
             };
           });
 
@@ -132,13 +164,14 @@ export const CopyTradeProvider = ({ children, onCopyTrade }) => {
             target: 'wallets',
             walletAddress: n.walletAddress,
             walletLabel: n.walletLabel,
+            walletProfileImage: n.walletProfileImage || null,
             mint: n.tokenMint,
             coin: {
               symbol: n.tokenSymbol || 'TOKEN',
               name: n.tokenSymbol || 'Token',
               image: n.tokenImage || null,
             },
-            message: `${n.walletLabel} ${n.type === 'sell' ? 'sold' : 'bought'} ${n.tokenSymbol || 'a token'}`,
+            message: `${n.type === 'sell' ? 'Sold' : 'Bought'} ${n.tokenSymbol || 'a token'}`,
             timestamp: (n.timestamp || Date.now() / 1000) * ((n.timestamp || 0) < 1e12 ? 1000 : 1),
           });
         });

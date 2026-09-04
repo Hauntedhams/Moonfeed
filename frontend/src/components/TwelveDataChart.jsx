@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useDarkMode } from '../contexts/DarkModeContext';
 import './TwelveDataChart.css';
 
-const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDesktopMode = false, desktopSlotRef = null, showPriceScale, showActionButtons = true, isExpanded = false, showLimitOrderLine = false, limitOrderPrice = null, limitOrderCurrentPrice = null, tradeLineMode = 'orders', marketBuyAmount = 0, limitOrderSide = 'buy', onCrosshairMove, onFirstPriceUpdate, onTradeClick, onExpand, onFullscreenChange, onOpenBuyDrawer }) => {
+const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDesktopMode = false, desktopSlotRef = null, showPriceScale, showActionButtons = true, showMobileControls = true, isExpanded = false, showLimitOrderLine = false, limitOrderPrice = null, limitOrderCurrentPrice = null, tradeLineMode = 'orders', marketBuyAmount = 0, limitOrderSide = 'buy', onCrosshairMove, onFirstPriceUpdate, onTradeClick, onExpand, onFullscreenChange, onOpenBuyDrawer }) => {
   const { isDarkMode: contextDarkMode } = useDarkMode();
   const [srcReady, setSrcReady] = useState(false);
   const [fullscreenMode, setFullscreenMode] = useState(null); // null | 'portrait' | 'landscape'
@@ -762,7 +762,7 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
               so only the single in-view card renders this fixed button (no stacking). */}
           {/* Bottom-right expand toggle: stays fixed in place whether the card is
               collapsed or expanded. Chevron points up to expand, down to collapse. */}
-          {onExpand && isActiveCard && !isDesktopMode && !fullscreenMode && (
+          {showMobileControls && onExpand && isActiveCard && !isDesktopMode && !fullscreenMode && (
             <div className="chart-mobile-right-actions">
               {onOpenBuyDrawer && (
                 <button

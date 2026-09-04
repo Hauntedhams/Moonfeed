@@ -1,0 +1,74 @@
+.notify-prompt-banner {
+  position: relative;
+  width: 100%;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 199, 0, 0.35);
+  background: linear-gradient(180deg, rgba(255, 199, 0, 0.12), rgba(20, 20, 25, 0.6));
+  margin: 10px 0;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+.notify-prompt-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+}
+
+.notify-prompt-icon {
+  font-size: 18px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.notify-prompt-text {
+  flex: 1;
+  color: #f1e4b8;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.notify-prompt-btn {
+  flex-shrink: 0;
+  background: #ffc700;
+  color: #1a1400;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.notify-prompt-btn:hover {
+  transform: translateY(-1px);
+}
+
+.notify-prompt-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+  transform: none;
+}
+
+.notify-prompt-banner.compact {
+  margin: 6px 0;
+}
+
+.notify-prompt-banner.compact .notify-prompt-content {
+  padding: 8px 10px;
+  gap: 8px;
+}
+
+.notify-prompt-banner.compact .notify-prompt-text {
+  font-size: 11px;
+}
+
+.notify-prompt-banner.compact .notify-prompt-btn {
+  padding: 6px 10px;
+  font-size: 11px;
+}
