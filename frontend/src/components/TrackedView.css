@@ -5,6 +5,20 @@
   overflow: hidden;
 }
 
+/* Opaque band behind the Wallets/Coins pill — the pills are translucent, so
+   without this the previous card's tail scrolls right through them. */
+.tracked-view::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: calc(58px + env(safe-area-inset-top, 0px));
+  background: linear-gradient(180deg, #0b1220 0%, #0d1324 82%, rgba(13, 19, 36, 0) 100%);
+  z-index: 999; /* under the top tabs (1000) and filter control (1001) */
+  pointer-events: none;
+}
+
 .tracked-wallets-scroller {
   height: 100dvh;
   width: 100%;
@@ -99,7 +113,7 @@
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   box-sizing: border-box;
-  padding: 58px 0 calc(96px + env(safe-area-inset-bottom, 0px));
+  padding: calc(58px + env(safe-area-inset-top, 0px)) 0 calc(96px + env(safe-area-inset-bottom, 0px));
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
 }
@@ -125,12 +139,12 @@
 /* Wallets tab: one full-height position card per snap page. */
 .tw-card-scroller {
   scroll-snap-type: y mandatory;
-  scroll-padding-top: 58px;
+  scroll-padding-top: calc(58px + env(safe-area-inset-top, 0px));
   overscroll-behavior-y: contain;
 }
 
 .tw-card-scroller .tw-card-slot {
-  height: calc(100dvh - 58px - 96px - env(safe-area-inset-bottom, 0px));
+  height: calc(100dvh - 58px - env(safe-area-inset-top, 0px) - 96px - env(safe-area-inset-bottom, 0px));
   scroll-snap-align: start;
   scroll-snap-stop: always;
 }
