@@ -1,0 +1,48 @@
+/* Home-feed horizontal swipe: drags the card sideways to switch feeds. */
+.feed-swipe-container {
+  position: relative;
+  width: 100%;
+  height: 100dvh;
+  touch-action: pan-y;
+  will-change: transform;
+}
+
+.feed-swipe-drag,
+.feed-swipe-jump {
+  transition: none;
+}
+
+.feed-swipe-settle {
+  transition: transform 0.2s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+/* While the card is animating out/in, nothing underneath should take taps. */
+.feed-swipe-settle,
+.feed-swipe-jump {
+  pointer-events: none;
+}
+
+/* Feed name flashed over the card after a switch. */
+.feed-name-toast {
+  position: fixed;
+  top: 96px;
+  left: 50%;
+  margin-left: -140px;
+  width: 280px;
+  z-index: 3000;
+  pointer-events: none;
+  text-align: center;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.92);
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.55);
+  animation: feedNameToast 1.5s ease forwards;
+}
+
+@keyframes feedNameToast {
+  0% { opacity: 0; transform: translateY(8px) scale(0.96); }
+  14% { opacity: 1; transform: translateY(0) scale(1); }
+  66% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-6px) scale(1); }
+}

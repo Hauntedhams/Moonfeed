@@ -18,6 +18,7 @@ import {
   addNotification,
   getUnreadCount,
   markAllRead as storageMarkAllRead,
+  markNotificationsRead as storageMarkNotificationsRead,
   syncPrefsToBackend,
   loadPrefsFromBackend,
 } from '../utils/alertStorage';
@@ -34,6 +35,7 @@ const NOOP_ALERTS = {
   clearCoinAlerts: () => {},
   getCoinAlerts: () => null,
   markAllRead: () => {},
+  markNotificationsRead: () => {},
   refreshFromStorage: () => {},
 };
 
@@ -88,6 +90,12 @@ export function AlertsProvider({ children }) {
     const list = storageMarkAllRead();
     setNotifications(list);
     setUnreadCount(0);
+  }, []);
+
+  const markNotificationsRead = useCallback((predicate) => {
+    const list = storageMarkNotificationsRead(predicate);
+    setNotifications(list);
+    setUnreadCount(list.filter((notification) => !notification.read).length);
   }, []);
 
   const getCoinAlerts = useCallback((mint) => getPrefs(mint), []);
@@ -201,6 +209,7 @@ export function AlertsProvider({ children }) {
     clearCoinAlerts,
     getCoinAlerts,
     markAllRead,
+    markNotificationsRead,
     refreshFromStorage,
   };
 

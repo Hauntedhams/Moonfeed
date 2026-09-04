@@ -104,6 +104,7 @@ export default function useHoldingsCrashNotifications() {
           await notifyHoldingCrash({ mint: holding.mint, symbol, dropPct, windowLabel, valueUsd });
           addNotification({
             id: `crash-${holding.mint}-${now}`,
+            target: 'coins',
             mint: holding.mint,
             coin: { symbol, name: pair.baseToken?.name || symbol, image: pair.info?.imageUrl || null },
             level: 'crash',

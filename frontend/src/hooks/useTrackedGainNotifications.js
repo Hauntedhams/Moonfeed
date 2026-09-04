@@ -90,6 +90,7 @@ export default function useTrackedGainNotifications(favorites = []) {
           });
           addNotification({
             id: `gain-${coin.mint}-${Date.now()}`,
+            target: 'coins',
             mint: coin.mint,
             coin: { symbol, name: symbol, image: live.image || null },
             level: 'gain',
@@ -118,6 +119,7 @@ export default function useTrackedGainNotifications(favorites = []) {
           });
           addNotification({
             id: `drop-${coin.mint}-${Date.now()}`,
+            target: 'coins',
             mint: coin.mint,
             coin: { symbol, name: symbol, image: live.image || null },
             level: 'crash',

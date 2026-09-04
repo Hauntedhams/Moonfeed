@@ -45,18 +45,6 @@ const ANON_ANIMALS = [
   { name: 'Manta', body: 'M2.8 12.5 C6.6 7.8 9.3 6.1 12 6.1 C14.7 6.1 17.4 7.8 21.2 12.5 C17.7 13.2 15.4 14.6 13.3 17.4 L12 20 L10.7 17.4 C8.6 14.6 6.3 13.2 2.8 12.5z' },
 ];
 
-const NAME_WORDS = {
-  a: ['Agile', 'Amber', 'Astral'], b: ['Bold', 'Bright', 'Brisk'], c: ['Cosmic', 'Clever', 'Crimson'],
-  d: ['Daring', 'Dusky', 'Drift'], e: ['Electric', 'Emerald', 'Echo'], f: ['Feral', 'Frost', 'Fleet'],
-  g: ['Golden', 'Ghost', 'Glowing'], h: ['Hidden', 'Hollow', 'Hyper'], i: ['Ivory', 'Ion', 'Iron'],
-  j: ['Jade', 'Jolly', 'Jet'], k: ['Keen', 'Kinetic', 'Kindled'], l: ['Lucky', 'Lunar', 'Lucid'],
-  m: ['Mystic', 'Magnetic', 'Molten'], n: ['Neon', 'Noble', 'Nomad'], o: ['Obsidian', 'Oracle', 'Orbit'],
-  p: ['Prime', 'Phantom', 'Polar'], q: ['Quick', 'Quiet', 'Quantum'], r: ['Radiant', 'Rogue', 'Rapid'],
-  s: ['Solar', 'Sharp', 'Silver'], t: ['Turbo', 'Twilight', 'True'], u: ['Ultra', 'Umber', 'Unbound'],
-  v: ['Vivid', 'Velvet', 'Vector'], w: ['Wild', 'White', 'Wired'], x: ['Xeno', 'Xray', 'Xtra'],
-  y: ['Young', 'Yellow', 'Yonder'], z: ['Zealous', 'Zenith', 'Zesty'],
-};
-
 const NAME_CREATURES = {
   a: ['Albatross', 'Antelope', 'Axolotl'], b: ['Badger', 'Bobcat', 'Bison'], c: ['Cougar', 'Cobra', 'Crane'],
   d: ['Dolphin', 'Dragonfly', 'Deer'], e: ['Eagle', 'Egret', 'Elk'], f: ['Falcon', 'Fox', 'Finch'],
@@ -92,14 +80,9 @@ const wordForLetter = (dict, letter, hash) => {
 };
 
 const buildWalletName = (addr = '') => {
-  const suffix = (addr.match(/[a-z0-9]+$/i)?.[0] || addr).slice(-6);
-  const letters = suffix.match(/[a-z]/gi) || [];
-  const digits = suffix.match(/\d/g) || [];
-  const fallbackLetters = (addr.match(/[a-z]/gi) || ['a', 'n']).slice(-2);
-  const [adjInitial, nounInitial] = (letters.length >= 2 ? letters.slice(-2) : fallbackLetters).map((c) => c.toLowerCase());
+  const lastLetter = (addr.match(/[a-z]/gi) || ['a']).slice(-1)[0].toLowerCase();
   const hash = hashAddress(addr);
-  const numberTag = digits.length ? ` ${digits.slice(-2).join('')}` : '';
-  return `${wordForLetter(NAME_WORDS, adjInitial, hash)} ${wordForLetter(NAME_CREATURES, nounInitial, Math.floor(hash / 7))}${numberTag}`;
+  return wordForLetter(NAME_CREATURES, lastLetter, hash);
 };
 
 const AnimalSilhouetteAvatar = ({ address }) => {

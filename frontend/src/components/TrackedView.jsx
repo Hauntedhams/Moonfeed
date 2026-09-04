@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import TopTabs from './TopTabs';
 import NativeChart from './NativeChart';
+import PositionCard from './PositionCard';
 import { useTrackedWallets } from '../contexts/TrackedWalletsContext';
 import { useTrackedTrades } from '../contexts/TrackedTradesContext';
 import { useWallet } from '../contexts/WalletContext';
+import { useAlerts } from '../contexts/AlertsContext';
 import WalletConnectOnboarding from './WalletConnectOnboarding';
 import { AnimalSilhouetteAvatar, buildWalletName, gradientForWallet, shortWalletAddress } from '../utils/walletIdentity';
 import { getFullApiUrl, fetchJsonWithTimeout } from '../config/api';
@@ -73,74 +75,30 @@ const parseTrade = (t) => {
   };
 };
 
-/** One chronological trade-event row: which tracked wallet moved, what they
- * bought/sold, the USD (and SOL) they put in, and how the coin has moved since. */
-function TradeEventRow({ trade, walletLabel, currentPrice, onOpenProfile, onOpenPosition }) {
-  const { walletAddress, mint, type, symbol, image, solAmount, usdAmount, priceUsd, time } = trade;
-  const sincePct = currentPrice > 0 && priceUsd > 0
-    ? ((currentPrice - priceUsd) / priceUsd) * 100
-    : null;
-  const sinceUp = sincePct !== null ? sincePct >= 0 : null;
+/** Defers mounting a heavy trade card (position fetch + OHLCV chart) until it
+ * scrolls near the viewport — the feed holds up to 60 cards, so they can't all
+ * fetch/render at once. Once mounted it stays mounted. */
+function LazyTradeCard({ children }) {
+  const ref = useRef(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    if (visible) return undefined;
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === 'undefined') { setVisible(true); return undefined; }
+    const obs = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        setVisible(true);
+        obs.disconnect();
+      }
+    }, { rootMargin: '900px 0px' });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [visible]);
 
   return (
-    <div
-      className="tw-tweet"
-      role="button"
-      tabIndex={0}
-      onClick={() => onOpenPosition?.(walletAddress, mint, { displayName: walletLabel, tokenSymbol: symbol, tokenImage: image })}
-    >
-      <div
-        className="tw-tweet-avatar"
-        style={{ background: gradientForWallet(walletAddress) }}
-        onClick={(e) => { e.stopPropagation(); onOpenProfile?.(walletAddress, { displayName: walletLabel }); }}
-        title="View wallet profile"
-      >
-        <AnimalSilhouetteAvatar address={walletAddress} />
-      </div>
-      <div className="tw-tweet-body">
-        <div className="tw-tweet-header">
-          <span
-            className="tw-tweet-name"
-            onClick={(e) => { e.stopPropagation(); onOpenProfile?.(walletAddress, { displayName: walletLabel }); }}
-          >
-            {walletLabel || buildWalletName(walletAddress)}
-          </span>
-          <span className="tw-tweet-handle">{shortWalletAddress(walletAddress)}</span>
-          {time > 0 && (
-            <>
-              <span className="tw-tweet-dot">·</span>
-              <span className="tw-tweet-time">{timeAgo(time)}</span>
-            </>
-          )}
-        </div>
-        <p className="tw-tweet-text">
-          {type === 'sell' ? 'Sold' : 'Bought'} <strong>${symbol}</strong>
-          {usdAmount > 0
-            ? <> for <strong>{formatUsdCompact(usdAmount)}</strong>{solAmount > 0 ? ` (${solAmount.toFixed(3)} SOL)` : ''}</>
-            : (solAmount > 0 ? ` for ${solAmount.toFixed(3)} SOL` : '')}
-          {sincePct !== null && (
-            <span className={sinceUp ? 'tw-up' : 'tw-down'}>
-              {' '}· {sinceUp ? 'up' : 'down'} {Math.abs(sincePct).toFixed(1)}% since
-            </span>
-          )}
-        </p>
-        <div className="tw-tweet-trade-card">
-          <span className="tw-tweet-coin-img">
-            {image ? <img src={image} alt="" loading="lazy" /> : <span className="tw-tweet-coin-egg">🥚</span>}
-          </span>
-          <span className="tw-tweet-trade-meta">
-            <span className="tw-tweet-trade-symbol">${symbol}</span>
-            <span className={`tw-tweet-trade-side ${type === 'sell' ? 'sell' : 'buy'}`}>
-              {type === 'sell' ? 'Sell' : 'Buy'}{time > 0 ? ` · ${timeAgo(time)} ago` : ''}
-            </span>
-          </span>
-          {sincePct !== null && (
-            <span className={`tw-tweet-pnl-chip ${sinceUp ? 'pos' : 'neg'}`}>
-              {sinceUp ? '+' : ''}{sincePct.toFixed(1)}% since
-            </span>
-          )}
-        </div>
-      </div>
+    <div ref={ref} className="tw-card-slot">
+      {visible ? children : <div className="tw-card-placeholder" />}
     </div>
   );
 }
@@ -347,16 +305,31 @@ function TrackedView({
   const [activeFeed, setActiveFeed] = useState('wallets');
   const [coinSort, setCoinSort] = useState('newest');
   const [walletSort, setWalletSort] = useState('newest');
+  const [showSortMenu, setShowSortMenu] = useState(false);
+  const [activityPanel, setActivityPanel] = useState(null);
   const { trackedWallets, untrackWallet } = useTrackedWallets();
   const { tradesByMint, tradesLoaded } = useTrackedTrades();
   const { connected: walletConnected } = useWallet();
+  const { notifications, markNotificationsRead } = useAlerts();
 
   // All tracked wallets' trades, newest first — the "recent moves" timeline.
+  // Deduped to one card per wallet+mint: the card itself summarizes the whole
+  // position (invested, PnL, tx count), so repeat same-coin trades would render
+  // identical cards. The latest trade's time/image seeds the card.
   const tradeFeed = useMemo(() => {
     const all = [];
     for (const list of tradesByMint.values()) all.push(...list);
     all.sort((a, b) => b.time - a.time);
-    return all.slice(0, 60);
+    const seen = new Set();
+    const deduped = [];
+    for (const t of all) {
+      const key = `${t.walletAddress}:${t.mint}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      deduped.push(t);
+      if (deduped.length >= 40) break;
+    }
+    return deduped;
   }, [tradesByMint]);
 
   const labelByWallet = useMemo(() => {
@@ -450,6 +423,15 @@ function TrackedView({
     { id: 'gainers', label: 'Top gainers' },
   ];
 
+  const sortOptions = activeFeed === 'wallets' ? WALLET_SORTS : COIN_SORTS;
+  const activeSort = activeFeed === 'wallets' ? walletSort : coinSort;
+
+  const selectSort = (sort) => {
+    if (activeFeed === 'wallets') setWalletSort(sort);
+    else setCoinSort(sort);
+    setShowSortMenu(false);
+  };
+
   // Wallets tab ordering/filtering — "since" uses the live Dexscreener price.
   const visibleTrades = useMemo(() => {
     const sinceOf = (t) => {
@@ -474,6 +456,8 @@ function TrackedView({
   }, [tradeFeed, walletSort, livePrices]);
 
   // Horizontal swipe between the Wallets / Coins feeds, page following the finger.
+  // The sort bar is a fixed overlay (its own horizontal scroll), so swipes
+  // starting on it must not slide the pages.
   const FEED_ORDER = ['wallets', 'coins'];
   const SLIDE_MS = 190;
   const pagesRef = useRef(null);
@@ -510,12 +494,43 @@ function TrackedView({
 
   const selectFeed = (target) => {
     if (target === activeFeed) return;
+    setShowSortMenu(false);
+    setActivityPanel(null);
     animateToFeed(target, FEED_ORDER.indexOf(target) > FEED_ORDER.indexOf(activeFeed) ? 1 : -1);
+  };
+
+  const notificationsFor = (target, unreadOnly = false) => (notifications || []).filter((notification) => {
+    const notificationTarget = notification.target || 'coins';
+    return notificationTarget === target && (!unreadOnly || !notification.read);
+  });
+
+  const unreadTabCounts = {
+    wallets: notificationsFor('wallets', true).length,
+    coins: notificationsFor('coins', true).length,
+  };
+
+  const openActivityPanel = (target) => {
+    const unread = notificationsFor(target, true).slice(0, 20);
+    setShowSortMenu(false);
+    setActivityPanel({ target, notifications: unread });
+    if (unread.length) {
+      const unreadIds = new Set(unread.map((notification) => notification.id));
+      markNotificationsRead((notification) => unreadIds.has(notification.id));
+    }
+  };
+
+  const handleActivityClick = (notification) => {
+    setActivityPanel(null);
+    if (notification.target === 'wallets' && notification.walletAddress) {
+      onWalletClick?.(notification.walletAddress, { displayName: notification.walletLabel });
+    } else if ((notification.target || 'coins') === 'coins' && notification.coin) {
+      onCoinSelect?.({ ...notification.coin, mintAddress: notification.mint || notification.coin.mintAddress });
+    }
   };
 
   const handlePageTouchStart = (e) => {
     if (slidePhase === 'settle' || slidePhase === 'jump') return;
-    if (e.target.closest?.('.native-chart, .tw-wallet-strip, .tw-sort-bar')) { swipeRef.current = null; return; }
+    if (e.target.closest?.('.native-chart, .tw-filter-control')) { swipeRef.current = null; return; }
     const t = e.touches?.[0];
     swipeRef.current = t ? { x: t.clientX, y: t.clientY, axis: null } : null;
   };
@@ -558,8 +573,64 @@ function TrackedView({
       <TopTabs
         activeFilter={activeFeed}
         onFilterChange={({ type }) => selectFeed(type)}
+        onActiveTabClick={openActivityPanel}
         customTabs={TRACKED_TABS}
+        tabBadges={unreadTabCounts}
       />
+
+      {activityPanel && (
+        <section className="tw-activity-panel" aria-label={`New ${activityPanel.target} notifications`}>
+          <div className="tw-activity-panel-header">
+            <span>New activity</span>
+            <button type="button" aria-label="Close notifications" onClick={() => setActivityPanel(null)}>×</button>
+          </div>
+          {activityPanel.notifications.length ? (
+            <div className="tw-activity-list">
+              {activityPanel.notifications.map((notification) => (
+                <button key={notification.id} type="button" className="tw-activity-item" onClick={() => handleActivityClick(notification)}>
+                  <span className="tw-activity-dot" aria-hidden="true" />
+                  {notification.coin?.image && <img src={notification.coin.image} alt="" />}
+                  <span className="tw-activity-copy">
+                    <strong>{notification.walletLabel || notification.coin?.symbol || 'Tracked activity'}</strong>
+                    <span>{notification.message}</span>
+                  </span>
+                  <time>{timeAgo(notification.timestamp)}</time>
+                </button>
+              ))}
+            </div>
+          ) : <p className="tw-activity-empty">No new notifications.</p>}
+        </section>
+      )}
+
+      <div className="tw-filter-control">
+        <button
+          type="button"
+          className={`tw-filter-button${showSortMenu ? ' active' : ''}`}
+          aria-label={`Filter ${activeFeed}`}
+          aria-expanded={showSortMenu}
+          onClick={() => setShowSortMenu((open) => !open)}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 7h16M7 12h10M10 17h4" />
+          </svg>
+        </button>
+        {showSortMenu && (
+          <div className="tw-filter-menu" role="menu" aria-label={`${activeFeed} filters`}>
+            {sortOptions.map((sort) => (
+              <button
+                key={sort.id}
+                type="button"
+                role="menuitemradio"
+                aria-checked={activeSort === sort.id}
+                className={activeSort === sort.id ? 'active' : ''}
+                onClick={() => selectSort(sort.id)}
+              >
+                {sort.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div
         className="tw-pages"
@@ -589,56 +660,27 @@ function TrackedView({
           </div>
         ) : (
           <div className="tw-feed-scroller">
-            {/* Tracked wallets strip — tap to open a profile, × to untrack */}
-            <div className="tw-wallet-strip">
-              {trackedWallets.map((w) => (
-                <span key={w.address} className="tw-wallet-chip">
-                  <span
-                    className="tw-wallet-chip-main"
-                    onClick={() => onWalletClick?.(w.address, { displayName: w.label })}
-                    role="button"
-                  >
-                    <span className="tw-wallet-chip-avatar" style={{ background: gradientForWallet(w.address) }}>
-                      <AnimalSilhouetteAvatar address={w.address} />
-                    </span>
-                    <span className="tw-wallet-chip-name">{w.label || buildWalletName(w.address)}</span>
-                  </span>
-                  <button
-                    type="button"
-                    className="tw-wallet-chip-x"
-                    title="Stop tracking"
-                    onClick={() => untrackWallet(w.address)}
-                  >
-                    ×
-                  </button>
-                </span>
-              ))}
-            </div>
-
-            <div className="tw-sort-bar">
-              {WALLET_SORTS.map((s) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  className={`tw-sort-chip ${walletSort === s.id ? 'active' : ''}`}
-                  onClick={() => setWalletSort(s.id)}
-                >
-                  {s.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="tw-feed">
+            <div className="tw-feed tw-card-feed">
               {visibleTrades.length > 0 ? (
                 visibleTrades.map((trade) => (
-                  <TradeEventRow
-                    key={`${trade.signature || trade.time}-${trade.walletAddress}-${trade.mint}`}
-                    trade={trade}
-                    walletLabel={labelByWallet.get(trade.walletAddress)}
-                    currentPrice={livePrices.get(trade.mint) || 0}
-                    onOpenProfile={onWalletClick}
-                    onOpenPosition={onOpenPosition}
-                  />
+                  <LazyTradeCard key={`${trade.signature || trade.time}-${trade.walletAddress}-${trade.mint}`}>
+                    <PositionCard
+                      embedded
+                      walletAddress={trade.walletAddress}
+                      mint={trade.mint}
+                      profileHint={{
+                        displayName: labelByWallet.get(trade.walletAddress),
+                        tokenSymbol: trade.symbol,
+                        tokenImage: trade.image,
+                        timestamp: trade.time,
+                        type: trade.type,
+                        solAmount: trade.solAmount,
+                      }}
+                      onOpenProfile={(hint) => onWalletClick?.(trade.walletAddress, hint)}
+                      onMimicTrade={onTradeClick}
+                      onCoinClick={onCoinSelect}
+                    />
+                  </LazyTradeCard>
                 ))
               ) : (
                 <div className="tracked-empty tracked-empty--inline">
@@ -660,18 +702,6 @@ function TrackedView({
         </div>
       ) : (
         <div className="tw-feed-scroller">
-          <div className="tw-sort-bar">
-            {COIN_SORTS.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                className={`tw-sort-chip ${coinSort === s.id ? 'active' : ''}`}
-                onClick={() => setCoinSort(s.id)}
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
           <div className="tw-feed">
             {sortedFavorites.map((coin) => (
               <CoinPostRow

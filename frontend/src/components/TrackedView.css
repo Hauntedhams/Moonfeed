@@ -99,7 +99,7 @@
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   box-sizing: border-box;
-  padding: 88px 0 calc(96px + env(safe-area-inset-bottom, 0px));
+  padding: 58px 0 calc(96px + env(safe-area-inset-bottom, 0px));
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
 }
@@ -122,41 +122,141 @@
   margin: 0 auto;
 }
 
-/* ── Coins tab sort bar ── */
-.tw-sort-bar {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-  padding: 4px 14px 12px;
-  max-width: 640px;
+/* Wallets tab: scrollable feed of position trade cards. The placeholder keeps
+   roughly the final card height so the scrollbar doesn't jump while cards
+   lazily mount as they approach the viewport. */
+.tw-card-feed .tw-card-placeholder {
+  min-height: 640px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+html:not(.dark-mode) .tw-card-feed .tw-card-placeholder {
+  border-bottom-color: rgba(0, 0, 0, 0.06);
+}
+
+/* Top-right filter control for the active Wallets or Coins tab. */
+.tw-filter-control {
+  position: fixed;
+  top: calc(14px + env(safe-area-inset-top, 0px));
+  right: 10px;
+  z-index: 1001; /* above the top-tabs container (1000) */
+}
+
+.tw-activity-panel {
+  position: fixed;
+  top: calc(50px + env(safe-area-inset-top, 0px));
+  right: 10px;
+  left: 10px;
+  z-index: 1002;
+  max-width: 520px;
+  max-height: min(56dvh, 430px);
   margin: 0 auto;
-  box-sizing: border-box;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(11, 18, 32, 0.97);
+  box-shadow: 0 18px 38px rgba(0, 0, 0, 0.35);
+  animation: twActivityDrop 180ms cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
-.tw-sort-bar::-webkit-scrollbar {
-  display: none;
+.tw-activity-panel-header { display: flex; align-items: center; justify-content: space-between; min-height: 42px; padding: 0 12px 0 14px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); color: #fff; font-size: 13px; font-weight: 750; }
+.tw-activity-panel-header button { width: 28px; height: 28px; padding: 0; border: 0; background: transparent; color: rgba(255, 255, 255, 0.7); font-size: 21px; line-height: 1; cursor: pointer; }
+.tw-activity-list { max-height: calc(min(56dvh, 430px) - 42px); overflow-y: auto; }
+.tw-activity-item { display: grid; grid-template-columns: 7px 34px minmax(0, 1fr) auto; align-items: center; width: 100%; min-height: 58px; gap: 9px; padding: 9px 12px 9px 10px; border: 0; border-bottom: 1px solid rgba(255, 255, 255, 0.06); background: rgba(96, 165, 250, 0.1); color: #fff; text-align: left; cursor: pointer; }
+.tw-activity-item:active { background: rgba(96, 165, 250, 0.19); }
+.tw-activity-item img { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; background: rgba(255, 255, 255, 0.08); }
+.tw-activity-dot { width: 7px; height: 7px; border-radius: 50%; background: #3b82f6; }
+.tw-activity-copy { display: grid; gap: 2px; min-width: 0; }
+.tw-activity-copy strong, .tw-activity-copy span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tw-activity-copy strong { font-size: 12px; }
+.tw-activity-copy span, .tw-activity-item time { color: rgba(255, 255, 255, 0.66); font-size: 11px; }
+.tw-activity-item time { align-self: start; padding-top: 2px; }
+.tw-activity-empty { margin: 0; padding: 24px 14px; color: rgba(255, 255, 255, 0.65); font-size: 13px; text-align: center; }
+html:not(.dark-mode) .tw-activity-panel { border-color: rgba(0, 0, 0, 0.12); background: rgba(255, 255, 255, 0.98); }
+html:not(.dark-mode) .tw-activity-panel-header { border-bottom-color: rgba(0, 0, 0, 0.08); color: #172033; }
+html:not(.dark-mode) .tw-activity-panel-header button, html:not(.dark-mode) .tw-activity-copy span, html:not(.dark-mode) .tw-activity-item time, html:not(.dark-mode) .tw-activity-empty { color: rgba(23, 32, 51, 0.65); }
+html:not(.dark-mode) .tw-activity-item { border-bottom-color: rgba(0, 0, 0, 0.06); background: rgba(96, 165, 250, 0.1); color: #172033; }
+
+@keyframes twActivityDrop { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: translateY(0); } }
+
+.tw-filter-button {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(11, 18, 32, 0.82);
+  color: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.tw-sort-chip {
-  flex-shrink: 0;
-  padding: 5px 12px;
-  border-radius: 999px;
+.tw-filter-button svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 2;
+}
+
+.tw-filter-button.active,
+.tw-filter-button:active {
+  background: rgba(96, 165, 250, 0.22);
+  border-color: rgba(96, 165, 250, 0.65);
+  color: #bfdbfe;
+}
+
+.tw-filter-menu {
+  position: absolute;
+  top: 38px;
+  right: 0;
+  display: grid;
+  min-width: 124px;
+  padding: 4px;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  background: rgba(11, 18, 32, 0.94);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.28);
+}
+
+.tw-filter-menu button {
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
   color: rgba(255, 255, 255, 0.7);
   font-size: 12px;
   font-weight: 600;
+  text-align: left;
   white-space: nowrap;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
 
-.tw-sort-chip.active {
-  background: rgba(96, 165, 250, 0.18);
-  border-color: rgba(96, 165, 250, 0.5);
-  color: #93c5fd;
+.tw-filter-menu button.active {
+  background: rgba(96, 165, 250, 0.2);
+  color: #dbeafe;
+}
+
+html:not(.dark-mode) .tw-filter-button,
+html:not(.dark-mode) .tw-filter-menu {
+  background: rgba(248, 249, 250, 0.94);
+  border-color: rgba(0, 0, 0, 0.12);
+  color: rgba(0, 0, 0, 0.72);
+}
+
+html:not(.dark-mode) .tw-filter-menu button {
+  color: rgba(0, 0, 0, 0.7);
+}
+
+html:not(.dark-mode) .tw-filter-menu button.active {
+  color: #1d4ed8;
 }
 
 /* ── Tracked wallets strip (above the trade timeline) ── */

@@ -37,6 +37,19 @@ const formatUsdPrice = (p) => {
   return `$${n.toPrecision(3)}`;
 };
 
+const timeAgo = (ts) => {
+  if (!ts) return '';
+  const ms = ts < 1e12 ? ts * 1000 : ts;
+  const secs = Math.floor((Date.now() - ms) / 1000);
+  if (secs < 0) return 'just now';
+  if (secs < 60) return `${secs}s`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h`;
+  return `${Math.floor(hours / 24)}d`;
+};
+
 // Pick a chart timeframe wide enough that both the entry and exit candle are visible.
 const tfIndexForHold = (secs) => {
   if (!secs) return 2; // 15m default
@@ -48,11 +61,16 @@ const tfIndexForHold = (secs) => {
 };
 
 /**
- * Full-screen FOMO-style position detail: candlestick chart with entry/exit
- * markers plus PnL, avg entry/exit market cap, invested $ and tx count — for
- * a single wallet+token position.
+ * The FOMO-style position card: wallet header, invested/PnL topline, token
+ * header, candlestick chart with entry/exit ⊕ pins, a stats grid, and
+ * Trade/Share actions — for a single wallet+token position.
+ *
+ * Renders in two modes:
+ *  - default: fills the PositionDetailView bottom sheet (chart flex-grows).
+ *  - `embedded`: an inline feed card (fixed-height chart, no follow button,
+ *    chart stays in scroll-passthrough mode so the feed scrolls natively).
  */
-function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onOpenProfile, onMimicTrade, onCoinClick }) {
+function PositionCard({ walletAddress, mint, profileHint = {}, embedded = false, onOpenProfile, onMimicTrade, onCoinClick }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -91,13 +109,6 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
       chartPriceRafRef.current = false;
       setChartPrice(pendingChartPointRef.current?.price ?? null);
     });
-  }, []);
-
-  // Hide the feed's fixed-position buy-drawer swipe hint while this full-screen
-  // overlay is open — it would otherwise bleed through on top of it.
-  useEffect(() => {
-    document.body.classList.add('pdv-open');
-    return () => document.body.classList.remove('pdv-open');
   }, []);
 
   useEffect(() => {
@@ -231,77 +242,11 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
   const chartCoin = mint ? { mintAddress: mint } : null;
   const displayName = profileHint?.displayName || profileHint?.name || buildWalletName(walletAddress);
 
-  // Swipe right anywhere on the page (except the interactive chart, which owns
-  // its own horizontal drag-to-pan) opens this wallet's full profile.
-  const swipeStartRef = useRef(null);
-  const handleSwipeTouchStart = (e) => {
-    if (e.target.closest?.('.native-chart')) { swipeStartRef.current = null; return; }
-    const t = e.touches?.[0];
-    swipeStartRef.current = t ? { x: t.clientX, y: t.clientY } : null;
-  };
-  const handleSwipeTouchEnd = (e) => {
-    const start = swipeStartRef.current;
-    swipeStartRef.current = null;
-    const t = e.changedTouches?.[0];
-    if (!start || !t) return;
-    const dx = t.clientX - start.x;
-    const dy = t.clientY - start.y;
-    if (dx > 70 && dx > Math.abs(dy) * 1.4) {
-      onOpenProfile?.({ displayName, ...profileHint });
-    }
-  };
-
-  // Dragging the pull handle down past a threshold dismisses the sheet, like a
-  // native bottom sheet — the sheet follows the finger the whole way, then
-  // either slides fully out (back) or springs back into place.
-  const [dragY, setDragY] = useState(0);
-  const [dragging, setDragging] = useState(false);
-  const [closing, setClosing] = useState(false);
-  const pdvRootRef = useRef(null);
-  const dragStartYRef = useRef(null);
-  const dragLastRef = useRef(null);
-  const handleHandleTouchStart = (e) => {
-    const t = e.touches?.[0];
-    dragStartYRef.current = t ? t.clientY : null;
-    dragLastRef.current = t ? { y: t.clientY, t: e.timeStamp, vy: 0 } : null;
-    setDragging(true);
-  };
-  const handleHandleTouchMove = (e) => {
-    if (dragStartYRef.current == null) return;
-    const t = e.touches?.[0];
-    if (!t) return;
-    const dy = t.clientY - dragStartYRef.current;
-    if (dragLastRef.current) {
-      const dt = Math.max(1, e.timeStamp - dragLastRef.current.t);
-      dragLastRef.current.vy = (t.clientY - dragLastRef.current.y) / dt;
-      dragLastRef.current.y = t.clientY;
-      dragLastRef.current.t = e.timeStamp;
-    }
-    if (dy > 0) setDragY(dy);
-  };
-  const handleHandleTouchEnd = () => {
-    const vy = dragLastRef.current?.vy || 0;
-    const flick = vy > 0.5 && dragY > 30;
-    dragStartYRef.current = null;
-    dragLastRef.current = null;
-    setDragging(false);
-    if (dragY > 90 || flick) {
-      setClosing(true);
-      const height = pdvRootRef.current?.clientHeight || window.innerHeight;
-      setDragY(height);
-      setTimeout(() => onBack?.(), 200);
-    } else {
-      setDragY(0);
-    }
-  };
-  const closeWithSlide = () => {
-    if (closing) return;
-    setClosing(true);
-    setDragging(false);
-    const height = pdvRootRef.current?.clientHeight || window.innerHeight;
-    setDragY(height);
-    setTimeout(() => onBack?.(), 200);
-  };
+  // When the wallet first bought in (drives the "Bought in Xm ago" sub-line).
+  // The fast hint carries the feed trade's own time until position data lands.
+  const boughtInMs = position?.timing?.firstBuy
+    || (profileHint?.timestamp ? (profileHint.timestamp < 1e12 ? profileHint.timestamp * 1000 : profileHint.timestamp) : null);
+  const boughtInText = boughtInMs ? timeAgo(boughtInMs) : null;
 
   const handleShare = async () => {
     const text = `${displayName} ${isProfit ? 'made' : 'lost'} ${formatCurrency(Math.abs(pnlTotal))} (${formatPercent(roi)}) on $${tokenSymbol} — entry ${formatMcap(position?.avgEntryMarketCap)} MC → exit ${formatMcap(position?.avgExitMarketCap)} MC. Spotted on Moonfeed 🌙 https://moonfeed.app`;
@@ -319,27 +264,7 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
   };
 
   return (
-    <div className="pdv-backdrop" onClick={closeWithSlide}>
-    <div
-      className="pdv-root"
-      ref={pdvRootRef}
-      style={dragY ? { transform: `translateY(${dragY}px)`, transition: (dragging && !closing) ? 'none' : undefined } : undefined}
-      onClick={(event) => event.stopPropagation()}
-      onTouchStart={handleSwipeTouchStart}
-      onTouchEnd={handleSwipeTouchEnd}
-    >
-      <div
-        className="pdv-drag-handle"
-        onTouchStart={handleHandleTouchStart}
-        onTouchMove={handleHandleTouchMove}
-        onTouchEnd={handleHandleTouchEnd}
-      />
-      <button className="pdv-back" onClick={closeWithSlide} title="Back" aria-label="Back">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="15 18 9 12 15 6" />
-        </svg>
-      </button>
-
+    <div className={embedded ? 'pdv-card pdv-card--embedded' : 'pdv-card'}>
       <div className="pdv-wallet-header">
         <button
           className="pdv-wallet-profile"
@@ -352,11 +277,16 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
           </span>
           <span className="pdv-wallet-copy">
             <span className="pdv-wallet-name">{displayName}</span>
-            <span className="pdv-wallet-sub">{shortWalletAddress(walletAddress)}</span>
+            <span className="pdv-wallet-sub">
+              {shortWalletAddress(walletAddress)}
+              {boughtInText && ` · Bought in ${boughtInText} ago`}
+            </span>
           </span>
           <span className="pdv-wallet-chevron">›</span>
         </button>
-        <button className="pdv-follow-btn" type="button" onClick={handleFollow} disabled={tracked}>{tracked ? 'Following' : 'Follow'}</button>
+        {!embedded && (
+          <button className="pdv-follow-btn" type="button" onClick={handleFollow} disabled={tracked}>{tracked ? 'Following' : 'Follow'}</button>
+        )}
       </div>
 
       {error && !position && (
@@ -367,29 +297,28 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
         <div className="pdv-inline-note">Showing fast trader stats while detailed entry and exit data catches up.</div>
       )}
 
-      <div className="pdv-hero-banner" style={tokenBanner ? { '--pdv-banner-image': `url("${tokenBanner}")` } : undefined}>
-        <div className="pdv-header">
-          <button
-            className="pdv-token-btn"
-            type="button"
-            onClick={() => onCoinClick?.({ mintAddress: mint, address: mint, symbol: tokenSymbol, name: tokenName, image: tokenImage })}
-            disabled={!onCoinClick || !mint}
-            title={`Open ${tokenSymbol}`}
-          >
-            {tokenImage ? (
-              <img className="pdv-token-img" src={tokenImage} alt={tokenSymbol} />
-            ) : (
-              <div className="pdv-token-img pdv-token-img--ph">{tokenSymbol?.[0] || '?'}</div>
-            )}
-            <div className="pdv-token-info">
-              <div className="pdv-token-symbol">{tokenSymbol}</div>
-              <div className="pdv-token-mcap">{formatMcap(position?.currentMarketCap)} <span className="pdv-token-mcap-label">Market cap</span></div>
-            </div>
-            {onCoinClick && mint && <span className="pdv-token-chevron">›</span>}
-          </button>
-        </div>
+      <div className="pdv-header">
+        <button
+          className="pdv-token-btn"
+          type="button"
+          onClick={() => onCoinClick?.({ mintAddress: mint, address: mint, symbol: tokenSymbol, name: tokenName, image: tokenImage })}
+          disabled={!onCoinClick || !mint}
+          title={`Open ${tokenSymbol}`}
+        >
+          {tokenImage ? (
+            <img className="pdv-token-img" src={tokenImage} alt={tokenSymbol} />
+          ) : (
+            <div className="pdv-token-img pdv-token-img--ph">{tokenSymbol?.[0] || '?'}</div>
+          )}
+          <div className="pdv-token-info">
+            <div className="pdv-token-symbol">{tokenSymbol}</div>
+            <div className="pdv-token-mcap">{formatMcap(position?.currentMarketCap)} <span className="pdv-token-mcap-label">Market cap</span></div>
+          </div>
+          {onCoinClick && mint && <span className="pdv-token-chevron">›</span>}
+        </button>
+      </div>
 
-        <div className="pdv-position-banner">
+      <div className="pdv-position-banner" style={tokenBanner ? { '--pdv-banner-image': `url("${tokenBanner}")` } : undefined}>
         <div className="pdv-invested">
           <span className="pdv-topline-label">Invested</span>
           <span className="pdv-topline-value">{position ? formatCurrency(position.invested) : '—'}</span>
@@ -405,14 +334,13 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
           </div>
           {isOpenPosition && <div className="pdv-pnl-note">*Theoretical — position not sold yet</div>}
         </div>
-        </div>
       </div>
 
       <div className="pdv-chart-wrap">
         <NativeChart
           coin={chartCoin}
           isActive={true}
-          isExpanded={true}
+          isExpanded={!embedded}
           markers={markers}
           tradePins={tradePins}
           onTradePinClick={handleTradePinClick}
@@ -474,8 +402,7 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
         </button>
       </div>
     </div>
-    </div>
   );
 }
 
-export default PositionDetailView;
+export default PositionCard;

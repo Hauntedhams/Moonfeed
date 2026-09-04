@@ -12,6 +12,30 @@ import OrderDetailView from './OrderDetailView';
 import CautionTapeBanner from './CautionTapeBanner';
 import './OrdersView.css';
 
+// Per-wallet holdings cache (stale-while-revalidate) so the Holdings tab
+// renders instantly on revisit instead of showing a spinner every time.
+const HOLDINGS_CACHE_PREFIX = 'ordersView.holdings.';
+const readHoldingsCache = (walletAddress) => {
+  try {
+    const raw = sessionStorage.getItem(HOLDINGS_CACHE_PREFIX + walletAddress);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+};
+const writeHoldingsCache = (walletAddress, list) => {
+  try {
+    sessionStorage.setItem(HOLDINGS_CACHE_PREFIX + walletAddress, JSON.stringify(list));
+  } catch { /* storage full / private mode — non-fatal */ }
+};
+
+// Per-session record of automatic V2 sign-in attempts. A connected wallet is
+// asked to sign at most once per session — the manual banner is only a
+// fallback if the user rejects that signature.
+const autoV2AuthAttempted = new Set();
+
 const OrdersView = ({ onCoinClick, onTradeClick }) => {
   // Use Jupiter Wallet Kit adapter for universal wallet connection
   const jupiterWallet = useJupiterWallet();
@@ -49,6 +73,12 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
   useEffect(() => {
     getSolUsdPrice().then(setSolUsdPrice);
   }, []);
+
+  // Preload the @solana/web3.js chunk in the background once a wallet is
+  // connected so the first holdings fetch doesn't stall on the download.
+  useEffect(() => {
+    if (connected) import('@solana/web3.js').catch(() => {});
+  }, [connected]);
 
   // Horizontal swipe moves between the Holdings / Orders / History tabs, with the
   // page following the finger and sliding out/in on commit.
@@ -302,10 +332,17 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
   // Fetch token holdings (on-chain balances) for connected wallet
   const fetchHoldings = async () => {
     if (!publicKey) return;
-    setLoadingHoldings(true);
+    const walletAddress = publicKey.toString();
+
+    // Stale-while-revalidate: show cached holdings instantly, refresh silently
+    const cachedHoldings = readHoldingsCache(walletAddress);
+    const hasCached = Array.isArray(cachedHoldings) && cachedHoldings.length > 0;
+    if (hasCached) {
+      setHoldings(cachedHoldings);
+    }
+    setLoadingHoldings(!hasCached);
     setHoldingsError(null);
     try {
-      const walletAddress = publicKey.toString();
       const storedTxs = getTransactions(walletAddress);
       const mintsMap = new Map(); // mint -> { mint, amount, decimals, symbol, name, image }
 
@@ -390,6 +427,7 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
 
       if (mintsToFetch.length === 0) {
         setHoldings([]);
+        writeHoldingsCache(walletAddress, []);
         setLoadingHoldings(false);
         return;
       }
@@ -463,6 +501,7 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
       // Sort by current USD value descending
       list.sort((a, b) => (b.currentValueUsd || 0) - (a.currentValueUsd || 0));
       setHoldings(list);
+      writeHoldingsCache(walletAddress, list);
     } catch (err) {
       console.error('Error fetching holdings:', err);
       // Fallback: If stored transactions exist, present them rather than displaying error
@@ -498,7 +537,10 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
           }
         }
       } catch (_) {}
-      setHoldingsError('Could not load on-chain holdings');
+      // If cached holdings are already on screen, keep them instead of an error
+      if (!hasCached) {
+        setHoldingsError('Could not load on-chain holdings');
+      }
     } finally {
       setLoadingHoldings(false);
     }
@@ -602,23 +644,38 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
         return list;
       })();
 
-      // V2 orders — non-interactive: returns null (instead of a wallet popup)
-      // when there's no cached JWT yet.
+      // V2 orders: try silently with the cached JWT first. If there isn't one
+      // and the wallet is connected, sign in automatically (once per session)
+      // instead of making the user tap a "Sign in" banner.
       const v2Promise = (async () => {
         if (isDemoMode) return [];
-        const list = await fetchTriggerOrdersV2({
+        const v2Args = {
           walletAddress,
           signMessage: jupiterWallet.signMessage || null,
           signTransaction: jupiterWallet.signTransaction || null,
           state: statusFilter === 'active' ? 'active' : 'past',
-          interactive: false,
-        });
-        if (list === null) {
-          setNeedsV2Auth(true);
-          return [];
+        };
+        let list = await fetchTriggerOrdersV2({ ...v2Args, interactive: false });
+        if (list !== null) {
+          setNeedsV2Auth(false);
+          return list;
         }
-        setNeedsV2Auth(false);
-        return list;
+        // No cached JWT — auto sign-in once per session/wallet.
+        const canSign = jupiterWallet.signMessage || jupiterWallet.signTransaction;
+        if (canSign && !autoV2AuthAttempted.has(walletAddress)) {
+          autoV2AuthAttempted.add(walletAddress);
+          try {
+            list = await fetchTriggerOrdersV2({ ...v2Args, interactive: true });
+            if (list !== null) {
+              setNeedsV2Auth(false);
+              return list;
+            }
+          } catch (autoAuthErr) {
+            console.warn('[Orders] Auto V2 sign-in failed:', autoAuthErr?.message);
+          }
+        }
+        setNeedsV2Auth(true);
+        return [];
       })();
 
       const [v1Result, v2Result, softResult] = await Promise.allSettled([
@@ -672,8 +729,11 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
     if (!publicKey || isDemoMode) return;
     setUnlockingV2(true);
     try {
+      const walletAddress = publicKey.toString();
+      // Reset the per-session guard so the auto sign-in can run again too.
+      autoV2AuthAttempted.delete(walletAddress);
       await ensureTriggerAuth({
-        walletAddress: publicKey.toString(),
+        walletAddress,
         signMessage: jupiterWallet.signMessage || null,
         signTransaction: jupiterWallet.signTransaction || null,
       });

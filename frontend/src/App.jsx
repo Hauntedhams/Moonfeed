@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useRef, lazy, Suspense } from 'react'
+import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react'
 import './App.css'
 import { useWallet } from '@jup-ag/wallet-adapter'
 import { getFullApiUrl } from './config/api'
 import ModernTokenScroller from './components/ModernTokenScroller'
 import TrackedView from './components/TrackedView'
 import BottomNavBar from './components/BottomNavBar'
-import FeedSelector, { FEED_ORDER } from './components/FeedSelector'
+import FeedSelector, { FEED_ORDER, BASE_FEEDS } from './components/FeedSelector'
+import FeedSwipeContainer from './components/FeedSwipeContainer'
 import ErrorBoundary from './components/ErrorBoundary'
 import { WalletProvider } from './contexts/WalletContext'
 import { TrackedWalletsProvider } from './contexts/TrackedWalletsContext'
@@ -47,6 +48,7 @@ const favoritesCacheKey = (address) => `moonfeed_tracked_coins_${address}`;
 
 // Remember which feed the user was browsing so reopening the app returns them there.
 const LAST_FEED_KEY = 'moonfeed_last_feed';
+const FEED_LABELS = Object.fromEntries(BASE_FEEDS.map((feed) => [feed.id, feed.label]));
 const KNOWN_FEEDS = ['dextrending', 'whalefeed', 'graduating', 'new', 'trending'];
 const getInitialFilters = () => {
   try {
@@ -110,6 +112,9 @@ function App() {
   const latestFavoritesSaveRef = useRef({ walletAddress: null, favorites: [] }); // always up to date for the flush handler
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [filters, setFilters] = useState(getInitialFilters); // Restores the last feed the user was on
+  const filtersRef = useRef(filters);
+  filtersRef.current = filters;
+  const [feedToast, setFeedToast] = useState(null); // Feed name flashed after a swipe switch
   const [advancedFilters, setAdvancedFilters] = useState(null); // For advanced filtering
   const [isAdvancedFilterActive, setIsAdvancedFilterActive] = useState(false);
   const [advancedFilterModalOpen, setAdvancedFilterModalOpen] = useState(false); // Control modal open/close
@@ -394,24 +399,34 @@ function App() {
 
   // CoinCard's name popup can swipe horizontally through the same home feeds
   // controlled by FeedSelector.
+  const switchFeed = useCallback((directionOrFeed) => {
+    const explicitFeed = KNOWN_FEEDS.includes(directionOrFeed) ? directionOrFeed : null;
+    const direction = Number(directionOrFeed) || 1;
+    const current = KNOWN_FEEDS.includes(filtersRef.current?.type) ? filtersRef.current.type : FEED_ORDER[0];
+    const nextIndex = (FEED_ORDER.indexOf(current) + direction + FEED_ORDER.length) % FEED_ORDER.length;
+    const nextFeed = explicitFeed || FEED_ORDER[nextIndex];
+    setActiveTab('home');
+    setAdvancedFilters(null);
+    setIsAdvancedFilterActive(false);
+    setFilters({ type: nextFeed });
+    setFeedToast({ feed: nextFeed, key: Date.now() });
+  }, []);
+
+  // Flash the new feed's name over the card for a moment after a switch.
+  useEffect(() => {
+    if (!feedToast) return undefined;
+    const timer = setTimeout(() => setFeedToast(null), 1500);
+    return () => clearTimeout(timer);
+  }, [feedToast]);
+
   useEffect(() => {
     const onSwipeFeed = (event) => {
       const explicitFeed = KNOWN_FEEDS.includes(event.detail?.feed) ? event.detail.feed : null;
-      const direction = Number(event.detail?.direction) || 1;
-      setActiveTab('home');
-      setAdvancedFilters(null);
-      setIsAdvancedFilterActive(false);
-      setFilters((prev) => {
-        if (explicitFeed) return { type: explicitFeed };
-        const current = KNOWN_FEEDS.includes(prev?.type) ? prev.type : FEED_ORDER[0];
-        const currentIndex = FEED_ORDER.indexOf(current);
-        const nextIndex = (currentIndex + direction + FEED_ORDER.length) % FEED_ORDER.length;
-        return { type: FEED_ORDER[nextIndex] };
-      });
+      switchFeed(explicitFeed || Number(event.detail?.direction) || 1);
     };
     window.addEventListener('moonfeed:swipe-feed', onSwipeFeed);
     return () => window.removeEventListener('moonfeed:swipe-feed', onSwipeFeed);
-  }, []);
+  }, [switchFeed]);
 
   // Handle top tab filter changes
   const handleTopTabFilterChange = (newFilters) => {
@@ -677,6 +692,12 @@ function App() {
             onAdvancedFilterClick={() => setAdvancedFilterModalOpen(true)}
           />
         )}
+
+        {feedToast && activeTab === 'home' && (
+          <div key={feedToast.key} className="feed-name-toast" aria-hidden="true">
+            {FEED_LABELS[feedToast.feed] || feedToast.feed}
+          </div>
+        )}
       
       <div style={{ paddingTop: '0' }}>
         {activeTab === 'tracked' ? (
@@ -691,7 +712,7 @@ function App() {
         />
       ) : activeTab === 'profile' ? (
         <Suspense fallback={<div style={{ padding: '20px', textAlign: 'center' }}>Loading...</div>}>
-          <ProfileView onTradeClick={handleTradeClick} />
+          <ProfileView onTradeClick={handleTradeClick} onOpenPosition={handleOpenPosition} />
         </Suspense>
       ) : activeTab === 'orders' ? (
         <Suspense fallback={<div style={{ padding: '20px', textAlign: 'center' }}>Loading...</div>}>
@@ -773,6 +794,7 @@ function App() {
         </div>
       ) : (
         <ErrorBoundary>
+          <FeedSwipeContainer enabled={activeTab === 'home'} onSwitch={switchFeed}>
           <ModernTokenScroller
             onFavoritesChange={handleFavoritesChange}
             favorites={favorites}
@@ -790,6 +812,7 @@ function App() {
             showFiltersButton={true} // Show filters button on home view
             onSearchClick={null} // Search is handled by the top-right FeedSelector pill
           />
+          </FeedSwipeContainer>
         </ErrorBoundary>
       )}
       </div>
@@ -826,11 +849,12 @@ function App() {
             onBack={() => setWalletProfile(null)}
             onOpenPosition={handleOpenPosition}
             onCoinClick={(coinData) => {
-              setWalletProfile(null);
-              setPreviousTab(activeTab);
-              setSelectedCoin(coinData);
-              setCurrentViewedCoin(coinData);
-              setActiveTab('coin-detail');
+              handleOpenPosition(walletProfile.address, coinData.mintAddress || coinData.address, {
+                displayName: walletProfile.displayName || walletProfile.name,
+                tokenSymbol: coinData.symbol,
+                tokenName: coinData.name,
+                tokenImage: coinData.image,
+              });
             }}
           />
         </Suspense>
@@ -850,6 +874,7 @@ function App() {
             }}
             onMimicTrade={(coin) => { setPositionDetail(null); handleTradeClick(coin); }}
             onCoinClick={(coinData) => {
+              setWalletProfile(null);
               setPositionDetail(null);
               setPreviousTab(activeTab);
               setSelectedCoin(coinData);

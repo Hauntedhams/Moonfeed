@@ -155,6 +155,25 @@
   color: rgba(255, 255, 255, 0.7);
 }
 
+.top-tab-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: grid;
+  place-items: center;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  box-sizing: border-box;
+  border: 2px solid #0b1220;
+  border-radius: 999px;
+  background: #3b82f6;
+  color: #fff;
+  font-size: 8px;
+  font-weight: 800;
+  line-height: 1;
+}
+
 /* Remove progress bar styles since we're using rotating design */
 .tab-progress-container,
 .tab-progress-bar {

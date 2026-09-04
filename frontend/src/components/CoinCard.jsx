@@ -74,9 +74,9 @@ function formatCompactNumber(num) {
 }
 
 const POPUP_FEED_ORDER = ['dextrending', 'whalefeed', 'graduating', 'new', 'trending'];
-// Feed picker geometry: expanded pill width and per-feed slot width (px)
-const FEED_PICKER_OPEN_W = 200;
-const FEED_PICKER_SLOT_W = 100;
+// Feed picker geometry: vertical rolodex — visible window height + per-feed row height (px)
+const FEED_PICKER_ROW_H = 34;
+const FEED_PICKER_OPEN_H = FEED_PICKER_ROW_H * 3;
 
 function normalizeFeedId(feedType) {
   const key = String(feedType || '').toLowerCase();
@@ -143,6 +143,7 @@ const CoinCard = memo(({
   const [showActionButtons, setShowActionButtons] = useState(false); // Hidden in collapsed/preview state; shown only when card is expanded
   const [hasToggledActions, setHasToggledActions] = useState(false); // Track if user has toggled (avoids mount animation)
   const expandSwipeRef = useRef(null); // touch tracking for the slide-up-to-expand arrow
+  const expandArrowRef = useRef(null); // measured/positioned to sit centered over the Profile nav button
   const [selectedWallet, setSelectedWallet] = useState(null);
   const [showDescriptionModal, setShowDescriptionModal] = useState(false);
   const [trackedPrice, setTrackedPrice] = useState(null);
@@ -152,6 +153,8 @@ const CoinCard = memo(({
   // while dragging), dragging }. The picked feed only applies on tap-outside.
   const [feedPicker, setFeedPicker] = useState(null);
   const feedPickerDragRef = useRef(null);
+  const feedPickerElRef = useRef(null); // pill DOM node, for the native wheel listener
+  const feedPickerWheelTimeoutRef = useRef(null); // snaps to nearest feed after wheel idles
   // Local state gives instant feedback on tap; once the persisted value (from
   // the account's tracked-coins list) arrives it takes over so the "Tracked
   // at" price survives reloads/remounts instead of resetting to nothing.
@@ -1631,6 +1634,26 @@ const CoinCard = memo(({
     }
   };
 
+  // Keep the slide-up-to-expand arrow centered exactly over the bottom-nav
+  // Profile button — its width isn't a fixed fraction of the nav (the Trade
+  // button carries extra margin), so measure the real button instead of
+  // relying on a CSS calc() guess.
+  useEffect(() => {
+    if (isDesktopMode || !isActiveCard || isExpanded) return undefined;
+    const align = () => {
+      const el = expandArrowRef.current;
+      const target = document.querySelector('.bottom-nav .nav-btn:last-child');
+      if (!el || !target) return;
+      const rect = target.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      el.style.left = `${centerX - el.offsetWidth / 2}px`;
+      el.style.right = 'auto';
+    };
+    align();
+    window.addEventListener('resize', align);
+    return () => window.removeEventListener('resize', align);
+  }, [isDesktopMode, isActiveCard, isExpanded]);
+
   // Expand toggle
   const handleExpandToggle = (e) => {
     e?.preventDefault();
@@ -1660,6 +1683,29 @@ const CoinCard = memo(({
     // Call parent's expand change handler which should lock scrolling
     // (use the same address fallback the parent compares against for its 'expanded' class)
     onExpandChange?.(next, coin.mintAddress || coin.tokenAddress);
+  };
+
+  // Trades/PnL buttons live on the standard (collapsed) card now, so tapping
+  // them from there needs to expand the card first, then open the panel —
+  // instead of requiring the user to expand manually beforehand.
+  const openPanelFromCard = (panel) => {
+    if (!isExpanded) {
+      setIsExpanded(true);
+      setShowActionButtons(false);
+      requestAnimationFrame(() => {
+        setShowActionButtons(true);
+        setNativeChartControlsVisible(true);
+      });
+      setHasToggledActions(true);
+      onExpandChange?.(true, coin.mintAddress || coin.tokenAddress);
+    }
+    if (panel === 'transactions') {
+      setShowInlineTopTraders(false);
+      setShowLiveTransactions((open) => (isExpanded ? !open : true));
+    } else {
+      setShowLiveTransactions(false);
+      setShowInlineTopTraders((open) => (isExpanded ? !open : true));
+    }
   };
 
   const showMetricBreakdown = (e, type, value, element) => {
@@ -2113,11 +2159,11 @@ const CoinCard = memo(({
     e.stopPropagation();
     try { e.currentTarget.setPointerCapture?.(e.pointerId); } catch (_) { /* inactive pointer */ }
     feedPickerDragRef.current = {
-      startX: e.clientX,
+      startY: e.clientY,
       startIndex: feedPicker.index,
-      lastX: e.clientX,
+      lastY: e.clientY,
       lastT: performance.now(),
-      vx: 0,
+      vy: 0,
     };
     setFeedPicker((p) => (p ? { ...p, dragging: true } : p));
   };
@@ -2127,11 +2173,11 @@ const CoinCard = memo(({
     if (!d) return;
     const now = performance.now();
     if (now > d.lastT) {
-      d.vx = (e.clientX - d.lastX) / (now - d.lastT);
-      d.lastX = e.clientX;
+      d.vy = (e.clientY - d.lastY) / (now - d.lastT);
+      d.lastY = e.clientY;
       d.lastT = now;
     }
-    const raw = d.startIndex - (e.clientX - d.startX) / FEED_PICKER_SLOT_W;
+    const raw = d.startIndex - (e.clientY - d.startY) / FEED_PICKER_ROW_H;
     // Rubber-band past the first/last feed
     const idx = raw < 0 ? raw * 0.3 : raw > feedPickerMax ? feedPickerMax + (raw - feedPickerMax) * 0.3 : raw;
     setFeedPicker({ index: idx, dragging: true });
@@ -2143,11 +2189,43 @@ const CoinCard = memo(({
     setFeedPicker((p) => {
       if (!p || !p.dragging) return p;
       // A quick flick advances one more feed even on a short drag
-      const bias = d && Math.abs(d.vx) > 0.35 ? (d.vx < 0 ? 0.5 : -0.5) : 0;
+      const bias = d && Math.abs(d.vy) > 0.35 ? (d.vy < 0 ? 0.5 : -0.5) : 0;
       const snapped = Math.max(0, Math.min(feedPickerMax, Math.round(p.index + bias)));
       return { index: snapped, dragging: false };
     });
   };
+
+  // Mouse-wheel/trackpad support for the vertical rolodex — React's onWheel is
+  // passive by default, so this attaches a native listener to preventDefault.
+  useEffect(() => {
+    if (!feedPicker) return undefined;
+    const el = feedPickerElRef.current;
+    if (!el) return undefined;
+    const onWheel = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const delta = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+      setFeedPicker((p) => {
+        if (!p) return p;
+        const raw = p.index + delta / FEED_PICKER_ROW_H;
+        const idx = raw < 0 ? raw * 0.3 : raw > feedPickerMax ? feedPickerMax + (raw - feedPickerMax) * 0.3 : raw;
+        return { index: idx, dragging: true };
+      });
+      clearTimeout(feedPickerWheelTimeoutRef.current);
+      feedPickerWheelTimeoutRef.current = setTimeout(() => {
+        setFeedPicker((p) => {
+          if (!p) return p;
+          const snapped = Math.max(0, Math.min(feedPickerMax, Math.round(p.index)));
+          return { index: snapped, dragging: false };
+        });
+      }, 140);
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => {
+      el.removeEventListener('wheel', onWheel);
+      clearTimeout(feedPickerWheelTimeoutRef.current);
+    };
+  }, [!!feedPicker, feedPickerMax]);
 
   return (
     <div
@@ -3744,7 +3822,7 @@ const CoinCard = memo(({
       <>
       <div
         ref={actionButtonsRef}
-        className={`tiktok-action-buttons ${showActionButtons ? '' : 'collapsed'}`}
+        className="tiktok-action-buttons"
         style={_mobilePortal ? {
           position: 'fixed',
           // Anchor to the bottom-right, just above the fixed Expand button, so the
@@ -3765,13 +3843,13 @@ const CoinCard = memo(({
           transition: isScrolling ? 'none' : 'opacity 0.15s ease',
         } : undefined}
       >
-        {/* Live transaction window */}
+        {/* Live transaction window — tapping from the standard (collapsed) card
+             expands it first, then opens the transactions panel. */}
         <button
           className={`tiktok-action-btn ${showLiveTransactions ? 'active' : ''}`}
           onClick={(e) => {
             e.stopPropagation();
-            setShowInlineTopTraders(false);
-            setShowLiveTransactions((open) => !open);
+            openPanelFromCard('transactions');
           }}
           title="Live transactions"
           aria-label="Open live transactions"
@@ -3787,13 +3865,12 @@ const CoinCard = memo(({
           <span className="tiktok-action-label">Trades</span>
         </button>
 
-        {/* Top PnL traders window */}
+        {/* Top PnL traders window — same expand-then-open behavior. */}
         <button
           className={`tiktok-action-btn ${showInlineTopTraders ? 'active' : ''}`}
           onClick={(e) => {
             e.stopPropagation();
-            setShowLiveTransactions(false);
-            setShowInlineTopTraders((open) => !open);
+            openPanelFromCard('topTraders');
           }}
           title="Top PnL traders"
           aria-label="Open top PnL traders"
@@ -3911,6 +3988,7 @@ const CoinCard = memo(({
       )}
       {_mobilePortal && !isExpanded && (
         <div
+          ref={expandArrowRef}
           className="coin-expand-swipe-arrow"
           style={{
             opacity: isScrolling ? 0 : 1,
@@ -4152,10 +4230,11 @@ const CoinCard = memo(({
                 <div className="coin-info-popup-name">{coin.name || coin.symbol || 'Meme coin'}</div>
               </div>
               <div
+                ref={feedPickerElRef}
                 className={`coin-info-popup-feed${feedPicker ? ' open' : ''}${feedPicker?.dragging ? ' dragging' : ''}`}
                 role="button"
                 tabIndex={0}
-                aria-label={feedPicker ? 'Swipe left or right to browse feeds' : `Feed: ${formatFeedLabel(popupFeedId)} — tap to switch`}
+                aria-label={feedPicker ? 'Scroll up or down to browse feeds' : `Feed: ${formatFeedLabel(popupFeedId)} — tap to switch`}
                 onClick={!feedPicker ? (e) => { e.stopPropagation(); openFeedPicker(); } : undefined}
                 onPointerDown={feedPicker ? handleFeedPickerPointerDown : undefined}
                 onPointerMove={feedPicker ? handleFeedPickerPointerMove : undefined}
@@ -4165,7 +4244,7 @@ const CoinCard = memo(({
                 {feedPicker ? (
                   <div
                     className="coin-info-popup-feed-track picker"
-                    style={{ transform: `translateX(${(FEED_PICKER_OPEN_W - FEED_PICKER_SLOT_W) / 2 - feedPicker.index * FEED_PICKER_SLOT_W}px)` }}
+                    style={{ transform: `translateY(${(FEED_PICKER_OPEN_H - FEED_PICKER_ROW_H) / 2 - feedPicker.index * FEED_PICKER_ROW_H}px)` }}
                   >
                     {POPUP_FEED_ORDER.map((feed, i) => (
                       <span
@@ -4189,7 +4268,7 @@ const CoinCard = memo(({
             {feedPicker && (
               <div className="coin-info-popup-feed-hint">
                 {feedPickerSnapped === popupFeedId
-                  ? 'Swipe the pill to browse feeds'
+                  ? 'Scroll up or down to browse feeds'
                   : `Tap anywhere else to switch to ${formatFeedLabel(feedPickerSnapped)}`}
               </div>
             )}

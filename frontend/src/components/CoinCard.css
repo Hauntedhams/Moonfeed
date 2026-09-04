@@ -24,9 +24,9 @@
   
   /* Disable most transitions on mobile for instant interactions
      BUT exempt TikTok action bar, expand-handle & info layer so they animate in BOTH directions */
-  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content):not(.coin-buy-drawer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track),
-  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content):not(.coin-buy-drawer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track)::before,
-  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content):not(.coin-buy-drawer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track)::after {
+  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content):not(.coin-buy-drawer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track):not(.feed-swipe-container),
+  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content):not(.coin-buy-drawer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track):not(.feed-swipe-container)::before,
+  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content):not(.coin-buy-drawer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track):not(.feed-swipe-container)::after {
     transition: none !important;
     transition-duration: 0s !important;
   }
@@ -36,7 +36,7 @@
   .info-layer-profile-image:hover,
   .header-metric:hover,
   .header-social-icon:hover,
-  *:not(.tiktok-action-btn):not(.expand-handle):not(.coin-info-layer):hover {
+  *:not(.tiktok-action-btn):not(.expand-handle):not(.coin-info-layer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track):not(.feed-swipe-container):hover {
     transform: none !important;
     opacity: 1 !important;
   }
@@ -5087,13 +5087,15 @@ html.dark-mode .description-modal-body,
   overflow: hidden;
   cursor: pointer;
   position: relative;
-  transition: width 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), height 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: width 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), height 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), border-radius 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-/* Tapped open: the pill grows into a swipeable picker with a center "window" */
+/* Tapped open: the pill grows into a vertical rolodex the finger scrolls through,
+   with a center "window" highlighting the currently-snapped feed. */
 .coin-info-popup-feed.open {
-  width: 200px;
-  height: 32px;
+  width: 132px;
+  height: 102px; /* 3 rows tall (FEED_PICKER_ROW_H * 3) */
+  border-radius: 16px;
   cursor: grab;
   touch-action: none;
   background: rgba(59, 130, 246, 0.26);
@@ -5103,11 +5105,11 @@ html.dark-mode .description-modal-body,
 .coin-info-popup-feed.open::after {
   content: '';
   position: absolute;
-  top: 2px;
-  bottom: 2px;
-  left: calc(50% - 47px);
-  width: 94px;
-  border-radius: 999px;
+  left: 4px;
+  right: 4px;
+  top: calc(50% - 17px);
+  height: 34px;
+  border-radius: 10px;
   border: 1px solid rgba(191, 219, 254, 0.55);
   pointer-events: none;
 }
@@ -5120,10 +5122,11 @@ html.dark-mode .description-modal-body,
 
 .coin-info-popup-feed-track {
   display: flex;
-  width: 300%;
-  height: 100%;
+  flex-direction: column;
+  width: 100%;
+  height: 300%;
   will-change: transform;
-  transform: translateX(-33.333%);
+  transform: translateY(-33.333%);
   transition: transform 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
@@ -5131,15 +5134,15 @@ html.dark-mode .description-modal-body,
   transition: none;
 }
 
-/* Open picker: fixed-width slots the finger drags through, snapping per feed */
+/* Open picker: fixed-height rows the finger drags through vertically, snapping per feed */
 .coin-info-popup-feed-track.picker {
-  width: auto;
+  height: auto;
   transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .coin-info-popup-feed-track.picker span {
-  width: 100px;
-  flex: 0 0 100px;
+  height: 34px;
+  flex: 0 0 34px;
 }
 
 .coin-info-popup-feed-slot.active {
@@ -5155,8 +5158,8 @@ html.dark-mode .description-modal-body,
 }
 
 .coin-info-popup-feed-track span {
-  width: 33.333%;
-  height: 100%;
+  width: 100%;
+  height: 33.333%;
   display: flex;
   align-items: center;
   justify-content: center;

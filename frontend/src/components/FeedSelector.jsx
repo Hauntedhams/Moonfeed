@@ -172,6 +172,7 @@ function FeedSelector({
 
   const feeds = hasCustomFilters ? [...BASE_FEEDS, CUSTOM_FEED] : BASE_FEEDS;
   const activeFeed = feeds.find((f) => f.id === activeFilter) || BASE_FEEDS[0];
+  const browsedFeed = feeds.find((f) => f.id === browseFeed) || activeFeed;
   const orderedFeeds = [activeFeed, ...feeds.filter((feed) => feed.id !== activeFeed.id)];
 
   const API_ROOT = API_CONFIG.BASE_URL;
@@ -327,13 +328,19 @@ function FeedSelector({
     }
   };
 
-  // Picking a feed on the left switches the app's feed but keeps the panel open so
-  // the user can keep browsing its coins.
+  // Picking a feed on the left only PREVIEWS it — the app's feed stays put until
+  // the user opens one of its coins.
   const handleFeedSelect = (feedId) => {
     setBrowseFeed(feedId);
-    if (feedId !== activeFilter) {
-      onFilterChange({ type: feedId });
+  };
+
+  // Opening a coin from a browsed feed is what commits the feed switch.
+  const handlePreviewCoinClick = (coin) => {
+    setOpen(false);
+    if (browseFeed && browseFeed !== activeFilter && browseFeed !== 'custom') {
+      onFilterChange?.({ type: browseFeed });
     }
+    onCoinSelect?.(coin);
   };
 
   return (
@@ -450,6 +457,22 @@ function FeedSelector({
             </div>
 
             <div className="feed-selector-coin-col">
+            {searchQuery.trim().length < 2 && FEED_INFO[browsedFeed.id] && (
+              <div className="feed-selector-feed-about">
+                <div className="feed-selector-feed-about-title">
+                  <span className="feed-selector-feed-icon">{renderIcon(browsedFeed.icon)}</span>
+                  <strong>{browsedFeed.label}</strong>
+                  {browsedFeed.id === activeFilter && <em>Your feed</em>}
+                </div>
+                <p>{FEED_INFO[browsedFeed.id].purpose}</p>
+                <p className="feed-selector-feed-about-why">{FEED_INFO[browsedFeed.id].reason}</p>
+                <div className="feed-selector-feed-about-hint">
+                  {browsedFeed.id === activeFilter
+                    ? 'Tap a coin to open it.'
+                    : `Tap a coin below to switch your feed to ${browsedFeed.label}.`}
+                </div>
+              </div>
+            )}
             {searchQuery.trim().length >= 2 ? (
             <div className="feed-selector-results">
               {searchResults.map((token, index) => (
@@ -496,7 +519,7 @@ function FeedSelector({
                     <button
                       key={coin.mintAddress || coin.address || coin.id || index}
                       className="feed-selector-coin-row"
-                      onClick={() => { setOpen(false); onCoinSelect?.(coin); }}
+                      onClick={() => handlePreviewCoinClick(coin)}
                     >
                       {art && <img src={art} alt="" className="feed-selector-coin-bg" loading="lazy" />}
                       <span className="feed-selector-coin-bg-overlay" />

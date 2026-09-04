@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './TopTabs.css';
 
-const TopTabs = ({ activeFilter, onFilterChange, showFilterButton = false, onFilterClick, isFilterActive = false, onActiveTabClick, hasCustomFilters = false, customTabs = null }) => {
+const TopTabs = ({ activeFilter, onFilterChange, showFilterButton = false, onFilterClick, isFilterActive = false, onActiveTabClick, hasCustomFilters = false, customTabs = null, tabBadges = {} }) => {
   const [touchStartX, setTouchStartX] = useState(0);
   const [touchEndX, setTouchEndX] = useState(0);
   const containerRef = useRef(null);
@@ -284,7 +284,8 @@ const TopTabs = ({ activeFilter, onFilterChange, showFilterButton = false, onFil
                 className={`top-tab ${isActive ? 'active' : ''}`}
                 onClick={(e) => {
                   e.stopPropagation();
-                  onFilterChange({ type: tab.id });
+                  if (isActive && onActiveTabClick) onActiveTabClick(tab.id);
+                  else onFilterChange({ type: tab.id });
                 }}
                 style={{
                   opacity: 1,
@@ -295,6 +296,7 @@ const TopTabs = ({ activeFilter, onFilterChange, showFilterButton = false, onFil
                 }}
               >
                 <span className="tab-label">{tab.label}</span>
+                {tabBadges[tab.id] > 0 && <span className="top-tab-badge">{tabBadges[tab.id] > 9 ? '9+' : tabBadges[tab.id]}</span>}
               </button>
             );
           })
@@ -364,6 +366,7 @@ const TopTabs = ({ activeFilter, onFilterChange, showFilterButton = false, onFil
                   ? (isActive ? 'rgba(255, 255, 255, 1)' : 'rgba(255, 255, 255, 0.8)')
                   : 'rgba(255, 255, 255, 0.5)'
               }}>{tab.label}</span>
+              {tabBadges[tab.id] > 0 && <span className="top-tab-badge">{tabBadges[tab.id] > 9 ? '9+' : tabBadges[tab.id]}</span>}
             </button>
           );
         })

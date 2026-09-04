@@ -167,6 +167,53 @@
   text-transform: uppercase;
 }
 
+/* Explainer for whichever feed is being browsed on the left. */
+.feed-selector-feed-about {
+  flex: 0 0 auto;
+  padding: 10px 12px 12px;
+  background: rgba(99, 102, 241, 0.09);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.feed-selector-feed-about-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #fff;
+  font-size: 0.86rem;
+}
+
+.feed-selector-feed-about-title em {
+  margin-left: auto;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(74, 222, 128, 0.16);
+  color: #4ade80;
+  font-size: 0.58rem;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.feed-selector-feed-about p {
+  margin: 7px 0 0;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.feed-selector-feed-about-why {
+  color: rgba(255, 255, 255, 0.5) !important;
+}
+
+.feed-selector-feed-about-hint {
+  margin-top: 9px;
+  color: #a5b4fc;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
 .feed-selector-coin-row {
   position: relative;
   display: flex;

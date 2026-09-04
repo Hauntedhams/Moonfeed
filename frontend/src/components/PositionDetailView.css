@@ -49,10 +49,10 @@ body.pdv-open .coin-expand-swipe-arrow {
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
   touch-action: pan-y;
-  padding: 64px 16px calc(28px + env(safe-area-inset-bottom, 0px));
+  padding: 56px 16px calc(20px + env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
   border-radius: 22px 22px 0 0;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-bottom: none;
@@ -142,6 +142,45 @@ html:not(.dark-mode) .pdv-loading, html:not(.dark-mode) .pdv-error {
   display: flex;
   align-items: center;
   gap: 12px;
+  padding: 4px 16px 0;
+  margin: 0 -16px;
+}
+
+/* Wraps the token header + invested/PnL stats so the coin banner image runs
+   behind both, fading in/out at the edges instead of a hard cutoff. */
+.pdv-hero-banner {
+  position: relative;
+  isolation: isolate;
+  margin: 0 -16px;
+  padding-top: 20px;
+  overflow: hidden;
+}
+
+.pdv-hero-banner::before {
+  content: '';
+  position: absolute;
+  z-index: -2;
+  inset: 0;
+  background-image: var(--pdv-banner-image);
+  background-position: center;
+  background-size: cover;
+  opacity: 0.5;
+  mask-image: linear-gradient(to bottom, transparent 0, black 28px, black calc(100% - 28px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, black 28px, black calc(100% - 28px), transparent 100%);
+}
+
+.pdv-hero-banner::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(11, 18, 32, 0.78), rgba(11, 18, 32, 0.3) 48%, rgba(11, 18, 32, 0.76));
+  mask-image: linear-gradient(to bottom, transparent 0, black 28px, black calc(100% - 28px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, black 28px, black calc(100% - 28px), transparent 100%);
+}
+
+html:not(.dark-mode) .pdv-hero-banner::after {
+  background: linear-gradient(90deg, rgba(248, 249, 250, 0.82), rgba(248, 249, 250, 0.38) 48%, rgba(248, 249, 250, 0.8));
 }
 
 .pdv-token-btn {
@@ -194,7 +233,7 @@ html:not(.dark-mode) .pdv-token-chevron {
   justify-content: space-between;
   gap: 12px;
   margin: -4px -4px 2px;
-  padding: 12px 4px 16px;
+  padding: 8px 4px 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
@@ -217,8 +256,8 @@ html:not(.dark-mode) .pdv-wallet-header {
 }
 
 .pdv-wallet-avatar {
-  width: 50px;
-  height: 50px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -242,7 +281,7 @@ html:not(.dark-mode) .pdv-wallet-header {
 }
 
 .pdv-wallet-name {
-  font-size: 20px;
+  font-size: 16px;
   font-weight: 850;
   letter-spacing: 0;
   white-space: nowrap;
@@ -251,7 +290,7 @@ html:not(.dark-mode) .pdv-wallet-header {
 }
 
 .pdv-wallet-sub {
-  font-size: 13px;
+  font-size: 12px;
   color: rgba(255, 255, 255, 0.52);
 }
 
@@ -268,13 +307,13 @@ html:not(.dark-mode) .pdv-wallet-sub {
 
 .pdv-follow-btn {
   flex-shrink: 0;
-  min-width: 86px;
-  height: 40px;
+  min-width: 76px;
+  height: 34px;
   border: none;
   border-radius: 9px;
   background: #4867ff;
   color: #fff;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 800;
   cursor: pointer;
   box-shadow: 0 8px 24px rgba(72, 103, 255, 0.26);
@@ -322,15 +361,57 @@ html:not(.dark-mode) .pdv-token-mcap {
   opacity: 0.7;
 }
 
-.pdv-pnl-block {
+/* Coin-banner result band between the token identity and the chart. */
+.pdv-position-banner {
+  position: relative;
+  min-height: 116px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: center;
+  gap: 8px;
+  padding: 16px 16px 20px;
+}
+
+.pdv-invested {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
   gap: 2px;
 }
 
+.pdv-topline-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+html:not(.dark-mode) .pdv-topline-label {
+  color: rgba(0, 0, 0, 0.5);
+}
+
+.pdv-topline-value {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.pdv-pnl-block {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.pdv-pnl-pct-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  text-align: center;
+}
+
 .pdv-pnl-amount {
-  font-size: 32px;
+  font-size: 30px;
   font-weight: 800;
   line-height: 1.1;
 }
@@ -340,8 +421,21 @@ html:not(.dark-mode) .pdv-token-mcap {
   font-weight: 600;
 }
 
-.pdv-pnl-amount.pos, .pdv-pnl-pct.pos { color: #26d07c; }
-.pdv-pnl-amount.neg, .pdv-pnl-pct.neg { color: #ff5c5c; }
+.pdv-position-banner .pdv-pnl-amount.pos,
+.pdv-position-banner .pdv-pnl-pct.pos { color: #34d399 !important; }
+.pdv-position-banner .pdv-pnl-amount.neg,
+.pdv-position-banner .pdv-pnl-pct.neg { color: #ff5c5c !important; }
+
+.pdv-pnl-note {
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.45);
+  white-space: nowrap;
+}
+
+html:not(.dark-mode) .pdv-pnl-note {
+  color: rgba(0, 0, 0, 0.45);
+}
 
 .pdv-pnl-amount.loading {
   color: rgba(255, 255, 255, 0.72);
@@ -378,9 +472,8 @@ html:not(.dark-mode) .pdv-inline-note {
 }
 
 .pdv-chart-wrap {
-  flex: 0 0 320px;
-  height: 320px;
-  min-height: 320px;
+  flex: 1 1 240px;
+  min-height: 220px;
   border-radius: 16px;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.03);
@@ -390,120 +483,60 @@ html:not(.dark-mode) .pdv-chart-wrap {
   background: rgba(0, 0, 0, 0.03);
 }
 
-.pdv-entryexit {
-  display: flex;
-  gap: 12px;
-}
-
-.pdv-entryexit-item {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+/* FOMO-style bottom card: everything else about the trade, one glance, no scroll. */
+.pdv-bottom-card {
   padding: 12px 14px;
-  border-radius: 12px;
+  border-radius: 14px;
   background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-html:not(.dark-mode) .pdv-entryexit-item {
-  background: rgba(0, 0, 0, 0.04);
+html:not(.dark-mode) .pdv-bottom-card {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.06);
 }
 
-.pdv-entryexit-text {
+.pdv-bottom-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px 10px;
+}
+
+.pdv-bottom-stat {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
 }
 
-.pdv-entryexit-zoom {
-  flex: 0 0 auto;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  border-radius: 50%;
-  background: rgba(79, 140, 255, 0.16);
-  color: #4f8cff;
-  cursor: pointer;
-  transition: background 0.15s ease, transform 0.15s ease;
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.pdv-entryexit-zoom:not(:disabled):active {
-  transform: scale(0.92);
-}
-
-.pdv-entryexit-zoom:not(:disabled):hover,
-.pdv-entryexit-zoom:focus-visible {
-  background: rgba(79, 140, 255, 0.3);
-}
-
-.pdv-entryexit-zoom:disabled {
-  cursor: default;
-  opacity: 0.35;
-}
-
-html:not(.dark-mode) .pdv-entryexit-zoom {
-  background: rgba(37, 99, 235, 0.12);
-  color: #2563eb;
-}
-
-.pdv-entryexit-label {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.55);
-}
-
-html:not(.dark-mode) .pdv-entryexit-label {
-  color: rgba(0, 0, 0, 0.5);
-}
-
-.pdv-entryexit-value {
+.pdv-bottom-stat-value {
   font-size: 15px;
-  font-weight: 700;
+  font-weight: 750;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.pdv-footer-stats {
-  display: flex;
-  gap: 12px;
-}
+.pdv-bottom-stat-value.entry { color: #26d07c; }
+.pdv-bottom-stat-value.exit { color: #ff5c5c; }
 
-.pdv-footer-stat {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  padding: 10px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
-}
-
-html:not(.dark-mode) .pdv-footer-stat {
-  background: rgba(0, 0, 0, 0.03);
-}
-
-.pdv-footer-stat-value {
-  font-size: 15px;
-  font-weight: 700;
-}
-
-.pdv-footer-stat-label {
+.pdv-bottom-stat-label {
   font-size: 11px;
   color: rgba(255, 255, 255, 0.5);
 }
 
-html:not(.dark-mode) .pdv-footer-stat-label {
+html:not(.dark-mode) .pdv-bottom-stat-label {
   color: rgba(0, 0, 0, 0.5);
 }
 
+.pdv-actions {
+  display: flex;
+  gap: 10px;
+}
+
 .pdv-mimic-btn {
-  margin-top: auto;
-  padding: 14px;
+  flex: 1;
+  padding: 13px;
   border: none;
   border-radius: 14px;
   background: #4f8cff;
@@ -511,4 +544,79 @@ html:not(.dark-mode) .pdv-footer-stat-label {
   font-weight: 700;
   font-size: 15px;
   cursor: pointer;
+}
+
+.pdv-share-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 13px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+  color: inherit;
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.pdv-share-btn:active {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+html:not(.dark-mode) .pdv-share-btn {
+  border-color: rgba(0, 0, 0, 0.12);
+  background: rgba(0, 0, 0, 0.05);
+}
+
+html:not(.dark-mode) .pdv-share-btn:active {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+/* ── PositionCard layout ──
+   PositionCard renders the card content (wallet header → actions) as a column. */
+.pdv-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ── Embedded feed-card variant (Tracked > Wallets timeline) ──
+   The same card rendered inline in a scrollable feed instead of the sheet. */
+.pdv-card--embedded {
+  padding: 14px 14px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+html:not(.dark-mode) .pdv-card--embedded {
+  border-bottom-color: rgba(0, 0, 0, 0.08);
+}
+
+.pdv-card--embedded .pdv-wallet-header {
+  margin: 0;
+  padding: 2px 4px 12px;
+}
+
+.pdv-card--embedded .pdv-wallet-avatar {
+  width: 44px;
+  height: 44px;
+}
+
+.pdv-card--embedded .pdv-wallet-name {
+  font-size: 17px;
+}
+
+.pdv-card--embedded .pdv-pnl-amount {
+  font-size: 26px;
+}
+
+/* Feed cards get a fixed-height chart (the existing scoped
+   `.pdv-chart-wrap .native-chart { height: 100% }` override fills it). */
+.pdv-card--embedded .pdv-chart-wrap {
+  flex: none;
+  height: 300px;
 }

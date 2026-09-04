@@ -151,6 +151,14 @@ export function markAllRead() {
   return list;
 }
 
+export function markNotificationsRead(predicate) {
+  const list = getNotifications().map((notification) => (
+    predicate(notification) ? { ...notification, read: true } : notification
+  ));
+  writeNotifications(list);
+  return list;
+}
+
 // ---------------------------------------------------------------------------
 // Backend sync — only used when a wallet is connected. Failures are non-fatal;
 // localStorage remains the source of truth for the current device.

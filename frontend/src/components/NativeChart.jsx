@@ -94,6 +94,9 @@ const NativeChart = ({
   livePrice = null,
   markers = null,
   tradeDots = null, // raw {time,price,type,wallet,label}[] — rendered as clustered avatar chips, not lightweight-charts markers
+  tradePins = null, // [{id, timeMs, price, kind:'entry'|'exit', label}] — clickable ⊕ chips pinned to a trade point
+  onTradePinClick = null,
+  activeTradePinId = null,
   onCrosshairMove = null,
   initialTfIndex = null,
   focusOneMinute = false,
@@ -165,6 +168,7 @@ const NativeChart = ({
   // separate arrows/labels when several trades land close together in time).
   const [dotClusters, setDotClusters] = useState([]);
   const [openCluster, setOpenCluster] = useState(null);
+  const [pinPositions, setPinPositions] = useState([]);
   const [trackedBubble, setTrackedBubble] = useState(null);
   // One-tap "watch live" zoom: 1m timeframe framed tight on the newest candles.
   const [liveZoom, setLiveZoom] = useState(false);
@@ -1652,6 +1656,93 @@ const NativeChart = ({
   // A fresh coin/dataset invalidates any open cluster popup.
   useEffect(() => { setOpenCluster(null); }, [mint]);
 
+  // Entry/exit ⊕ pins: clickable chips glued to the trade's candle. Snapped to
+  // the nearest bar (an exact trade timestamp rarely equals a bar time) and
+  // clamped to the plot edges so an offscreen pin stays reachable to zoom back out.
+  useEffect(() => {
+    const chart = chartRef.current;
+    const series = seriesRef.current;
+    if (!chart || !series || status !== 'ready' || !tradePins?.length) {
+      setPinPositions([]);
+      return undefined;
+    }
+
+    const nearestBar = (timeSec) => {
+      const n = dataLengthRef.current;
+      if (!n) return null;
+      let lo = 0;
+      let hi = n - 1;
+      try {
+        while (lo < hi) {
+          const mid = (lo + hi) >> 1;
+          const bar = series.dataByIndex(mid);
+          if (!bar) return null;
+          if (bar.time < timeSec) lo = mid + 1;
+          else hi = mid;
+        }
+        const bar = series.dataByIndex(lo);
+        const prev = lo > 0 ? series.dataByIndex(lo - 1) : null;
+        if (prev && bar && Math.abs(prev.time - timeSec) < Math.abs(bar.time - timeSec)) return prev;
+        return bar || prev;
+      } catch (_) {
+        return null; // series disposed mid-search
+      }
+    };
+
+    const recompute = () => {
+      const canvas = containerRef.current;
+      const width = canvas?.clientWidth || 0;
+      const height = canvas?.clientHeight || 0;
+      if (!width || !height) return;
+      const next = [];
+      for (const pin of tradePins) {
+        const timeMs = Number(pin.timeMs);
+        if (!Number.isFinite(timeMs) || timeMs <= 0) continue;
+        const bar = nearestBar(Math.floor(timeMs / 1000));
+        if (!bar) continue;
+        const price = Number.isFinite(Number(pin.price)) && Number(pin.price) > 0
+          ? Number(pin.price)
+          : (bar.close ?? bar.value);
+        let x;
+        let y;
+        try {
+          x = chart.timeScale().timeToCoordinate(bar.time);
+          y = series.priceToCoordinate(price);
+        } catch (_) { continue; }
+        if (!Number.isFinite(x)) x = timeMs / 1000 < bar.time ? -20 : width + 20;
+        if (!Number.isFinite(y)) continue;
+        const clamped = x < 16 || x > width - 16;
+        next.push({
+          ...pin,
+          x: Math.min(width - 16, Math.max(16, x)),
+          y: Math.min(height - 46, Math.max(42, y)),
+          clamped,
+        });
+      }
+      setPinPositions((prev) => {
+        if (prev.length === next.length
+          && prev.every((p, i) => p.id === next[i].id
+            && Math.abs(p.x - next[i].x) < 0.5
+            && Math.abs(p.y - next[i].y) < 0.5
+            && p.clamped === next[i].clamped)) {
+          return prev;
+        }
+        return next;
+      });
+    };
+
+    let raf = requestAnimationFrame(function tick() {
+      recompute();
+      raf = requestAnimationFrame(tick);
+    });
+    const observer = new ResizeObserver(recompute);
+    if (containerRef.current) observer.observe(containerRef.current);
+    return () => {
+      cancelAnimationFrame(raf);
+      observer.disconnect();
+    };
+  }, [tradePins, status, tfIndex, dataRev]);
+
 
   // native candle range and eases toward the live target while the price wheel moves.
   useEffect(() => {
@@ -2005,6 +2096,35 @@ const NativeChart = ({
             <span className="tracked-bubble-text">Tracked at {formatPrice(trackedBubble.price)}</span>
             <span className="tracked-bubble-arrow">↑</span>
           </button>
+        </div>
+      )}
+      {pinPositions.length > 0 && (
+        <div className="native-chart-trade-pins">
+          {pinPositions.map((pin) => (
+            <button
+              key={pin.id}
+              type="button"
+              className={`native-chart-trade-pin native-chart-trade-pin--${pin.kind || 'entry'} ${activeTradePinId === pin.id ? 'active' : ''} ${pin.clamped ? 'clamped' : ''}`}
+              style={{ left: pin.x, top: pin.y }}
+              onClick={(e) => { e.stopPropagation(); onTradePinClick?.(pin.id); }}
+              title={activeTradePinId === pin.id ? 'Zoom back out' : `Zoom to ${pin.label || pin.id}`}
+              aria-label={activeTradePinId === pin.id ? 'Zoom back out' : `Zoom to ${pin.label || pin.id}`}
+            >
+              <span className="native-chart-trade-pin-circle">
+                {activeTradePinId === pin.id ? (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                ) : (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                )}
+              </span>
+              {pin.label && <span className="native-chart-trade-pin-label">{pin.label}</span>}
+            </button>
+          ))}
         </div>
       )}
       {dotClusters.length > 0 && (

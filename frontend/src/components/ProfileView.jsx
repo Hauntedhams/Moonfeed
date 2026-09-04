@@ -18,7 +18,7 @@ import { fetchTriggerOrdersV2, cancelTriggerOrderV2 } from '../utils/triggerOrde
 import CautionTapeBanner from './CautionTapeBanner';
 import { WalletChip } from '../utils/walletIdentity';
 
-const ProfileView = ({ onTradeClick }) => {
+const ProfileView = ({ onTradeClick, onOpenPosition }) => {
   // Use Jupiter Wallet Kit adapter
   const jupiterWallet = useJupiterWallet();
   const { isDemoMode, demoPublicKey, disableDemoMode } = useDemoMode();
@@ -45,6 +45,7 @@ const ProfileView = ({ onTradeClick }) => {
   const [statusFilter, setStatusFilter] = useState('active');
   const [cancellingOrder, setCancellingOrder] = useState(null);
   const [coinBanners, setCoinBanners] = useState(new Map());
+  const [positionPnl, setPositionPnl] = useState(new Map()); // mint -> { pnlTotal } aggregate position P/L in USD
   const fileInputRef = useRef(null);
   const contentRef = useRef(null); // scrolled into view when a header stat is tapped
   const { trackedWallets, untrackWallet } = useTrackedWallets();
@@ -147,6 +148,38 @@ const ProfileView = ({ onTradeClick }) => {
       setTransactions([]);
     }
   }, [publicKey]);
+
+  // Fetch the same aggregate per-position P/L (in USD) used by the full
+  // position detail view, so each history card's headline number matches
+  // exactly what you see after tapping into it.
+  useEffect(() => {
+    if (!publicKey || !transactions.length) return;
+    const addr = publicKey.toString();
+    const uniqueMints = [...new Set(transactions.map(t => t.tokenMint).filter(Boolean))];
+    const missingMints = uniqueMints.filter(m => !positionPnl.has(m));
+    if (!missingMints.length) return;
+    let cancelled = false;
+    (async () => {
+      const updates = new Map();
+      await Promise.all(missingMints.map(async (mint) => {
+        try {
+          const res = await fetch(getFullApiUrl(`/api/wallet/${addr}/position/${mint}`));
+          const data = await res.json();
+          if (data?.success) updates.set(mint, { pnlTotal: Number(data?.pnl?.total) || 0 });
+        } catch (_) { /* silent */ }
+      }));
+      if (!cancelled && updates.size) setPositionPnl(prev => new Map([...prev, ...updates]));
+    })();
+    return () => { cancelled = true; };
+  }, [publicKey, transactions]);
+
+  const formatUsdPnl = (n) => {
+    const abs = Math.abs(n);
+    const sign = n >= 0 ? '+' : '-';
+    if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
+    if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(2)}K`;
+    return `${sign}$${abs.toFixed(2)}`;
+  };
 
   const fetchBalance = async () => {
     if (!publicKey || !connection) return;
@@ -630,6 +663,20 @@ const ProfileView = ({ onTradeClick }) => {
   };
 
   const handleHistoryCardClick = async (tx) => {
+    // Preferred: the FOMO-style PositionDetailView (chart + entry/exit pins + PnL).
+    if (onOpenPosition && publicKey && tx.tokenMint) {
+      onOpenPosition(publicKey.toString(), tx.tokenMint, {
+        displayName: profile.displayName || 'You',
+        tokenSymbol: tx.tokenSymbol,
+        tokenName: tx.tokenName,
+        tokenImage: tx.tokenImage,
+        type: tx.type,
+        solAmount: tx.type === 'sell' ? tx.outputAmount : tx.inputAmount,
+        timestamp: tx.timestamp,
+      });
+      return;
+    }
+    // Fallback: the legacy inline history sheet.
     setHistoryDetailCoin(tx);
     setHistoryCurrentPrice(null);
     setHistoryPriceLoading(true);
@@ -954,23 +1001,17 @@ const ProfileView = ({ onTradeClick }) => {
             ) : (
               <div className="pv-ig-hist-grid">
                 {transactions.map((tx) => {
-                  // P/L % since the trade: compare trade price to current SOL price.
-                  const priceNow = coinBanners.get(tx.tokenMint)?.priceNative;
-                  const isSell = tx.type === 'sell';
-                  let tradePrice = Number(tx.pricePerToken) || 0;
-                  if (!tradePrice) {
-                    tradePrice = isSell
-                      ? (Number(tx.inputAmount) > 0 ? Number(tx.outputAmount) / Number(tx.inputAmount) : 0)
-                      : (Number(tx.outputAmount) > 0 ? Number(tx.inputAmount) / Number(tx.outputAmount) : 0);
-                  }
-                  let pnlPct = null;
-                  if (priceNow > 0 && tradePrice > 0) {
-                    pnlPct = isSell
-                      ? ((tradePrice - priceNow) / priceNow) * 100
-                      : ((priceNow - tradePrice) / tradePrice) * 100;
-                  }
+                  // Aggregate position P/L in USD — same number shown on the full detail view.
+                  const pnlTotal = positionPnl.get(tx.tokenMint)?.pnlTotal;
+                  const hasPnl = typeof pnlTotal === 'number' && isFinite(pnlTotal);
+                  const isProfit = hasPnl && pnlTotal >= 0;
                   return (
-                  <div key={tx.signature} className={`pv-ig-hist-card pv-ig-hist-card--${tx.type || 'buy'}`} onClick={() => handleHistoryCardClick(tx)} style={{ cursor: 'pointer' }}>
+                  <div
+                    key={tx.signature}
+                    className={`pv-ig-hist-card pv-ig-hist-card--${tx.type || 'buy'}${hasPnl ? ` pv-ig-hist-card--${isProfit ? 'profit' : 'loss'}` : ''}`}
+                    onClick={() => handleHistoryCardClick(tx)}
+                    style={{ cursor: 'pointer' }}
+                  >
                     {(coinBanners.get(tx.tokenMint)?.banner || tx.tokenImage) && (
                       <img
                         src={coinBanners.get(tx.tokenMint)?.banner || tx.tokenImage}
@@ -979,10 +1020,10 @@ const ProfileView = ({ onTradeClick }) => {
                         onError={(e) => { e.target.style.display = 'none'; }}
                       />
                     )}
-                    <div className="pv-ig-hist-overlay" />
-                    {pnlPct !== null && (
-                      <span className={`pv-ig-hist-pnl ${pnlPct >= 0 ? 'pv-ig-hist-pnl--up' : 'pv-ig-hist-pnl--down'}`}>
-                        {pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(1)}%
+                    <div className={`pv-ig-hist-overlay${hasPnl ? ` pv-ig-hist-overlay--${isProfit ? 'profit' : 'loss'}` : ''}`} />
+                    {hasPnl && (
+                      <span className={`pv-ig-hist-pnl ${isProfit ? 'pv-ig-hist-pnl--up' : 'pv-ig-hist-pnl--down'}`}>
+                        {formatUsdPnl(pnlTotal)}
                       </span>
                     )}
                     <div className="pv-ig-hist-body">

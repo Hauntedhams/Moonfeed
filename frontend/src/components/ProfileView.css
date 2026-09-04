@@ -2085,6 +2085,24 @@
   );
 }
 
+.pv-ig-hist-overlay--profit {
+  background: linear-gradient(
+    to bottom,
+    rgba(16, 185, 129, 0.18) 0%,
+    rgba(0, 0, 0, 0.55) 55%,
+    rgba(16, 185, 129, 0.3) 100%
+  );
+}
+
+.pv-ig-hist-overlay--loss {
+  background: linear-gradient(
+    to bottom,
+    rgba(239, 68, 68, 0.18) 0%,
+    rgba(0, 0, 0, 0.55) 55%,
+    rgba(239, 68, 68, 0.3) 100%
+  );
+}
+
 .pv-ig-hist-body {
   position: absolute;
   inset: 0;

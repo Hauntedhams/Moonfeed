@@ -9,6 +9,7 @@ import React, {
 import { useTrackedWallets } from './TrackedWalletsContext';
 import { getFullApiUrl } from '../config/api';
 import { initTradeNotifications, notifyWalletTrade } from '../utils/tradeNotifications';
+import { addNotification } from '../utils/alertStorage';
 
 const CopyTradeContext = createContext(null);
 
@@ -126,6 +127,20 @@ export const CopyTradeProvider = ({ children, onCopyTrade }) => {
           if (!targetW || targetW.notificationsEnabled !== false) {
             notifyWalletTrade(n);
           }
+          addNotification({
+            id: `wallet-trade-${n.signature || n.id}`,
+            target: 'wallets',
+            walletAddress: n.walletAddress,
+            walletLabel: n.walletLabel,
+            mint: n.tokenMint,
+            coin: {
+              symbol: n.tokenSymbol || 'TOKEN',
+              name: n.tokenSymbol || 'Token',
+              image: n.tokenImage || null,
+            },
+            message: `${n.walletLabel} ${n.type === 'sell' ? 'sold' : 'bought'} ${n.tokenSymbol || 'a token'}`,
+            timestamp: (n.timestamp || Date.now() / 1000) * ((n.timestamp || 0) < 1e12 ? 1000 : 1),
+          });
         });
 
         // Haptic feedback on mobile
