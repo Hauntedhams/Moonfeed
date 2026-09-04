@@ -2,7 +2,7 @@ services:
   - type: web
     name: moonfeed-backend
     env: node
-    plan: free
+    plan: pro
     buildCommand: npm install --prefix backend
     startCommand: ./start.sh
     envVars:
