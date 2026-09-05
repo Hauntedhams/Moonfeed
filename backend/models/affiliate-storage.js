@@ -6,6 +6,7 @@
 
 const { Affiliate, AffiliateTrade, AffiliatePayout } = require('./Affiliate');
 const { getSolUsdPrice } = require('../utils/solPrice');
+const { hashPassword, verifyPassword, generatePassword } = require('../utils/passwordHash');
 
 class AffiliateStorage {
   // Kept for API compatibility — Mongo connection is managed by config/database.js
@@ -15,18 +16,47 @@ class AffiliateStorage {
 
   // ==================== AFFILIATE METHODS ====================
 
-  async createAffiliate({ code, name, walletAddress, sharePercentage = 25, email = null, telegram = null }) {
+  async createAffiliate({ code, name, walletAddress, sharePercentage = 25, email = null, telegram = null, password = null }) {
     const existing = await Affiliate.findOne({ code }).lean();
     if (existing) {
       throw new Error(`Affiliate code "${code}" already exists`);
     }
 
+    // Portal login password — generated if the admin didn't set one.
+    const plainPassword = password || generatePassword();
+
     const affiliate = await Affiliate.create({
-      code, name, walletAddress, sharePercentage, email, telegram
+      code, name, walletAddress, sharePercentage, email, telegram,
+      password: hashPassword(plainPassword)
     });
 
     console.log(`✅ Created affiliate: ${name} (${code})`);
-    return affiliate.toObject();
+    const obj = affiliate.toObject();
+    delete obj.password;
+    return { ...obj, plainPassword };
+  }
+
+  // Sets/replaces an affiliate's portal password. Returns the new plaintext once.
+  async setAffiliatePassword(code, plainPassword = null) {
+    const finalPassword = plainPassword || generatePassword();
+    const affiliate = await Affiliate.findOneAndUpdate(
+      { code },
+      { $set: { password: hashPassword(finalPassword) } },
+      { new: true }
+    ).lean();
+    if (!affiliate) {
+      throw new Error(`Affiliate "${code}" not found`);
+    }
+    return finalPassword;
+  }
+
+  // Verifies a portal login attempt. Never leaks the hash.
+  async verifyAffiliatePassword(code, plainPassword) {
+    const affiliate = await Affiliate.findOne({ code }).select('+password').lean();
+    if (!affiliate) return { ok: false, reason: 'not_found' };
+    if (!affiliate.password) return { ok: false, reason: 'no_password_set' };
+    if (!verifyPassword(plainPassword, affiliate.password)) return { ok: false, reason: 'invalid_password' };
+    return { ok: true };
   }
 
   async getAffiliate(code) {
@@ -39,6 +69,7 @@ class AffiliateStorage {
 
   async updateAffiliate(code, updates) {
     delete updates.code;
+    delete updates.password; // portal password can only change via setAffiliatePassword
     const affiliate = await Affiliate.findOneAndUpdate(
       { code },
       { $set: updates },

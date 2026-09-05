@@ -68,6 +68,7 @@
         <div><label>Solana wallet</label><input id="nWallet" placeholder="Their payout wallet address"></div>
         <div style="max-width:110px"><label>Share % of fee</label><input id="nShare" type="number" value="25"></div>
         <div style="max-width:150px"><label>Telegram (optional)</label><input id="nTelegram" placeholder="@handle"></div>
+        <div style="max-width:160px"><label>Portal password (optional)</label><input id="nPassword" placeholder="auto-generated if blank"></div>
         <div style="flex:0"><button onclick="createAffiliate()">Create</button></div>
       </div>
       <div class="muted" style="margin-top:8px">Link will be <span class="mono" id="linkPreview">https://moonfeed.app?ref=…</span></div>
@@ -91,6 +92,7 @@
 <script>
 const API = window.location.origin.includes('localhost') ? 'http://localhost:3001' : window.location.origin;
 const LINK_BASE = 'https://moonfeed.app';
+const PORTAL_BASE = window.location.origin.includes('localhost') ? 'http://localhost:3001/affiliate/portal' : window.location.origin + '/affiliate/portal';
 
 function key() { return localStorage.getItem('mf_admin_key') || ''; }
 function saveKey() {
@@ -133,7 +135,7 @@ async function loadAffiliates() {
     }));
 
     el.innerHTML = `<table>
-      <tr><th>Affiliate</th><th>Link</th><th>Wallet</th><th>Share</th><th>Volume</th><th>Total earned</th><th>Pending</th><th></th></tr>
+      <tr><th>Affiliate</th><th>Link</th><th>Wallet</th><th>Share</th><th>Volume</th><th>Total earned</th><th>Pending</th><th>Portal</th><th></th></tr>
       ${rows.map(({ a, pending }) => `
         <tr>
           <td><b>${a.name}</b><br><span class="muted mono">${a.code}</span></td>
@@ -143,6 +145,7 @@ async function loadAffiliates() {
           <td>${solUsd(a.totalVolume, a.totalVolumeUsd)}</td>
           <td class="green">${solUsd(a.totalEarned, a.totalEarnedUsd)}</td>
           <td class="amber">${solUsd(pending.totalPending, pending.totalPendingUsd)}<br><span class="muted">${pending.tradeCount} trades</span></td>
+          <td><span class="copy" onclick="copyText('${PORTAL_BASE}')">copy link</span><br><span class="copy" onclick="resetPassword('${a.code}')">reset password</span></td>
           <td>${pending.totalPending > 0
             ? `<button onclick="payOut('${a.code}')">Record payout</button>`
             : '<span class="muted">—</span>'}</td>
@@ -190,14 +193,27 @@ async function createAffiliate() {
     name: document.getElementById('nName').value.trim(),
     walletAddress: document.getElementById('nWallet').value.trim(),
     sharePercentage: parseFloat(document.getElementById('nShare').value) || 25,
-    telegram: document.getElementById('nTelegram').value.trim() || null
+    telegram: document.getElementById('nTelegram').value.trim() || null,
+    password: document.getElementById('nPassword').value.trim() || null
   };
   if (!body.code || !body.name || !body.walletAddress) return toast('Code, name, and wallet are required');
   try {
-    await api('/api/affiliates/create', { method: 'POST', body: JSON.stringify(body) });
-    toast(`Created ${body.code} — link: ${LINK_BASE}?ref=${body.code}`);
-    ['nCode', 'nName', 'nWallet', 'nTelegram'].forEach(id => document.getElementById(id).value = '');
+    const { portalPassword } = await api('/api/affiliates/create', { method: 'POST', body: JSON.stringify(body) });
+    alert(`Created ${body.code}\n\nTrade link: ${LINK_BASE}?ref=${body.code}\n\nPortal login (share with them):\n${PORTAL_BASE}\nCode: ${body.code}\nPassword: ${portalPassword}`);
+    ['nCode', 'nName', 'nWallet', 'nTelegram', 'nPassword'].forEach(id => document.getElementById(id).value = '');
     loadAll();
+  } catch (e) { toast('Error: ' + e.message); }
+}
+
+async function resetPassword(code) {
+    const custom = prompt('Enter a new portal password for ' + code + ' (leave blank to auto-generate):');
+  if (custom === null) return; // cancelled
+  try {
+    const { portalPassword } = await api(`/api/affiliates/${code}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify({ password: custom.trim() || null })
+    });
+    alert(`New portal login for ${code}:\n\n${PORTAL_BASE}\nCode: ${code}\nPassword: ${portalPassword}`);
   } catch (e) { toast('Error: ' + e.message); }
 }
 

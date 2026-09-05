@@ -9,6 +9,8 @@ const affiliateSchema = new mongoose.Schema({
   sharePercentage: { type: Number, default: 25 },
   email: { type: String, default: null },
   telegram: { type: String, default: null },
+  // Hashed ("<salt>:<hash>") — excluded from normal queries, opt in via .select('+password')
+  password: { type: String, default: null, select: false },
   totalEarned: { type: Number, default: 0 },
   totalVolume: { type: Number, default: 0 },
   totalTrades: { type: Number, default: 0 },

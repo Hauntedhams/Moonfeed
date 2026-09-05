@@ -129,6 +129,11 @@ app.get('/admin/affiliates', (req, res) => {
   res.sendFile(require('path').join(__dirname, 'admin', 'affiliate-dashboard.html'));
 });
 
+// Influencer self-service portal (page is public, data requires the affiliate's own password)
+app.get('/affiliate/portal', (req, res) => {
+  res.sendFile(require('path').join(__dirname, 'admin', 'affiliate-portal.html'));
+});
+
 // Mount Comments routes
 app.use('/api/comments', commentsRoutes);
 

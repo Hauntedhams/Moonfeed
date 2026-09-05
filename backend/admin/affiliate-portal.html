@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Moonfeed — Affiliate Portal</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:#0d1117; color:#e6edf3; min-height:100vh; padding:24px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:22px; margin-bottom:4px; }
+  .sub { color:#8b949e; font-size:13px; margin-bottom:24px; }
+  .card { background:#161b22; border:1px solid #30363d; border-radius:12px; padding:18px; margin-bottom:18px; }
+  .card h2 { font-size:15px; margin-bottom:12px; color:#c9d1d9; }
+  label { display:block; font-size:12px; color:#8b949e; margin:10px 0 4px; }
+  input { width:100%; padding:9px 12px; background:#0d1117; border:1px solid #30363d; border-radius:8px; color:#e6edf3; font-size:14px; }
+  input:focus { outline:none; border-color:#58a6ff; }
+  button { background:#238636; color:#fff; border:none; padding:9px 16px; border-radius:8px; cursor:pointer; font-weight:600; font-size:13px; }
+  button:hover { background:#2ea043; }
+  button.secondary { background:#21262d; border:1px solid #30363d; }
+  button.secondary:hover { background:#30363d; }
+  .row { display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; }
+  .row > div { flex:1; min-width:140px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th { text-align:left; color:#8b949e; font-weight:600; padding:8px 10px; border-bottom:1px solid #30363d; font-size:11px; text-transform:uppercase; letter-spacing:.04em; }
+  td { padding:10px; border-bottom:1px solid #21262d; vertical-align:middle; }
+  tr:last-child td { border-bottom:none; }
+  .mono { font-family:ui-monospace,Menlo,monospace; font-size:12px; }
+  .pill { display:inline-block; padding:2px 9px; border-radius:99px; font-size:11px; font-weight:600; }
+  .pill.pending { background:#3d2e00; color:#d29922; }
+  .pill.paid { background:#0f2e1b; color:#3fb950; }
+  .green { color:#3fb950; font-weight:700; }
+  .amber { color:#d29922; font-weight:700; }
+  .copy { cursor:pointer; color:#58a6ff; font-size:11px; margin-left:6px; user-select:none; }
+  .copy:hover { text-decoration:underline; }
+  #msg { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#1f6feb; color:#fff; padding:10px 18px; border-radius:8px; font-size:13px; display:none; z-index:10; }
+  .muted { color:#8b949e; font-size:12px; }
+  .stat-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:14px; }
+  .stat-box { background:#0d1117; border:1px solid #21262d; border-radius:10px; padding:14px; }
+  .stat-box .label { color:#8b949e; font-size:11px; text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px; }
+  .stat-box .value { font-size:20px; font-weight:700; }
+  .error { color:#f85149; font-size:13px; }
+  #app { display:none; }
+  #logout { float:right; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🌙 Moonfeed — Affiliate Portal</h1>
+  <div class="sub">View your referral link, tracked trades, and earnings.</div>
+
+  <div class="card" id="loginCard">
+    <h2>Sign in</h2>
+    <div class="row">
+      <div><label>Your affiliate code</label><input id="loginCode" placeholder="e.g. jrus" autocomplete="username"></div>
+      <div><label>Password</label><input id="loginPassword" type="password" placeholder="Given to you by Moonfeed" autocomplete="current-password"></div>
+      <div style="flex:0"><button onclick="login()">Sign in</button></div>
+    </div>
+    <div class="error" id="loginError" style="margin-top:10px"></div>
+  </div>
+
+  <div id="app">
+    <div class="card">
+      <button id="logout" class="secondary" onclick="logout()">Sign out</button>
+      <h2 id="welcomeName">—</h2>
+      <div class="muted">Your link: <span class="mono" id="myLink">—</span><span class="copy" onclick="copyLink()">copy</span></div>
+    </div>
+
+    <div class="card">
+      <h2>Overview</h2>
+      <div class="stat-grid">
+        <div class="stat-box"><div class="label">Total volume</div><div class="value" id="statVolume">—</div></div>
+        <div class="stat-box"><div class="label">Total earned</div><div class="value green" id="statEarned">—</div></div>
+        <div class="stat-box"><div class="label">Pending payout</div><div class="value amber" id="statPending">—</div></div>
+        <div class="stat-box"><div class="label">Paid out</div><div class="value" id="statPaid">—</div></div>
+        <div class="stat-box"><div class="label">Total trades</div><div class="value" id="statTrades">—</div></div>
+        <div class="stat-box"><div class="label">Share of fee</div><div class="value" id="statShare">—</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Recent trades</h2>
+      <div id="trades" class="muted">—</div>
+    </div>
+
+    <div class="card">
+      <h2>Payout history</h2>
+      <div id="payouts" class="muted">—</div>
+    </div>
+  </div>
+</div>
+<div id="msg"></div>
+
+<script>
+const API = window.location.origin.includes('localhost') ? 'http://localhost:3001' : window.location.origin;
+const LINK_BASE = 'https://moonfeed.app';
+const SESSION_KEY = 'mf_affiliate_session';
+
+function toast(t) {
+  const m = document.getElementById('msg');
+  m.textContent = t; m.style.display = 'block';
+  clearTimeout(m._t); m._t = setTimeout(() => m.style.display = 'none', 2600);
+}
+function short(a) { return a ? a.slice(0, 4) + '…' + a.slice(-4) : '—'; }
+function usd(n) { return '$' + (n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 }); }
+function sol(n) { return (n || 0).toLocaleString(undefined, { maximumFractionDigits: 4 }) + ' SOL'; }
+function solUsd(nSol, nUsd) { return `${sol(nSol)}<br><span class="muted">${usd(nUsd)}</span>`; }
+function copyText(t) { navigator.clipboard.writeText(t); toast('Copied: ' + t); }
+function copyLink() { copyText(document.getElementById('myLink').textContent); }
+
+function getSession() {
+  try { return JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null'); } catch (e) { return null; }
+}
+function setSession(code, password) {
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify({ code, password }));
+}
+function logout() {
+  sessionStorage.removeItem(SESSION_KEY);
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('loginCard').style.display = 'block';
+}
+
+async function fetchPortal(code, password) {
+  const res = await fetch(`${API}/api/affiliates/${encodeURIComponent(code)}/portal`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.success) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+}
+
+async function login() {
+  const code = document.getElementById('loginCode').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const errEl = document.getElementById('loginError');
+  errEl.textContent = '';
+  if (!code || !password) { errEl.textContent = 'Enter your code and password'; return; }
+  try {
+    const data = await fetchPortal(code, password);
+    setSession(code, password);
+    render(data);
+  } catch (e) { errEl.textContent = e.message; }
+}
+
+function render(data) {
+  document.getElementById('loginCard').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+
+  const a = data.affiliate;
+  document.getElementById('welcomeName').textContent = `Welcome, ${a.name}`;
+  document.getElementById('myLink').textContent = `${LINK_BASE}?ref=${a.code}`;
+
+  const s = data.stats;
+  document.getElementById('statVolume').innerHTML = solUsd(s.totalVolume, s.totalVolumeUsd);
+  document.getElementById('statEarned').innerHTML = solUsd(s.totalEarnings, s.totalEarningsUsd);
+  document.getElementById('statPending').innerHTML = solUsd(s.pendingEarnings, s.pendingEarningsUsd);
+  document.getElementById('statPaid').innerHTML = solUsd(s.paidEarnings, s.paidEarningsUsd);
+  document.getElementById('statTrades').textContent = s.totalTrades;
+  document.getElementById('statShare').textContent = a.sharePercentage + '%';
+
+  const tradesEl = document.getElementById('trades');
+  if (!data.trades.length) {
+    tradesEl.innerHTML = '<span class="muted">No trades tracked yet.</span>';
+  } else {
+    tradesEl.innerHTML = `<table>
+      <tr><th>Time</th><th>User</th><th>Volume</th><th>Your cut</th><th>Status</th><th>Tx</th></tr>
+      ${data.trades.map(t => `
+        <tr>
+          <td class="muted">${new Date(t.timestamp).toLocaleString()}</td>
+          <td class="mono">${short(t.userWallet)}</td>
+          <td>${solUsd(t.tradeVolume, t.tradeVolumeUsd)}</td>
+          <td class="green">${solUsd(t.influencerShare, t.influencerShareUsd)}</td>
+          <td><span class="pill ${t.payoutStatus}">${t.payoutStatus}</span></td>
+          <td>${t.transactionSignature ? `<a class="copy" href="https://solscan.io/tx/${t.transactionSignature}" target="_blank">solscan</a>` : '—'}</td>
+        </tr>`).join('')}
+    </table>`;
+  }
+
+  const payoutsEl = document.getElementById('payouts');
+  if (!data.payouts.length) {
+    payoutsEl.innerHTML = '<span class="muted">No payouts recorded yet.</span>';
+  } else {
+    payoutsEl.innerHTML = `<table>
+      <tr><th>Date</th><th>Amount</th><th>Trades</th><th>Status</th><th>Tx</th></tr>
+      ${data.payouts.map(p => `
+        <tr>
+          <td class="muted">${new Date(p.createdAt).toLocaleString()}</td>
+          <td class="green">${solUsd(p.amount, p.amountUsd)}</td>
+          <td>${p.tradeCount}</td>
+          <td><span class="pill ${p.status === 'completed' ? 'paid' : 'pending'}">${p.status}</span></td>
+          <td>${p.transactionSignature ? `<a class="copy" href="https://solscan.io/tx/${p.transactionSignature}" target="_blank">solscan</a>` : '—'}</td>
+        </tr>`).join('')}
+    </table>`;
+  }
+}
+
+// Re-use a saved session for this browser tab so a page refresh doesn't force re-login.
+(async function init() {
+  const session = getSession();
+  if (!session) return;
+  try {
+    const data = await fetchPortal(session.code, session.password);
+    render(data);
+  } catch (e) {
+    logout();
+  }
+})();
+</script>
+</body>
+</html>

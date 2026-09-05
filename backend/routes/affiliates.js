@@ -18,7 +18,7 @@ const { verifySwapVolume } = require('../utils/verifySwapVolume');
  */
 router.post('/create', adminAuth, async (req, res) => {
   try {
-    const { code, name, walletAddress, sharePercentage, email, telegram } = req.body;
+    const { code, name, walletAddress, sharePercentage, email, telegram, password } = req.body;
 
     if (!code || !name || !walletAddress) {
       return res.status(400).json({
@@ -41,12 +41,16 @@ router.post('/create', adminAuth, async (req, res) => {
       walletAddress,
       sharePercentage: sharePercentage || 25,
       email,
-      telegram
+      telegram,
+      password
     });
+    const { plainPassword, ...affiliateSafe } = affiliate;
 
     res.json({
       success: true,
-      affiliate
+      affiliate: affiliateSafe,
+      // Plaintext portal password — only ever returned once, at creation time.
+      portalPassword: plainPassword
     });
   } catch (error) {
     console.error('Error creating affiliate:', error);
@@ -156,6 +160,80 @@ router.delete('/:code', adminAuth, async (req, res) => {
     });
   } catch (error) {
     console.error('Error deleting affiliate:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/affiliates/:code/reset-password
+ * Set/regenerate an affiliate's portal login password (admin only).
+ * Returns the new plaintext password once — share it with the influencer directly.
+ */
+router.post('/:code/reset-password', adminAuth, async (req, res) => {
+  try {
+    const { code } = req.params;
+    const { password } = req.body || {};
+
+    const plainPassword = await affiliateStorage.setAffiliatePassword(code, password || null);
+
+    res.json({
+      success: true,
+      portalPassword: plainPassword
+    });
+  } catch (error) {
+    console.error('Error resetting affiliate password:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/affiliates/:code/portal
+ * Influencer self-service portal login — password-protected, no admin key needed.
+ * Bundles everything the portal page needs in one call.
+ */
+router.post('/:code/portal', async (req, res) => {
+  try {
+    const { code } = req.params;
+    const { password } = req.body || {};
+
+    if (!password) {
+      return res.status(400).json({ success: false, error: 'Missing password' });
+    }
+
+    const auth = await affiliateStorage.verifyAffiliatePassword(code, password);
+    if (!auth.ok) {
+      const status = auth.reason === 'not_found' ? 404 : 401;
+      return res.status(status).json({
+        success: false,
+        error: auth.reason === 'not_found' ? `Affiliate "${code}" not found`
+          : auth.reason === 'no_password_set' ? 'No portal password set for this affiliate yet — contact the admin.'
+          : 'Incorrect password'
+      });
+    }
+
+    const [{ affiliate, stats }, trades, payouts, pendingEarnings] = await Promise.all([
+      affiliateStorage.getAffiliateStats(code),
+      affiliateStorage.getTradesByReferral(code, { limit: 200 }),
+      affiliateStorage.getPayoutsByReferral(code, { limit: 50 }),
+      affiliateStorage.getPendingEarnings(code)
+    ]);
+
+    res.json({
+      success: true,
+      affiliate,
+      stats,
+      trades,
+      payouts,
+      pendingEarnings
+    });
+  } catch (error) {
+    console.error('Error loading affiliate portal:', error);
     res.status(500).json({
       success: false,
       error: error.message
