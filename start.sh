@@ -21,6 +21,6 @@ fi
 
 # Start the server
 echo "🔥 Starting server..."
-# Heap sized for the Pro container (4GB RAM); leaves ~1GB headroom for
+# Heap sized for the 1c-2g container (2GB RAM); leaves ~512MB headroom for
 # non-heap (buffers, native, WS/RPC connections) before the OOM ceiling.
-exec node --max-old-space-size=3072 server.js
+exec node --max-old-space-size=1536 server.js
