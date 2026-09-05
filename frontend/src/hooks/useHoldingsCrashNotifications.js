@@ -101,7 +101,7 @@ export default function useHoldingsCrashNotifications() {
           const windowLabel = crashedM5 ? 'last 5 minutes' : 'last hour';
           const valueUsd = holding.amount * (parseFloat(pair.priceUsd) || 0);
 
-          await notifyHoldingCrash({ mint: holding.mint, symbol, dropPct, windowLabel, valueUsd });
+          await notifyHoldingCrash({ mint: holding.mint, symbol, dropPct, windowLabel, valueUsd, image: pair.info?.imageUrl || null });
           addNotification({
             id: `crash-${holding.mint}-${now}`,
             target: 'coins',

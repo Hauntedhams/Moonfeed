@@ -156,6 +156,7 @@ async function runOnce() {
           await sendToWallet(wallet, 'trackedGain', {
             title: `${symbol} is up ${gainPct.toFixed(1)}%`,
             body: `Since you tracked it, now $${live.price.toPrecision(3)}.`,
+            image: live.image,
             data: { type: 'trackedGain', mint },
           });
         }
@@ -175,6 +176,7 @@ async function runOnce() {
         await sendToWallet(wallet, 'holdingCrash', {
           title: `${symbol} is dropping fast`,
           body: `Down ${Math.abs(dropPct).toFixed(1)}% in the ${windowLabel}.`,
+          image: live.image,
           data: { type: 'holdingCrash', mint },
         });
       }
@@ -291,7 +293,10 @@ async function runWalletTradesOnce() {
       for (const f of followers) {
         const profile = profileByWallet.get(w);
         const label = profile?.displayName || f.label || shortWallet(w);
-        const profileImage = profileImageForPush(profile, w);
+        // Prefer the tracked wallet's own uploaded pic; fall back to the same
+        // generated gradient+animal avatar the app shows for that wallet.
+        const profileImage = profileImageForPush(profile, w)
+          || `${PUBLIC_API_BASE_URL}/api/avatar/wallet/${w}.png`;
         await sendToWallet(f.userWallet, 'walletTrade', {
           title: `${label} • Following`,
           body: `${action[0].toUpperCase()}${action.slice(1)} $${sym}${sol}`,
@@ -354,6 +359,7 @@ async function runSoftOrdersOnce() {
       await sendToWallet(o.walletAddress, 'orderFill', {
         title: `${symbol} hit your ${action} target`,
         body: `Now $${priceStr} — tap to ${action} ${o.side === 'buy' ? `with ${o.amountSol} SOL` : 'now'}.`,
+        image: live.image,
         data: {
           type: 'softOrderTriggered',
           orderId: String(o._id),

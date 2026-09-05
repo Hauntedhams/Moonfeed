@@ -157,7 +157,13 @@ export const CopyTradeProvider = ({ children, onCopyTrade }) => {
         newNotifs.forEach(n => {
           const targetW = trackedWallets.find(w => w.address === n.walletAddress);
           if (!targetW || targetW.notificationsEnabled !== false) {
-            notifyWalletTrade(n);
+            // Wallet alerts show the WALLET's picture: the hosted profile pic
+            // when it's a remote URL, otherwise the same generated avatar the
+            // app renders (served by the backend avatar endpoint).
+            const walletImage = /^https:/i.test(n.walletProfileImage || '')
+              ? n.walletProfileImage
+              : (n.walletAddress ? getFullApiUrl(`/api/avatar/wallet/${n.walletAddress}.png`) : null);
+            notifyWalletTrade({ ...n, walletImage });
           }
           addNotification({
             id: `wallet-trade-${n.signature || n.id}`,

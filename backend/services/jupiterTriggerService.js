@@ -68,6 +68,18 @@ function setCachedTokenPrice(tokenMint, price, source) {
 // END CACHING SYSTEM
 // ============================================
 
+// Sweep expired entries periodically — reads only evict the key being read, so
+// tokens never queried again would otherwise accumulate forever.
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, value] of tokenMetadataCache) {
+    if (now - value.timestamp > METADATA_CACHE_TTL) tokenMetadataCache.delete(key);
+  }
+  for (const [key, value] of tokenPriceCache) {
+    if (now - value.timestamp > PRICE_CACHE_TTL) tokenPriceCache.delete(key);
+  }
+}, 5 * 60 * 1000).unref();
+
 // Jupiter Trigger API base URL - CORRECT endpoint for limit orders
 const JUPITER_TRIGGER_API = 'https://lite-api.jup.ag/trigger/v1';
 

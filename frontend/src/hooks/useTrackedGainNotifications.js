@@ -87,6 +87,7 @@ export default function useTrackedGainNotifications(favorites = []) {
             gainPct,
             trackedAtPrice: coin.trackedAtPrice,
             price: live.price,
+            image: live.image || null,
           });
           addNotification({
             id: `gain-${coin.mint}-${Date.now()}`,
@@ -116,6 +117,7 @@ export default function useTrackedGainNotifications(favorites = []) {
             dropPct: gainPct,
             trackedAtPrice: coin.trackedAtPrice,
             price: live.price,
+            image: live.image || null,
           });
           addNotification({
             id: `drop-${coin.mint}-${Date.now()}`,

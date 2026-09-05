@@ -95,10 +95,17 @@ app.get('/api/version', (req, res) => {
 
 // Health check endpoint for Render deployment
 app.get('/api/health', (req, res) => {
+  const mem = process.memoryUsage();
   res.status(200).json({
     status: 'healthy',
     timestamp: new Date().toISOString(),
-    uptime: process.uptime()
+    uptime: process.uptime(),
+    memoryMB: {
+      rss: Math.round(mem.rss / 1048576),
+      heapUsed: Math.round(mem.heapUsed / 1048576),
+      heapTotal: Math.round(mem.heapTotal / 1048576),
+      external: Math.round(mem.external / 1048576)
+    }
   });
 });
 
@@ -130,6 +137,9 @@ app.use('/api/users', usersRoutes);
 
 // Mount push-notification device registry
 app.use('/api/push', pushRoutes);
+
+// Mount generated wallet avatars (notification images for wallet alerts)
+app.use('/api/avatar', require('./routes/avatar'));
 
 // Mount soft (server-monitored) limit orders
 app.use('/api/soft-orders', softOrderRoutes);
@@ -1045,6 +1055,25 @@ const DEXTRENDING_CACHE_TTL = 15 * 60 * 1000; // 15 minutes cache
 // Top traders cache to prevent duplicate API calls
 const topTradersCache = new Map();
 const TOP_TRADERS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+// Periodic sweep of TTL caches that otherwise only evict on read — entries for
+// keys never requested again would live forever and slowly exhaust the 512MB
+// container (shows up as silent health-check timeouts / instance replacement).
+setInterval(() => {
+  const now = Date.now();
+  let removed = 0;
+  for (const [key, value] of geckoCache) {
+    if (now - value.timestamp > GECKO_STALE_CACHE_MAX) { geckoCache.delete(key); removed++; }
+  }
+  for (const [key, value] of topTradersCache) {
+    if (now - value.timestamp > TOP_TRADERS_CACHE_TTL * 4) { topTradersCache.delete(key); removed++; }
+  }
+  for (const [key, value] of poolAddressCache) {
+    if (now - value.timestamp > POOL_CACHE_TTL) { poolAddressCache.delete(key); removed++; }
+  }
+  const mem = process.memoryUsage();
+  console.log(`🧹 Cache sweep: removed ${removed} stale entries | gecko=${geckoCache.size} topTraders=${topTradersCache.size} pools=${poolAddressCache.size} | rss=${Math.round(mem.rss / 1048576)}MB heap=${Math.round(mem.heapUsed / 1048576)}MB`);
+}, 10 * 60 * 1000);
 
 // Initialize Rugcheck auto-processor
 const rugcheckAutoProcessor = new RugcheckAutoProcessor();

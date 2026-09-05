@@ -3,6 +3,7 @@
 // while the app is running. On web it falls back to the browser Notification API.
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
+import { Filesystem, Directory } from '@capacitor/filesystem';
 
 const isNative = Capacitor.isNativePlatform();
 let permissionGranted = false;
@@ -16,6 +17,47 @@ function idFromSignature(signature) {
     hash = (hash * 31 + signature.charCodeAt(i)) | 0;
   }
   return Math.abs(hash) % 2147483647 || 1;
+}
+
+function isRemoteImage(url) {
+  return typeof url === 'string' && /^https:\/\//i.test(url);
+}
+
+// iOS notification attachments must be LOCAL files, so a remote image URL has
+// to be downloaded into the cache dir first. Returns the native file URI, or
+// null (notification still fires, just without the picture).
+const imageFileCache = new Map(); // url -> file URI
+async function resolveImageAttachment(imageUrl) {
+  if (!isNative || !isRemoteImage(imageUrl)) return null;
+  if (imageFileCache.has(imageUrl)) return imageFileCache.get(imageUrl);
+  let fileUri = null;
+  try {
+    let hash = 0;
+    for (let i = 0; i < imageUrl.length; i++) hash = imageUrl.charCodeAt(i) + ((hash << 5) - hash);
+    const extMatch = /\.(png|jpe?g|gif|webp)(\?|#|$)/i.exec(imageUrl);
+    const path = `notif-img-${Math.abs(hash)}${extMatch ? `.${extMatch[1].toLowerCase()}` : '.png'}`;
+    try {
+      const existing = await Filesystem.stat({ path, directory: Directory.Cache });
+      fileUri = existing.uri || null;
+    } catch (_) {
+      const res = await Filesystem.downloadFile({ url: imageUrl, path, directory: Directory.Cache, recursive: true });
+      fileUri = res.path || null;
+    }
+  } catch (_) {
+    fileUri = null;
+  }
+  if (imageFileCache.size > 100) imageFileCache.clear();
+  imageFileCache.set(imageUrl, fileUri);
+  return fileUri;
+}
+
+// Extra fields for a native notification carrying an image: iOS attachment
+// (thumbnail + expanded large image) and Android largeIcon.
+async function imageFields(imageUrl) {
+  const fileUri = await resolveImageAttachment(imageUrl);
+  return fileUri
+    ? { attachments: [{ id: 'image', url: fileUri }], largeIcon: fileUri }
+    : {};
 }
 
 // Check current permission status without prompting the user.
@@ -105,6 +147,7 @@ export async function notifyOrderFilled(order, stats) {
   if (!permissionGranted) return;
   const { title, body } = buildFillMessage(order, stats);
   const orderId = order.orderId || order.id || String(Date.now());
+  const image = order.image || order.tokenImage || null;
 
   try {
     if (isNative) {
@@ -116,13 +159,14 @@ export async function notifyOrderFilled(order, stats) {
             body,
             schedule: { at: new Date(Date.now() + 200) },
             extra: { orderId, tokenMint: order.tokenMint },
+            ...(await imageFields(image)),
           },
         ],
       });
     } else if ('Notification' in window) {
       const notificationOptions = {
         body,
-        icon: '/android-chrome-192x192.png',
+        icon: isRemoteImage(image) ? image : '/android-chrome-192x192.png',
         badge: '/favicon-32x32.png',
         tag: `order-filled-${orderId}`,
         renotify: true,
@@ -142,7 +186,7 @@ export async function notifyOrderFilled(order, stats) {
 }
 
 // Fire a native (or web) notification when a coin the user holds starts crashing.
-export async function notifyHoldingCrash({ mint, symbol, dropPct, windowLabel, valueUsd }) {
+export async function notifyHoldingCrash({ mint, symbol, dropPct, windowLabel, valueUsd, image }) {
   if (!permissionGranted) return;
   const pct = Math.abs(Number(dropPct) || 0).toFixed(1);
   const value = valueUsd > 0 ? ` Your position is worth ~$${Number(valueUsd).toFixed(2)}.` : '';
@@ -159,13 +203,14 @@ export async function notifyHoldingCrash({ mint, symbol, dropPct, windowLabel, v
             body,
             schedule: { at: new Date(Date.now() + 200) },
             extra: { tokenMint: mint },
+            ...(await imageFields(image)),
           },
         ],
       });
     } else if ('Notification' in window) {
       const notificationOptions = {
         body,
-        icon: '/android-chrome-192x192.png',
+        icon: isRemoteImage(image) ? image : '/android-chrome-192x192.png',
         badge: '/favicon-32x32.png',
         tag: `holding-crash-${mint}`,
         renotify: true,
@@ -184,7 +229,7 @@ export async function notifyHoldingCrash({ mint, symbol, dropPct, windowLabel, v
 }
 
 // Fire a native (or web) notification when a tracked coin is up past a threshold.
-export async function notifyTrackedGain({ mint, symbol, gainPct, trackedAtPrice, price }) {
+export async function notifyTrackedGain({ mint, symbol, gainPct, trackedAtPrice, price, image }) {
   if (!permissionGranted) return;
   const pct = Number(gainPct) || 0;
   const title = `${symbol || 'A coin you track'} is up ${pct.toFixed(1)}%`;
@@ -203,13 +248,14 @@ export async function notifyTrackedGain({ mint, symbol, gainPct, trackedAtPrice,
             body,
             schedule: { at: new Date(Date.now() + 200) },
             extra: { tokenMint: mint },
+            ...(await imageFields(image)),
           },
         ],
       });
     } else if ('Notification' in window) {
       const notificationOptions = {
         body,
-        icon: '/android-chrome-192x192.png',
+        icon: isRemoteImage(image) ? image : '/android-chrome-192x192.png',
         badge: '/favicon-32x32.png',
         tag: `tracked-gain-${mint}`,
         renotify: true,
@@ -228,7 +274,7 @@ export async function notifyTrackedGain({ mint, symbol, gainPct, trackedAtPrice,
 }
 
 // Fire a native (or web) notification when a tracked coin is down past a threshold.
-export async function notifyTrackedDrop({ mint, symbol, dropPct, trackedAtPrice, price }) {
+export async function notifyTrackedDrop({ mint, symbol, dropPct, trackedAtPrice, price, image }) {
   if (!permissionGranted) return;
   const pct = Math.abs(Number(dropPct) || 0);
   const title = `📉 ${symbol || 'Tracked coin'} is down ${pct.toFixed(1)}%`;
@@ -247,13 +293,14 @@ export async function notifyTrackedDrop({ mint, symbol, dropPct, trackedAtPrice,
             body,
             schedule: { at: new Date(Date.now() + 200) },
             extra: { tokenMint: mint },
+            ...(await imageFields(image)),
           },
         ],
       });
     } else if ('Notification' in window) {
       const notificationOptions = {
         body,
-        icon: '/android-chrome-192x192.png',
+        icon: isRemoteImage(image) ? image : '/android-chrome-192x192.png',
         badge: '/favicon-32x32.png',
         tag: `tracked-drop-${mint}`,
         renotify: true,
@@ -275,6 +322,13 @@ export async function notifyTrackedDrop({ mint, symbol, dropPct, trackedAtPrice,
 export async function notifyWalletTrade(swap) {
   if (!permissionGranted) return;
   const { title, body } = buildMessage(swap);
+  // Prefer the wallet's hosted profile pic / generated avatar URL; only use a
+  // remote image (data-URI pictures can't be attached or used as web icons).
+  const image = isRemoteImage(swap.walletImage)
+    ? swap.walletImage
+    : isRemoteImage(swap.walletProfileImage)
+      ? swap.walletProfileImage
+      : null;
 
   try {
     if (isNative) {
@@ -285,7 +339,7 @@ export async function notifyWalletTrade(swap) {
             title,
             body,
             schedule: { at: new Date(Date.now() + 200) },
-            largeIcon: swap.walletProfileImage || undefined,
+            ...(await imageFields(image)),
             extra: { signature: swap.signature, walletAddress: swap.walletAddress },
           },
         ],
@@ -293,7 +347,7 @@ export async function notifyWalletTrade(swap) {
     } else if ('Notification' in window && permissionGranted) {
       const notificationOptions = {
         body,
-        icon: swap.walletProfileImage || '/android-chrome-192x192.png',
+        icon: image || '/android-chrome-192x192.png',
         badge: '/favicon-32x32.png',
         tag: `tracked-wallet-${swap.signature || swap.walletAddress || Date.now()}`,
         renotify: true,
