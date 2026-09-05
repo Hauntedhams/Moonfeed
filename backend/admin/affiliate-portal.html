@@ -132,7 +132,10 @@ async function fetchPortal(code, password) {
 }
 
 async function login() {
-  const code = document.getElementById('loginCode').value.trim();
+  let code = document.getElementById('loginCode').value.trim();
+  // Be forgiving if they paste the whole link (e.g. "https://moonfeed.app?ref=Inferno")
+  const refMatch = code.match(/[?&]ref=([^&\s]+)/i);
+  if (refMatch) code = refMatch[1];
   const password = document.getElementById('loginPassword').value;
   const errEl = document.getElementById('loginError');
   errEl.textContent = '';
