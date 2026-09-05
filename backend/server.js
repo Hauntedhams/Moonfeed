@@ -44,6 +44,7 @@ const pushRoutes = require('./routes/push');
 const softOrderRoutes = require('./routes/softOrders');
 const pushMonitors = require('./services/pushMonitors');
 const onDemandEnrichment = require('./services/OnDemandEnrichmentService');
+const xTrendsService = require('./services/xTrendsService');
 const geckoTerminalService = require('./geckoTerminalService');
 const chartDataService = require('./chartDataService');
 const { getJupiterReferralService } = require('./services/jupiterReferralService');
@@ -148,6 +149,17 @@ app.use('/api/avatar', require('./routes/avatar'));
 
 // Mount soft (server-monitored) limit orders
 app.use('/api/soft-orders', softOrderRoutes);
+
+// X (Twitter) trending events matched to coins (Grok Live Search, cached server-side)
+app.get('/api/x-trends', async (req, res) => {
+  try {
+    const data = await xTrendsService.getTrends();
+    res.json({ success: true, ...data });
+  } catch (error) {
+    console.error('❌ /api/x-trends error:', error.message);
+    res.status(500).json({ success: false, error: 'Failed to load X trends' });
+  }
+});
 
 // ═══════════════════════════════════════════════════════════════
 // 🪐 JUPITER REFERRAL API ENDPOINTS
@@ -1056,6 +1068,19 @@ let dextrendingCoins = []; // Cache for Dexscreener trending coins (fresh, <=30d
 let dextrendingLastFetch = 0; // Timestamp of last fetch
 let whalefeedCoins = []; // Cache for large, established coins (no age cap)
 const DEXTRENDING_CACHE_TTL = 15 * 60 * 1000; // 15 minutes cache
+
+// X-trends matcher scans every pool the server already maintains (deduped by mint).
+xTrendsService.setCoinPoolGetter(() => {
+  const seen = new Set();
+  const pool = [];
+  for (const coin of [...dextrendingCoins, ...whalefeedCoins, ...currentCoins, ...newCoins]) {
+    const mint = coin?.mintAddress;
+    if (!mint || seen.has(mint)) continue;
+    seen.add(mint);
+    pool.push(coin);
+  }
+  return pool;
+});
 
 // Top traders cache to prevent duplicate API calls
 const topTradersCache = new Map();

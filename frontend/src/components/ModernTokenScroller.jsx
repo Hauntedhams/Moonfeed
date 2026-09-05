@@ -76,7 +76,8 @@ const ModernTokenScroller = ({
   onAdvancedFilter = null,
   isAdvancedFilterActive = false,
   onSearchClick = null, // Add search click handler
-  showFiltersButton = true // Hide the top-left info/hamburger button (e.g. a fixed back button takes that spot instead)
+  showFiltersButton = true, // Hide the top-left info/hamburger button (e.g. a fixed back button takes that spot instead)
+  scrollTarget = null // { feed, mint, index, nonce } from the feed browser; keeps browsing in the full feed
 }) => {
   const { connected: walletConnected } = useWallet();
   const { openWalletConnect } = useWalletConnectOnboarding();
@@ -1573,6 +1574,28 @@ const ModernTokenScroller = ({
       container.scrollTop = idx * slideHeight;
     });
   }, [coins.length, loading]);
+
+  useEffect(() => {
+    if (!scrollTarget || loading || coins.length === 0) return;
+    if (onlyFavorites || singleCoin || advancedFilters) return;
+    const feedType = filters.type || 'trending';
+    if (scrollTarget.feed && scrollTarget.feed !== feedType) return;
+    const mintOf = (c) => c.mintAddress || c.tokenAddress || c.address;
+    let idx = scrollTarget.mint ? coins.findIndex((c) => mintOf(c) === scrollTarget.mint) : -1;
+    if (idx < 0 && Number.isInteger(scrollTarget.index)) idx = Math.min(Math.max(scrollTarget.index, 0), coins.length - 1);
+    if (idx < 0) return;
+    currentIndexRef.current = idx;
+    setCurrentIndex(idx);
+    setSettledIndex(idx);
+    const coin = coins[idx];
+    if (coin) onCurrentCoinChangeRef.current?.(coin, idx);
+    requestAnimationFrame(() => {
+      const container = scrollerRef.current;
+      if (!container) return;
+      const slideHeight = container.querySelector('.modern-coin-slide')?.offsetHeight || container.clientHeight || window.innerHeight;
+      container.scrollTop = idx * slideHeight;
+    });
+  }, [scrollTarget?.nonce, coins.length, loading, filters.type, onlyFavorites, singleCoin, advancedFilters]);
 
   // ── Tracked-wallet buys woven into the feed ──────────────────────────────
   // Once per feed load: tag feed coins a tracked wallet recently bought, and

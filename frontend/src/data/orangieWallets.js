@@ -167,6 +167,25 @@ export const ORANGIE_WALLETS = [
   { name: 'BIQ ORNG', address: 'BiqkWhrJ4dfpE6TeNY34tA4GssG23SBH8CU8mqB7xZ6t' },
   { name: 'orangie 39q', address: '39qpCe9zdyC2g53UJeyGh5jwGBKjFwidCbnD5W53aVBW' },
   { name: 'obijai', address: 'GryvxoTHMYkVUgTTexpqntYLfY4La582UGX7TSX4KRh7' },
+  // Sourced from gmgn.ai (2026-09-05).
+  { name: 'GMGN Trader 1', address: '7w7f4P284zJhv3zotjCUmaNsZSsrHQKtpXGBJFq8gdzq' },
+  { name: 'GMGN Trader 2', address: 'ardinRsN1mNYVeoJWTBsWeYeXvuR9UUDGMsCDKpb6AT4' },
+  { name: 'GMGN Trader 3', address: 'vw54BmAogeRV3vPKWyFet5yf8DTLcREzdSzx4rw9Ud9' },
+  { name: 'GMGN Trader 4', address: 'JAj2wKJmW54nyBFYxUea7Nq3fYTE3G69iwaa8NLjTRFr' },
+  { name: 'GMGN Trader 5', address: 'CMCkuhr8dynwXzeRc7DmhQt7KJFq2YFiJYSNGJAKkpAr' },
+  { name: 'GMGN Trader 6', address: 'Bi4rd5FH5bYEN8scZ7wevxNZyNmKHdaBcvewdPFxYdLt' },
+  { name: 'GMGN Trader 7', address: 'DYAn4XpAkN5mhiXkRB7dGq4Jadnx6XYgu8L5b3WGhbrt' },
+  // Cupsey already tracked above (suqh5s…) — skipped duplicate.
+  { name: 'GMGN Trader 8', address: 'FixukbsKfJZEr996ubcWvwTAt1b6QJ2SfP3FJsBSbH33' },
+  { name: 'GMGN Trader 9', address: 'Eh3q5AXnopCFULMLGv6QeVqpZhRvPgkWHBMKqNGQvQTX' },
+  { name: 'GMGN Trader 10', address: '6yaPaPHQuGV2ThviDWphxzmp9Hd8BoUK3MjpDn1cPDse' },
+  { name: 'GMGN Trader 11', address: 'HZ8SS2qXVjv77fad5mmjzEyTnMAfPY8Mhsi8Z2TZhcyR' },
+  { name: 'GMGN Trader 12', address: '9W69DaLY58ZmLDBuqxVPKRhEWBPD61QQgQ4qH8m6qAJD' },
+  { name: 'GMGN Trader 13', address: 'Go9BEhJGCpbXFzky6SWcofqQyuiKrtE1m9Knx1aiZCc8' },
+  { name: 'GMGN Trader 14', address: 'XvHdhLKiTnpT6UgMG6gRoVjkUqx8RnoEYhiuZmderqg' },
+  { name: 'GMGN Trader 15', address: 'C86oRMyUqzsXKXEAsCUbrhJuYuMbqXxE886s9MpUFF88' },
+  { name: 'GMGN Trader 16', address: '6G8Cu53PRgm5aPHxMaZRguYHJfaNxmnmgoR129cKMvJk' },
+  { name: 'GMGN Trader 17', address: '2fg5QD1eD7rzNNCsvnhmXFm5hqNgwTTG8p7kQ6f3rx6f' },
 ];
 
 export default ORANGIE_WALLETS;

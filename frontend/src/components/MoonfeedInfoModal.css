@@ -1634,6 +1634,25 @@
   padding: 12px 20px 24px;
   flex: 1;
   -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(139, 155, 255, 0.4) rgba(255, 255, 255, 0.03);
+}
+
+.menu-panel-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.menu-panel-body::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.menu-panel-body::-webkit-scrollbar-thumb {
+  background: rgba(139, 155, 255, 0.4);
+  border-radius: 3px;
+}
+
+.menu-panel-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(139, 155, 255, 0.6);
 }
 
 /* Empty state */
@@ -1831,6 +1850,65 @@
   font-size: 13px;
   line-height: 1.5;
   color: rgba(255, 255, 255, 0.72);
+}
+
+/* ── Whale list stat chips + leaderboard ── */
+.twallet-section-heading {
+  list-style: none;
+  padding: 12px 2px 6px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.twallet-rank {
+  font-size: 11px;
+  font-weight: 700;
+  color: #8b9bff;
+  margin-right: 6px;
+}
+
+.twallet-stat-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 3px;
+}
+
+.twallet-win-chip {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+
+.twallet-win-chip--high {
+  background: rgba(52, 211, 153, 0.16);
+  color: #34d399;
+}
+
+.twallet-win-chip--mid {
+  background: rgba(251, 191, 36, 0.14);
+  color: #fbbf24;
+}
+
+.twallet-win-chip--low {
+  background: rgba(248, 113, 113, 0.14);
+  color: #f87171;
+}
+
+.twallet-pnl {
+  font-size: 11px;
+  font-weight: 600;
+  color: #34d399;
+  white-space: nowrap;
+}
+
+.twallet-pnl--loss {
+  color: #f87171;
 }
 
 .tracked-wallet-row-addr {

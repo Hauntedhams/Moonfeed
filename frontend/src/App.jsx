@@ -48,6 +48,7 @@ const favoritesCacheKey = (address) => `moonfeed_tracked_coins_${address}`;
 
 // Remember which feed the user was browsing so reopening the app returns them there.
 const LAST_FEED_KEY = 'moonfeed_last_feed';
+const FEED_POS_KEY = 'moonfeed_feed_pos';
 const FEED_LABELS = Object.fromEntries(BASE_FEEDS.map((feed) => [feed.id, feed.label]));
 const KNOWN_FEEDS = ['dextrending', 'whalefeed', 'graduating', 'new', 'trending'];
 const getInitialFilters = () => {
@@ -115,6 +116,7 @@ function App() {
   const filtersRef = useRef(filters);
   filtersRef.current = filters;
   const [feedToast, setFeedToast] = useState(null); // Feed name flashed after a swipe switch
+  const [feedJumpTarget, setFeedJumpTarget] = useState(null); // Jump home feed to a coin picked from the feed browser
   const [advancedFilters, setAdvancedFilters] = useState(null); // For advanced filtering
   const [isAdvancedFilterActive, setIsAdvancedFilterActive] = useState(false);
   const [advancedFilterModalOpen, setAdvancedFilterModalOpen] = useState(false); // Control modal open/close
@@ -506,6 +508,22 @@ function App() {
     setActiveTab('coin-detail');
   };
 
+  const handleFeedCoinSelect = (coin, { feed, index } = {}) => {
+    if (!coin) return;
+    const feedType = KNOWN_FEEDS.includes(feed) ? feed : filtersRef.current?.type || 'dextrending';
+    const mint = coin.mintAddress || coin.tokenAddress || coin.address;
+    try {
+      if (mint) localStorage.setItem(FEED_POS_KEY, JSON.stringify({ feed: feedType, mint, index, ts: Date.now() }));
+    } catch (_) {}
+    setActiveTab('home');
+    setAdvancedFilters(null);
+    setIsAdvancedFilterActive(false);
+    setFilters({ type: feedType });
+    setCurrentViewedCoin(coin);
+    setFeedJumpTarget({ feed: feedType, mint, index, nonce: Date.now() });
+    if (feedType !== filtersRef.current?.type) setFeedToast({ feed: feedType, key: Date.now() });
+  };
+
   // Handle Jupiter swap success
   const handleSwapSuccess = async ({ txid, swapResult, quoteResponseMeta, coin, walletAddress }) => {
     console.log('🎉 Swap successful for', coin.symbol, 'TX:', txid);
@@ -623,6 +641,17 @@ function App() {
     return () => window.removeEventListener('moonfeed:open-wallet-profile', onOpenWalletProfile);
   }, []);
 
+  // Same pattern for coins — lets nested panels (e.g. X Tracker) open a coin's
+  // detail card without prop-threading.
+  useEffect(() => {
+    const onOpenCoin = (e) => {
+      const coin = e.detail;
+      if (coin?.mintAddress || coin?.address) handleCoinFound(coin);
+    };
+    window.addEventListener('moonfeed:open-coin', onOpenCoin);
+    return () => window.removeEventListener('moonfeed:open-coin', onOpenCoin);
+  }, []);
+
   // Push-notification taps (dispatched from pushNotifications.js). A triggered
   // soft order deep-links straight into a prefilled instant swap.
   useEffect(() => {
@@ -687,6 +716,7 @@ function App() {
             activeFilter={filters.type || 'graduating'}
             onFilterChange={handleTopTabFilterChange}
             onCoinSelect={handleCoinFound}
+            onFeedCoinSelect={handleFeedCoinSelect}
             hasCustomFilters={isAdvancedFilterActive}
             onFeedListOpen={handleActiveTabClick}
             onAdvancedFilterClick={() => setAdvancedFilterModalOpen(true)}
@@ -805,6 +835,7 @@ function App() {
             onVisibleCoinsChange={handleVisibleCoinsChange}
             onCurrentCoinChange={handleCurrentCoinChange}
             onTotalCoinsChange={handleTotalCoinsChange}
+            scrollTarget={feedJumpTarget}
             feedOrder={FEED_ORDER}
             advancedFilters={advancedFilters}
             onAdvancedFilter={handleAdvancedFilter}
@@ -849,12 +880,12 @@ function App() {
             onBack={() => setWalletProfile(null)}
             onOpenPosition={handleOpenPosition}
             onCoinClick={(coinData) => {
-              handleOpenPosition(walletProfile.address, coinData.mintAddress || coinData.address, {
-                displayName: walletProfile.displayName || walletProfile.name,
-                tokenSymbol: coinData.symbol,
-                tokenName: coinData.name,
-                tokenImage: coinData.image,
-              });
+              setWalletProfile(null);
+              setPositionDetail(null);
+              setPreviousTab(activeTab);
+              setSelectedCoin(coinData);
+              setCurrentViewedCoin(coinData);
+              setActiveTab('coin-detail');
             }}
           />
         </Suspense>

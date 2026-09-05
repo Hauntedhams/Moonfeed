@@ -1,9 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useTrackedWallets } from '../contexts/TrackedWalletsContext';
 import { useDarkMode } from '../contexts/DarkModeContext';
 import { useCopyTrade } from '../contexts/CopyTradeContext';
 import { ORANGIE_WALLETS } from '../data/orangieWallets';
+import { getFullApiUrl } from '../config/api';
+import XTrackerPanel from './XTrackerPanel';
 
 import './MoonfeedInfoModal.css';
 
@@ -303,12 +305,105 @@ const MoonfeedInfoModal = ({ isVisible, onClose, onBuyMoo, onStartTutorial }) =>
 };
 
 // ─── Tracked Wallets Panel ────────────────────────────────────────────────────
+const WHALE_NAME_BY_ADDRESS = ORANGIE_WALLETS.reduce((map, w) => {
+  if (!map[w.address]) map[w.address] = w.name;
+  return map;
+}, {});
+
+const formatPnlUsd = (n) => {
+  if (n == null || !isFinite(n)) return null;
+  const abs = Math.abs(n);
+  const num = abs >= 1e6 ? `$${(abs / 1e6).toFixed(1)}M`
+    : abs >= 1e3 ? `$${(abs / 1e3).toFixed(0)}K`
+    : `$${abs.toFixed(0)}`;
+  return `${n < 0 ? '-' : '+'}${num}`;
+};
+
+const winChipClass = (winRate) => (
+  winRate >= 55 ? 'twallet-win-chip--high' : winRate >= 40 ? 'twallet-win-chip--mid' : 'twallet-win-chip--low'
+);
+
+const WalletStatChips = ({ winRate, pnl }) => {
+  const pnlText = pnl ? formatPnlUsd(pnl) : null;
+  const hasWin = winRate != null && isFinite(winRate) && winRate > 0;
+  // No data (0% win + $0 PnL) reads as a terrible trader — show nothing instead.
+  if (!hasWin && !pnlText) return null;
+  return (
+    <span className="twallet-stat-row">
+      {hasWin && (
+        <span className={`twallet-win-chip ${winChipClass(winRate)}`}>{Math.round(winRate)}% win</span>
+      )}
+      {pnlText && (
+        <span className={`twallet-pnl ${pnl < 0 ? 'twallet-pnl--loss' : ''}`}>{pnlText} PnL</span>
+      )}
+    </span>
+  );
+};
+
 const TrackedWalletsPanel = ({ onClose }) => {
   const { trackedWallets, untrackWallet, toggleCopyTrade, trackWallet, isTracked } = useTrackedWallets();
   const { queue } = useCopyTrade();
   const [selectedWallet, setSelectedWallet] = useState(null);
   const [howItWorksOpen, setHowItWorksOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('mine'); // 'mine' | 'orangie'
+  const [whaleStats, setWhaleStats] = useState({}); // address → {winRate, realizedPnl}
+  const [leaderboard, setLeaderboard] = useState([]); // live top traders
+
+  // Load live leaderboard + cached win rates for the curated list when the tab opens.
+  useEffect(() => {
+    if (activeTab !== 'orangie') return;
+    let cancelled = false;
+    let timer = null;
+    let attempts = 0;
+
+    fetch(getFullApiUrl('/api/wallet/whale-leaderboard'))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (!cancelled && j?.wallets?.length) setLeaderboard(j.wallets); })
+      .catch(() => {});
+
+    const addresses = ORANGIE_WALLETS.map((w) => w.address);
+    const fetchStats = () => {
+      fetch(getFullApiUrl('/api/wallet/stats-batch'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ addresses }),
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => {
+          if (cancelled || !j?.stats) return;
+          setWhaleStats((prev) => {
+            const next = { ...prev };
+            for (const [addr, s] of Object.entries(j.stats)) if (s) next[addr] = s;
+            return next;
+          });
+          // Backend warms cache misses in the background — re-poll to fill them in.
+          const missing = Object.values(j.stats).some((s) => !s);
+          if (missing && ++attempts < 8) timer = setTimeout(fetchStats, 15000);
+        })
+        .catch(() => {});
+    };
+    fetchStats();
+
+    return () => { cancelled = true; if (timer) clearTimeout(timer); };
+  }, [activeTab]);
+
+  // Recently-trading + higher-win wallets bubble to the top; unknowns keep their original order.
+  const RECENT_TRADE_WINDOW_MS = 48 * 60 * 60 * 1000;
+  const sortedCuratedWallets = useMemo(() => {
+    const now = Date.now();
+    const scored = ORANGIE_WALLETS.map((w, i) => {
+      const s = whaleStats[w.address];
+      const winRate = s?.winRate ?? null;
+      const lastTradeAt = s?.lastTradeAt ?? null;
+      const isRecent = lastTradeAt != null && (now - lastTradeAt) < RECENT_TRADE_WINDOW_MS;
+      const recencyScore = lastTradeAt != null ? Math.max(0, 1 - (now - lastTradeAt) / RECENT_TRADE_WINDOW_MS) * 100 : 0;
+      const score = (isRecent ? 1000 : 0) + (winRate ?? 0) * 0.6 + recencyScore * 0.4;
+      return { w, i, score, hasData: winRate != null || lastTradeAt != null };
+    });
+    return scored
+      .sort((a, b) => (b.score - a.score) || (a.i - b.i))
+      .map((s) => s.w);
+  }, [whaleStats]);
 
   const openWalletProfile = (address, displayName) => {
     onClose();
@@ -366,8 +461,57 @@ const TrackedWalletsPanel = ({ onClose }) => {
             </div>
 
             <ul className="tracked-wallet-list">
-              {ORANGIE_WALLETS.map((w, i) => {
+              {leaderboard.length > 0 && (
+                <>
+                  <li className="twallet-section-heading">🔥 Top traders right now — live all-time PnL leaderboard</li>
+                  {leaderboard.slice(0, 15).map((w, i) => {
+                    const tracked = isTracked(w.address);
+                    const name = WHALE_NAME_BY_ADDRESS[w.address] || `${w.address.slice(0, 4)}…${w.address.slice(-4)}`;
+                    return (
+                      <li key={`lb-${w.address}`} className="tracked-wallet-row">
+                        <div
+                          className="tracked-wallet-row-info tracked-wallet-row-info--clickable"
+                          onClick={() => openWalletProfile(w.address, name)}
+                          role="button"
+                          title="View wallet profile"
+                        >
+                          <div className="twallet-addr-row">
+                            <span className="twallet-rank">#{i + 1}</span>
+                            <span className="tracked-wallet-row-addr">
+                              {w.address.slice(0, 5)}…{w.address.slice(-5)}
+                            </span>
+                          </div>
+                          <span className="tracked-wallet-row-label">{name}</span>
+                          <WalletStatChips winRate={w.winRate} pnl={w.totalPnl} />
+                        </div>
+                        <div className="tracked-wallet-row-actions">
+                          <button
+                            className={`twallet-track-btn ${tracked ? 'twallet-track-btn--on' : ''}`}
+                            onClick={() => {
+                              if (tracked) untrackWallet(w.address);
+                              else trackWallet(w.address, name);
+                            }}
+                            title={tracked ? 'Untrack this wallet' : 'Add to My Wallets'}
+                          >
+                            {tracked ? '✓ Tracked' : '+ Track'}
+                          </button>
+                          <button
+                            className="twallet-view-btn"
+                            onClick={() => setSelectedWallet(w.address)}
+                            title="View on Solscan"
+                          >
+                            ↗
+                          </button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                  <li className="twallet-section-heading">Curated whale list</li>
+                </>
+              )}
+              {sortedCuratedWallets.map((w, i) => {
                 const tracked = isTracked(w.address);
+                const stats = whaleStats[w.address];
                 return (
                   <li key={`${w.address}-${i}`} className="tracked-wallet-row">
                     <div
@@ -382,6 +526,7 @@ const TrackedWalletsPanel = ({ onClose }) => {
                         </span>
                       </div>
                       <span className="tracked-wallet-row-label">{w.name}</span>
+                      {stats && <WalletStatChips winRate={stats.winRate} pnl={stats.realizedPnl} />}
                     </div>
                     <div className="tracked-wallet-row-actions">
                       <button
@@ -624,6 +769,7 @@ const MoonfeedInfoButton = ({
   const [showTrackedWallets, setShowTrackedWallets] = useState(false);
   const [showOptions, setShowOptions] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [showXTracker, setShowXTracker] = useState(false);
   const wrapperRef = useRef(null);
 
   useEffect(() => {
@@ -653,6 +799,13 @@ const MoonfeedInfoButton = ({
         setMenuOpen(false);
         if (onTrackedWallets) onTrackedWallets();
         else setShowTrackedWallets(true);
+      },
+    },
+    {
+      label: 'X Tracker',
+      onClick: () => {
+        setMenuOpen(false);
+        setShowXTracker(true);
       },
     },
     {
@@ -747,6 +900,7 @@ const MoonfeedInfoButton = ({
       {showTrackedWallets && <TrackedWalletsPanel onClose={() => setShowTrackedWallets(false)} />}
       {showOptions && <OptionsPanel onClose={() => setShowOptions(false)} />}
       {showHelp && <HelpPanel onClose={() => setShowHelp(false)} />}
+      {showXTracker && <XTrackerPanel onClose={() => setShowXTracker(false)} />}
     </div>
   );
 };

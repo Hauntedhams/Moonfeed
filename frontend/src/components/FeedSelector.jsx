@@ -154,6 +154,7 @@ function FeedSelector({
   activeFilter,
   onFilterChange,
   onCoinSelect,
+  onFeedCoinSelect,
   hasCustomFilters = false,
   onAdvancedFilterClick,
   onFeedListOpen
@@ -335,8 +336,12 @@ function FeedSelector({
   };
 
   // Opening a coin from a browsed feed is what commits the feed switch.
-  const handlePreviewCoinClick = (coin) => {
+  const handlePreviewCoinClick = (coin, index) => {
     setOpen(false);
+    if (onFeedCoinSelect) {
+      onFeedCoinSelect(coin, { feed: browseFeed, index });
+      return;
+    }
     if (browseFeed && browseFeed !== activeFilter && browseFeed !== 'custom') {
       onFilterChange?.({ type: browseFeed });
     }
@@ -519,7 +524,7 @@ function FeedSelector({
                     <button
                       key={coin.mintAddress || coin.address || coin.id || index}
                       className="feed-selector-coin-row"
-                      onClick={() => handlePreviewCoinClick(coin)}
+                      onClick={() => handlePreviewCoinClick(coin, index)}
                     >
                       {art && <img src={art} alt="" className="feed-selector-coin-bg" loading="lazy" />}
                       <span className="feed-selector-coin-bg-overlay" />

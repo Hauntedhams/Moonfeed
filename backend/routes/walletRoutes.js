@@ -218,6 +218,8 @@ const processWarmQueue = async () => {
     } finally {
       warmingWallets.delete(owner);
     }
+    // Space out upstream calls when draining a large batch (e.g. whale-list stats warm).
+    if (warmQueue.length) await new Promise((r) => setTimeout(r, 300));
   }
 
   warmQueueActive = false;
@@ -308,6 +310,93 @@ router.post('/warm', (req, res) => {
 
   processWarmQueue();
   res.json({ success: true, queued: queued.length, pending: warmQueue.length, warming: warmingWallets.size });
+});
+
+/**
+ * GET /api/wallet/whale-leaderboard
+ * Solana Tracker top-traders leaderboard — the wallets moving the biggest money
+ * right now, with win percentages. Cached 30 minutes.
+ */
+const LEADERBOARD_CACHE_TTL = 30 * 60 * 1000;
+router.get('/whale-leaderboard', async (req, res) => {
+  try {
+    const cached = walletCache.get('whale-leaderboard');
+    let data;
+    if (cached?.data && (Date.now() - cached.timestamp) < LEADERBOARD_CACHE_TTL) {
+      data = cached.data;
+    } else {
+      const result = await callSolanaTrackerAPI(
+        '/top-traders/all?expandPnl=false&sortBy=total',
+        'whale-leaderboard'
+      );
+      data = result.data;
+    }
+
+    const wallets = (data?.wallets || []).map((w) => ({
+      address: w.wallet,
+      winRate: w.summary?.winPercentage ?? null,
+      totalPnl: w.summary?.total ?? null,
+      realizedPnl: w.summary?.realized ?? null,
+      totalInvested: w.summary?.totalInvested ?? null,
+      wins: w.summary?.totalWins ?? null,
+      losses: w.summary?.totalLosses ?? null,
+    })).filter((w) => w.address);
+
+    res.json({ success: true, wallets });
+  } catch (error) {
+    console.error('❌ whale-leaderboard error:', error.message);
+    res.status(502).json({ success: false, error: 'Leaderboard unavailable' });
+  }
+});
+
+/**
+ * POST /api/wallet/stats-batch
+ * Cached-only win rate / PnL for a list of wallets (curated whale list).
+ * Serves whatever is in the persistent wallet cache (up to 7 days old — fine
+ * for a list display) and background-warms the misses via the existing queue,
+ * so this never fans out into a burst of upstream calls.
+ */
+const STATS_BATCH_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
+const STATS_BATCH_WARM_CAP = 60;
+const lastTradeAtFromCache = (address) => {
+  const cached = walletCache.get(`wallet-trades-${address}`);
+  const firstTrade = cached?.data?.trades?.[0];
+  return firstTrade?.time ?? null;
+};
+
+router.post('/stats-batch', (req, res) => {
+  const addresses = Array.isArray(req.body?.addresses) ? req.body.addresses.slice(0, 200) : [];
+  const stats = {};
+  let warmed = 0;
+
+  for (const address of addresses) {
+    if (typeof address !== 'string' || address.length < 32 || address.length > 60) continue;
+    const cached = walletCache.get(`wallet-pnlv2-${address}`);
+    const hasAnalytics = cached?.data && (Date.now() - cached.timestamp) < STATS_BATCH_MAX_AGE;
+    const lastTradeAt = lastTradeAtFromCache(address);
+
+    if (hasAnalytics) {
+      stats[address] = {
+        winRate: cached.data.winRate ?? null,
+        realizedPnl: cached.data.pnl?.realized ?? null,
+        totalTrades: cached.data.trading?.totalTrades ?? null,
+        lastTradeAt,
+      };
+    } else {
+      stats[address] = lastTradeAt ? { winRate: null, realizedPnl: null, totalTrades: null, lastTradeAt } : null;
+    }
+
+    if ((!hasAnalytics || lastTradeAt == null)
+      && warmed < STATS_BATCH_WARM_CAP
+      && !warmingWallets.has(address)
+      && !warmQueue.some((item) => item.address === address)) {
+      warmQueue.push({ address, includeTrades: true });
+      warmed++;
+    }
+  }
+
+  if (warmed) processWarmQueue();
+  res.json({ success: true, stats, warming: warmed });
 });
 
 /**
