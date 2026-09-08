@@ -16,6 +16,9 @@ const POLL_INTERVAL_MS = 90 * 1000;
 // Each cycle costs 100 Helius credits (Enhanced API) PER tracked wallet, 24/7 —
 // at 60s this alone burned ~1M credits/day. 180s cuts it 3x.
 const WALLET_POLL_INTERVAL_MS = 180 * 1000;
+// When the Helius webhook is registered, polling is just a safety net for
+// missed deliveries — 30 min instead of 3.
+const WALLET_POLL_FALLBACK_MS = 30 * 60 * 1000;
 const SOFT_ORDER_POLL_INTERVAL_MS = 30 * 1000;
 const CHUNK = 30;
 
@@ -368,6 +371,83 @@ async function runWalletTradesOnce() {
   }
 }
 
+// ── Webhook-delivered wallet trades ─────────────────────────────────
+// Same outcome as runWalletTradesOnce but driven by a single Helius enhanced
+// webhook event (1 credit) instead of polling. The atomic cursor advance
+// doubles as dedupe against webhook retries AND the slow polling fallback.
+async function handleWebhookSwap(walletAddress, tx) {
+  const swap = parseSwap(tx, walletAddress);
+  if (!swap) return;
+
+  const advanced = await PushWalletCursor.findOneAndUpdate(
+    {
+      walletAddress,
+      lastTimestamp: { $lt: swap.timestamp },
+      lastSignature: { $ne: swap.signature },
+    },
+    {
+      $set: {
+        lastTimestamp: swap.timestamp,
+        lastSignature: swap.signature,
+        lastSeenSignature: swap.signature,
+        updatedAt: new Date(),
+      },
+    }
+  );
+  if (!advanced) {
+    const existing = await PushWalletCursor.findOne({ walletAddress }).lean();
+    if (existing) return; // already seen (retry/poll race) or older than cursor
+    try {
+      // First ever event for this wallet — webhook events are fresh by
+      // definition, so notify (unlike the polling path's silent seed).
+      await PushWalletCursor.create({
+        walletAddress,
+        lastTimestamp: swap.timestamp,
+        lastSignature: swap.signature,
+        lastSeenSignature: swap.signature,
+      });
+    } catch (_) {
+      return; // concurrent create — the other delivery owns the notify
+    }
+  }
+
+  if (!pushService.isEnabled()) return;
+
+  const followers = await User.find({ 'trackedWallets.address': walletAddress })
+    .select('walletAddress trackedWallets')
+    .lean();
+  if (!followers.length) return;
+
+  const profile = await User.findOne({ walletAddress })
+    .select('walletAddress displayName profilePicture')
+    .lean();
+  const sym = await tokenSymbol(swap.tokenMint);
+  const action = swap.type === 'sell' ? 'sold' : 'bought';
+  const sol = swap.solAmount > 0 ? ` for ${swap.solAmount.toFixed(3)} SOL` : '';
+  const profileImage = profileImageForPush(profile, walletAddress)
+    || `${PUBLIC_API_BASE_URL}/api/avatar/wallet/${walletAddress}.png`;
+
+  for (const f of followers) {
+    const tw = f.trackedWallets?.find((t) => t.address === walletAddress);
+    const label = profile?.displayName || tw?.label || shortWallet(walletAddress);
+    await sendToWallet(f.walletAddress, 'walletTrade', {
+      title: `${label} • Following`,
+      body: `${action[0].toUpperCase()}${action.slice(1)} $${sym}${sol}`,
+      image: profileImage,
+      data: {
+        type: 'walletTrade',
+        wallet: walletAddress,
+        mint: swap.tokenMint,
+        signature: swap.signature,
+        walletLabel: label,
+        tokenSymbol: sym,
+        action,
+        ...(profileImage ? { walletProfileImage: profileImage } : {}),
+      },
+    });
+  }
+}
+
 // ── Soft-order monitor ─────────────────────────────────────────────────
 // Server-monitored buy-at / sell-at / stop-loss alerts. When a trigger hits,
 // the order flips to 'triggered' and every registered device gets a push that
@@ -449,9 +529,15 @@ function start() {
 
   console.log('[push] wallet-trade monitor started');
   runWalletTradesOnce().catch((e) => console.error('[push] wallet monitor error:', e.message));
+  // Webhook active → polling is only a missed-delivery safety net.
+  const heliusWebhookService = require('./heliusWebhookService');
+  const walletPollMs = heliusWebhookService.isConfigured()
+    ? WALLET_POLL_FALLBACK_MS
+    : WALLET_POLL_INTERVAL_MS;
+  console.log(`[push] wallet-trade poll interval: ${Math.round(walletPollMs / 1000)}s${walletPollMs === WALLET_POLL_FALLBACK_MS ? ' (webhook primary)' : ''}`);
   walletTimer = setInterval(() => {
     runWalletTradesOnce().catch((e) => console.error('[push] wallet monitor error:', e.message));
-  }, WALLET_POLL_INTERVAL_MS);
+  }, walletPollMs);
 }
 
 function stop() {
@@ -463,4 +549,4 @@ function stop() {
   softOrderTimer = null;
 }
 
-module.exports = { start, stop, runOnce, runWalletTradesOnce, runSoftOrdersOnce };
+module.exports = { start, stop, runOnce, runWalletTradesOnce, runSoftOrdersOnce, handleWebhookSwap };

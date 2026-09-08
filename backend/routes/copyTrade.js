@@ -24,6 +24,38 @@ const SOL_MINT = 'So11111111111111111111111111111111111111112';
 // wallet had no new activity.
 const swapCache = new Map();
 const SWAP_CACHE_TTL = 60000;
+// Wallets covered by the Helius webhook get every SWAP pushed into the cache
+// as it happens — trust the cache much longer (capped so a silently broken
+// webhook can't serve stale data forever).
+const WEBHOOK_CACHE_TTL = 15 * 60 * 1000;
+
+let heliusWebhookService = null;
+function webhookCovers(address) {
+  try {
+    if (!heliusWebhookService) heliusWebhookService = require('../services/heliusWebhookService');
+    return heliusWebhookService.isConfigured() && heliusWebhookService.getTrackedSet().has(address);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Called by the Helius webhook route: prepend a fresh enhanced tx so frontend
+ * polls hit the cache instead of the Enhanced API.
+ */
+function ingestWebhookTx(address, tx) {
+  const cached = swapCache.get(address);
+  const txs = Array.isArray(cached?.txs) ? cached.txs : [];
+  if (txs.some((t) => t?.signature === tx.signature)) {
+    cached.ts = Date.now();
+    return;
+  }
+  swapCache.set(address, {
+    txs: [tx, ...txs].slice(0, 10),
+    ts: Date.now(),
+    lastSeenSig: tx.signature,
+  });
+}
 
 // 1-credit activity probe. Returns newest tx signature (any kind) or null on
 // failure so callers fail open to the full Enhanced fetch.
@@ -173,11 +205,13 @@ router.post('/recent-swaps', async (req, res) => {
       if (!address || address.length < 32 || address.length > 44) return;
 
       try {
-        // Serve from cache if fresh
+        // Serve from cache if fresh (webhook-covered wallets stay fresh via
+        // pushed events, so their TTL is much longer)
         const cached = swapCache.get(address);
+        const ttl = webhookCovers(address) ? WEBHOOK_CACHE_TTL : SWAP_CACHE_TTL;
         let txs;
 
-        if (cached && Date.now() - cached.ts < SWAP_CACHE_TTL) {
+        if (cached && Date.now() - cached.ts < ttl) {
           txs = cached.txs;
         } else {
           // Stale cache: 1-credit pre-check — if the wallet's newest tx
@@ -247,3 +281,4 @@ router.post('/recent-swaps', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.ingestWebhookTx = ingestWebhookTx;

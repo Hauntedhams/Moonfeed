@@ -147,6 +147,9 @@ app.use('/api/push', pushRoutes);
 // Mount generated wallet avatars (notification images for wallet alerts)
 app.use('/api/avatar', require('./routes/avatar'));
 
+// Helius enhanced-webhook receiver (tracked-wallet swaps, 1 credit/event)
+app.use('/api/webhook/helius', require('./routes/heliusWebhook'));
+
 // Mount soft (server-monitored) limit orders
 app.use('/api/soft-orders', softOrderRoutes);
 
@@ -3265,6 +3268,9 @@ server.listen(PORT, async () => {
 
   // Start server-side push monitors (no-op until FIREBASE_SERVICE_ACCOUNT is set)
   try { pushMonitors.start(); } catch (e) { console.error('[push] failed to start monitors:', e.message); }
+
+  // Register/sync the Helius wallet-trade webhook (no-op until env is set)
+  try { require('./services/heliusWebhookService').start(); } catch (e) { console.error('[webhook] failed to start:', e.message); }
   
   // Initialize feeds and start auto-refreshers
   initializeWithLatestBatch();

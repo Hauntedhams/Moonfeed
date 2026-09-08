@@ -298,14 +298,15 @@ const CoinCard = memo(({
     coin.price_usd || coin.priceUsd || coin.price || 0
   );
 
-  // Full tx stream (history + trade table + ticks): expanded, or desktop ACTIVE card.
-  // isActiveCard (not isCurrentCard) so the off-screen preload card doesn't open a
-  // 100-credit Helius history fetch + live tx stream on every scroll step.
-  const wantsFullTxStream = isExpanded || showLiveTransactions || (!isMobile && isActiveCard);
-  // Mobile collapsed current card: lean per-trade PRICE TICK stream only (log-decoded
-  // server-side, no getTransaction credits). Gated on the settled chart mount AND a
-  // 300ms debounce so fast scrolls never churn WebSockets (the old WKWebView crash).
-  const tickStreamWanted = isMobile && !wantsFullTxStream && isCurrentCard && (mountChart ?? isVisible);
+  // Full tx stream (history + trade table + ticks) ONLY when the user is actually
+  // looking at trades: expanded card or open transactions panel. Helius streams
+  // bill per byte 24/7 — collapsed cards (mobile AND desktop) use the free
+  // Dexscreener-backed price channel below instead.
+  const wantsFullTxStream = isExpanded || showLiveTransactions;
+  // Collapsed current card: free ~1.5s price updates (server-side Dexscreener
+  // poll, zero Helius credits). Gated on the settled chart mount AND a 300ms
+  // debounce so fast scrolls never churn WebSockets (the old WKWebView crash).
+  const tickStreamWanted = !wantsFullTxStream && isCurrentCard && (mountChart ?? isVisible);
   const [tickStreamSettled, setTickStreamSettled] = useState(false);
   useEffect(() => {
     if (!tickStreamWanted) {
@@ -319,7 +320,7 @@ const CoinCard = memo(({
   const { transactions, livePrice: rpcLivePrice, isConnected: txConnected, historyLoaded: txHistoryLoaded, error: txError, clearTransactions } = useSolanaTransactions(
     mintAddress,
     wantsFullTxStream || (tickStreamWanted && tickStreamSettled),
-    wantsFullTxStream ? 'full' : 'ticks'
+    wantsFullTxStream ? 'full' : 'price'
   );
 
   // Prefer the live WebSocket stream so the card follows the chart's freshest price.

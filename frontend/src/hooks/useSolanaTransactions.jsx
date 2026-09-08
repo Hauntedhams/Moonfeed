@@ -27,8 +27,10 @@ const PRICE_THROTTLE_MS = 120;
 /**
  * mode:
  *   'full'  — tx history + live tx-new pushes + per-trade price ticks (default)
- *   'ticks' — per-trade price ticks only (log-decoded server-side, near-zero cost);
- *             no history fetch, no tx table. For collapsed mobile feed cards.
+ *   'ticks' — per-trade price ticks only (log-decoded server-side); still opens a
+ *             Helius stream billed per byte.
+ *   'price' — server-side Dexscreener poll only (~1.5s updates, ZERO Helius
+ *             credits). For collapsed feed cards.
  */
 export const useSolanaTransactions = (mintAddress, isActive, mode = 'full') => {
   const [transactions, setTransactions] = useState([]);
@@ -105,7 +107,12 @@ export const useSolanaTransactions = (mintAddress, isActive, mode = 'full') => {
     ws.onopen = () => {
       reconnectAttemptsRef.current = 0;
       ws.send(JSON.stringify({ type: 'subscribe', token: mint }));
-      ws.send(JSON.stringify({ type: modeRef.current === 'ticks' ? 'subscribe-ticks' : 'subscribe-txs', token: mint }));
+      if (modeRef.current === 'price') {
+        // Free Dexscreener-backed price channel only — no Helius stream.
+        setIsConnected(true);
+      } else {
+        ws.send(JSON.stringify({ type: modeRef.current === 'ticks' ? 'subscribe-ticks' : 'subscribe-txs', token: mint }));
+      }
     };
 
     ws.onmessage = (event) => {
