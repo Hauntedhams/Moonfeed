@@ -1,5 +1,6 @@
 require('dotenv').config();
 const express = require('express');
+const v8 = require('v8');
 
 // Safety net: never let a stray upstream rejection (e.g. GeckoTerminal 429) crash the
 // whole server. Log and keep running — individual requests already handle their errors.
@@ -56,6 +57,18 @@ const newCoinStorage = new NewCoinStorage();
 const CustomCoinStorage = require('./custom-coin-storage');
 const customCoinStorage = new CustomCoinStorage();
 
+function getMemoryMB() {
+  const memory = process.memoryUsage();
+  return {
+    rss: Math.round(memory.rss / 1048576),
+    heapUsed: Math.round(memory.heapUsed / 1048576),
+    heapTotal: Math.round(memory.heapTotal / 1048576),
+    heapLimit: Math.round(v8.getHeapStatistics().heap_size_limit / 1048576),
+    external: Math.round(memory.external / 1048576),
+    arrayBuffers: Math.round(memory.arrayBuffers / 1048576)
+  };
+}
+
 // Middleware
 app.use(compression()); // Enable gzip compression for all responses
 app.use(cors({
@@ -96,19 +109,19 @@ app.get('/api/version', (req, res) => {
 
 // Health check endpoint for Render deployment
 app.get('/api/health', (req, res) => {
-  const mem = process.memoryUsage();
   res.status(200).json({
     status: 'healthy',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
-    memoryMB: {
-      rss: Math.round(mem.rss / 1048576),
-      heapUsed: Math.round(mem.heapUsed / 1048576),
-      heapTotal: Math.round(mem.heapTotal / 1048576),
-      external: Math.round(mem.external / 1048576)
-    }
+    memoryMB: getMemoryMB()
   });
 });
+
+setInterval(() => {
+  const memory = getMemoryMB();
+  const level = memory.rss >= 1600 ? '⚠️ ' : '';
+  console.log(`${level}🧠 Memory: rss=${memory.rss}MB heap=${memory.heapUsed}/${memory.heapTotal}MB external=${memory.external}MB buffers=${memory.arrayBuffers}MB limit=${memory.heapLimit}MB`);
+}, 60 * 1000).unref();
 
 // Mount wallet routes
 app.use('/api/wallet', walletRoutes);
