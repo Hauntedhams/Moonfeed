@@ -2946,7 +2946,7 @@ const CoinCard = memo(({
                     {transactions.length === 0 ? (
                       <div className="transactions-empty">
                         <div className="empty-text">
-                          {txHistoryLoaded ? 'Loading' : 'Waiting for transactions...'}
+                          {txHistoryLoaded ? 'No recent swaps' : 'Waiting for transactions...'}
                         </div>
                         <div className="empty-subtext">
                           {txConnected

@@ -250,7 +250,8 @@ class MoonshotMetadataService {
 
       // Approach 2: Try fetching from Solana on-chain metadata using Helius/Metaplex
       try {
-        const heliusUrl = `https://mainnet.helius-rpc.com/?api-key=${process.env.HELIUS_API_KEY || 'c59a0beb-c3c7-48a0-92be-5a6cfdc0b603'}`;
+        const { HELIUS_RPC_URL } = require('../solanaRpcConfig');
+        const heliusUrl = HELIUS_RPC_URL;
         
         const metadataResponse = await fetch(heliusUrl, {
           method: 'POST',

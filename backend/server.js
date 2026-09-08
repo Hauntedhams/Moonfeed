@@ -342,6 +342,13 @@ app.get('/api/chart-data/:mintAddress', async (req, res) => {
     });
 
   } catch (error) {
+    const rateLimited = error.response?.status === 429 || /429|max usage/i.test(error.message || '');
+    if (rateLimited) {
+      return res.status(503).json({
+        error: 'Chart data temporarily unavailable',
+        reason: 'upstream_rate_limited',
+      });
+    }
     console.error(`❌ [ChartData] Error for ${req.params.mintAddress}:`, error.message);
     res.status(500).json({
       error: 'Failed to fetch chart data',

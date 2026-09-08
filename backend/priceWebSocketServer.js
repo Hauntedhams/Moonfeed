@@ -238,27 +238,38 @@ class PriceWebSocketServer {
    */
   async subscribeTxs(ws, tokenAddress) {
     try {
-      // 1. Send recent history immediately. 50 swaps ≈ one Enhanced API page
-      // (100 credits) instead of up to three at limit=100.
-      const history = await solanaTransactionService.getRecentTransactions(tokenAddress, 50);
-      this.sendMessage(ws, {
-        type: 'tx-history',
-        token: tokenAddress,
-        transactions: history,
-        timestamp: Date.now(),
-      });
-
-      // 2. Register for live Helius WebSocket stream
+      // 1. Open the live stream FIRST — a cold history fetch costs seconds and
+      // must never delay real-time swaps reaching the client.
       heliusTxStreamer.subscribe(tokenAddress, ws);
 
       this.sendMessage(ws, {
         type: 'txs-subscribed',
         token: tokenAddress,
-        historyCount: history.length,
         timestamp: Date.now(),
       });
 
-      console.log(`[PriceWebSocketServer] Sent ${history.length} history txs + live stream opened for ${tokenAddress.substring(0, 8)}...`);
+      // 2. Backfill recent history in the background. 50 swaps ≈ one Enhanced
+      // API page (100 credits) instead of up to three at limit=100.
+      solanaTransactionService
+        .getRecentTransactions(tokenAddress, 50)
+        .then((history) => {
+          if (ws.readyState !== ws.OPEN) return;
+          this.sendMessage(ws, {
+            type: 'tx-history',
+            token: tokenAddress,
+            transactions: history,
+            timestamp: Date.now(),
+          });
+          console.log(`[PriceWebSocketServer] Backfilled ${history.length} history txs for ${tokenAddress.substring(0, 8)}...`);
+        })
+        .catch((err) => {
+          console.warn(`[PriceWebSocketServer] History backfill failed for ${tokenAddress.substring(0, 8)}:`, err.message);
+          if (ws.readyState === ws.OPEN) {
+            this.sendMessage(ws, { type: 'tx-history', token: tokenAddress, transactions: [], timestamp: Date.now() });
+          }
+        });
+
+      console.log(`[PriceWebSocketServer] Live tx stream opened for ${tokenAddress.substring(0, 8)}...`);
     } catch (error) {
       console.error(`[PriceWebSocketServer] Error subscribing txs:`, error.message);
       this.sendMessage(ws, {

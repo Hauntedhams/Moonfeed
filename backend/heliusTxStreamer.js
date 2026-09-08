@@ -65,12 +65,22 @@ class HeliusTxStreamer {
         lastTickPriceUsd: 0,
       };
       this.streams.set(mintAddress, stream);
+      stream.clients.add(clientWs);
+      if (!opts.ticksOnly) stream.parseClients.add(clientWs);
       // If Helius WS recently 429'd (credit/connection budget exhausted), start on
       // public RPC immediately instead of burning reconnect backoff per new coin.
       this._openStream(mintAddress, stream, Date.now() < this.heliusWsDownUntil);
+    } else {
+      const hadParseClients = stream.parseClients.size > 0;
+      stream.clients.add(clientWs);
+      if (!opts.ticksOnly) stream.parseClients.add(clientWs);
+      // First full-tx client on a ticks-only (logsSubscribe) Helius stream:
+      // reopen with transactionSubscribe so the trade table gets pushed rows.
+      if (!hadParseClients && stream.parseClients.size > 0
+          && stream.subMethod === 'logs' && !stream.usingPublicRpc) {
+        this._reopenStream(mintAddress, stream);
+      }
     }
-    stream.clients.add(clientWs);
-    if (!opts.ticksOnly) stream.parseClients.add(clientWs);
     console.log(`[TxStreamer] Client subscribed to ${mintAddress.substring(0, 8)}${opts.ticksOnly ? ' (ticks-only)' : ''}. Total clients: ${stream.clients.size}`);
   }
 
@@ -82,6 +92,7 @@ class HeliusTxStreamer {
     const stream = this.streams.get(mintAddress);
     if (!stream) return;
 
+    const hadParseClients = stream.parseClients.size > 0;
     stream.clients.delete(clientWs);
     stream.parseClients.delete(clientWs);
     console.log(`[TxStreamer] Client unsubscribed from ${mintAddress.substring(0, 8)}. Remaining: ${stream.clients.size}`);
@@ -89,6 +100,11 @@ class HeliusTxStreamer {
     if (stream.clients.size === 0) {
       this._closeStream(mintAddress, stream);
       this.streams.delete(mintAddress);
+    } else if (hadParseClients && stream.parseClients.size === 0
+        && stream.subMethod === 'transaction' && !stream.usingPublicRpc) {
+      // Only ticks-only clients remain: downgrade to logsSubscribe (full
+      // jsonParsed pushes stream ~4-5x more billable bytes than logs).
+      this._reopenStream(mintAddress, stream);
     }
   }
 
@@ -105,7 +121,13 @@ class HeliusTxStreamer {
   }
 
   // ─── Private ─────────────────────────────────────────────────────────────
-
+  /** Close and immediately reopen a stream (subscription method may change). */
+  _reopenStream(mintAddress, stream) {
+    this._closeStream(mintAddress, stream);
+    stream.subscriptionId = null;
+    stream.reconnectAttempts = 0;
+    this._openStream(mintAddress, stream, Date.now() < this.heliusWsDownUntil);
+  }
   _openStream(mintAddress, stream, usePublicRpc = false) {
     const wsUrl = usePublicRpc ? PUBLIC_WS_URL : (HELIUS_WS_URL || PUBLIC_WS_URL);
     try {
@@ -119,8 +141,12 @@ class HeliusTxStreamer {
         // 'processed' = ~400ms after the trade lands (vs ~2-3s for 'confirmed').
         // Helius (Dev plan): transactionSubscribe pushes the FULL parsed tx per trade
         // — instant verified tick + table row for every DEX, zero getTransaction calls.
+        // But LaserStream WS bills per streamed MB, and a full jsonParsed tx is
+        // ~4-5x the bytes of its logs — so ticks-only streams (no trade-table
+        // client) use logsSubscribe and decode the price from the pushed logs.
         // Public RPC fallback: standard logsSubscribe (sig queue + batched parse).
-        if (usePublicRpc) {
+        const wantFullTxs = stream.parseClients.size > 0;
+        if (usePublicRpc || !wantFullTxs) {
           stream.subMethod = 'logs';
           ws.send(JSON.stringify({
             jsonrpc: '2.0',
@@ -211,6 +237,9 @@ class HeliusTxStreamer {
       });
 
       ws.on('close', () => {
+        // Stale event from a socket we already replaced (method upgrade/downgrade
+        // via _reopenStream) — the new socket owns the stream now.
+        if (stream.ws && stream.ws !== ws) return;
         console.log(`[TxStreamer] WS closed for ${mintAddress.substring(0, 8)} (${usePublicRpc ? 'public' : 'helius'})`);
         stream.ws = null;
         if (stream.pingInterval) {

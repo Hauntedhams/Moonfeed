@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef } from 'r
 import { useWallet } from '@jup-ag/wallet-adapter';
 import { getFullApiUrl } from '../config/api';
 import { useWalletConnectOnboarding } from '../components/WalletConnectOnboarding';
+import { maybeEnableNotifications } from '../utils/notificationOptIn';
 
 const TrackedWalletsContext = createContext();
 
@@ -21,6 +22,8 @@ export const TrackedWalletsProvider = ({ children }) => {
   const { publicKey, connected } = useWallet();
   const { openWalletConnect } = useWalletConnectOnboarding();
   const walletAddress = publicKey?.toString() || null;
+  // Alias usable inside functions whose params shadow `walletAddress`.
+  const accountAddress = walletAddress;
   const syncedWalletRef = useRef(null); // account address we've already pulled synced data for
   const skipNextSaveRef = useRef(false); // true right after loading remote data, to avoid an immediate re-save
   const hydratedRef = useRef(false); // blocks saving until the first remote read settles
@@ -174,6 +177,9 @@ export const TrackedWalletsProvider = ({ children }) => {
 
     setTrackedWallets(prev => [...prev, newWallet]);
     console.log(`✅ Tracking wallet: ${walletAddress.slice(0, 4)}...${walletAddress.slice(-4)}`);
+    // Following a wallet is an explicit ask for trade alerts — offer the OS
+    // notification prompt at this moment (once per session), never at launch.
+    maybeEnableNotifications(accountAddress).catch(() => {});
     return true;
   };
 

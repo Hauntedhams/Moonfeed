@@ -120,7 +120,17 @@ export const useSolanaTransactions = (mintAddress, isActive, mode = 'full') => {
 
           case 'tx-history':
             if (Array.isArray(msg.transactions)) {
-              setTransactions(msg.transactions);
+              // History arrives after the live stream, so merge instead of
+              // replacing — live rows received first must not be dropped.
+              setTransactions(prev => {
+                if (!prev.length) return msg.transactions;
+                const seen = new Set(prev.map(t => t.signature));
+                const older = msg.transactions.filter(t => !seen.has(t.signature));
+                if (!older.length) return prev;
+                return [...prev, ...older]
+                  .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+                  .slice(0, 50);
+              });
               setIsConnected(true);
               setHistoryLoaded(true);
               setError(null);

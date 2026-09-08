@@ -1,8 +1,9 @@
 const fetch = require('node-fetch');
+const { HELIUS_API_KEY } = require('./solanaRpcConfig');
 
 class HeliusService {
   constructor() {
-    this.apiKey = process.env.HELIUS_API_KEY || '26240c3d-8cce-414e-95f7-5c0c75c1a2cb';
+    this.apiKey = HELIUS_API_KEY;
     this.baseURL = 'https://api.helius.xyz';
     this.cache = new Map();
     this.cacheTimeout = 60 * 1000; // 1 minute cache

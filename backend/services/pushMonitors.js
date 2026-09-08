@@ -19,7 +19,7 @@ const WALLET_POLL_INTERVAL_MS = 180 * 1000;
 const SOFT_ORDER_POLL_INTERVAL_MS = 30 * 1000;
 const CHUNK = 30;
 
-const HELIUS_API_KEY = process.env.HELIUS_API_KEY || '05a97104-cba1-4284-aed6-e0ad21af8b33';
+const { HELIUS_API_KEY, HELIUS_RPC_URL } = require('../solanaRpcConfig');
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
 const MAX_TRACKED_WALLETS = 60; // cap Helius load per cycle
 
@@ -227,6 +227,29 @@ async function fetchRecentSwaps(address) {
   return txs.map((tx) => parseSwap(tx, address)).filter(Boolean);
 }
 
+// 1-credit activity probe (vs 100 credits for an Enhanced API fetch). Returns
+// the wallet's newest tx signature of any kind, or null on any failure so
+// callers fail open to the full fetch.
+async function newestSignature(address) {
+  try {
+    const res = await fetch(HELIUS_RPC_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0', id: 1,
+        method: 'getSignaturesForAddress',
+        params: [address, { limit: 1 }],
+      }),
+      timeout: 6000,
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.result?.[0]?.signature || null;
+  } catch {
+    return null;
+  }
+}
+
 async function runWalletTradesOnce() {
   if (!pushService.isEnabled()) return;
 
@@ -262,26 +285,54 @@ async function runWalletTradesOnce() {
   const profileByWallet = new Map(profiles.map((p) => [p.walletAddress, p]));
 
   for (const w of trackedWallets) {
+    const cursor = await PushWalletCursor.findOne({ walletAddress: w });
+
+    // 1-credit pre-check BEFORE the 100-credit Enhanced fetch: if the wallet's
+    // newest tx signature hasn't changed since last cycle, nothing happened.
+    // (Fetched before the Enhanced call so a race can only cause a re-check,
+    // never a missed swap.)
+    const seenSig = await newestSignature(w);
+    if (cursor && seenSig && cursor.lastSeenSignature === seenSig) continue;
+
     let swaps;
     try {
       swaps = await fetchRecentSwaps(w);
     } catch (_) { continue; }
-    if (!swaps.length) continue;
+
+    if (!swaps.length) {
+      // No swap history — still record the activity cursor so idle/non-swap
+      // wallets cost 1 credit per cycle instead of 100.
+      if (cursor && seenSig && cursor.lastSeenSignature !== seenSig) {
+        cursor.lastSeenSignature = seenSig;
+        cursor.updatedAt = new Date();
+        await cursor.save();
+      } else if (!cursor && seenSig) {
+        await PushWalletCursor.create({ walletAddress: w, lastTimestamp: 0, lastSignature: null, lastSeenSignature: seenSig });
+      }
+      continue;
+    }
 
     swaps.sort((a, b) => b.timestamp - a.timestamp);
     const newest = swaps[0];
 
-    const cursor = await PushWalletCursor.findOne({ walletAddress: w });
     // First time we see this wallet: seed silently so we don't blast old history.
     if (!cursor) {
-      await PushWalletCursor.create({ walletAddress: w, lastTimestamp: newest.timestamp, lastSignature: newest.signature });
+      await PushWalletCursor.create({ walletAddress: w, lastTimestamp: newest.timestamp, lastSignature: newest.signature, lastSeenSignature: seenSig || null });
       continue;
     }
-    if (newest.timestamp <= cursor.lastTimestamp) continue;
+    if (newest.timestamp <= cursor.lastTimestamp) {
+      if (seenSig && cursor.lastSeenSignature !== seenSig) {
+        cursor.lastSeenSignature = seenSig;
+        cursor.updatedAt = new Date();
+        await cursor.save();
+      }
+      continue;
+    }
 
     const fresh = swaps.filter((s) => s.timestamp > cursor.lastTimestamp).slice(0, 3);
     cursor.lastTimestamp = newest.timestamp;
     cursor.lastSignature = newest.signature;
+    if (seenSig) cursor.lastSeenSignature = seenSig;
     cursor.updatedAt = new Date();
     await cursor.save();
 

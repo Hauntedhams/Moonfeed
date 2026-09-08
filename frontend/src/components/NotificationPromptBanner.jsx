@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useWallet } from '../contexts/WalletContext';
-import { initTradeNotifications, hasNotificationPermission } from '../utils/tradeNotifications';
-import { initRemotePush } from '../utils/pushNotifications';
+import { hasNotificationPermission } from '../utils/tradeNotifications';
+import { maybeEnableNotifications, openNotificationSettings } from '../utils/notificationOptIn';
 import './NotificationPromptBanner.css';
 
 // Reminds the user that order fills can currently only be delivered via push
@@ -25,9 +25,14 @@ export default function NotificationPromptBanner({ compact = false }) {
     if (requesting) return;
     setRequesting(true);
     try {
-      const granted = await initTradeNotifications();
-      initRemotePush(walletAddress).catch(() => {});
-      setEnabled(granted);
+      const result = await maybeEnableNotifications(walletAddress);
+      if (result === 'granted') {
+        setEnabled(true);
+      } else {
+        // Already denied at OS level — the prompt can't be shown again, so the
+        // only way on is the app's page in Settings.
+        openNotificationSettings();
+      }
     } finally {
       setRequesting(false);
     }

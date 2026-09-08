@@ -4,18 +4,16 @@
 
 /* ⚡ MOBILE PERFORMANCE OPTIMIZATIONS - Disable animations on mobile devices */
 @media (max-width: 768px), (hover: none) {
-  /* COMPLETELY disable all animations on mobile for maximum performance
-     BUT exempt TikTok action bar & expand-handle elements so collapse/expand anims work */
+    /* Disable non-essential animations on mobile for maximum performance.
+      Loading indicators stay animated so active work remains visible. */
   .enrichment-status-badge,
   .enrichment-status-badge span,
-  .loading-spinner,
   .price-flash-green,
   .price-flash-red,
   .graduation-progress-glow,
   .shimmer-gradient,
   *[class*="animate"]:not(.expand-handle):not(.tiktok-action-btn),
   *[class*="pulse"]:not(.expand-handle),
-  *[class*="spin"],
   *[class*="bounce"] {
     animation: none !important;
     animation-duration: 0s !important;
@@ -26,9 +24,9 @@
      BUT exempt TikTok action bar, expand-handle & info layer so they animate in BOTH directions.
      The full-screen sheets (pdv/wpv/odv) are exempt too — their drag-dismiss
      spring-back and slide-out rely on the transform transition. */
-  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content):not(.coin-buy-drawer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track):not(.feed-swipe-container):not(.pdv-root):not(.wpv-root):not(.odv-root),
-  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content):not(.coin-buy-drawer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track):not(.feed-swipe-container):not(.pdv-root):not(.wpv-root):not(.odv-root)::before,
-  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content):not(.coin-buy-drawer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track):not(.feed-swipe-container):not(.pdv-root):not(.wpv-root):not(.odv-root)::after {
+  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content):not(.coin-buy-drawer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track):not(.feed-swipe-container):not(.swipe-back-page):not(.pdv-root):not(.wpv-root):not(.odv-root),
+  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content):not(.coin-buy-drawer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track):not(.feed-swipe-container):not(.swipe-back-page):not(.pdv-root):not(.wpv-root):not(.odv-root)::before,
+  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content):not(.coin-buy-drawer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track):not(.feed-swipe-container):not(.swipe-back-page):not(.pdv-root):not(.wpv-root):not(.odv-root)::after {
     transition: none !important;
     transition-duration: 0s !important;
   }
@@ -43,7 +41,7 @@
   .info-layer-profile-image:hover,
   .header-metric:hover,
   .header-social-icon:hover,
-  *:not(.tiktok-action-btn):not(.tiktok-action-buttons):not(.expand-handle):not(.coin-info-layer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track):not(.feed-swipe-container):not(.pdv-root):not(.wpv-root):not(.odv-root):hover {
+  *:not(.tiktok-action-btn):not(.tiktok-action-buttons):not(.expand-handle):not(.coin-info-layer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track):not(.feed-swipe-container):not(.swipe-back-page):not(.pdv-root):not(.wpv-root):not(.odv-root):hover {
     transform: none !important;
     opacity: 1 !important;
   }
@@ -1583,7 +1581,9 @@ html:not(.dark-mode) .coin-card-left-panel::-webkit-scrollbar-thumb:hover {
 
   .coin-card-left-panel .coin-info-layer.expanded {
     position: relative !important;
-    height: auto !important;
+    height: calc(100vh - 160px) !important;
+    max-height: calc(100vh - 160px);
+    overflow-y: auto !important;
     /* When expanded, shift up slightly to maximize visible content */
     transform: translateY(-50px) !important;
   }

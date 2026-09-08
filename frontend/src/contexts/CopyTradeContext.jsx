@@ -49,7 +49,8 @@ export const CopyTradeProvider = ({ children, onCopyTrade }) => {
   const { trackedWallets } = useTrackedWallets();
   const [queue, setQueue] = useState([]); // pending toast notifications
 
-  // Request OS notification permission once we have wallets to watch.
+  // Sync OS notification permission state once we have wallets to watch.
+  // Passive: never prompts — the prompt only appears on explicit user action.
   useEffect(() => {
     if (trackedWallets.some(w => w.copyTradeEnabled !== false)) {
       initTradeNotifications();

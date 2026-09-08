@@ -986,6 +986,8 @@ const NativeChart = ({
             if (points.length > 0) break; // got data — done
           } else if (res.status === 404) {
             points = []; hadError = false; // endpoint says no data
+          } else if (res.status === 503) {
+            hadError = true; break; // upstream rate-limited — retrying won't help
           } else {
             hadError = true;
           }

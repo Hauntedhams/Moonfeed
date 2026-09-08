@@ -7,7 +7,6 @@ import { Filesystem, Directory } from '@capacitor/filesystem';
 
 const isNative = Capacitor.isNativePlatform();
 let permissionGranted = false;
-let initialized = false;
 let serviceWorkerRegistrationPromise = null;
 
 // Notification ids must be 32-bit ints; derive one from the tx signature.
@@ -60,6 +59,26 @@ async function imageFields(imageUrl) {
     : {};
 }
 
+// Schedule a native local notification. An image attachment must never cost us
+// the notification itself: if scheduling WITH the attachment fails (bad file,
+// unsupported type, plugin error), retry once without it so the alert still
+// fires as plain text instead of silently dying.
+async function scheduleNative({ id, title, body, image = null, extra }) {
+  const base = { id, title, body, schedule: { at: new Date(Date.now() + 200) }, extra };
+  try {
+    await LocalNotifications.schedule({
+      notifications: [{ ...base, ...(await imageFields(image)) }],
+    });
+  } catch (err) {
+    console.warn('[TradeNotifications] schedule with image failed, retrying without:', err?.message);
+    try {
+      await LocalNotifications.schedule({ notifications: [base] });
+    } catch (err2) {
+      console.warn('[TradeNotifications] schedule failed:', err2?.message);
+    }
+  }
+}
+
 // Check current permission status without prompting the user.
 export async function hasNotificationPermission() {
   try {
@@ -74,26 +93,40 @@ export async function hasNotificationPermission() {
   return false;
 }
 
-// Request notification permission once. Safe to call multiple times.
-export async function initTradeNotifications() {
-  if (initialized) return permissionGranted;
-  initialized = true;
-
+// Current OS permission state without prompting: 'granted' | 'denied' |
+// 'prompt' (never asked) | 'unsupported'.
+export async function getNotificationPermissionState() {
   try {
     if (isNative) {
       const check = await LocalNotifications.checkPermissions();
-      let status = check.display;
-      if (status !== 'granted') {
-        const req = await LocalNotifications.requestPermissions();
-        status = req.display;
+      return check.display || 'prompt';
+    }
+    if ('Notification' in window) return Notification.permission; // granted | denied | default
+  } catch (err) {
+    console.debug('[TradeNotifications] permission state error:', err?.message);
+  }
+  return 'unsupported';
+}
+
+// Sync the cached permission flag. PASSIVE BY DEFAULT — it never shows the OS
+// prompt unless { request: true } is passed, which must only happen from an
+// explicit user action (tracking a coin/wallet, tapping an enable button).
+// Launch-time callers use the passive form so the app never asks on boot.
+export async function initTradeNotifications({ request = false } = {}) {
+  try {
+    if (isNative) {
+      let status = (await LocalNotifications.checkPermissions()).display;
+      if (status !== 'granted' && request) {
+        status = (await LocalNotifications.requestPermissions()).display;
       }
       permissionGranted = status === 'granted';
     } else if ('Notification' in window) {
       if (Notification.permission === 'granted') {
         permissionGranted = true;
-      } else if (Notification.permission !== 'denied') {
-        const res = await Notification.requestPermission();
-        permissionGranted = res === 'granted';
+      } else if (request && Notification.permission !== 'denied') {
+        permissionGranted = (await Notification.requestPermission()) === 'granted';
+      } else {
+        permissionGranted = false;
       }
     }
   } catch (err) {
@@ -151,17 +184,12 @@ export async function notifyOrderFilled(order, stats) {
 
   try {
     if (isNative) {
-      await LocalNotifications.schedule({
-        notifications: [
-          {
-            id: idFromSignature(orderId),
-            title,
-            body,
-            schedule: { at: new Date(Date.now() + 200) },
-            extra: { orderId, tokenMint: order.tokenMint },
-            ...(await imageFields(image)),
-          },
-        ],
+      await scheduleNative({
+        id: idFromSignature(orderId),
+        title,
+        body,
+        image,
+        extra: { orderId, tokenMint: order.tokenMint },
       });
     } else if ('Notification' in window) {
       const notificationOptions = {
@@ -195,17 +223,12 @@ export async function notifyHoldingCrash({ mint, symbol, dropPct, windowLabel, v
 
   try {
     if (isNative) {
-      await LocalNotifications.schedule({
-        notifications: [
-          {
-            id: idFromSignature(`crash-${mint}-${Date.now()}`),
-            title,
-            body,
-            schedule: { at: new Date(Date.now() + 200) },
-            extra: { tokenMint: mint },
-            ...(await imageFields(image)),
-          },
-        ],
+      await scheduleNative({
+        id: idFromSignature(`crash-${mint}-${Date.now()}`),
+        title,
+        body,
+        image,
+        extra: { tokenMint: mint },
       });
     } else if ('Notification' in window) {
       const notificationOptions = {
@@ -240,17 +263,12 @@ export async function notifyTrackedGain({ mint, symbol, gainPct, trackedAtPrice,
 
   try {
     if (isNative) {
-      await LocalNotifications.schedule({
-        notifications: [
-          {
-            id: idFromSignature(`gain-${mint}-${Date.now()}`),
-            title,
-            body,
-            schedule: { at: new Date(Date.now() + 200) },
-            extra: { tokenMint: mint },
-            ...(await imageFields(image)),
-          },
-        ],
+      await scheduleNative({
+        id: idFromSignature(`gain-${mint}-${Date.now()}`),
+        title,
+        body,
+        image,
+        extra: { tokenMint: mint },
       });
     } else if ('Notification' in window) {
       const notificationOptions = {
@@ -285,17 +303,12 @@ export async function notifyTrackedDrop({ mint, symbol, dropPct, trackedAtPrice,
 
   try {
     if (isNative) {
-      await LocalNotifications.schedule({
-        notifications: [
-          {
-            id: idFromSignature(`drop-${mint}-${Date.now()}`),
-            title,
-            body,
-            schedule: { at: new Date(Date.now() + 200) },
-            extra: { tokenMint: mint },
-            ...(await imageFields(image)),
-          },
-        ],
+      await scheduleNative({
+        id: idFromSignature(`drop-${mint}-${Date.now()}`),
+        title,
+        body,
+        image,
+        extra: { tokenMint: mint },
       });
     } else if ('Notification' in window) {
       const notificationOptions = {
@@ -332,17 +345,12 @@ export async function notifyWalletTrade(swap) {
 
   try {
     if (isNative) {
-      await LocalNotifications.schedule({
-        notifications: [
-          {
-            id: idFromSignature(swap.signature || String(Date.now())),
-            title,
-            body,
-            schedule: { at: new Date(Date.now() + 200) },
-            ...(await imageFields(image)),
-            extra: { signature: swap.signature, walletAddress: swap.walletAddress },
-          },
-        ],
+      await scheduleNative({
+        id: idFromSignature(swap.signature || String(Date.now())),
+        title,
+        body,
+        image,
+        extra: { signature: swap.signature, walletAddress: swap.walletAddress },
       });
     } else if ('Notification' in window && permissionGranted) {
       const notificationOptions = {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { getFullApiUrl } from '../config/api';
 import './XTrackerPanel.css';
@@ -22,6 +22,10 @@ const formatMc = (mc) => {
 const XTrackerPanel = ({ onClose }) => {
   const [state, setState] = useState({ loading: true, error: null, data: null });
   const [showMomentumInfo, setShowMomentumInfo] = useState(false);
+  const [dragOffset, setDragOffset] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const bodyRef = useRef(null);
+  const touchStartY = useRef(null);
 
   const load = useCallback(async () => {
     setState((s) => ({ ...s, loading: true, error: null }));
@@ -36,6 +40,29 @@ const XTrackerPanel = ({ onClose }) => {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  const handleTouchStart = (e) => {
+    if (e.target.closest('button') || bodyRef.current?.scrollTop > 0) return;
+    touchStartY.current = e.touches[0].clientY;
+  };
+
+  const handleTouchMove = (e) => {
+    if (touchStartY.current === null) return;
+    const offset = e.touches[0].clientY - touchStartY.current;
+    if (offset <= 0) return;
+    e.preventDefault();
+    setIsDragging(true);
+    setDragOffset(Math.min(offset, 240));
+  };
+
+  const handleTouchEnd = () => {
+    if (touchStartY.current === null) return;
+    const shouldClose = dragOffset > 110;
+    touchStartY.current = null;
+    setIsDragging(false);
+    setDragOffset(0);
+    if (shouldClose) onClose();
+  };
 
   const openCoin = (coin) => {
     onClose();
@@ -60,7 +87,15 @@ const XTrackerPanel = ({ onClose }) => {
 
   return createPortal(
     <div className="menu-panel-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="menu-panel xtracker-panel" onClick={(e) => e.stopPropagation()}>
+      <div
+        className={`menu-panel xtracker-panel ${isDragging ? 'xtracker-panel--dragging' : ''}`}
+        style={dragOffset ? { transform: `translateY(${dragOffset}px)` } : undefined}
+        onClick={(e) => e.stopPropagation()}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
+      >
         <div className="menu-panel-header">
           <h3 className="menu-panel-title xtracker-title">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -85,14 +120,18 @@ const XTrackerPanel = ({ onClose }) => {
           </div>
         </div>
 
-        <div className="menu-panel-body xtracker-body">
+        <div ref={bodyRef} className="menu-panel-body xtracker-body">
           <p className="xtracker-intro">
             What's trending on X right now — and the coins riding each wave.
           </p>
 
           {state.loading && !trends.length && (
-            <div className="xtracker-status">
-              <span className="xtracker-spinner" />
+            <div className="xtracker-status" role="status" aria-live="polite">
+              <span className="xtracker-loader" aria-hidden="true">
+                <span className="xtracker-loader-ring" />
+                <span className="xtracker-loader-scan" />
+                <span className="xtracker-loader-mark">X</span>
+              </span>
               Scanning X for trending events…
             </div>
           )}

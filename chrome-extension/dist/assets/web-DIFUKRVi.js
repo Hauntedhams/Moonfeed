@@ -1,0 +1,1 @@
+import{I as e}from"./index-CY4SYKQ8.js";import"./react-vendor-DmCrio42.js";import"./wallet-vendor-B3m-xsCt.js";class r extends e{async canOpenUrl(e){return{value:!0}}async openUrl(e){return window.open(e.url,"_blank"),{completed:!0}}}export{r as AppLauncherWeb};

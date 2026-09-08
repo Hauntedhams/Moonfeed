@@ -17,6 +17,7 @@ import { AlertsProvider } from './contexts/AlertsContext'
 import CopyTradeToast from './components/CopyTradeToast'
 import ReferralTracker from './utils/ReferralTracker'
 import { initRemotePush } from './utils/pushNotifications'
+import { maybeEnableNotifications } from './utils/notificationOptIn'
 import MobileOptimizer from './utils/mobileOptimizer'
 import { initializePerformanceMonitoring } from './utils/mobileOptimizations'
 import { storeTransaction } from './utils/transactionStorage'
@@ -25,6 +26,7 @@ import { getSolUsdPrice } from './utils/orderFillTracking'
 import useOrderFillNotifications from './hooks/useOrderFillNotifications'
 import useHoldingsCrashNotifications from './hooks/useHoldingsCrashNotifications'
 import useTrackedGainNotifications from './hooks/useTrackedGainNotifications'
+import useSwipeBack from './hooks/useSwipeBack'
 
 // Lazy load heavy components that aren't needed immediately
 const WalletDebug = lazy(() => import('./components/WalletDebug'))
@@ -155,7 +157,9 @@ function App() {
     ReferralTracker.stampReferralOnAccount(walletAddress);
   }, [connected, walletAddress]);
 
-  // Register the device for remote (closed-app) push and associate it with the account
+  // Register the device for remote (closed-app) push and associate it with the account.
+  // PASSIVE: only registers when the OS permission was already granted — the
+  // prompt only ever appears after an explicit user action (see notificationOptIn).
   useEffect(() => {
     initRemotePush(connected ? walletAddress : null).catch((err) => {
       console.debug('[push] init failed:', err?.message);
@@ -170,6 +174,13 @@ function App() {
         ? c
         : { ...c, trackedAtPrice: Number(c.price_usd) || Number(c.priceUsd) || Number(c.price) || 0 }
     )));
+
+    // A fresh "track coin" tap is an explicit ask for alerts — the right moment
+    // to offer the OS notification prompt (never at app launch).
+    const prevMints = new Set(favorites.map(c => c.mintAddress || c.address));
+    if (newFavs.some(c => !prevMints.has(c.mintAddress || c.address))) {
+      maybeEnableNotifications(walletAddress).catch(() => {});
+    }
   };
 
   // Coin tracking belongs to the connected account. Clear legacy guest records
@@ -296,26 +307,14 @@ function App() {
     setActiveTab('coin-detail');
   };
 
-  // Swipe left anywhere on the single-coin detail view (except the interactive
-  // chart, which owns its own horizontal drag-to-pan) closes it and returns to
-  // the previous tab — same gesture users expect from a "back" navigation.
-  const coinDetailSwipeStartRef = useRef(null);
-  const handleCoinDetailTouchStart = (e) => {
-    if (e.target.closest?.('.native-chart')) { coinDetailSwipeStartRef.current = null; return; }
-    const t = e.touches?.[0];
-    coinDetailSwipeStartRef.current = t ? { x: t.clientX, y: t.clientY } : null;
-  };
-  const handleCoinDetailTouchEnd = (e) => {
-    const start = coinDetailSwipeStartRef.current;
-    coinDetailSwipeStartRef.current = null;
-    const t = e.changedTouches?.[0];
-    if (!start || !t) return;
-    const dx = t.clientX - start.x;
-    const dy = t.clientY - start.y;
-    if (dx < -70 && Math.abs(dx) > Math.abs(dy) * 1.4) {
-      setActiveTab(previousTab || 'home');
-    }
-  };
+  // Edge swipe-back for the single-coin detail view. The page follows the
+  // finger from the left edge and slides out on commit (shared gesture — see
+  // hooks/useSwipeBack.js).
+  const goBackFromCoinDetail = () => setActiveTab(previousTab || 'home');
+  const coinDetailSwipeBack = useSwipeBack({
+    onBack: goBackFromCoinDetail,
+    ignoreSelector: '.native-chart',
+  });
 
   // Handle trade button click - open Jupiter modal with the coin
   const handleTradeClick = (coin, options = {}) => {
@@ -768,13 +767,12 @@ function App() {
         </Suspense>
       ) : activeTab === 'coin-detail' && selectedCoin ? (
         <div
+          {...coinDetailSwipeBack.bind}
           style={{ position: 'relative' }}
-          onTouchStart={handleCoinDetailTouchStart}
-          onTouchEnd={handleCoinDetailTouchEnd}
         >
           {/* Back button for coin detail view */}
           <button
-            onClick={() => setActiveTab(previousTab || 'home')}
+            onClick={coinDetailSwipeBack.closeWithSlide}
             style={{
               position: 'fixed',
               top: 20,

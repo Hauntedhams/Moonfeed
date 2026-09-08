@@ -3,6 +3,12 @@
 
 .xtracker-panel {
   max-height: 88dvh;
+  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.xtracker-panel--dragging {
+  transition: none;
+  user-select: none;
 }
 
 .xtracker-body {
@@ -91,17 +97,77 @@
   text-align: center;
 }
 
-.xtracker-spinner {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  border: 2.5px solid rgba(255, 255, 255, 0.15);
-  border-top-color: #4b9fff;
-  animation: xtrackerSpin 0.8s linear infinite;
+.xtracker-loader {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  color: #fff;
 }
 
-@keyframes xtrackerSpin {
+.xtracker-loader-ring,
+.xtracker-loader-scan {
+  position: absolute;
+  inset: 2px;
+  border-radius: 50%;
+}
+
+.xtracker-loader-ring {
+  border: 2px solid rgba(75, 159, 255, 0.2);
+  border-top-color: #4b9fff;
+  border-right-color: rgba(75, 159, 255, 0.7);
+  animation: xtrackerLoaderSpin 1.1s linear infinite;
+}
+
+.xtracker-loader-scan {
+  inset: 9px;
+  border: 1px dashed rgba(125, 184, 255, 0.55);
+  animation: xtrackerLoaderSpin 2.4s linear infinite reverse;
+}
+
+.xtracker-loader-scan::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 50%;
+  height: 1px;
+  transform-origin: left center;
+  background: linear-gradient(90deg, rgba(125, 184, 255, 0.85), transparent);
+  animation: xtrackerLoaderSweep 1.4s ease-in-out infinite;
+}
+
+.xtracker-loader-mark {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0;
+  animation: xtrackerLoaderPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes xtrackerLoaderSpin {
   to { transform: rotate(360deg); }
+}
+
+@keyframes xtrackerLoaderSweep {
+  from { transform: rotate(0deg) scaleX(0.4); opacity: 0.35; }
+  50% { transform: rotate(180deg) scaleX(1); opacity: 1; }
+  to { transform: rotate(360deg) scaleX(0.4); opacity: 0.35; }
+}
+
+@keyframes xtrackerLoaderPulse {
+  0%, 100% { transform: scale(0.82); opacity: 0.55; }
+  50% { transform: scale(1); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xtracker-loader-ring,
+  .xtracker-loader-scan,
+  .xtracker-loader-scan::after,
+  .xtracker-loader-mark {
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+  }
 }
 
 .xtracker-retry-btn {

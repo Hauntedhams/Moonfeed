@@ -46,7 +46,14 @@ async function sendTokenToBackend(token, walletAddress) {
 
 // Call once after the app mounts (and again whenever the wallet changes so the
 // token gets re-associated with the connected account).
-export async function initRemotePush(walletAddress = null) {
+//
+// PASSIVE BY DEFAULT: if the OS notification permission isn't already granted,
+// this returns without prompting — the system prompt must only ever appear
+// after an explicit user action (tracking a coin, following a wallet, tapping
+// an enable button). Pass { requestPermission: true } from those actions only.
+// (iOS gives one shot at the prompt; a launch-time prompt that's dismissed
+// silences the app permanently AND blocks FCM token registration.)
+export async function initRemotePush(walletAddress = null, { requestPermission = false } = {}) {
   lastWallet = walletAddress;
 
   if (!Capacitor.isNativePlatform()) return;
@@ -60,17 +67,18 @@ export async function initRemotePush(walletAddress = null) {
     return;
   }
   if (registered) return;
-  registered = true;
 
   try {
     let perm = await plugin.checkPermissions();
     if (perm.receive !== 'granted') {
+      if (!requestPermission) return; // passive mode: never prompt unprompted
       perm = await plugin.requestPermissions();
     }
-    if (perm.receive !== 'granted') {
-      registered = false;
-      return;
-    }
+    if (perm.receive !== 'granted') return;
+
+    // Latch only AFTER permission is confirmed so a later explicit request can
+    // still complete registration.
+    registered = true;
 
     // Fires when FCM issues or rotates the token.
     await plugin.addListener('tokenReceived', (event) => {
@@ -93,7 +101,7 @@ export async function initRemotePush(walletAddress = null) {
       await sendTokenToBackend(token, lastWallet);
     }
   } catch (err) {
-    console.debug('[push] init error:', err?.message);
+    console.warn('[push] init error:', err?.message);
     registered = false;
   }
 }

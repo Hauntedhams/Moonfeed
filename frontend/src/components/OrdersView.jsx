@@ -14,21 +14,91 @@ import './OrdersView.css';
 
 // Per-wallet holdings cache (stale-while-revalidate) so the Holdings tab
 // renders instantly on revisit instead of showing a spinner every time.
-const HOLDINGS_CACHE_PREFIX = 'ordersView.holdings.';
+// localStorage (not sessionStorage) so it also survives app cold starts.
+const HOLDINGS_CACHE_PREFIX = 'ordersView.holdings.v3.';
+const HOLDINGS_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const readHoldingsCache = (walletAddress) => {
   try {
-    const raw = sessionStorage.getItem(HOLDINGS_CACHE_PREFIX + walletAddress);
+    const raw = localStorage.getItem(HOLDINGS_CACHE_PREFIX + walletAddress);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : null;
+    if (!parsed || !Array.isArray(parsed.list)) return null;
+    if (Date.now() - (parsed.ts || 0) > HOLDINGS_CACHE_MAX_AGE_MS) return null;
+    return parsed.list;
   } catch {
     return null;
   }
 };
 const writeHoldingsCache = (walletAddress, list) => {
   try {
-    sessionStorage.setItem(HOLDINGS_CACHE_PREFIX + walletAddress, JSON.stringify(list));
+    localStorage.setItem(HOLDINGS_CACHE_PREFIX + walletAddress, JSON.stringify({ ts: Date.now(), list }));
   } catch { /* storage full / private mode — non-fatal */ }
+};
+
+// Token program IDs whose accounts hold the wallet's balances
+const SPL_TOKEN_PROGRAM = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
+const TOKEN_2022_PROGRAM = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb';
+const HOLDINGS_RPC_ENDPOINTS = [
+  'https://mainnet.helius-rpc.com/?api-key=05a97104-cba1-4284-aed6-e0ad21af8b33',
+  'https://rpc.ankr.com/solana',
+  'https://api.mainnet-beta.solana.com'
+];
+const RPC_TIMEOUT_MS = 8000;
+const RPC_HEDGE_DELAY_MS = 1800;
+
+// One batched JSON-RPC POST for both token programs. Avoids pulling in the
+// heavy @solana/web3.js chunk and gives us a hard timeout via AbortController.
+const fetchTokenAccountsViaRpc = async (rpcUrl, owner, signal) => {
+  const body = [SPL_TOKEN_PROGRAM, TOKEN_2022_PROGRAM].map((programId, i) => ({
+    jsonrpc: '2.0',
+    id: i,
+    method: 'getTokenAccountsByOwner',
+    params: [owner, { programId }, { encoding: 'jsonParsed' }]
+  }));
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), RPC_TIMEOUT_MS);
+  if (signal) signal.addEventListener('abort', () => controller.abort(), { once: true });
+  try {
+    const res = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal
+    });
+    if (!res.ok) throw new Error(`RPC ${res.status}`);
+    const json = await res.json();
+    const responses = Array.isArray(json) ? json : [json];
+    const accounts = [];
+    let sawResult = false;
+    for (const entry of responses) {
+      if (!entry?.result?.value) continue;
+      sawResult = true;
+      accounts.push(...entry.result.value);
+    }
+    if (!sawResult) throw new Error('RPC returned no result');
+    return accounts;
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
+// Hedged request: try the primary endpoint, and only if it is slow start the
+// fallbacks alongside it. First success wins instead of waiting out a stall.
+const loadTokenAccounts = async (owner) => {
+  const controller = new AbortController();
+  const attempts = HOLDINGS_RPC_ENDPOINTS.map((url, i) => (
+    new Promise((resolve, reject) => {
+      const start = () => fetchTokenAccountsViaRpc(url, owner, controller.signal).then(resolve, reject);
+      if (i === 0) start();
+      else setTimeout(start, RPC_HEDGE_DELAY_MS * i);
+    })
+  ));
+  try {
+    const accounts = await Promise.any(attempts);
+    return accounts;
+  } finally {
+    controller.abort();
+  }
 };
 
 // Per-session record of automatic V2 sign-in attempts. A connected wallet is
@@ -74,11 +144,6 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
     getSolUsdPrice().then(setSolUsdPrice);
   }, []);
 
-  // Preload the @solana/web3.js chunk in the background once a wallet is
-  // connected so the first holdings fetch doesn't stall on the download.
-  useEffect(() => {
-    if (connected) import('@solana/web3.js').catch(() => {});
-  }, [connected]);
 
   // Horizontal swipe moves between the Holdings / Orders / History tabs, with the
   // page following the finger and sliding out/in on commit.
@@ -330,9 +395,20 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
   };
 
   // Fetch token holdings (on-chain balances) for connected wallet
-  const fetchHoldings = async () => {
+  const holdingsFetchRef = React.useRef({ inFlight: false, lastAt: 0, wallet: null });
+  const HOLDINGS_REFRESH_MS = 20000;
+
+  const fetchHoldings = async (force = false) => {
     if (!publicKey) return;
     const walletAddress = publicKey.toString();
+
+    // Don't re-run on every tab switch — recent data is good enough
+    const meta = holdingsFetchRef.current;
+    if (meta.wallet === walletAddress) {
+      if (meta.inFlight) return;
+      if (force !== true && Date.now() - meta.lastAt < HOLDINGS_REFRESH_MS) return;
+    }
+    holdingsFetchRef.current = { inFlight: true, lastAt: meta.lastAt, wallet: walletAddress };
 
     // Stale-while-revalidate: show cached holdings instantly, refresh silently
     const cachedHoldings = readHoldingsCache(walletAddress);
@@ -346,50 +422,23 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
       const storedTxs = getTransactions(walletAddress);
       const mintsMap = new Map(); // mint -> { mint, amount, decimals, symbol, name, image }
 
-      // 1. Try to fetch on-chain balances across fallback RPC endpoints
-      const RPC_ENDPOINTS = [
-        'https://mainnet.helius-rpc.com/?api-key=05a97104-cba1-4284-aed6-e0ad21af8b33',
-        'https://rpc.ankr.com/solana',
-        'https://api.mainnet-beta.solana.com'
-      ];
-
-      for (const rpcUrl of RPC_ENDPOINTS) {
-        try {
-          const { Connection, PublicKey } = await import('@solana/web3.js');
-          const conn = new Connection(rpcUrl, 'confirmed');
-          const ownerPk = new PublicKey(walletAddress);
-
-          const [splRes, token2022Res] = await Promise.allSettled([
-            conn.getParsedTokenAccountsByOwner(ownerPk, { programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA') }),
-            conn.getParsedTokenAccountsByOwner(ownerPk, { programId: new PublicKey('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb') })
-          ]);
-
-          const allAccounts = [];
-          if (splRes.status === 'fulfilled' && splRes.value?.value) {
-            allAccounts.push(...splRes.value.value);
+      // 1. Fetch on-chain balances (batched JSON-RPC, hedged across endpoints)
+      try {
+        const accounts = await loadTokenAccounts(walletAddress);
+        for (const item of accounts) {
+          const info = item.account?.data?.parsed?.info;
+          const amount = Number(info?.tokenAmount?.uiAmount) || 0;
+          const mint = info?.mint;
+          if (amount > 0 && mint) {
+            mintsMap.set(mint, {
+              mint,
+              amount,
+              decimals: info?.tokenAmount?.decimals || 6
+            });
           }
-          if (token2022Res.status === 'fulfilled' && token2022Res.value?.value) {
-            allAccounts.push(...token2022Res.value.value);
-          }
-
-          if (splRes.status === 'fulfilled' || token2022Res.status === 'fulfilled') {
-            for (const item of allAccounts) {
-              const info = item.account?.data?.parsed?.info;
-              const amount = Number(info?.tokenAmount?.uiAmount) || 0;
-              const mint = info?.mint;
-              if (amount > 0 && mint) {
-                mintsMap.set(mint, {
-                  mint,
-                  amount,
-                  decimals: info?.tokenAmount?.decimals || 6
-                });
-              }
-            }
-            break; // RPC call succeeded
-          }
-        } catch (rpcErr) {
-          console.warn(`RPC ${rpcUrl} holdings error:`, rpcErr.message);
         }
+      } catch (rpcErr) {
+        console.warn('Holdings RPC failed on all endpoints:', rpcErr?.message || rpcErr);
       }
 
       // 2. Incorporate stored transactions to fill any tokens bought in-app
@@ -434,26 +483,18 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
 
       // 3. Fetch Dexscreener market data for current USD prices & token names/images
       const mintAddrs = mintsToFetch.map(m => m.mint).slice(0, 30).join(',');
-      let dexPairs = [];
-      try {
-        const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mintAddrs}`);
-        if (dexRes.ok) {
-          const dexData = await dexRes.json();
-          dexPairs = dexData.pairs || [];
-        }
-      } catch (e) {
-        console.warn('Dexscreener holdings fetch warning:', e);
-      }
+      const cachedByMint = new Map((cachedHoldings || []).map(h => [h.mint, h]));
 
-      const list = mintsToFetch.map(item => {
+      const buildList = (dexPairs) => mintsToFetch.map(item => {
+        const cached = cachedByMint.get(item.mint);
         const pair = dexPairs.find(p => p.baseToken?.address === item.mint);
         const buys = storedTxs.filter(tx => tx.tokenMint === item.mint && (!tx.type || tx.type === 'buy'));
         const latestTx = buys[buys.length - 1] || storedTxs.find(tx => tx.tokenMint === item.mint);
 
-        const symbol = pair?.baseToken?.symbol || item.symbol || latestTx?.tokenSymbol || item.mint.slice(0, 6);
-        const name = pair?.baseToken?.name || item.name || latestTx?.tokenName || symbol;
-        const image = pair?.info?.imageUrl || pair?.baseToken?.image || item.image || latestTx?.tokenImage || null;
-        const priceUsd = parseFloat(pair?.priceUsd || latestTx?.pricePerTokenUsd || 0);
+        const symbol = pair?.baseToken?.symbol || item.symbol || latestTx?.tokenSymbol || cached?.symbol || item.mint.slice(0, 6);
+        const name = pair?.baseToken?.name || item.name || latestTx?.tokenName || cached?.name || symbol;
+        const image = pair?.info?.imageUrl || pair?.baseToken?.image || item.image || latestTx?.tokenImage || cached?.image || null;
+        const priceUsd = parseFloat(pair?.priceUsd || latestTx?.pricePerTokenUsd || cached?.priceUsd || 0);
 
         // Find cost basis from local transaction history
         let costBasisUsd = 0;
@@ -464,14 +505,15 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
           buys.forEach(b => {
             const qty = Number(b.outputAmount) || 0;
             const price = Number(b.pricePerTokenUsd) || (Number(b.pricePerToken) * solUsdPrice) || 0;
-            if (qty > 0 && price > 0) {
-              totalCostUsd += qty * price;
-              totalQty += qty;
-            }
             if (Number(b.inputAmount) > 0) {
               totalCostSol += Number(b.inputAmount);
             }
+            if (qty > 0 && price > 0) totalQty += qty;
           });
+          // Buy input is the authoritative amount spent. Deriving total cost
+          // from token quantity and a stored unit price can be wrong when an
+          // older transaction used the wrong token decimals.
+          totalCostUsd = totalCostSol * solUsdPrice;
           if (totalQty > 0) costBasisUsd = totalCostUsd / totalQty;
         }
 
@@ -498,8 +540,27 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
         };
       });
 
-      // Sort by current USD value descending
-      list.sort((a, b) => (b.currentValueUsd || 0) - (a.currentValueUsd || 0));
+      const sortByValue = (rows) => rows.sort((a, b) => (b.currentValueUsd || 0) - (a.currentValueUsd || 0));
+
+      // Paint the balances right away (using last known prices) so the spinner
+      // clears before the market-data round trip finishes.
+      if (!hasCached) {
+        setHoldings(sortByValue(buildList([])));
+        setLoadingHoldings(false);
+      }
+
+      let dexPairs = [];
+      try {
+        const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mintAddrs}`);
+        if (dexRes.ok) {
+          const dexData = await dexRes.json();
+          dexPairs = dexData.pairs || [];
+        }
+      } catch (e) {
+        console.warn('Dexscreener holdings fetch warning:', e);
+      }
+
+      const list = sortByValue(buildList(dexPairs));
       setHoldings(list);
       writeHoldingsCache(walletAddress, list);
     } catch (err) {
@@ -542,6 +603,7 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
         setHoldingsError('Could not load on-chain holdings');
       }
     } finally {
+      holdingsFetchRef.current = { inFlight: false, lastAt: Date.now(), wallet: walletAddress };
       setLoadingHoldings(false);
     }
   };
@@ -1143,7 +1205,7 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
             ) : holdingsError ? (
               <div className="orders-error">
                 <p>⚠️ {holdingsError}</p>
-                <button onClick={fetchHoldings} className="retry-btn">Retry</button>
+                <button onClick={() => fetchHoldings(true)} className="retry-btn">Retry</button>
               </div>
             ) : holdings.length === 0 ? (
               <div className="orders-empty">

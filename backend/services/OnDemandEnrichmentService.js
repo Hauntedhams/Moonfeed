@@ -1199,8 +1199,8 @@ class OnDemandEnrichmentService {
   async fetchTokenInfoFromRPC(mintAddress) {
     try {
       const { Connection, PublicKey } = require('@solana/web3.js');
-      const HELIUS_API_KEY = process.env.HELIUS_API_KEY || '26240c3d-8cce-414e-95f7-5c0c75c1a2cb';
-      const connection = new Connection(`https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`, 'confirmed');
+      const { HELIUS_RPC_URL } = require('../solanaRpcConfig');
+      const connection = new Connection(HELIUS_RPC_URL, 'confirmed');
       
       console.log(`🔍 Fetching REAL token info from Helius RPC for ${mintAddress}`);
       

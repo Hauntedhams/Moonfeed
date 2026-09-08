@@ -36,7 +36,9 @@ const SOL_MINT = 'So11111111111111111111111111111111111111112';
 class SolanaTransactionService {
   constructor() {
     this.txCache = new Map(); // mintAddress -> { transactions, timestamp }
-    this.CACHE_TTL = 60_000; // each miss costs 100+ Helius credits (Enhanced API)
+    // Each miss costs 100+ Helius credits (Enhanced API). History is only the
+    // seed — the live tx stream keeps the table fresh — so a long TTL is safe.
+    this.CACHE_TTL = 300_000;
     
     console.log('[TxService] Initialized. Helius:', HELIUS_API_KEY ? 'available (secondary)' : 'not configured');
   }
@@ -90,8 +92,10 @@ class SolanaTransactionService {
       const parsed = [];
       let beforeSig = undefined;
       const MAX_PAGES = 2; // 100 Helius credits per page — cap the worst case
+      // A second page doubles latency and credits for rows nobody scrolls to.
+      const ENOUGH = Math.min(limit, 20);
 
-      for (let page = 0; page < MAX_PAGES && parsed.length < limit; page++) {
+      for (let page = 0; page < MAX_PAGES && parsed.length < ENOUGH; page++) {
         const pageLimit = Math.min(limit * 2, 100); // fetch extra to compensate for filtered non-swaps
 
         const params = new URLSearchParams({

@@ -1,0 +1,24 @@
+/* Shared iOS-style swipe-back page transitions (see hooks/useSwipeBack.js). */
+
+.swipe-back-page {
+  will-change: transform;
+  touch-action: pan-y;
+}
+
+/* Following the finger — no tween, the transform IS the position. */
+.swipe-back-page.swipe-back-dragging {
+  transition: none !important;
+}
+
+.swipe-back-page.swipe-back-dragging,
+.swipe-back-page.swipe-back-closing {
+  box-shadow: -12px 0 32px rgba(0, 0, 0, 0.45);
+}
+
+.swipe-back-page.swipe-back-settling {
+  transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1) !important;
+}
+
+.swipe-back-page.swipe-back-closing {
+  transition: transform 220ms cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
