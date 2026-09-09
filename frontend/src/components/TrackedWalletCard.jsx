@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { getFullApiUrl, fetchJsonWithTimeout } from '../config/api';
 import NativeChart from './NativeChart';
-import { AnimalSilhouetteAvatar } from '../utils/walletIdentity';
+import { AnimalSilhouetteAvatar, resolveWalletDisplayName } from '../utils/walletIdentity';
 import './TrackedWalletCard.css';
 
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
@@ -183,7 +183,7 @@ function TrackedWalletCard({ wallet, shouldLoad = true, onOpenProfile, onOpenPos
           <AnimalSilhouetteAvatar address={address} />
         </div>
         <div className="twc-identity twc-identity--clickable" onClick={() => onOpenProfile?.(address)} title="View full wallet profile">
-          <div className="twc-label">{wallet?.label || shortAddr(address)}</div>
+          <div className="twc-label">{resolveWalletDisplayName(address, wallet?.label)}</div>
           <a
             className="twc-addr"
             href={`https://solscan.io/account/${address}`}

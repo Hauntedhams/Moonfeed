@@ -6,6 +6,7 @@
 // Safe no-op on web / when the plugin isn't installed.
 import { Capacitor } from '@capacitor/core';
 import { getFullApiUrl } from '../config/api';
+import { markXNewsPushUnread } from './xNewsAlerts';
 
 let FirebaseMessaging = null;
 let registered = false;
@@ -91,7 +92,15 @@ export async function initRemotePush(walletAddress = null, { requestPermission =
     await plugin.addListener('notificationActionPerformed', (event) => {
       const data = event?.notification?.data || {};
       try {
+        if (data.type === 'xNews') markXNewsPushUnread(data.alertKey, { open: true });
         window.dispatchEvent(new CustomEvent('moonfeed:push-action', { detail: data }));
+      } catch (_) { /* non-fatal */ }
+    });
+
+    await plugin.addListener('notificationReceived', (event) => {
+      const data = event?.notification?.data || {};
+      try {
+        if (data.type === 'xNews') markXNewsPushUnread(data.alertKey);
       } catch (_) { /* non-fatal */ }
     });
 

@@ -5,6 +5,7 @@ import { useDarkMode } from '../contexts/DarkModeContext';
 import { useCopyTrade } from '../contexts/CopyTradeContext';
 import { ORANGIE_WALLETS } from '../data/orangieWallets';
 import { getFullApiUrl } from '../config/api';
+import { consumePendingXTrackerOpen, hasUnreadXNews, markXNewsRead } from '../utils/xNewsAlerts';
 import XTrackerPanel from './XTrackerPanel';
 
 import './MoonfeedInfoModal.css';
@@ -770,7 +771,53 @@ const MoonfeedInfoButton = ({
   const [showOptions, setShowOptions] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [showXTracker, setShowXTracker] = useState(false);
+  const [hasXNews, setHasXNews] = useState(false);
   const wrapperRef = useRef(null);
+  const xTrendsRef = useRef([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const checkXNews = async () => {
+      try {
+        const response = await fetch(getFullApiUrl('/api/x-trends'));
+        if (!response.ok) return;
+        const data = await response.json();
+        if (cancelled) return;
+        xTrendsRef.current = data?.trends || [];
+        setHasXNews(hasUnreadXNews(xTrendsRef.current));
+      } catch { /* retry on the next interval */ }
+    };
+    const openXTracker = () => {
+      setMenuOpen(false);
+      setShowXTracker(true);
+      markXNewsRead(xTrendsRef.current);
+      setHasXNews(false);
+    };
+    const onXNews = () => {
+      setHasXNews(true);
+      if (consumePendingXTrackerOpen()) openXTracker();
+      else checkXNews();
+    };
+    checkXNews().then(() => {
+      if (!cancelled && consumePendingXTrackerOpen()) openXTracker();
+    });
+    const timer = setInterval(checkXNews, 2 * 60 * 1000);
+    window.addEventListener('moonfeed:x-news-updated', onXNews);
+    window.addEventListener('moonfeed:open-x-tracker', openXTracker);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+      window.removeEventListener('moonfeed:x-news-updated', onXNews);
+      window.removeEventListener('moonfeed:open-x-tracker', openXTracker);
+    };
+  }, []);
+
+  const openXTracker = () => {
+    setMenuOpen(false);
+    setShowXTracker(true);
+    markXNewsRead(xTrendsRef.current);
+    setHasXNews(false);
+  };
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -803,10 +850,8 @@ const MoonfeedInfoButton = ({
     },
     {
       label: 'X Tracker',
-      onClick: () => {
-        setMenuOpen(false);
-        setShowXTracker(true);
-      },
+      alert: hasXNews,
+      onClick: openXTracker,
     },
     {
       label: 'Options',
@@ -864,6 +909,7 @@ const MoonfeedInfoButton = ({
           <rect x="0" y="13.5" width="22" height="2.5" rx="1.25" fill="currentColor" />
         </svg>
         {showNudge && <span className="nudge-dot" aria-hidden="true" />}
+        {hasXNews && <span className="x-news-menu-dot" aria-label="New breaking event" />}
       </button>
 
       {menuOpen && (
@@ -879,11 +925,17 @@ const MoonfeedInfoButton = ({
             ) : (
               <button
                 key={item.label}
-                className="hamburger-menu-item"
+                className={`hamburger-menu-item${item.alert ? ' hamburger-menu-item--alert' : ''}`}
                 role="menuitem"
                 onClick={(e) => { e.stopPropagation(); item.onClick(); }}
               >
-                {item.label}
+                <span>{item.label}</span>
+                {item.alert && (
+                  <span className="x-news-item-cue" aria-label="New breaking event">
+                    <span className="x-news-item-dot" /> New
+                    <span aria-hidden="true">&#8594;</span>
+                  </span>
+                )}
               </button>
             )
           )}

@@ -49,6 +49,22 @@ export const buildWalletName = (addr = '') => {
 
 export const shortWalletAddress = (address) => (address ? `${address.slice(0, 4)}...${address.slice(-4)}` : 'Unknown');
 
+const isPlaceholderWalletLabel = (address, label) => {
+  const value = String(label || '').trim();
+  if (!value) return true;
+  if (/^wallet\s+\d+$/i.test(value)) return true;
+  if (!address) return false;
+  if (value === address) return true;
+  return value.startsWith(address.slice(0, 4))
+    && value.endsWith(address.slice(-4))
+    && (value.includes('...') || value.includes('…'));
+};
+
+export const resolveWalletDisplayName = (address, ...candidates) => {
+  const customName = candidates.find((candidate) => !isPlaceholderWalletLabel(address, candidate));
+  return customName ? String(customName).trim() : buildWalletName(address);
+};
+
 export const AnimalSilhouetteAvatar = ({ address, className = 'wallet-animal-avatar' }) => {
   const animal = getAnonAnimal(address);
   return (

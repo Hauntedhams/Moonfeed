@@ -1085,7 +1085,7 @@ const CoinCard = memo(({
           amountTokens: tokenAmount,
           expiresAt: pending.expiredAt,
         });
-        setOrderSuccess(`Sell order set at ${formatPrice(pending.triggerPrice)} — we'll notify you to execute`);
+        setOrderSuccess(`Sell alert set at ${formatPrice(pending.triggerPrice)} — we'll notify you to approve the trade`);
         emitAutoOrder('placed');
       } catch (err) {
         setOrderError(err.message || 'Failed to place sell order');
@@ -1149,7 +1149,7 @@ const CoinCard = memo(({
         amountTokens: buyDrawerOrderSide === 'sell' ? amt : null,
         expiresAt: getExpiryTimestamp(orderExpiry),
       });
-      setOrderSuccess(`Limit ${buyDrawerOrderSide} set at ${formatPrice(buyOrderPrice)} — we'll notify you to execute`);
+      setOrderSuccess(`${buyDrawerOrderSide === 'buy' ? 'Buy' : 'Sell'} alert set at ${formatPrice(buyOrderPrice)} — we'll notify you to approve the trade`);
     } catch (err) {
       setOrderError(err.message || 'Failed to place order');
     } finally {
@@ -1199,7 +1199,7 @@ const CoinCard = memo(({
         amountTokens: floored,
         expiresAt: getExpiryTimestamp(orderExpiry),
       });
-      setOrderSuccess(`Sell order set at ${formatPrice(buyOrderPrice)} — we'll notify you to execute`);
+      setOrderSuccess(`Sell alert set at ${formatPrice(buyOrderPrice)} — we'll notify you to approve the trade`);
       setSellTokenAmountInput('');
     } catch (err) {
       setOrderError(err.message || 'Failed to place sell order');
@@ -3495,7 +3495,7 @@ const CoinCard = memo(({
                       className={`coin-buy-mode-tab${buyDrawerMode === 'orders' ? ' active' : ''}`}
                       onClick={() => setBuyDrawerMode('orders')}
                     >
-                      Orders <span className="caution-tape-badge">IN PROGRESS</span>
+                      Orders <span className="caution-tape-badge">PRICE ALERT</span>
                     </button>
                   </div>
                   <button className="coin-buy-close" onClick={() => setBuyDrawerOpen(false)} aria-label="Close">×</button>
@@ -3555,7 +3555,7 @@ const CoinCard = memo(({
                   </>
                 ) : (
                   <>
-                    <CautionTapeBanner message="IN PROGRESS — LIMIT ORDERS UNDER MAINTENANCE" compact />
+                    <CautionTapeBanner compact />
                     <div className="coin-buy-order-side-toggle" aria-label="Order side">
                       <button
                         className={`coin-buy-order-side-btn${buyDrawerOrderSide === 'buy' ? ' active' : ''}`}
@@ -3711,7 +3711,7 @@ const CoinCard = memo(({
                       <div className="coin-buy-order-side-note">
                         {holderSellMode
                           ? `You already hold ${formatCompact(heldTokens)} ${coin.symbol || 'tokens'} (~$${heldValueUsd.toFixed(2)}) — this sells from your existing tokens.`
-                          : 'Sell at buys in first — the sell order is placed automatically once the buy confirms.'}
+                          : 'Sell at buys in first — the price alert is created once the buy confirms.'}
                       </div>
                       {holderSellMode ? (
                         <label className="coin-buy-custom-amount">
@@ -3782,7 +3782,7 @@ const CoinCard = memo(({
                         </div>
                         <div className="coin-buy-balance-line">
                           {sellOrderPending
-                            ? 'Waiting for your buy to confirm — the sell order is placed automatically.'
+                            ? 'Waiting for your buy to confirm — then the sell price alert will be created.'
                             : `Buys ~${formatPrice(displayPrice)} entry, then sells everything you get at ${formatPrice(buyOrderPrice)}.`}
                         </div>
                       </label>

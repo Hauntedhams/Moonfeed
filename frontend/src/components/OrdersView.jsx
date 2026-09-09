@@ -1158,7 +1158,7 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
               className={`filter-btn ${statusFilter === 'active' ? 'active' : ''}`}
               onClick={() => selectTab('active')}
             >
-              Orders <span className="caution-tape-badge">IN PROGRESS</span>
+              Orders <span className="caution-tape-badge">PRICE ALERT</span>
             </button>
             <button
               className={`filter-btn ${statusFilter === 'history' ? 'active' : ''}`}
@@ -1169,7 +1169,7 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
           </div>
 
           {statusFilter === 'active' && (
-            <CautionTapeBanner message="IN PROGRESS — LIMIT ORDERS UNDER MAINTENANCE" />
+            <CautionTapeBanner />
           )}
 
           {statusFilter !== 'holdings' && needsV2Auth && !isDemoMode && connected && (
@@ -1660,9 +1660,9 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
                       {(targetReached || parseFloat(priceDiffPercent) === 0) && (
                         <div className="order-card-executing-banner">
                           <span className="order-card-executing-dot" />
-                          {order.source === 'soft' ? 'Target reached — check your notifications' : 'Target reached — pending fill'}
+                          {order.source === 'soft' ? 'Target reached — your trade is ready' : 'Target reached — pending fill'}
                           <span className="order-card-executing-sub">
-                            {order.source === 'soft' ? 'Tap the alert to execute the trade' : 'Will appear in History once sold'}
+                            {order.source === 'soft' ? 'Open the notification and approve the trade' : 'Will appear in History once sold'}
                           </span>
                         </div>
                       )}
@@ -2177,9 +2177,9 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
             <div className="info-section">
               <h3>The Basics</h3>
               <p>
-                A <strong>limit order</strong> lets you buy or sell a token at a specific price you set, 
-                rather than the current market price. Your order sits on the blockchain and automatically 
-                executes when the market reaches your target price.
+                A Moonfeed <strong>limit order</strong> monitors the token price you choose. When the
+                market reaches that target, Moonfeed sends you a notification so you can open and approve
+                the trade in your wallet.
               </p>
             </div>
 
@@ -2187,9 +2187,10 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
               <h3>How It Works</h3>
               <ul>
                 <li><strong>Set Your Price:</strong> Choose the exact price you want to buy or sell at</li>
-                <li><strong>Wait for Match:</strong> Your order waits on-chain until the market hits your price</li>
-                <li><strong>Auto Execute:</strong> When conditions are met, the trade happens automatically</li>
-                <li><strong>Full Control:</strong> Cancel anytime before execution</li>
+                <li><strong>Price Monitoring:</strong> Moonfeed watches for the market to reach your target</li>
+                <li><strong>Get Notified:</strong> Moonfeed alerts you when the trade is ready</li>
+                <li><strong>You Approve:</strong> Open the alert and approve the swap in your wallet</li>
+                <li><strong>Full Control:</strong> Remove the alert at any time</li>
               </ul>
             </div>
 
@@ -2197,9 +2198,9 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
               <h3>Benefits</h3>
               <ul>
                 <li><strong>Price Control:</strong> You decide the exact price, no surprises</li>
-                <li><strong>No Watching:</strong> Set it and forget it - trades happen automatically</li>
+                <li><strong>No Constant Watching:</strong> Moonfeed watches the target and notifies you</li>
                 <li><strong>Reduced Slippage:</strong> No more getting rekt by market orders</li>
-                <li><strong>Smart Trading:</strong> Buy dips or sell peaks without being glued to charts</li>
+                <li><strong>Self-Custody:</strong> Moonfeed cannot execute the trade for you</li>
               </ul>
             </div>
 

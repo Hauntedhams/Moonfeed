@@ -17,7 +17,7 @@ router.post('/register', async (req, res) => {
       lastSeenAt: new Date(),
     };
     if (prefs && typeof prefs === 'object') {
-      for (const k of ['trackedGain', 'holdingCrash', 'walletTrade', 'orderFill']) {
+      for (const k of ['trackedGain', 'holdingCrash', 'walletTrade', 'orderFill', 'xNews', 'whaleGain']) {
         if (typeof prefs[k] === 'boolean') update[`prefs.${k}`] = prefs[k];
       }
     }

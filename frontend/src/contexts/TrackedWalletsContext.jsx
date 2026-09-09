@@ -3,6 +3,7 @@ import { useWallet } from '@jup-ag/wallet-adapter';
 import { getFullApiUrl } from '../config/api';
 import { useWalletConnectOnboarding } from '../components/WalletConnectOnboarding';
 import { maybeEnableNotifications } from '../utils/notificationOptIn';
+import { resolveWalletDisplayName } from '../utils/walletIdentity';
 
 const TrackedWalletsContext = createContext();
 
@@ -168,7 +169,7 @@ export const TrackedWalletsProvider = ({ children }) => {
 
     const newWallet = {
       address: walletAddress,
-      label: label || `Wallet ${trackedWallets.length + 1}`,
+      label: resolveWalletDisplayName(walletAddress, label),
       addedAt: Date.now(),
       lastViewed: Date.now(),
       copyTradeEnabled: true,

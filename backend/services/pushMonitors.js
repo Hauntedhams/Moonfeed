@@ -29,6 +29,7 @@ const MAX_TRACKED_WALLETS = 60; // cap Helius load per cycle
 // Tracked-coin gain thresholds.
 const GAIN_PCT = 10;
 const GAIN_REARM_PCT = 5;
+const GLOBAL_WHALE_STATE = '__global_whale_feed__';
 // Held/tracked-coin crash thresholds (Dexscreener price-change windows).
 const CRASH_M5_PCT = -15;
 const CRASH_H1_PCT = -30;
@@ -37,6 +38,7 @@ const CRASH_REARM_M5 = -5;
 let timer = null;
 let walletTimer = null;
 let softOrderTimer = null;
+let whaleCoinGetter = null;
 const symbolCache = new Map(); // mint -> { symbol, ts }
 const SYMBOL_TTL = 60 * 60 * 1000;
 
@@ -80,6 +82,7 @@ async function deepestPairs(mints) {
           liq,
           m5: Number(pair.priceChange?.m5),
           h1: Number(pair.priceChange?.h1),
+          h24: Number(pair.priceChange?.h24),
           symbol: pair.baseToken?.symbol,
           image: pair.info?.imageUrl || null,
         });
@@ -113,6 +116,80 @@ async function sendToWallet(walletAddress, category, payload) {
   const { invalidTokens } = await pushService.sendToTokens(tokens, payload);
   if (invalidTokens.length) {
     await DeviceToken.deleteMany({ token: { $in: invalidTokens } });
+  }
+}
+
+function setWhaleCoinGetter(fn) {
+  whaleCoinGetter = fn;
+}
+
+function whaleGainAction(change24h, state) {
+  if (!Number.isFinite(change24h)) return 'none';
+  if (!state) return 'seed';
+  if (change24h < GAIN_REARM_PCT && state.armed) return 'rearm';
+  if (change24h >= GAIN_PCT && !state.armed) return 'notify';
+  return 'none';
+}
+
+async function sendToAllDevices(category, payload) {
+  const devices = await DeviceToken.find({ [`prefs.${category}`]: { $ne: false } }).select('token').lean();
+  const tokens = [...new Set(devices.map((device) => device.token).filter(Boolean))];
+  if (!tokens.length) return 0;
+
+  const invalidTokens = [];
+  let sent = 0;
+  for (let index = 0; index < tokens.length; index += 500) {
+    const batch = tokens.slice(index, index + 500);
+    const result = await pushService.sendToTokens(batch, payload);
+    invalidTokens.push(...result.invalidTokens);
+    sent += batch.length - result.invalidTokens.length;
+  }
+  if (invalidTokens.length) await DeviceToken.deleteMany({ token: { $in: invalidTokens } });
+  return sent;
+}
+
+async function runWhaleGainsOnce() {
+  if (!pushService.isEnabled() || typeof whaleCoinGetter !== 'function') return;
+  const whaleCoins = whaleCoinGetter() || [];
+  const byMint = new Map();
+  for (const coin of whaleCoins) {
+    const mint = coin?.mintAddress;
+    if (mint && !byMint.has(mint)) byMint.set(mint, coin);
+  }
+  if (!byMint.size) return;
+
+  const prices = await deepestPairs([...byMint.keys()]);
+  for (const [mint, coin] of byMint) {
+    const live = prices.get(mint);
+    const change24h = live?.h24;
+    const state = await getState(GLOBAL_WHALE_STATE, mint, 'whaleGain');
+    const action = whaleGainAction(change24h, state);
+
+    if (action === 'seed') {
+      await setState(GLOBAL_WHALE_STATE, mint, 'whaleGain', change24h >= GAIN_PCT, change24h);
+      continue;
+    }
+    if (action === 'rearm') {
+      await setState(GLOBAL_WHALE_STATE, mint, 'whaleGain', false, change24h);
+      continue;
+    }
+    if (action !== 'notify') continue;
+
+    const claimed = await PushAlertState.findOneAndUpdate(
+      { walletAddress: GLOBAL_WHALE_STATE, mint, type: 'whaleGain', armed: false },
+      { $set: { armed: true, lastValue: change24h, updatedAt: new Date() } },
+      { new: true }
+    );
+    if (!claimed) continue;
+
+    const symbol = live.symbol || coin.symbol || mint.slice(0, 6);
+    const sent = await sendToAllDevices('whaleGain', {
+      title: `${symbol} is up ${change24h.toFixed(1)}%`,
+      body: 'A Whale feed coin is moving. Tap to view the coin and live chart.',
+      image: live.image || coin.image || coin.profileImage || null,
+      data: { type: 'whaleGain', mint, symbol },
+    });
+    console.log(`[push] whale gain ${symbol} +${change24h.toFixed(1)}% sent to ${sent} device(s)`);
   }
 }
 
@@ -521,10 +598,12 @@ function start() {
     console.log('[push] price/wallet monitors not started (FCM disabled — set FIREBASE_SERVICE_ACCOUNT)');
     return;
   }
-  console.log('[push] price monitors started (tracked-gain + crash)');
+  console.log('[push] price monitors started (tracked-gain + crash + whale-gain)');
   runOnce().catch((e) => console.error('[push] monitor error:', e.message));
+  runWhaleGainsOnce().catch((e) => console.error('[push] whale-gain monitor error:', e.message));
   timer = setInterval(() => {
     runOnce().catch((e) => console.error('[push] monitor error:', e.message));
+    runWhaleGainsOnce().catch((e) => console.error('[push] whale-gain monitor error:', e.message));
   }, POLL_INTERVAL_MS);
 
   console.log('[push] wallet-trade monitor started');
@@ -549,4 +628,14 @@ function stop() {
   softOrderTimer = null;
 }
 
-module.exports = { start, stop, runOnce, runWalletTradesOnce, runSoftOrdersOnce, handleWebhookSwap };
+module.exports = {
+  start,
+  stop,
+  setWhaleCoinGetter,
+  whaleGainAction,
+  runOnce,
+  runWhaleGainsOnce,
+  runWalletTradesOnce,
+  runSoftOrdersOnce,
+  handleWebhookSwap,
+};

@@ -152,7 +152,10 @@ const XTrackerPanel = ({ onClose }) => {
           {trends.map((trend) => (
             <article key={trend.id || trend.topic} className="xtracker-card">
               <div className="xtracker-card-top">
-                <span className="xtracker-category">{trend.category}</span>
+                <div className="xtracker-card-labels">
+                  {trend.alertWorthy && <span className="xtracker-breaking">Breaking</span>}
+                  <span className="xtracker-category">{trend.category}</span>
+                </div>
                 <button
                   type="button"
                   className="xtracker-momentum"
@@ -174,6 +177,11 @@ const XTrackerPanel = ({ onClose }) => {
                 <span className="xtracker-event-time">{trend.eventTime}</span>
               )}
               <p className="xtracker-summary">{trend.summary}</p>
+              {trend.sourceUrl && (
+                <a className="xtracker-source-link" href={trend.sourceUrl} target="_blank" rel="noopener noreferrer">
+                  View source on X &#8599;
+                </a>
+              )}
 
               {trend.hashtags?.length > 0 && (
                 <div className="xtracker-hashtags">

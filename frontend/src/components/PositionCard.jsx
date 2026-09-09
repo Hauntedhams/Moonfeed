@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getFullApiUrl, fetchJsonWithTimeout } from '../config/api';
 import NativeChart from './NativeChart';
 import { useTrackedWallets } from '../contexts/TrackedWalletsContext';
-import { AnimalSilhouetteAvatar, buildWalletName, gradientForWallet, shortWalletAddress } from '../utils/walletIdentity';
+import { AnimalSilhouetteAvatar, gradientForWallet, resolveWalletDisplayName, shortWalletAddress } from '../utils/walletIdentity';
 import './PositionDetailView.css';
 
 const formatCurrency = (amount) => {
@@ -240,7 +240,7 @@ function PositionCard({ walletAddress, mint, profileHint = {}, embedded = false,
   // Position still open (never sold) — the PnL shown is unrealized/theoretical.
   const isOpenPosition = !!position && !(Number(position?.counts?.sells) > 0 || position?.timing?.lastSell);
   const chartCoin = mint ? { mintAddress: mint } : null;
-  const displayName = profileHint?.displayName || profileHint?.name || buildWalletName(walletAddress);
+  const displayName = resolveWalletDisplayName(walletAddress, profileHint?.displayName, profileHint?.name);
 
   // When the wallet first bought in (drives the "Bought in Xm ago" sub-line).
   // The fast hint carries the feed trade's own time until position data lands.

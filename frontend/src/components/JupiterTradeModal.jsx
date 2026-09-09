@@ -345,7 +345,7 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
                 >
                   <span className="tab-icon">🎯</span>
                   Limit Order
-                  <span className="caution-tape-badge">IN PROGRESS</span>
+                  <span className="caution-tape-badge">PRICE ALERT</span>
                 </button>
               </div>
             </>
@@ -512,7 +512,7 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
 
                 {/* Page 2 — Limit Order (swipe left to reach) */}
                 <div className="jt-swipe-page jt-swipe-page--limit">
-                  <CautionTapeBanner message="IN PROGRESS — LIMIT ORDERS UNDER MAINTENANCE" />
+                  <CautionTapeBanner />
                   <TriggerOrderModal
                     embedded
                     isOpen={isOpen}

@@ -411,8 +411,8 @@ const TriggerOrderModal = ({
         {success ? (
           <div className="success-message">
             <div className="success-icon">✅</div>
-            <h3>Order Created!</h3>
-            <p>Your limit order has been created successfully</p>
+            <h3>Price Alert Created</h3>
+            <p>We’ll notify you at your target. Open the alert to approve the trade.</p>
           </div>
         ) : (
           <>
@@ -470,8 +470,8 @@ const TriggerOrderModal = ({
                   </div>
                   <p className="hero-slider-hint">
                     {side === 'sell'
-                      ? 'One order — works for either a take-profit above, or a downside exit below, the current price.'
-                      : 'Order fills automatically once the price drops to (or rises to) this level.'}
+                      ? 'Set a take-profit above or a downside exit below. We’ll notify you when it is ready to approve.'
+                      : 'We’ll notify you when the price reaches this level. You approve the trade in your wallet.'}
                   </p>
                   
                   <div className="slider-wrapper-hero">

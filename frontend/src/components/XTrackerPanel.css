@@ -198,6 +198,31 @@
   margin-bottom: 8px;
 }
 
+.xtracker-card-labels {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.xtracker-breaking {
+  color: #fff;
+  background: #dc2626;
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.xtracker-source-link {
+  display: inline-block;
+  margin: -2px 0 12px;
+  color: #93c5fd;
+  font-size: 12px;
+  font-weight: 650;
+  text-decoration: none;
+}
+
 .xtracker-category {
   font-size: 11px;
   font-weight: 700;

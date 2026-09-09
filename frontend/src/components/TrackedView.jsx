@@ -7,7 +7,7 @@ import { useTrackedTrades } from '../contexts/TrackedTradesContext';
 import { useWallet } from '../contexts/WalletContext';
 import { useAlerts } from '../contexts/AlertsContext';
 import WalletConnectOnboarding from './WalletConnectOnboarding';
-import { AnimalSilhouetteAvatar, buildWalletName, gradientForWallet, shortWalletAddress } from '../utils/walletIdentity';
+import { AnimalSilhouetteAvatar, gradientForWallet, resolveWalletDisplayName, shortWalletAddress } from '../utils/walletIdentity';
 import { getFullApiUrl, fetchJsonWithTimeout } from '../config/api';
 import './TrackedView.css';
 
@@ -106,6 +106,7 @@ function LazyTradeCard({ children }) {
  * tapping anywhere opens the full wallet profile. */
 function WalletTweetRow({ wallet, onOpenProfile, onUntrack }) {
   const address = wallet?.address;
+  const displayName = resolveWalletDisplayName(address, wallet?.label);
   const [lastTrade, setLastTrade] = useState(null);
   const [pnlRealized, setPnlRealized] = useState(null);
   const [roi, setRoi] = useState(null);
@@ -138,14 +139,14 @@ function WalletTweetRow({ wallet, onOpenProfile, onUntrack }) {
       className="tw-tweet"
       role="button"
       tabIndex={0}
-      onClick={() => onOpenProfile?.(address, { displayName: wallet.label })}
+      onClick={() => onOpenProfile?.(address, { displayName })}
     >
       <div className="tw-tweet-avatar" style={{ background: gradientForWallet(address) }}>
         <AnimalSilhouetteAvatar address={address} />
       </div>
       <div className="tw-tweet-body">
         <div className="tw-tweet-header">
-          <span className="tw-tweet-name">{wallet.label || buildWalletName(address)}</span>
+          <span className="tw-tweet-name">{displayName}</span>
           <span className="tw-tweet-handle">{shortWalletAddress(address)}</span>
           {wallet.addedAt && (
             <>

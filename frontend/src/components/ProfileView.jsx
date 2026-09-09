@@ -16,7 +16,7 @@ import { getTransactions, syncTransactionsWithAccount } from '../utils/transacti
 import { computeFillStats, getSolUsdPrice } from '../utils/orderFillTracking';
 import { fetchTriggerOrdersV2, cancelTriggerOrderV2 } from '../utils/triggerOrdersV2';
 import CautionTapeBanner from './CautionTapeBanner';
-import { WalletChip } from '../utils/walletIdentity';
+import { resolveWalletDisplayName, WalletChip } from '../utils/walletIdentity';
 
 const ProfileView = ({ onTradeClick, onOpenPosition }) => {
   // Use Jupiter Wallet Kit adapter
@@ -1058,7 +1058,7 @@ const ProfileView = ({ onTradeClick, onOpenPosition }) => {
         {/* ── ORDERS TAB ── */}
         {profileTab === 'orders' && (
           <div className="pv-ig-orders">
-            <CautionTapeBanner message="IN PROGRESS — LIMIT ORDERS UNDER MAINTENANCE" />
+            <CautionTapeBanner />
             <div className="orders-filter">
               <button className={`filter-btn ${statusFilter === 'active' ? 'active' : ''}`} onClick={() => setStatusFilter('active')}>Active</button>
               <button className={`filter-btn ${statusFilter === 'history' ? 'active' : ''}`} onClick={() => setStatusFilter('history')}>History</button>
@@ -2081,10 +2081,10 @@ const ProfileView = ({ onTradeClick, onOpenPosition }) => {
                       <WalletChip
                         address={wallet.address}
                         size={38}
-                        onClick={() => window.dispatchEvent(new CustomEvent('moonfeed:open-wallet-profile', { detail: { address: wallet.address, displayName: wallet.label } }))}
+                        onClick={() => window.dispatchEvent(new CustomEvent('moonfeed:open-wallet-profile', { detail: { address: wallet.address, displayName: resolveWalletDisplayName(wallet.address, wallet.label) } }))}
                       />
                       <div className="pv-tracked-row-meta">
-                        {wallet.label && <span className="pv-tracked-row-label">{wallet.label}</span>}
+                        <span className="pv-tracked-row-label">{resolveWalletDisplayName(wallet.address, wallet.label)}</span>
                         <span className="pv-tracked-row-date">Added {new Date(wallet.addedAt).toLocaleDateString()}</span>
                       </div>
                       <div className="pv-tracked-row-actions">

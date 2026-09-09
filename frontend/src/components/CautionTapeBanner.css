@@ -2,26 +2,12 @@
   position: relative;
   width: 100%;
   overflow: hidden;
-  border-top: 2px solid #f39c12;
-  border-bottom: 2px solid #f39c12;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(96, 165, 250, 0.42);
+  background: rgba(30, 64, 175, 0.14);
   margin: 10px 0;
   border-radius: 8px;
   pointer-events: auto;
   z-index: 100;
-}
-
-.caution-tape-stripes {
-  position: absolute;
-  inset: 0;
-  background: repeating-linear-gradient(
-    -45deg,
-    #f39c12,
-    #f39c12 16px,
-    #111111 16px,
-    #111111 32px
-  );
-  opacity: 0.95;
 }
 
 .caution-tape-content {
@@ -29,18 +15,15 @@
   z-index: 2;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 10px;
   padding: 10px 16px;
-  background: rgba(10, 10, 15, 0.82);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  color: #f1c40f;
-  font-weight: 800;
+  color: #dbeafe;
+  font-weight: 600;
   font-size: 13px;
-  letter-spacing: 0.8px;
-  text-transform: uppercase;
-  text-align: center;
+  letter-spacing: 0;
+  line-height: 1.4;
+  text-align: left;
 }
 
 .caution-tape-banner.compact {
@@ -53,21 +36,28 @@
 }
 
 .caution-tape-icon {
-  font-size: 15px;
-  line-height: 1;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  color: #60a5fa;
+}
+
+.caution-tape-icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .caution-tape-text {
-  color: #f1c40f;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  color: inherit;
 }
 
 .caution-tape-badge {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  background: #f39c12;
-  color: #000;
+  background: #2563eb;
+  color: #fff;
   font-size: 10px;
   font-weight: 900;
   padding: 2px 6px;

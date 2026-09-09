@@ -9,6 +9,7 @@ import { useCopyTrade } from '../contexts/CopyTradeContext';
 import { UnifiedWalletButton } from '@jup-ag/wallet-adapter';
 import WalletConnectOnboarding from './WalletConnectOnboarding';
 import { getTransactions } from '../utils/transactionStorage';
+import { resolveWalletDisplayName } from '../utils/walletIdentity';
 import './FavoritesGrid.css';
 
 function FavoritesGrid({ favorites = [], onCoinClick, onFavoritesChange, onSetupOrder, onWalletClick }) {
@@ -445,7 +446,7 @@ function FavoritesGrid({ favorites = [], onCoinClick, onFavoritesChange, onSetup
                       {w.address.slice(0, 2).toUpperCase()}
                     </div>
                     <div className="copytrade-info">
-                      <span className="copytrade-label">{w.label}</span>
+                      <span className="copytrade-label">{resolveWalletDisplayName(w.address, w.label)}</span>
                       <span className="copytrade-addr">
                         {w.address.slice(0, 5)}…{w.address.slice(-5)}
                       </span>

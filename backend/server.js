@@ -1092,6 +1092,9 @@ let dextrendingLastFetch = 0; // Timestamp of last fetch
 let whalefeedCoins = []; // Cache for large, established coins (no age cap)
 const DEXTRENDING_CACHE_TTL = 15 * 60 * 1000; // 15 minutes cache
 
+// Global whale-gain pushes monitor the same centrally-ranked feed served to users.
+pushMonitors.setWhaleCoinGetter(() => whalefeedCoins);
+
 // X-trends matcher scans every pool the server already maintains (deduped by mint).
 xTrendsService.setCoinPoolGetter(() => {
   const seen = new Set();
@@ -3287,7 +3290,12 @@ server.listen(PORT, async () => {
   
   // Initialize feeds and start auto-refreshers
   initializeWithLatestBatch();
-  
+
+  // Pre-warm X Tracker so the panel's first open is instant instead of
+  // waiting ~10-20s for the first live Grok call. Delayed so the coin pools
+  // above have a moment to populate (better coin-matching on the first pass).
+  setTimeout(() => { try { xTrendsService.prewarm(); } catch (e) { console.error('[x-trends] prewarm failed:', e.message); } }, 15000);
+
   // Start Solana Native RPC Price Service (TRUE on-chain prices from blockchain)
   console.log('🔗 Starting Solana Native RPC Price Service (Direct Blockchain)...');
   console.log('⚡ Using ON-DEMAND mode - prices fetched only when requested');

@@ -670,6 +670,19 @@ function App() {
           side: d.side === 'buy' ? 'buy' : 'sell',
           ...(solAmount > 0 ? { solAmount } : {}),
         });
+      } else if (d.type === 'xNews') {
+        setActiveTab('home');
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('moonfeed:open-x-tracker'));
+        }, 100);
+      } else if (d.type === 'whaleGain' && d.mint) {
+        handleCoinFound({
+          mintAddress: d.mint,
+          tokenAddress: d.mint,
+          address: d.mint,
+          symbol: d.symbol || '',
+          name: d.symbol || '',
+        });
       }
     };
     window.addEventListener('moonfeed:push-action', onPushAction);

@@ -3,6 +3,7 @@ import { getFullApiUrl, fetchJsonWithTimeout } from '../config/api';
 import { useTrackedWallets } from '../contexts/TrackedWalletsContext';
 import { sendPushNotification } from '../utils/tradeNotifications';
 import { maybeEnableNotifications, openNotificationSettings } from '../utils/notificationOptIn';
+import { resolveWalletDisplayName } from '../utils/walletIdentity';
 import useSwipeBack from '../hooks/useSwipeBack';
 import './ProfileView.css';
 import './WalletProfileView.css';
@@ -286,7 +287,7 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
   const identity = stats?.identity || null;
   const anonAnimal = getAnonAnimal(walletAddress);
   const displayName = identity?.name || profileHint?.displayName || profileHint?.name || buildWalletName(walletAddress);
-  const walletName = trackedWallet?.label || displayName;
+  const walletName = resolveWalletDisplayName(walletAddress, trackedWallet?.label, displayName);
   const latestCoin = coins[0] || null;
 
   const handleBellClick = async () => {

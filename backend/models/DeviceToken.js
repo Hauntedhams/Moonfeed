@@ -12,6 +12,8 @@ const deviceTokenSchema = new mongoose.Schema({
     holdingCrash: { type: Boolean, default: true },
     walletTrade: { type: Boolean, default: true },
     orderFill: { type: Boolean, default: true },
+    xNews: { type: Boolean, default: true },
+    whaleGain: { type: Boolean, default: true },
   },
   lastSeenAt: { type: Date, default: Date.now },
 }, { timestamps: true });

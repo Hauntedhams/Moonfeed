@@ -6,7 +6,7 @@ const mongoose = require('mongoose');
 const pushAlertStateSchema = new mongoose.Schema({
   walletAddress: { type: String, required: true, index: true },
   mint: { type: String, required: true },
-  type: { type: String, required: true }, // 'trackedGain' | 'holdingCrash'
+  type: { type: String, required: true }, // 'trackedGain' | 'holdingCrash' | 'whaleGain'
   armed: { type: Boolean, default: false }, // true = already notified, waiting to reset
   lastValue: { type: Number, default: 0 },
   updatedAt: { type: Date, default: Date.now },

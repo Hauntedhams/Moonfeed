@@ -186,7 +186,7 @@ function OrderDetailView({ order, walletAddress, solUsdPrice = 150, cancelling, 
           </svg>
         </button>
 
-        <CautionTapeBanner message="IN PROGRESS — LIMIT ORDERS UNDER MAINTENANCE" compact />
+        <CautionTapeBanner compact />
 
         <div className="odv-header">
           <button
