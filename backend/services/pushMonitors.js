@@ -236,7 +236,7 @@ async function runOnce() {
           await sendToWallet(wallet, 'trackedGain', {
             title: `${symbol} is up ${gainPct.toFixed(1)}%`,
             body: `Since you tracked it, now $${live.price.toPrecision(3)}.`,
-            image: live.image,
+            image: live.image || coin.image || null,
             data: { type: 'trackedGain', mint },
           });
         }
@@ -256,7 +256,7 @@ async function runOnce() {
         await sendToWallet(wallet, 'holdingCrash', {
           title: `${symbol} is dropping fast`,
           body: `Down ${Math.abs(dropPct).toFixed(1)}% in the ${windowLabel}.`,
-          image: live.image,
+          image: live.image || coin.image || null,
           data: { type: 'holdingCrash', mint },
         });
       }

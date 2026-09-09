@@ -385,20 +385,19 @@ const ModernTokenScroller = ({
 
   useEffect(() => {
     if (!showSwipeHint || onlyFavorites || coins.length < 2 || isTutorialActive) return;
-    const hintTimer = setTimeout(dismissSwipeHint, 9000);
+    const hintTimer = setTimeout(() => {
+      dismissSwipeHint();
+      startHelpHint();
+    }, 9000);
     return () => clearTimeout(hintTimer);
-  }, [showSwipeHint, onlyFavorites, coins.length, isTutorialActive, dismissSwipeHint]);
+  }, [showSwipeHint, onlyFavorites, coins.length, isTutorialActive, dismissSwipeHint, startHelpHint]);
 
   useEffect(() => {
     if (showSwipeHint && currentIndex > 0) {
       dismissSwipeHint();
-      if (!hasSeenFeedHint()) {
-        setShowFeedHint(true);
-      } else if (!hasSeenExpandHint()) {
-        setShowExpandHint(true);
-      }
+      startHelpHint();
     }
-  }, [showSwipeHint, currentIndex, dismissSwipeHint, hasSeenFeedHint, hasSeenExpandHint]);
+  }, [showSwipeHint, currentIndex, dismissSwipeHint, startHelpHint]);
 
   // Feed-switch hint: ring around the coin's name at the top of the card.
   useEffect(() => {
@@ -2500,7 +2499,7 @@ const ModernTokenScroller = ({
             style={{ left: helpHintTarget.left, top: helpHintTarget.top }}
           />
           <div className="help-section-callout" style={getHelpCalloutStyle(helpHintTarget)}>
-            More guides & info anytime — tap the lines in the top-left
+            More help here
           </div>
         </div>
       )}

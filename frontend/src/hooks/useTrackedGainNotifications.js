@@ -38,6 +38,7 @@ export default function useTrackedGainNotifications(favorites = []) {
         .map((c) => ({
           mint: c.mintAddress || c.address,
           symbol: c.symbol || c.name,
+          image: c.image || c.profileImage || c.logo || null,
           trackedAtPrice: Number(c.trackedAtPrice) || 0,
         }))
         .filter((c) => c.mint && c.trackedAtPrice > 0);
@@ -87,13 +88,13 @@ export default function useTrackedGainNotifications(favorites = []) {
             gainPct,
             trackedAtPrice: coin.trackedAtPrice,
             price: live.price,
-            image: live.image || null,
+            image: live.image || coin.image,
           });
           addNotification({
             id: `gain-${coin.mint}-${Date.now()}`,
             target: 'coins',
             mint: coin.mint,
-            coin: { symbol, name: symbol, image: live.image || null },
+            coin: { symbol, name: symbol, image: live.image || coin.image },
             level: 'gain',
             price: live.price,
             message: `${symbol} is up ${gainPct.toFixed(1)}% since you tracked it`,
@@ -117,13 +118,13 @@ export default function useTrackedGainNotifications(favorites = []) {
             dropPct: gainPct,
             trackedAtPrice: coin.trackedAtPrice,
             price: live.price,
-            image: live.image || null,
+            image: live.image || coin.image,
           });
           addNotification({
             id: `drop-${coin.mint}-${Date.now()}`,
             target: 'coins',
             mint: coin.mint,
-            coin: { symbol, name: symbol, image: live.image || null },
+            coin: { symbol, name: symbol, image: live.image || coin.image },
             level: 'crash',
             price: live.price,
             message: `${symbol} dropped ${Math.abs(gainPct).toFixed(1)}% since you tracked it`,

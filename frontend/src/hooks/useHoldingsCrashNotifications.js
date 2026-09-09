@@ -37,7 +37,12 @@ function heldMintsFromTransactions(walletAddress) {
   const byMint = new Map();
   for (const tx of txs) {
     if (!tx?.tokenMint) continue;
-    const entry = byMint.get(tx.tokenMint) || { mint: tx.tokenMint, amount: 0, symbol: tx.tokenSymbol };
+    const entry = byMint.get(tx.tokenMint) || {
+      mint: tx.tokenMint,
+      amount: 0,
+      symbol: tx.tokenSymbol,
+      image: tx.tokenImage || tx.image || null,
+    };
     const qty = Number(tx.outputAmount) || 0;
     if (!tx.type || tx.type === 'buy') {
       entry.amount += qty;
@@ -45,6 +50,7 @@ function heldMintsFromTransactions(walletAddress) {
       entry.amount -= Number(tx.inputAmount) || qty;
     }
     if (tx.tokenSymbol) entry.symbol = tx.tokenSymbol;
+    if (!entry.image) entry.image = tx.tokenImage || tx.image || null;
     byMint.set(tx.tokenMint, entry);
   }
   return Array.from(byMint.values()).filter((e) => e.amount > 0).slice(0, MAX_MINTS);
@@ -101,12 +107,13 @@ export default function useHoldingsCrashNotifications() {
           const windowLabel = crashedM5 ? 'last 5 minutes' : 'last hour';
           const valueUsd = holding.amount * (parseFloat(pair.priceUsd) || 0);
 
-          await notifyHoldingCrash({ mint: holding.mint, symbol, dropPct, windowLabel, valueUsd, image: pair.info?.imageUrl || null });
+          const image = pair.info?.imageUrl || holding.image || null;
+          await notifyHoldingCrash({ mint: holding.mint, symbol, dropPct, windowLabel, valueUsd, image });
           addNotification({
             id: `crash-${holding.mint}-${now}`,
             target: 'coins',
             mint: holding.mint,
-            coin: { symbol, name: pair.baseToken?.name || symbol, image: pair.info?.imageUrl || null },
+            coin: { symbol, name: pair.baseToken?.name || symbol, image },
             level: 'crash',
             price: parseFloat(pair.priceUsd) || 0,
             message: `${symbol} is down ${Math.abs(dropPct).toFixed(1)}% in the ${windowLabel}`,

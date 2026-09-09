@@ -20,7 +20,6 @@ function isAlertWorthy(trend, liveSearchUsed = true) {
   const momentum = Number(trend.momentum) || 0;
   const officialLaunch = trend.sourceType === 'official' && trend.eventType === 'coin_launch';
   if (officialLaunch) return momentum >= 60;
-  if (!trend?.coins?.length) return false;
   const cryptoEvent = trend.category === 'crypto';
   return (cryptoEvent && momentum >= 75) || momentum >= 90;
 }

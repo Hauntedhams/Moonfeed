@@ -75,7 +75,8 @@ function PositionCard({ walletAddress, mint, profileHint = {}, embedded = false,
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [chartPrice, setChartPrice] = useState(null);
-  const [tokenBanner, setTokenBanner] = useState(profileHint?.tokenBanner || profileHint?.banner || null);
+  const [tokenBanner, setTokenBanner] = useState(profileHint?.tokenBanner || profileHint?.banner || profileHint?.tokenImage || null);
+  const [enrichedCoin, setEnrichedCoin] = useState(null);
   const [chartFocusTime, setChartFocusTime] = useState(null);
   const [chartFocusNonce, setChartFocusNonce] = useState(0);
   // Which ⊕ pin the chart is currently zoomed into — tapping it again zooms back
@@ -143,8 +144,11 @@ function PositionCard({ walletAddress, mint, profileHint = {}, embedded = false,
         },
       }),
     }).then((result) => {
-      const banner = result?.coin?.banner || result?.banner || result?.data?.banner;
-      if (!cancelled && banner) setTokenBanner(banner);
+      if (cancelled) return;
+      const nextCoin = result?.coin || result?.data?.coin || null;
+      if (nextCoin) setEnrichedCoin(nextCoin);
+      const banner = nextCoin?.banner || nextCoin?.header || result?.banner || result?.data?.banner || nextCoin?.image || profileHint?.tokenImage;
+      if (banner) setTokenBanner(banner);
     }).catch((e) => { if (!cancelled) console.warn('Banner fetch failed:', e.message); });
     return () => { cancelled = true; };
   }, [mint, profileHint?.tokenSymbol, profileHint?.tokenName, profileHint?.tokenImage]);
@@ -236,7 +240,7 @@ function PositionCard({ walletAddress, mint, profileHint = {}, embedded = false,
   const position = data?.success ? data : fastTraderPosition;
   const tokenSymbol = position?.symbol || profileHint?.tokenSymbol || 'Token';
   const tokenName = position?.name || profileHint?.tokenName || tokenSymbol;
-  const tokenImage = position?.image || profileHint?.tokenImage || null;
+  const tokenImage = position?.image || enrichedCoin?.image || profileHint?.tokenImage || null;
   const reportedPnl = position?.pnl?.total ?? 0;
   const entryPrice = Number(position?.avgEntryPrice);
   const invested = Number(position?.invested);
@@ -247,7 +251,7 @@ function PositionCard({ walletAddress, mint, profileHint = {}, embedded = false,
   const isProfit = pnlTotal >= 0;
   // Position still open (never sold) — the PnL shown is unrealized/theoretical.
   const isOpenPosition = !!position && !(Number(position?.counts?.sells) > 0 || position?.timing?.lastSell);
-  const chartCoin = mint ? { mintAddress: mint } : null;
+  const chartCoin = mint ? { ...enrichedCoin, mintAddress: mint } : null;
   const displayName = resolveWalletDisplayName(walletAddress, profileHint?.displayName, profileHint?.name);
 
   // When the wallet first bought in (drives the "Bought in Xm ago" sub-line).
