@@ -117,6 +117,8 @@ const CoinCard = memo(({
   onExpandChange,
   onChartFullscreenChange,
   isVisible = true,
+  preloadBanner = false,
+  enrichmentManaged = false,
   mountChart = null, // Settled-index chart gate; falls back to isVisible when not provided
   isCurrentCard = false, // True only for the single card currently in view — gates DexScreener embed load
   isActiveCard = false, // True ONLY for the single card visually in view (not preload) — used to portal action buttons
@@ -451,6 +453,8 @@ const CoinCard = memo(({
   }, [pinnedMetric]);
   
   useEffect(() => {
+    if (enrichmentManaged) return;
+
     // Enrich when the card is visible and we still need data. Trigger if the coin
     // isn't enriched OR simply has no banner yet — a coin can have socials/rugcheck
     // (isEnriched=true) but still be missing its banner image, and on mobile this
@@ -508,7 +512,7 @@ const CoinCard = memo(({
       // 🚀 NO DEBOUNCE - Start enrichment immediately for fast loading
       enrichCoin();
     }
-  }, [isVisible, isEnriched, enrichmentRequested, mintAddress, coin, onEnrichmentComplete]);
+  }, [isVisible, isEnriched, enrichmentRequested, mintAddress, coin, onEnrichmentComplete, enrichmentManaged]);
 
   // Signal that the mobile chart portal target div is mounted and ref is available
   useEffect(() => {
@@ -2334,7 +2338,8 @@ const CoinCard = memo(({
             <img 
               src={bannerUrl}
               alt={coin.name || 'Token banner'}
-              loading="lazy"
+              loading={preloadBanner ? 'eager' : 'lazy'}
+              fetchPriority={isActiveCard ? 'high' : 'auto'}
               decoding="async"
               onError={() => { 
                 debug.log(`Banner image failed to load for ${coin.symbol}:`, bannerUrl);

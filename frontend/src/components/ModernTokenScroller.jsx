@@ -148,6 +148,7 @@ const ModernTokenScroller = ({
   const feedEndTriggerRef = useRef(null);
   const loadedFeedTypesRef = useRef([]);
   const isLoadingMoreFeedRef = useRef(false);
+  const enrichmentInFlightRef = useRef(new Map());
   const trackedBuyAppliedRef = useRef(false); // one-shot per feed load: tracked-wallet buys woven in
   const pendingFeedRestoreRef = useRef(false); // restore saved position once after a feed (re)loads
   const lastSavedFeedPosRef = useRef(''); // dedupe localStorage writes
@@ -913,49 +914,58 @@ const ModernTokenScroller = ({
     
     try {
       // Enrich each coin using the fast on-demand endpoint
-      const enrichmentPromises = mintAddresses.map(async (mintAddress) => {
-        const coin = coins.find(c => c.mintAddress === mintAddress);
+      const enrichmentPromises = [...new Set(mintAddresses)].map((mintAddress) => {
+        if (enrichedCoinsRef.current.has(mintAddress)) return null;
+
+        const existingRequest = enrichmentInFlightRef.current.get(mintAddress);
+        if (existingRequest) return existingRequest;
+
+        const coin = coinsRef.current.find(c => c.mintAddress === mintAddress);
         if (!coin) return null;
-        
-        // Skip if already in enrichment cache (backend will handle rugcheck retries)
-        if (enrichedCoins.has(mintAddress)) {
-          console.log(`📦 Already enriched: ${coin.symbol}`);
+
+        const request = (async () => {
+          const response = await fetch(`${API_BASE}/enrich-single`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ coin })
+          });
+
+          if (!response.ok) {
+            console.warn(`⚠️ Enrichment failed for ${coin.symbol}: ${response.status}`);
+            return null;
+          }
+
+          const data = await response.json();
+          if (data.success && data.coin) {
+            console.log(`✅ Enriched ${coin.symbol} in ${data.enrichmentTime}ms`);
+            return { mintAddress, enrichedData: data.coin };
+          }
+
           return null;
-        }
-        
-        const response = await fetch(`${API_BASE}/enrich-single`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ coin })
+        })().finally(() => {
+          enrichmentInFlightRef.current.delete(mintAddress);
         });
-        
-        if (!response.ok) {
-          console.warn(`⚠️ Enrichment failed for ${coin.symbol}: ${response.status}`);
-          return null;
-        }
-        
-        const data = await response.json();
-        if (data.success && data.coin) {
-          console.log(`✅ Enriched ${coin.symbol} in ${data.enrichmentTime}ms`);
-          return { mintAddress, enrichedData: data.coin };
-        }
-        
-        return null;
+
+        enrichmentInFlightRef.current.set(mintAddress, request);
+        return request;
       });
       
       const results = await Promise.all(enrichmentPromises);
-      
-      // Update enriched coins map
-      results.forEach(result => {
-        if (result && result.enrichedData) {
-          setEnrichedCoins(prev => new Map(prev).set(result.mintAddress, result.enrichedData));
-        }
-      });
+      const completed = results.filter(result => result?.enrichedData);
+
+      if (completed.length > 0) {
+        setEnrichedCoins(prev => {
+          const next = new Map(prev);
+          completed.forEach(({ mintAddress, enrichedData }) => next.set(mintAddress, enrichedData));
+          enrichedCoinsRef.current = next;
+          return next;
+        });
+      }
       
     } catch (error) {
       console.error('❌ On-demand enrichment error:', error);
     }
-  }, [coins, enrichedCoins, API_BASE]);
+  }, [API_BASE]);
 
   // Handle enrichment completion from CoinCard
   const handleEnrichmentComplete = useCallback((mintAddress, enrichedData) => {
@@ -2022,6 +2032,8 @@ const ModernTokenScroller = ({
           isGraduating={coin.status === 'graduating'}
           isTrending={coin.source?.includes('trending')}
           isVisible={isVisible}
+          preloadBanner={index >= currentIndex && index <= currentIndex + 3}
+          enrichmentManaged
           mountChart={mountChart}
           onExpandChange={handleCoinExpandChange}
           isCurrentCard={isCurrentCoin || isPreloadCoin}
@@ -2084,7 +2096,8 @@ const ModernTokenScroller = ({
     if (coins.length > 0 && currentIndex >= 0 && currentIndex < coins.length) {
       const currentCoin = coins[currentIndex];
       
-      // Always enrich current coin + next 2 coins for smooth scrolling
+      // Keep banner discovery well ahead of a fast swipe. Requests are deduped
+      // across overlapping windows, so moving one card only adds one new call.
       const coinsToEnrich = [];
       
       // Current coin
@@ -2092,8 +2105,8 @@ const ModernTokenScroller = ({
         coinsToEnrich.push(currentCoin.mintAddress);
       }
       
-      // Next 2 coins (prefetch for smooth scrolling)
-      for (let i = 1; i <= 2; i++) {
+      // Next 5 coins (prefetch for smooth scrolling)
+      for (let i = 1; i <= 5; i++) {
         const nextIndex = currentIndex + i;
         if (nextIndex < coins.length) {
           const nextCoin = coins[nextIndex];
