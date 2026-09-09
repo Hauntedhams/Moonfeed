@@ -485,9 +485,6 @@ const CoinCard = memo(({
                 phase: data.coin.phase // 'fast' or 'complete'
               });
               
-              // 🆕 Mark enrichment as completed to trigger chart auto-load
-              setEnrichmentCompleted(true);
-              
               // Notify parent component of enrichment completion
               if (onEnrichmentComplete && typeof onEnrichmentComplete === 'function') {
                 onEnrichmentComplete(mintAddress, data.coin);
@@ -501,6 +498,10 @@ const CoinCard = memo(({
           }
         } catch (error) {
           console.error(`❌ On-view enrichment failed for ${coin.symbol}:`, error.message);
+        } finally {
+          // Always resolve — a bonding-curve token with no banner/socials yet is a
+          // valid outcome, not a reason to spin the "Loading..." badge forever.
+          setEnrichmentCompleted(true);
         }
       };
       
@@ -2286,7 +2287,7 @@ const CoinCard = memo(({
         )}
         
         {/* Enrichment status badge */}
-        {!isEnriched && (
+        {!isEnriched && !enrichmentCompleted && (
           <div className="enrichment-status-badge"
             style={{
               position: 'absolute',
@@ -4363,7 +4364,7 @@ const CoinCard = memo(({
       )}
 
       {/* Loading Indicator - Shown when enrichment is in progress */}
-      {!isEnriched && (
+      {!isEnriched && !enrichmentCompleted && (
         <div className="enrichment-loading">
           <div className="loading-spinner"></div>
           <div className="loading-text">Enriching data...</div>

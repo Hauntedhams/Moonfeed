@@ -47,6 +47,16 @@ function resolvePool(coin) {
   return coin?.pairAddress || coin?.poolAddress || coin?.ammAccount || null;
 }
 
+// Plain fetch() has no default timeout — on a flaky mobile connection a stalled
+// request can hang indefinitely, leaving the chart stuck on its loading spinner
+// forever instead of surfacing an error. Abort after timeoutMs so callers always
+// reach a terminal state.
+function fetchWithTimeout(url, timeoutMs = 10000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timer));
+}
+
 // Interval length in seconds for a timeframe (used to bucket the live price).
 function tfSeconds(tf) {
   const base = tf.interval === 'hour' ? 3600 : tf.interval === 'day' ? 86400 : 60;
@@ -273,7 +283,7 @@ const NativeChart = ({
     let cancelled = false;
     setPool(null);
     setPoolResolved(false);
-    fetch(`${API_CONFIG.BASE_URL}/api/resolve-pool/${mint}`)
+    fetchWithTimeout(`${API_CONFIG.BASE_URL}/api/resolve-pool/${mint}`)
       .then((r) => r.json())
       .then((d) => {
         if (!cancelled) {
@@ -888,7 +898,7 @@ const NativeChart = ({
       for (const delay of RETRY_DELAYS_MS) {
         if (delay) await new Promise((r) => setTimeout(r, delay));
         try {
-          const res = await fetch(url);
+          const res = await fetchWithTimeout(url);
           if (!res.ok) { hadError = true; continue; } // transient — retry
           const json = await res.json();
           list = json?.data?.attributes?.ohlcv_list || [];
@@ -978,7 +988,7 @@ const NativeChart = ({
       for (const delay of RETRY_DELAYS_MS) {
         if (delay) await new Promise((r) => setTimeout(r, delay));
         try {
-          const res = await fetch(`${API_CONFIG.BASE_URL}/api/chart-data/${mint}?timeframe=${tf.label}`);
+          const res = await fetchWithTimeout(`${API_CONFIG.BASE_URL}/api/chart-data/${mint}?timeframe=${tf.label}`);
           if (res.ok) {
             const json = await res.json();
             points = json?.data || [];
