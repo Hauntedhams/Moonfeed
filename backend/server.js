@@ -933,12 +933,12 @@ app.post('/api/coins/enrich-single', async (req, res) => {
       baseCoin = currentCoins.find(c => c.mintAddress === targetAddress) ||
                  newCoins.find(c => c.mintAddress === targetAddress) ||
                  customCoins.find(c => c.mintAddress === targetAddress);
-      
+
+      // Not in any cached feed (e.g. a token only seen via a trader's position/
+      // trade history) — enrichment can still fetch it from DexScreener etc.
+      // using just the mint address, so build a minimal stub instead of 404ing.
       if (!baseCoin) {
-        return res.status(404).json({
-          success: false,
-          error: 'Coin not found in cache'
-        });
+        baseCoin = { mintAddress: targetAddress };
       }
     }
 

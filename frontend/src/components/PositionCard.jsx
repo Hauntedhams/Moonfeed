@@ -133,13 +133,21 @@ function PositionCard({ walletAddress, mint, profileHint = {}, embedded = false,
     fetchJsonWithTimeout(getFullApiUrl('/api/coins/enrich-single'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mintAddress: mint }),
+      body: JSON.stringify({
+        mintAddress: mint,
+        coin: {
+          mintAddress: mint,
+          symbol: profileHint?.tokenSymbol,
+          name: profileHint?.tokenName,
+          image: profileHint?.tokenImage,
+        },
+      }),
     }).then((result) => {
       const banner = result?.coin?.banner || result?.banner || result?.data?.banner;
       if (!cancelled && banner) setTokenBanner(banner);
-    }).catch(() => {});
+    }).catch((e) => { if (!cancelled) console.warn('Banner fetch failed:', e.message); });
     return () => { cancelled = true; };
-  }, [mint]);
+  }, [mint, profileHint?.tokenSymbol, profileHint?.tokenName, profileHint?.tokenImage]);
 
   const markers = useMemo(() => {
     const list = [];
