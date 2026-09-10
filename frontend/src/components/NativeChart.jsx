@@ -1059,11 +1059,11 @@ const NativeChart = ({
     const focusMs = Number(focusTimelineAt);
     if (Number.isFinite(focusMs) && focusMs > 0) {
       const target = Math.floor(focusMs / 1000);
-      const span = interval * 40;
+      const span = interval * 80;
       try {
         chart.timeScale().setVisibleRange({
-          from: Math.max(0, target - span * 0.4),
-          to: target + span * 0.6,
+          from: Math.max(0, target - span * 0.5),
+          to: target + span * 0.5,
         });
       } catch (_) {
         // The selected timeframe may not retain the requested trade candle.
@@ -1080,7 +1080,7 @@ const NativeChart = ({
       const tradeStart = Math.min(entry, exit);
       const tradeEnd = Math.max(entry, exit);
       const tradeSpan = Math.max(interval * 8, tradeEnd - tradeStart);
-      const padding = Math.max(interval * 10, tradeSpan * 0.55);
+      const padding = Math.max(interval * 18, tradeSpan * 0.85);
       from = Math.max(0, tradeStart - padding);
       to = tradeEnd + padding;
     } else {

@@ -29,6 +29,7 @@ const REFRESH_MS = REFRESH_MINUTES * 60 * 1000; // fresh window
 const STALE_MAX_MS = 6 * 60 * 60 * 1000;         // serve-on-error ceiling
 const MAX_EVENTS_PER_PASS = 8;
 const MAX_EVENTS_TOTAL = 14;
+const MIN_CRYPTO_EVENTS_TOTAL = 6;
 const MAX_COINS_PER_EVENT = 6;
 
 // Generic words that would false-positive against half the coin pool.
@@ -99,11 +100,15 @@ trending RIGHT NOW specifically in crypto / Solana meme-coin culture (last 24
 hours, high engagement): new pump.fun / Solana meme coin launches tied to a
 person, meme, or news event; celebrity or politically-linked coin drama;
 viral crypto-Twitter moments; big coin pumps/dumps driven by a real-world
-event. Prioritize coins announced by the person or organization on their own
-official X account, and include that exact post as sourceUrl. Use AT MOST 3 X searches total (try queries like "pump.fun", "solana
-meme coin", "new coin launched", a trending name + "coin"), then stop
-searching and answer. Skip generic market analysis — only report events tied
-to a SPECIFIC person/meme/news moment.
+event; crypto CEO/founder/exchange/protocol posts people are reacting to; and
+fresh memes or ticker narratives spreading through crypto accounts. Prioritize
+specific stories that could create or move meme coins over broad market takes.
+Coins announced by the person or organization on their own official X account
+are highest priority; include that exact post as sourceUrl when you find one.
+Use AT MOST 4 X searches total (try queries like "pump.fun", "solana meme coin",
+"new coin launched", "crypto CEO", "Binance Coinbase Solana meme", a trending
+name + "coin"), then stop searching and answer. Skip generic market analysis —
+only report events tied to a SPECIFIC person/meme/news/crypto-industry moment.
 
 ${EVENT_SCHEMA}`;
 
@@ -178,6 +183,58 @@ function dedupeEvents(events) {
   return out;
 }
 
+function isCryptoSpaceEvent(event) {
+  const haystack = normalize([
+    event.category,
+    event.eventType,
+    event.topic,
+    event.headline,
+    event.summary,
+    ...(event.keywords || []),
+    ...(event.hashtags || []),
+  ].join(' '));
+  return event.category === 'crypto'
+    || event.eventType === 'coin_launch'
+    || event.eventType === 'coin_move'
+    || /\b(crypto|solana|pumpfun|pump fun|pump\.fun|meme coin|memecoin|coinbase|binance|kraken|bybit|okx|jupiter|phantom|solflare|wallet|token|launch|ticker|cto|ceo|founder|vitalik|cz|brian armstrong|anatoly|mert)\b/.test(haystack);
+}
+
+function trendPriority(event) {
+  const momentum = Number(event.momentum) || 0;
+  let boost = 0;
+  if (event.category === 'crypto') boost += 24;
+  if (event.eventType === 'coin_launch') boost += 18;
+  if (event.eventType === 'coin_move') boost += 14;
+  if (event.sourceType === 'official') boost += 5;
+  return momentum + boost;
+}
+
+function prioritizeEvents(events) {
+  const sorted = [...events].sort((a, b) => trendPriority(b) - trendPriority(a));
+  const cryptoEvents = sorted.filter(isCryptoSpaceEvent);
+  const otherEvents = sorted.filter((event) => !isCryptoSpaceEvent(event));
+  const head = cryptoEvents.slice(0, MIN_CRYPTO_EVENTS_TOTAL);
+  const remainder = [...cryptoEvents.slice(head.length), ...otherEvents]
+    .sort((a, b) => trendPriority(b) - trendPriority(a));
+  return [...head, ...remainder].slice(0, MAX_EVENTS_TOTAL);
+}
+
+function trendDisplayScore(trend) {
+  const coinMatch = trend.coins?.[0]?.matchScore || 0;
+  const coinCount = trend.coins?.length || 0;
+  return trendPriority(trend)
+    + Math.min(22, coinMatch * 2.5)
+    + Math.min(10, coinCount * 2);
+}
+
+function prioritizeMatchedTrends(trends) {
+  const sorted = [...trends].sort((a, b) => trendDisplayScore(b) - trendDisplayScore(a));
+  const cryptoHead = sorted.filter(isCryptoSpaceEvent).slice(0, MIN_CRYPTO_EVENTS_TOTAL);
+  const cryptoIds = new Set(cryptoHead.map((trend) => trend.id));
+  const rest = sorted.filter((trend) => !cryptoIds.has(trend.id));
+  return [...cryptoHead, ...rest].slice(0, MAX_EVENTS_TOTAL);
+}
+
 async function fetchGrokTrends() {
   // Run both passes in parallel — general world/culture trends + a dedicated
   // crypto/meme-coin-specific pass (catches niche stories the general pass
@@ -190,9 +247,7 @@ async function fetchGrokTrends() {
   const ok = results.filter((r) => r.status === 'fulfilled').map((r) => r.value);
   if (!ok.length) throw results[0].reason;
 
-  const merged = dedupeEvents(ok.flatMap((r) => r.events))
-    .sort((a, b) => b.momentum - a.momentum)
-    .slice(0, MAX_EVENTS_TOTAL);
+  const merged = prioritizeEvents(dedupeEvents(ok.flatMap((r) => r.events)));
   const citations = ok.flatMap((r) => r.citations);
   const liveSearchUsed = ok.some((r) => r.liveSearchUsed);
   const totalCostUsd = ok.reduce((n, r) => n + r.costUsd, 0);
@@ -303,10 +358,10 @@ async function refresh() {
   const { events, citations, liveSearchUsed } = await fetchGrokTrends();
   const pool = (typeof coinPoolGetter === 'function' ? coinPoolGetter() : []) || [];
 
-  const matchedTrends = events.map((event) => ({
+  const matchedTrends = prioritizeMatchedTrends(events.map((event) => ({
     ...event,
     coins: matchCoinsForEvent(event, pool),
-  }));
+  })));
   const trends = xNewsAlertService.decorateTrends(matchedTrends, liveSearchUsed);
 
   cache = { trends, updatedAt: Date.now(), model: XAI_MODEL, citations: citations.slice(0, 30), poolSize: pool.length, liveSearchUsed };

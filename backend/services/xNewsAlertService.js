@@ -19,9 +19,10 @@ function isAlertWorthy(trend, liveSearchUsed = true) {
   if (!liveSearchUsed) return false;
   const momentum = Number(trend.momentum) || 0;
   const officialLaunch = trend.sourceType === 'official' && trend.eventType === 'coin_launch';
-  if (officialLaunch) return momentum >= 60;
+  if (officialLaunch) return momentum >= 50;
+  if (trend.eventType === 'coin_launch') return momentum >= 60;
   const cryptoEvent = trend.category === 'crypto';
-  return (cryptoEvent && momentum >= 75) || momentum >= 90;
+  return (cryptoEvent && momentum >= 65) || momentum >= 90;
 }
 
 function decorateTrends(trends, liveSearchUsed = true) {
