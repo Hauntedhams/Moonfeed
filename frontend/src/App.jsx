@@ -20,6 +20,8 @@ import { initRemotePush } from './utils/pushNotifications'
 import { maybeEnableNotifications } from './utils/notificationOptIn'
 import MobileOptimizer from './utils/mobileOptimizer'
 import { initializePerformanceMonitoring } from './utils/mobileOptimizations'
+import { initAnalytics, setAnalyticsWallet, track, coinProps } from './utils/analytics'
+import { refreshTasteProfile } from './utils/feedPersonalization'
 import { storeTransaction } from './utils/transactionStorage'
 import { fetchTokenDecimals } from './utils/triggerOrders'
 import { getSolUsdPrice } from './utils/orderFillTracking'
@@ -135,11 +137,13 @@ function App() {
   const [previousTab, setPreviousTab] = useState(restoredCoinDetail?.previousTab || 'home'); // Tab to go back to from coin-detail
   const [walletProfile, setWalletProfile] = useState(null); // Wallet profile overlay state: { address, displayName? }
   const [positionDetail, setPositionDetail] = useState(null); // { wallet, mint } to show a single position's entry/exit detail
+  const lastViewedMintRef = useRef(null); // dedupes repeated coin_view analytics for the same card
 
   // Initialize referral tracking, mobile optimizer, and performance monitoring on app load
   useEffect(() => {
     try {
       ReferralTracker.initialize();
+      initAnalytics();
       initializePerformanceMonitoring();
       if (MobileOptimizer.isMobile) {
         console.log('📱 Mobile mode active - aggressive optimizations enabled');
@@ -156,6 +160,17 @@ function App() {
     if (!connected || !walletAddress) return;
     ReferralTracker.stampReferralOnAccount(walletAddress);
   }, [connected, walletAddress]);
+
+  // Attribute analytics to the account once a wallet is connected
+  useEffect(() => {
+    setAnalyticsWallet(connected ? walletAddress : null);
+    refreshTasteProfile({ force: true }); // recommendations follow the account
+  }, [connected, walletAddress]);
+
+  // Which screen the user is on
+  useEffect(() => {
+    track('tab_view', { label: activeTab });
+  }, [activeTab]);
 
   // Register the device for remote (closed-app) push and associate it with the account.
   // PASSIVE: only registers when the OS permission was already granted — the
@@ -178,7 +193,9 @@ function App() {
     // A fresh "track coin" tap is an explicit ask for alerts — the right moment
     // to offer the OS notification prompt (never at app launch).
     const prevMints = new Set(favorites.map(c => c.mintAddress || c.address));
-    if (newFavs.some(c => !prevMints.has(c.mintAddress || c.address))) {
+    const added = newFavs.filter(c => !prevMints.has(c.mintAddress || c.address));
+    added.forEach(c => track('coin_tracked', coinProps(c, { feed: filtersRef.current?.type })));
+    if (added.length) {
       maybeEnableNotifications(walletAddress).catch(() => {});
     }
   };
@@ -321,6 +338,7 @@ function App() {
     if (IS_EXTENSION) { openFullSite(); return; }
     console.log('🚀 Trade button clicked for:', coin?.symbol);
     if (coin) {
+      track('trade_window_open', coinProps(coin, { feed: filtersRef.current?.type, label: options?.tab || 'swap' }));
       setCoinToTrade(coin);
       setTradeModalOptions(options);
       setTradeModalOpen(true);
@@ -367,6 +385,13 @@ function App() {
     
     setCurrentViewedCoin(coin);
     setCurrentCoinIndex(index); // Track the current coin index
+
+    // One coin_view per coin the user actually lands on — this is the scroll signal.
+    const mint = coin?.mintAddress || coin?.address;
+    if (mint && mint !== lastViewedMintRef.current) {
+      lastViewedMintRef.current = mint;
+      track('coin_view', coinProps(coin, { feed: filtersRef.current?.type, value: index }));
+    }
   };
 
   // Ensure the current viewed coin is set when viewing a specific coin detail
@@ -526,6 +551,8 @@ function App() {
   // Handle Jupiter swap success
   const handleSwapSuccess = async ({ txid, swapResult, quoteResponseMeta, coin, walletAddress }) => {
     console.log('🎉 Swap successful for', coin.symbol, 'TX:', txid);
+
+    track('swap_success', coinProps(coin, { feed: filtersRef.current?.type }));
 
     // Lets a card that queued a follow-up action (e.g. the sell-at buy-in) react.
     window.dispatchEvent(new CustomEvent('moonfeed:swap-success', {

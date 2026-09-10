@@ -166,6 +166,9 @@ app.use('/api/webhook/helius', require('./routes/heliusWebhook'));
 // Mount soft (server-monitored) limit orders
 app.use('/api/soft-orders', softOrderRoutes);
 
+// First-party product analytics (ingest is public, dashboard aggregations need ADMIN_API_KEY)
+app.use('/api/analytics', require('./routes/analytics'));
+
 // X (Twitter) trending events matched to coins (Grok Live Search, cached server-side)
 app.get('/api/x-trends', async (req, res) => {
   try {

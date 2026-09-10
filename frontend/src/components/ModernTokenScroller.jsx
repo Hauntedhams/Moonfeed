@@ -6,6 +6,7 @@ import { API_CONFIG, getApiUrl } from '../config/api';
 import { useWallet } from '../contexts/WalletContext';
 import { useWalletConnectOnboarding } from './WalletConnectOnboarding';
 import { useTrackedTrades } from '../contexts/TrackedTradesContext';
+import { personalizeCoins } from '../utils/feedPersonalization';
 import './ModernTokenScroller.css';
 
 const SWIPE_HINT_SEEN_KEY = 'moonfeed_swipe_hint_seen';
@@ -1208,7 +1209,11 @@ const ModernTokenScroller = ({
   const normalizeFeedCoins = useCallback((feedCoins, feedType) => {
     const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768;
     const maxCoins = isMobileDevice ? 20 : 50;
-    let normalizedCoins = [...feedCoins];
+    // Nudge the coins this user engages with most toward the top before the
+    // mobile cap trims the tail (no-op until their taste profile has signal).
+    let normalizedCoins = onlyFavorites || singleCoin
+      ? [...feedCoins]
+      : personalizeCoins([...feedCoins]);
 
     if (isMobileDevice && normalizedCoins.length > maxCoins) {
       console.log(`📱 MOBILE LIMIT: Reducing ${feedType} from ${normalizedCoins.length} to ${maxCoins} coins to prevent crashes`);
@@ -1219,7 +1224,7 @@ const ModernTokenScroller = ({
       ...coin,
       _moonfeedFeedType: feedType
     }));
-  }, []);
+  }, [onlyFavorites, singleCoin]);
 
   // Fetch coins from backend with fast loading approach
   const fetchCoins = useCallback(async () => {

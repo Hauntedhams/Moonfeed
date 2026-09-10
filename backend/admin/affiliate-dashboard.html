@@ -39,6 +39,25 @@
   .keybar { display:flex; gap:10px; align-items:center; }
   .keybar input { max-width:420px; }
   details summary { cursor:pointer; color:#8b949e; font-size:13px; margin-bottom:10px; }
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; margin-bottom:16px; }
+  .kpi { background:#0d1117; border:1px solid #30363d; border-radius:10px; padding:12px 14px; }
+  .kpi .n { font-size:22px; font-weight:700; }
+  .kpi .l { font-size:11px; color:#8b949e; text-transform:uppercase; letter-spacing:.04em; margin-top:2px; }
+  .charts { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:16px; }
+  .chart-box { background:#0d1117; border:1px solid #30363d; border-radius:10px; padding:14px; }
+  .chart-box h3 { font-size:13px; color:#c9d1d9; margin-bottom:2px; }
+  .chart-box .hint { font-size:11px; color:#8b949e; margin-bottom:10px; }
+  .bar-row { display:grid; grid-template-columns:130px 1fr 62px; align-items:center; gap:8px; margin-bottom:6px; font-size:12px; }
+  .bar-track { background:#161b22; border-radius:5px; height:14px; overflow:hidden; }
+  .bar-fill { background:linear-gradient(90deg,#1f6feb,#58a6ff); height:100%; border-radius:5px; }
+  .bar-fill.funnel { background:linear-gradient(90deg,#238636,#3fb950); }
+  .bar-fill.warn { background:linear-gradient(90deg,#9e6a03,#d29922); }
+  .bar-val { text-align:right; color:#8b949e; font-variant-numeric:tabular-nums; }
+  .bar-label { color:#c9d1d9; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .range { display:flex; gap:6px; }
+  .range button { background:#21262d; border:1px solid #30363d; padding:6px 12px; }
+  .range button.on { background:#1f6feb; border-color:#1f6feb; }
+  svg text { font-size:10px; fill:#8b949e; }
 </style>
 </head>
 <body>
@@ -53,6 +72,19 @@
       <button onclick="saveKey()">Save</button>
       <span class="muted" id="keyStatus"></span>
     </div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:12px">
+      <h2 style="margin:0">App usage</h2>
+      <div class="range" id="rangeBtns">
+        <button data-days="1">24h</button>
+        <button data-days="7" class="on">7d</button>
+        <button data-days="30">30d</button>
+        <button data-days="90">90d</button>
+      </div>
+    </div>
+    <div id="analytics" class="muted">Save your admin key to load.</div>
   </div>
 
   <div class="card">
@@ -264,7 +296,163 @@ async function loadContributors() {
   } catch (e) { el.innerHTML = `<span class="muted">${e.message}</span>`; }
 }
 
-function loadAll() { loadAffiliates(); loadTrades(); loadContributors(); }
+function loadAll() { loadAffiliates(); loadTrades(); loadContributors(); loadAnalytics(); }
+
+// ── App usage analytics ────────────────────────────────────────────────
+let analyticsDays = 7;
+
+function esc(s) { return String(s == null ? '' : s).replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c])); }
+function num(n) { return (n || 0).toLocaleString(); }
+function duration(ms) {
+  const s = Math.round((ms || 0) / 1000);
+  return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`;
+}
+
+// Horizontal bars — readable with any number of categories, no chart library.
+function bars(rows, { modifier = '', total = null } = {}) {
+  if (!rows.length) return '<span class="muted">No data yet.</span>';
+  const max = total || Math.max(...rows.map(r => r.value), 1);
+  return rows.map(r => `
+    <div class="bar-row">
+      <span class="bar-label" title="${esc(r.label)}">${esc(r.label)}</span>
+      <span class="bar-track"><span class="bar-fill ${r.modifier || modifier}" style="width:${Math.max(1, (r.value / max) * 100)}%"></span></span>
+      <span class="bar-val">${r.display != null ? esc(r.display) : num(r.value)}</span>
+    </div>`).join('');
+}
+
+// Two-series line chart (sessions + events per day) drawn as inline SVG.
+function lineChart(points, seriesDefs) {
+  if (points.length < 2) return '<span class="muted">Needs at least 2 days of data.</span>';
+  const W = 520, H = 160, PAD = 26;
+  const max = Math.max(1, ...seriesDefs.flatMap(s => points.map(p => p[s.key] || 0)));
+  const x = i => PAD + (i * (W - PAD * 2)) / (points.length - 1);
+  const y = v => H - PAD - ((v || 0) / max) * (H - PAD * 2);
+  const paths = seriesDefs.map(s =>
+    `<polyline fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round"
+       points="${points.map((p, i) => `${x(i).toFixed(1)},${y(p[s.key]).toFixed(1)}`).join(' ')}" />`
+  ).join('');
+  const labelEvery = Math.ceil(points.length / 6);
+  const xLabels = points.map((p, i) => (i % labelEvery === 0 || i === points.length - 1)
+    ? `<text x="${x(i).toFixed(1)}" y="${H - 8}" text-anchor="middle">${esc(p.date.slice(5))}</text>` : '').join('');
+  const legend = seriesDefs.map((s, i) =>
+    `<text x="${PAD + i * 100}" y="14" fill="${s.color}">■ ${esc(s.label)}</text>`).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="170" role="img">
+    <line x1="${PAD}" y1="${H - PAD}" x2="${W - PAD}" y2="${H - PAD}" stroke="#30363d" />
+    <text x="${PAD - 4}" y="${y(max) + 4}" text-anchor="end">${num(max)}</text>
+    ${paths}${xLabels}${legend}
+  </svg>`;
+}
+
+const SCROLL_BUCKET_LABELS = {
+  0: '0 scrolls (bounced)', 1: '1–2 scrolls', 3: '3–5 scrolls',
+  6: '6–10 scrolls', 11: '11–20 scrolls', 21: '21–50 scrolls', '51+': '51+ scrolls',
+};
+
+async function loadAnalytics() {
+  const el = document.getElementById('analytics');
+  el.innerHTML = '<span class="muted">Loading…</span>';
+  try {
+    const d = await api(`/api/analytics/summary?days=${analyticsDays}`);
+    const t = d.totals, f = d.funnel;
+
+    const funnelRows = [
+      { label: 'Opened the app', value: f.opened },
+      { label: 'Scrolled the feed', value: f.scrolled },
+      { label: 'Expanded a card', value: f.expanded },
+      { label: 'Opened trade window', value: f.openedTrade },
+      { label: 'Connected a wallet', value: f.connected },
+      { label: 'Completed a swap', value: f.traded },
+    ].map(r => ({
+      ...r, modifier: 'funnel',
+      display: `${num(r.value)} (${f.opened ? Math.round((r.value / f.opened) * 100) : 0}%)`,
+    }));
+
+    el.innerHTML = `
+      <div class="kpis">
+        <div class="kpi"><div class="n">${num(t.sessions)}</div><div class="l">Sessions</div></div>
+        <div class="kpi"><div class="n">${num(t.devices)}</div><div class="l">Devices</div></div>
+        <div class="kpi"><div class="n">${num(t.wallets)}</div><div class="l">Wallets</div></div>
+        <div class="kpi"><div class="n">${num(t.events)}</div><div class="l">Interactions</div></div>
+        <div class="kpi"><div class="n">${t.sessions ? (t.scrolls / t.sessions).toFixed(1) : '0'}</div><div class="l">Scrolls / session</div></div>
+        <div class="kpi"><div class="n">${duration(t.avgDurationMs)}</div><div class="l">Avg session</div></div>
+      </div>
+
+      <div class="charts">
+        <div class="chart-box" style="grid-column:1/-1">
+          <h3>Daily activity</h3>
+          <div class="hint">Sessions, unique devices and total interactions per day.</div>
+          ${lineChart(d.daily, [
+            { key: 'sessions', label: 'Sessions', color: '#58a6ff' },
+            { key: 'devices', label: 'Devices', color: '#3fb950' },
+            { key: 'events', label: 'Interactions', color: '#d29922' },
+          ])}
+        </div>
+
+        <div class="chart-box">
+          <h3>Session funnel</h3>
+          <div class="hint">How far a session gets before the user leaves.</div>
+          ${bars(funnelRows, { total: f.opened })}
+        </div>
+
+        <div class="chart-box">
+          <h3>Scroll depth before leaving</h3>
+          <div class="hint">e.g. "4 scrolls and closed the app".</div>
+          ${bars(d.scrollBuckets.map(b => ({ label: SCROLL_BUCKET_LABELS[b.bucket] || String(b.bucket), value: b.sessions })), { modifier: 'warn' })}
+        </div>
+
+        <div class="chart-box">
+          <h3>What users press</h3>
+          <div class="hint">Every tracked interaction in the period.</div>
+          ${bars(d.eventsByType.map(e => ({ label: e.type, value: e.count })))}
+        </div>
+
+        <div class="chart-box">
+          <h3>Last action before closing</h3>
+          <div class="hint">Where sessions end — the drop-off points.</div>
+          ${bars(d.exitPoints.map(e => ({ label: e.type, value: e.sessions })), { modifier: 'warn' })}
+        </div>
+
+        <div class="chart-box">
+          <h3>Feeds used</h3>
+          ${bars(d.feedUsage.map(x => ({ label: x.feed, value: x.events })))}
+        </div>
+
+        <div class="chart-box">
+          <h3>Platforms</h3>
+          ${bars(d.platforms.map(x => ({ label: x.platform, value: x.sessions })))}
+        </div>
+
+        <div class="chart-box">
+          <h3>Activity by hour (UTC)</h3>
+          ${bars(d.hourly.map(h => ({ label: `${String(h.hour).padStart(2, '0')}:00`, value: h.count })))}
+        </div>
+
+        <div class="chart-box" style="grid-column:1/-1">
+          <h3>Most engaging coins</h3>
+          <div class="hint">Weighted by interaction: a swap counts far more than a scroll past.</div>
+          ${d.topCoins.length ? `<table>
+            <tr><th>Coin</th><th>Mint</th><th>Engagement</th><th>Views</th><th>Swaps</th></tr>
+            ${d.topCoins.map(c => `<tr>
+              <td>${esc(c.symbol || '—')}</td>
+              <td class="mono">${short(c.mint)}<span class="copy" onclick="copyText('${esc(c.mint)}')">copy</span></td>
+              <td class="green">${num(c.engagement)}</td>
+              <td>${num(c.views)}</td>
+              <td>${num(c.trades)}</td>
+            </tr>`).join('')}
+          </table>` : '<span class="muted">No coin interactions yet.</span>'}
+        </div>
+      </div>`;
+  } catch (e) { el.innerHTML = `<span class="muted">${esc(e.message)}</span>`; }
+}
+
+document.getElementById('rangeBtns').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-days]');
+  if (!btn) return;
+  analyticsDays = Number(btn.dataset.days);
+  document.querySelectorAll('#rangeBtns button').forEach(b => b.classList.toggle('on', b === btn));
+  loadAnalytics();
+});
+
 
 document.getElementById('nCode').addEventListener('input', e => {
   document.getElementById('linkPreview').textContent = `${LINK_BASE}?ref=${e.target.value.trim() || '…'}`;

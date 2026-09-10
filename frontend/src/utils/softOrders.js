@@ -4,6 +4,7 @@
 // with every wallet (Jupiter Trigger V2 deposits get broken by the Lighthouse
 // instructions Phantom/Solflare inject on mobile).
 import { getFullApiUrl } from '../config/api';
+import { track } from './analytics';
 
 async function parseJson(res) {
   const data = await res.json().catch(() => ({}));
@@ -35,6 +36,7 @@ export async function createSoftOrder({
     }),
   });
   const data = await parseJson(res);
+  track('order_created', { mint, symbol: tokenSymbol, label: side, value: triggerPriceUsd });
   return data.order;
 }
 

@@ -18,6 +18,7 @@ import { createSoftOrder } from '../utils/softOrders.js';
 import { getTransactions } from '../utils/transactionStorage';
 import { getSolUsdPrice } from '../utils/orderFillTracking';
 import { WalletChip } from '../utils/walletIdentity';
+import { track, coinProps } from '../utils/analytics';
 import { useTrackedTrades } from '../contexts/TrackedTradesContext';
 import { API_CONFIG } from '../config/api.js';
 import { 
@@ -1712,6 +1713,7 @@ const CoinCard = memo(({
     
     const next = !isExpanded;
     setIsExpanded(next);
+    if (next) track('card_expand', coinProps(coin));
     
     if (next) {
       setShowActionButtons(false);
@@ -1735,6 +1737,7 @@ const CoinCard = memo(({
   // them from there needs to expand the card first, then open the panel —
   // instead of requiring the user to expand manually beforehand.
   const openPanelFromCard = (panel) => {
+    track(panel === 'transactions' ? 'transactions_open' : 'top_traders_open', coinProps(coin));
     if (!isExpanded) {
       setIsExpanded(true);
       setShowActionButtons(false);
