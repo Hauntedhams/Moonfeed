@@ -35,6 +35,20 @@ router.post('/register', async (req, res) => {
   }
 });
 
+// GET /api/push/prefs?token=... — read a device's saved notification prefs
+// (used by the Options screen to render its toggles).
+router.get('/prefs', async (req, res) => {
+  try {
+    const { token } = req.query || {};
+    if (!token) return res.status(400).json({ error: 'Missing token' });
+    const device = await DeviceToken.findOne({ token }).select('prefs');
+    res.json({ prefs: device ? device.prefs : null });
+  } catch (err) {
+    console.error('❌ push prefs error:', err.message);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // POST /api/push/unregister — remove a token (logout / notifications disabled).
 router.post('/unregister', async (req, res) => {
   try {

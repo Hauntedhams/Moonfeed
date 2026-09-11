@@ -2335,6 +2335,56 @@
 .options-toggle.on .options-toggle-thumb  { left: 23px; }
 .options-toggle.off .options-toggle-thumb { left: 3px; }
 
+.options-section-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.4);
+  margin: 18px 0 4px;
+}
+
+.options-row-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.options-row-desc {
+  font-size: 12px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.options-enable-btn {
+  padding: 7px 16px;
+  border-radius: 16px;
+  border: none;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.options-enable-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.options-share-btn {
+  padding: 7px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
 /* Help list */
 .help-item-list {
   list-style: none;

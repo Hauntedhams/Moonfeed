@@ -153,6 +153,7 @@ const ModernTokenScroller = ({
   const trackedBuyAppliedRef = useRef(false); // one-shot per feed load: tracked-wallet buys woven in
   const pendingFeedRestoreRef = useRef(false); // restore saved position once after a feed (re)loads
   const lastSavedFeedPosRef = useRef(''); // dedupe localStorage writes
+  const scrollTargetInsertedRef = useRef(''); // nonce of a feed-browser jump we've already spliced in (avoid dupes)
 
   // Live mirrors of state the IntersectionObserver reads. Keeping these in refs
   // lets the observer be created ONCE (see effect below) instead of being torn
@@ -1197,6 +1198,10 @@ const ModernTokenScroller = ({
       const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
       const limit = isMobileDevice ? 50 : 100;
       endpoint = `${API_BASE}/graduating?limit=${limit}`;
+    } else if (feedType === 'trenches') {
+      const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      const limit = isMobileDevice ? 50 : 100;
+      endpoint = `${API_BASE}/trenches?limit=${limit}`;
     } else if (feedType === 'dextrending') {
       endpoint = `${API_BASE}/dextrending`;
     } else if (feedType === 'whalefeed') {
@@ -1271,6 +1276,8 @@ const ModernTokenScroller = ({
         console.log('🆕 Using NEW endpoint for emerging coins:', endpoint);
       } else if (currentFeedType === 'graduating') {
         console.log('🎓 Using GRADUATING endpoint for Pump.fun graduating tokens:', endpoint);
+      } else if (currentFeedType === 'trenches') {
+        console.log('⚔️ Using TRENCHES endpoint for early pump.fun tokens:', endpoint);
       } else if (currentFeedType === 'dextrending') {
         console.log(`🔥 Using DEXTRENDING endpoint for Dexscreener trending tokens:`, endpoint);
       } else if (currentFeedType === 'whalefeed') {
@@ -1596,6 +1603,32 @@ const ModernTokenScroller = ({
     if (scrollTarget.feed && scrollTarget.feed !== feedType) return;
     const mintOf = (c) => c.mintAddress || c.tokenAddress || c.address;
     let idx = scrollTarget.mint ? coins.findIndex((c) => mintOf(c) === scrollTarget.mint) : -1;
+
+    // The feed-browser's preview list can include coins beyond what's actually
+    // loaded here (e.g. the mobile ~20-coin cap trims the tail) — splice the
+    // tapped coin AND everything after it in that preview list in, so
+    // continued scrolling keeps going through the rest of that list in order
+    // instead of landing on one orphan coin with nowhere further to go.
+    if (idx < 0 && scrollTarget.coin && scrollTarget.mint && scrollTargetInsertedRef.current !== scrollTarget.nonce) {
+      scrollTargetInsertedRef.current = scrollTarget.nonce;
+      const insertAt = Math.min(Math.max(currentIndexRef.current + 1, 0), coins.length);
+      const tail = Array.isArray(scrollTarget.coins) && scrollTarget.coins.length ? scrollTarget.coins : [scrollTarget.coin];
+      const coinsToInsert = tail.map((c) => ({ ...c, mintAddress: mintOf(c) || c.mintAddress, _moonfeedFeedType: feedType }));
+      setCoins((prev) => {
+        if (prev.some((c) => mintOf(c) === scrollTarget.mint)) return prev; // already landed, e.g. a duplicate effect pass
+        const existingMints = new Set(prev.map(mintOf).filter(Boolean));
+        const uniqueToInsert = coinsToInsert.filter((c) => {
+          const key = mintOf(c);
+          return !key || !existingMints.has(key);
+        });
+        const next = [...prev];
+        next.splice(Math.min(insertAt, next.length), 0, ...uniqueToInsert);
+        onTotalCoinsChange?.(next.length);
+        return next;
+      });
+      return; // re-fires once coins.length changes, this time finding it by mint
+    }
+
     if (idx < 0 && Number.isInteger(scrollTarget.index)) idx = Math.min(Math.max(scrollTarget.index, 0), coins.length - 1);
     if (idx < 0) return;
     currentIndexRef.current = idx;
@@ -2082,7 +2115,10 @@ const ModernTokenScroller = ({
 
   useEffect(() => {
     if (!feedOrder.length || onlyFavorites || filters.type === 'custom' || advancedFilters) return;
-    if (loading || coins.length === 0 || currentIndex !== coins.length - 1) return;
+    // Within the last 2 cards, not just the exact last one — a short appended
+    // batch (e.g. a small Trenches slice) can otherwise get skipped if a fast
+    // scroll jumps straight past the one index this used to require.
+    if (loading || coins.length === 0 || currentIndex < coins.length - 2) return;
     if (expandedCoin || chartFullscreenLock || isScrollLocked.current) return;
 
     const triggerKey = `${loadedFeedTypesRef.current.join('>')}:${coins.length}`;

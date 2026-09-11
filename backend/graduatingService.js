@@ -180,8 +180,47 @@ function getCacheStatus() {
   };
 }
 
+// Solana Tracker's /tokens/multi/graduating endpoint only ever returns tokens
+// already 60%+ up their bonding curve (verified live — nothing below 60%
+// comes back), so Graduating and Trenches partition that SAME ~100-token pool
+// by progress instead of overlapping (overlap would mean the two feeds show
+// near-duplicate coins, and appendNextFeed's mint-dedup would drop most of
+// Trenches when continuous-scrolling straight from Graduating).
+const GRADUATING_MIN_PROGRESS = 80;
+
+// "The trenches" — earlier bonding-curve stage than Graduating, gated on real
+// liquidity/market cap so it's not pure zero-activity noise.
+const TRENCHES_GATE = {
+  maxBondingProgress: GRADUATING_MIN_PROGRESS,
+  minLiquidityUsd: 2000,
+  minMarketCapUsd: 6000
+};
+
+async function getGraduatingOnlyTokens() {
+  const allTokens = await getGraduatingTokens();
+  return allTokens.filter(t => t.bondingCurveProgress >= GRADUATING_MIN_PROGRESS);
+}
+
+async function getTrenchesTokens() {
+  const allTokens = await getGraduatingTokens();
+  const trenchTokens = allTokens
+    .filter(t =>
+      t.bondingCurveProgress < TRENCHES_GATE.maxBondingProgress &&
+      t.liquidity >= TRENCHES_GATE.minLiquidityUsd &&
+      t.marketCap >= TRENCHES_GATE.minMarketCapUsd
+    )
+    // Liquidity is the clearest signal a fresh launch already has real traction.
+    .sort((a, b) => b.liquidity - a.liquidity)
+    .map(t => ({ ...t, status: 'trenches' }));
+
+  console.log(`⚔️ Trenches: ${trenchTokens.length}/${allTokens.length} bonding-curve tokens pass the promise gate`);
+  return trenchTokens;
+}
+
 module.exports = {
   getGraduatingTokens,
+  getGraduatingOnlyTokens,
+  getTrenchesTokens,
   fetchGraduatingTokens,
   clearCache,
   getCacheStatus

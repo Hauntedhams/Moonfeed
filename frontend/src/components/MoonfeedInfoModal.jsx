@@ -1,11 +1,16 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
+import { Capacitor } from '@capacitor/core';
+import { useWallet } from '@jup-ag/wallet-adapter';
 import { useTrackedWallets } from '../contexts/TrackedWalletsContext';
 import { useDarkMode } from '../contexts/DarkModeContext';
 import { useCopyTrade } from '../contexts/CopyTradeContext';
 import { ORANGIE_WALLETS } from '../data/orangieWallets';
 import { getFullApiUrl } from '../config/api';
 import { consumePendingXTrackerOpen, hasUnreadXNews, markXNewsRead } from '../utils/xNewsAlerts';
+import { getNotificationPermissionState } from '../utils/tradeNotifications';
+import { fetchNotificationPrefs, updateNotificationPrefs } from '../utils/pushNotifications';
+import { maybeEnableNotifications, openNotificationSettings } from '../utils/notificationOptIn';
 import XTrackerPanel from './XTrackerPanel';
 
 import './MoonfeedInfoModal.css';
@@ -197,20 +202,20 @@ const MoonfeedInfoModal = ({ isVisible, onClose, onBuyMoo, onStartTutorial }) =>
                     <span className="phase-status">Completed</span>
                   </div>
                 </div>
-                <div className="roadmap-phase in-progress">
-                  <div className="phase-marker">II</div>
+                <div className="roadmap-phase completed">
+                  <div className="phase-marker">✓</div>
                   <div className="phase-content">
                     <h4>Chapter II: Mobile Conquest</h4>
                     <p>Launch on iOS App Store and Google Play Store, bringing Moonfeed to mobile devices everywhere.</p>
-                    <span className="phase-status">In Progress</span>
+                    <span className="phase-status">Completed</span>
                   </div>
                 </div>
-                <div className="roadmap-phase upcoming">
+                <div className="roadmap-phase in-progress">
                   <div className="phase-marker">III</div>
                   <div className="phase-content">
                     <h4>Chapter III: To The Moon</h4>
                     <p>Influencer partnerships, community expansion, and taking Moonfeed to the moon!</p>
-                    <span className="phase-status">Coming Soon</span>
+                    <span className="phase-status">In Progress</span>
                   </div>
                 </div>
               </div>
@@ -681,8 +686,127 @@ const TrackedWalletsPanel = ({ onClose }) => {
 };
 
 // ─── Options Panel ────────────────────────────────────────────────────────────
+const NOTIFICATION_CATEGORIES = [
+  { key: 'walletTrade', label: 'Tracked wallet trades', desc: 'A wallet you follow makes a trade' },
+  { key: 'trackedGain', label: 'Tracked coin gains', desc: 'A coin you track jumps +10%' },
+  { key: 'holdingCrash', label: 'Holding crash alerts', desc: 'A coin you hold drops sharply' },
+  { key: 'orderFill', label: 'Order fills', desc: 'A limit order you placed triggers' },
+  { key: 'whaleGain', label: 'Whale activity', desc: 'Big wallets make notable moves' },
+  { key: 'xNews', label: 'Breaking X news', desc: 'A trending story hits the X Tracker' },
+];
+
+const NotificationsSection = () => {
+  const { connected, publicKey } = useWallet();
+  const walletAddress = publicKey?.toString?.() || null;
+  const isNative = Capacitor.isNativePlatform();
+  const [permission, setPermission] = useState('unknown'); // 'granted' | 'denied' | 'unknown'
+  const [prefs, setPrefs] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!connected || !isNative) return;
+    let cancelled = false;
+    (async () => {
+      const state = await getNotificationPermissionState();
+      if (cancelled) return;
+      setPermission(state);
+      if (state === 'granted') {
+        const remote = await fetchNotificationPrefs();
+        if (!cancelled && remote) setPrefs(remote);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [connected, isNative]);
+
+  if (!connected) {
+    return (
+      <div className="options-row options-row-static">
+        <span className="options-row-label">Notifications</span>
+        <span className="options-row-value">Connect a wallet to manage</span>
+      </div>
+    );
+  }
+
+  if (!isNative) {
+    return (
+      <div className="options-row options-row-static">
+        <span className="options-row-label">Notifications</span>
+        <span className="options-row-value">Available in the mobile app</span>
+      </div>
+    );
+  }
+
+  if (permission !== 'granted') {
+    return (
+      <div className="options-row">
+        <span className="options-row-label">Notifications</span>
+        <button
+          className="options-enable-btn"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            const result = await maybeEnableNotifications(walletAddress);
+            setPermission(result === 'granted' ? 'granted' : 'denied');
+            if (result === 'granted') setPrefs(await fetchNotificationPrefs());
+            else if (result === 'denied') await openNotificationSettings();
+            setBusy(false);
+          }}
+        >
+          {permission === 'denied' ? 'Open Settings' : 'Enable'}
+        </button>
+      </div>
+    );
+  }
+
+  const effectivePrefs = prefs || {};
+  return (
+    <>
+      <div className="options-section-label">Notifications</div>
+      {NOTIFICATION_CATEGORIES.map(({ key, label, desc }) => {
+        const on = effectivePrefs[key] !== false;
+        return (
+          <div className="options-row" key={key}>
+            <span className="options-row-label">
+              {label}
+              <span className="options-row-desc">{desc}</span>
+            </span>
+            <button
+              className={`options-toggle ${on ? 'on' : 'off'}`}
+              onClick={() => {
+                const next = { ...effectivePrefs, [key]: !on };
+                setPrefs(next);
+                updateNotificationPrefs({ [key]: !on });
+              }}
+              aria-label={`Turn ${label} ${on ? 'off' : 'on'}`}
+            >
+              <span className="options-toggle-thumb" />
+            </button>
+          </div>
+        );
+      })}
+    </>
+  );
+};
+
 const OptionsPanel = ({ onClose }) => {
   const { isDarkMode, toggleDarkMode } = useDarkMode();
+  const [shareCopied, setShareCopied] = useState(false);
+
+  const handleShareApp = async () => {
+    const shareUrl = 'https://moonfeed.app';
+    const text = `Check out Moonfeed — discover trending Solana meme coins 🌙 ${shareUrl}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: 'Moonfeed', text, url: shareUrl });
+      } else {
+        await navigator.clipboard.writeText(shareUrl);
+        setShareCopied(true);
+        setTimeout(() => setShareCopied(false), 1600);
+      }
+    } catch (_) {
+      // user dismissed the share sheet
+    }
+  };
 
   return createPortal(
     <div className="menu-panel-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -710,6 +834,13 @@ const OptionsPanel = ({ onClose }) => {
             <span className="options-row-label">Currency</span>
             <span className="options-row-value">USD</span>
           </div>
+          <div className="options-row">
+            <span className="options-row-label">Share Moonfeed</span>
+            <button className="options-share-btn" onClick={handleShareApp}>
+              {shareCopied ? 'Copied!' : 'Share'}
+            </button>
+          </div>
+          <NotificationsSection />
         </div>
       </div>
     </div>,

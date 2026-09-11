@@ -2,29 +2,36 @@ import React, { useState, useEffect, useRef } from 'react';
 import { API_CONFIG } from '../config/api';
 import './FeedSelector.css';
 
-// Feed definitions (kept in sync with the old TopTabs base tabs)
+// Feed definitions (kept in sync with the old TopTabs base tabs).
+// 'trending' is no longer a separate selectable feed — its coins are folded
+// into the tail of 'dextrending' (see CONTINUOUS_FEED_ORDER below).
 export const BASE_FEEDS = [
-  { id: 'dextrending', label: 'DEXtrending', detail: 'Dexscreener + CoinGecko hot pools', icon: 'trending-up' },
+  { id: 'dextrending', label: 'Trending', detail: 'Hot pools + momentum leaders', icon: 'trending-up' },
   { id: 'whalefeed', label: 'Whale', detail: 'Large, liquid multi-source picks', icon: 'whale' },
   { id: 'graduating', label: 'Graduating', detail: 'Pump.fun bonding-curve launches', icon: 'graduation-cap' },
-  { id: 'new', label: 'New', detail: 'Fresh Solana Tracker launches', icon: 'sparkles' },
-  { id: 'trending', label: 'Trending', detail: 'Solana Tracker momentum leaders', icon: 'fire' }
+  { id: 'trenches', label: 'Trenches', detail: 'Early pump.fun plays with real traction', icon: 'fire' },
+  { id: 'new', label: 'Rugs', detail: 'Fresh runners — high risk, high reward', icon: 'sparkles' },
 ];
 
 export const FEED_ORDER = BASE_FEEDS.map((feed) => feed.id);
+
+// Drives continuous vertical scrolling across feeds (ModernTokenScroller's
+// `feedOrder` prop): same as FEED_ORDER, but with 'trending' spliced in right
+// after 'dextrending' so its coins keep the scroll going before whale/graduating/rugs.
+export const CONTINUOUS_FEED_ORDER = ['dextrending', 'trending', 'whalefeed', 'graduating', 'trenches', 'new'];
 
 const CUSTOM_FEED = { id: 'custom', label: 'Custom', detail: 'Your saved market filters', icon: 'filter' };
 
 // Per-feed explainer shown in the expandable info drawer.
 const FEED_INFO = {
   dextrending: {
-    purpose: 'Hot Solana coins selected from a broader multi-source pool, with new and rising DEX activity prioritized.',
-    sources: 'Dexscreener (boosted, latest, profiles and keyword searches) plus CoinGecko Onchain trending and new Solana pools.',
+    purpose: 'Hot Solana coins selected from a broader multi-source pool, with new and rising DEX activity prioritized. Once you scroll past the hottest pools it keeps going straight into the broader momentum leaders — no need to switch feeds.',
+    sources: 'Dexscreener (boosted, latest, profiles and keyword searches) plus CoinGecko Onchain trending and new Solana pools, followed by Solana Tracker momentum leaders.',
     reason: 'Candidates are deduped by mint and ranked by liquidity, volume, activity and age so a coin appearing across sources has a stronger signal.'
   },
   whalefeed: {
     purpose: 'The blue-chip meme coins — large, established tokens with deep liquidity and proven staying power.',
-    sources: 'Built from the same Dexscreener + CoinGecko Onchain candidate pool as DEXtrending, filtered to big established pairs.',
+    sources: 'Built from the same Dexscreener + CoinGecko Onchain candidate pool as Trending, filtered to big established pairs.',
     reason: 'Preset gates for liquidity ≥ $250k, volume ≥ $200k, market cap ≥ $1M and age ≥ 24h (no upper age cap) so you only see coins that have survived and stayed liquid.'
   },
   graduating: {
@@ -32,15 +39,15 @@ const FEED_INFO = {
     sources: 'Pump.fun bonding-curve data.',
     reason: 'As SOL is deposited these tokens climb toward 100% completion — this preset catches them right before they graduate, a key moment for early entries.'
   },
-  new: {
-    purpose: 'The freshest launches — tokens created very recently with strong early trading.',
-    sources: 'Recent Solana launches via Solana Tracker.',
-    reason: 'Preset prioritizes tokens under ~48h old with real early volume so you can find opportunities at the earliest stage.'
+  trenches: {
+    purpose: 'The trenches — brand new pump.fun coins earlier in their bonding curve than Graduating, already showing real traction. High risk, but this is where the 2x/3x/10x runs start.',
+    sources: 'Pump.fun bonding-curve data, same feed as Graduating.',
+    reason: 'Filtered to an early bonding-curve range with a real liquidity + market cap floor, so it\u2019s promising early plays instead of zero-activity noise. Still very risky — size positions accordingly.'
   },
-  trending: {
-    purpose: 'Tokens with strong overall momentum — high volume, growing holders and positive price action.',
-    sources: 'Solana Tracker trending data, enriched with live prices.',
-    reason: 'Preset ranks on sustained trading activity and momentum so you see coins the market is actively rallying behind.'
+  new: {
+    purpose: 'Coins already in the middle of a run — you can still ride the move up, but treat every one of these as a rug until proven otherwise. High risk, high reward.',
+    sources: 'Recent Solana launches via Solana Tracker.',
+    reason: 'Preset prioritizes tokens under ~48h old with real early volume, since that\u2019s when these moves happen fastest — trade small and watch closely.'
   },
   custom: {
     purpose: 'Your own filtered feed built from the criteria you choose.',
@@ -227,6 +234,7 @@ function FeedSelector({
       dextrending: '/api/coins/dextrending',
       whalefeed: '/api/coins/whalefeed',
       graduating: '/api/coins/graduating',
+      trenches: '/api/coins/trenches',
       new: '/api/coins/new',
       trending: '/api/coins/trending',
       custom: '/api/coins/infinite',
@@ -240,16 +248,34 @@ function FeedSelector({
     setPreviewCoins([]);
     setPreviewTotal(null);
 
-    fetch(`${API_ROOT}${endpoint}?limit=40&offset=0`)
-      .then((response) => {
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return response.json();
-      })
-      .then((data) => {
+    const fetchList = (url) => fetch(url).then((response) => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    });
+    const mintOf = (c) => c.mintAddress || c.address || c.id;
+    const totalOf = (data, coins) => (Number.isFinite(Number(data?.total)) ? Number(data.total)
+      : Number.isFinite(Number(data?.count)) ? Number(data.count) : coins.length);
+
+    // 'dextrending' is a combined feed (see CONTINUOUS_FEED_ORDER) — preview
+    // its trending tail too, so this list matches what scrolling the real
+    // feed does once the dextrending coins run out.
+    const requests = [fetchList(`${API_ROOT}${endpoint}?limit=40&offset=0`)];
+    if (browseFeed === 'dextrending') {
+      requests.push(fetchList(`${API_ROOT}/api/coins/trending?limit=40&offset=0`));
+    }
+
+    Promise.all(requests)
+      .then(([primary, secondary]) => {
         if (cancelled) return;
-        const coins = Array.isArray(data.coins) ? data.coins : [];
-        setPreviewCoins(coins);
-        setPreviewTotal(Number.isFinite(Number(data.total)) ? Number(data.total) : (Number.isFinite(Number(data.count)) ? Number(data.count) : coins.length));
+        const primaryCoins = Array.isArray(primary.coins) ? primary.coins : [];
+        const secondaryCoins = Array.isArray(secondary?.coins) ? secondary.coins : [];
+        const seenMints = new Set(primaryCoins.map(mintOf).filter(Boolean));
+        const uniqueSecondary = secondaryCoins.filter((c) => {
+          const key = mintOf(c);
+          return !key || !seenMints.has(key);
+        });
+        setPreviewCoins([...primaryCoins, ...uniqueSecondary]);
+        setPreviewTotal(totalOf(primary, primaryCoins) + (secondary ? totalOf(secondary, secondaryCoins) : 0));
       })
       .catch(() => {
         if (!cancelled) setPreviewError('Could not load this feed right now.');
@@ -339,7 +365,9 @@ function FeedSelector({
   const handlePreviewCoinClick = (coin, index) => {
     setOpen(false);
     if (onFeedCoinSelect) {
-      onFeedCoinSelect(coin, { feed: browseFeed, index });
+      // Carry the rest of this preview list too, so scrolling past the tapped
+      // coin keeps going through it in order instead of dead-ending.
+      onFeedCoinSelect(coin, { feed: browseFeed, index, coins: previewCoins.slice(index) });
       return;
     }
     if (browseFeed && browseFeed !== activeFilter && browseFeed !== 'custom') {

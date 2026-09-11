@@ -13,6 +13,52 @@ let registered = false;
 let lastToken = null;
 let lastWallet = null;
 
+// Persisted so the Options screen can read/update prefs even after a fresh
+// reload, before initRemotePush has re-registered a token this session.
+const PUSH_TOKEN_STORAGE_KEY = 'moonfeed_push_token';
+function persistToken(token) {
+  try { if (token) localStorage.setItem(PUSH_TOKEN_STORAGE_KEY, token); } catch (_) { /* best-effort */ }
+}
+export function getStoredPushToken() {
+  if (lastToken) return lastToken;
+  try { return localStorage.getItem(PUSH_TOKEN_STORAGE_KEY); } catch (_) { return null; }
+}
+
+// Read this device's saved notification-category prefs from the backend.
+export async function fetchNotificationPrefs() {
+  const token = getStoredPushToken();
+  if (!token) return null;
+  try {
+    const res = await fetch(getFullApiUrl(`/api/push/prefs?token=${encodeURIComponent(token)}`));
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.prefs || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+// Update one or more notification-category prefs for this device.
+export async function updateNotificationPrefs(prefsPartial) {
+  const token = getStoredPushToken();
+  if (!token) return false;
+  try {
+    await fetch(getFullApiUrl('/api/push/register'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        token,
+        walletAddress: lastWallet || null,
+        platform: Capacitor.getPlatform(),
+        prefs: prefsPartial,
+      }),
+    });
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
 // NOTE: never return/resolve the plugin proxy from an async function —
 // Capacitor's plugin proxy traps EVERY property access, so resolving a promise
 // with it invokes plugin.then() and rejects with
@@ -30,6 +76,7 @@ async function loadPlugin() {
 }
 
 async function sendTokenToBackend(token, walletAddress) {
+  persistToken(token);
   try {
     await fetch(getFullApiUrl('/api/push/register'), {
       method: 'POST',

@@ -5,7 +5,7 @@ import { getFullApiUrl } from './config/api'
 import ModernTokenScroller from './components/ModernTokenScroller'
 import TrackedView from './components/TrackedView'
 import BottomNavBar from './components/BottomNavBar'
-import FeedSelector, { FEED_ORDER, BASE_FEEDS } from './components/FeedSelector'
+import FeedSelector, { FEED_ORDER, CONTINUOUS_FEED_ORDER, BASE_FEEDS } from './components/FeedSelector'
 import FeedSwipeContainer from './components/FeedSwipeContainer'
 import ErrorBoundary from './components/ErrorBoundary'
 import { WalletProvider } from './contexts/WalletContext'
@@ -54,13 +54,13 @@ const favoritesCacheKey = (address) => `moonfeed_tracked_coins_${address}`;
 const LAST_FEED_KEY = 'moonfeed_last_feed';
 const FEED_POS_KEY = 'moonfeed_feed_pos';
 const FEED_LABELS = Object.fromEntries(BASE_FEEDS.map((feed) => [feed.id, feed.label]));
-const KNOWN_FEEDS = ['dextrending', 'whalefeed', 'graduating', 'new', 'trending'];
+const KNOWN_FEEDS = ['dextrending', 'whalefeed', 'graduating', 'trenches', 'new'];
 const getInitialFilters = () => {
   try {
     const saved = localStorage.getItem(LAST_FEED_KEY);
     if (saved && KNOWN_FEEDS.includes(saved)) return { type: saved };
   } catch (_) {}
-  return { type: 'dextrending' }; // DEXtrending is the fastest-loading default
+  return { type: 'dextrending' }; // "Trending" (id: dextrending) is the fastest-loading default
 };
 
 // If the page silently reloads while a coin-detail view is open (WKWebView
@@ -120,6 +120,7 @@ function App() {
   const filtersRef = useRef(filters);
   filtersRef.current = filters;
   const [feedToast, setFeedToast] = useState(null); // Feed name flashed after a swipe switch
+  const lastAutoFeedTypeRef = useRef(filters.type); // last feed shown on the home scroller, via switch or auto-scroll
   const [feedJumpTarget, setFeedJumpTarget] = useState(null); // Jump home feed to a coin picked from the feed browser
   const [advancedFilters, setAdvancedFilters] = useState(null); // For advanced filtering
   const [isAdvancedFilterActive, setIsAdvancedFilterActive] = useState(false);
@@ -392,6 +393,16 @@ function App() {
       lastViewedMintRef.current = mint;
       track('coin_view', coinProps(coin, { feed: filtersRef.current?.type, value: index }));
     }
+
+    // The home feed scrolls straight through into the next feed (see
+    // CONTINUOUS_FEED_ORDER) — flash that feed's name the same way a swipe does.
+    if (activeTab === 'home') {
+      const feedTag = coin?._moonfeedFeedType;
+      if (feedTag && FEED_LABELS[feedTag] && feedTag !== lastAutoFeedTypeRef.current) {
+        lastAutoFeedTypeRef.current = feedTag;
+        setFeedToast({ feed: feedTag, key: Date.now() });
+      }
+    }
   };
 
   // Ensure the current viewed coin is set when viewing a specific coin detail
@@ -436,6 +447,7 @@ function App() {
     setIsAdvancedFilterActive(false);
     setFilters({ type: nextFeed });
     setFeedToast({ feed: nextFeed, key: Date.now() });
+    lastAutoFeedTypeRef.current = nextFeed;
   }, []);
 
   // Flash the new feed's name over the card for a moment after a switch.
@@ -457,6 +469,7 @@ function App() {
   // Handle top tab filter changes
   const handleTopTabFilterChange = (newFilters) => {
     setFilters(newFilters);
+    lastAutoFeedTypeRef.current = newFilters?.type;
     // Clear advanced filters when using top tabs
     setAdvancedFilters(null);
     setIsAdvancedFilterActive(false);
@@ -532,7 +545,7 @@ function App() {
     setActiveTab('coin-detail');
   };
 
-  const handleFeedCoinSelect = (coin, { feed, index } = {}) => {
+  const handleFeedCoinSelect = (coin, { feed, index, coins } = {}) => {
     if (!coin) return;
     const feedType = KNOWN_FEEDS.includes(feed) ? feed : filtersRef.current?.type || 'dextrending';
     const mint = coin.mintAddress || coin.tokenAddress || coin.address;
@@ -544,8 +557,13 @@ function App() {
     setIsAdvancedFilterActive(false);
     setFilters({ type: feedType });
     setCurrentViewedCoin(coin);
-    setFeedJumpTarget({ feed: feedType, mint, index, nonce: Date.now() });
+    // Carry the full coin plus the rest of that preview list — the browsed
+    // preview (up to 40) can include coins beyond the loaded feed's mobile cap
+    // (~20), so the scroller may need to splice them in rather than find them,
+    // and scrolling past the tapped coin should keep going through the list.
+    setFeedJumpTarget({ feed: feedType, mint, coin, coins, index, nonce: Date.now() });
     if (feedType !== filtersRef.current?.type) setFeedToast({ feed: feedType, key: Date.now() });
+    lastAutoFeedTypeRef.current = feedType;
   };
 
   // Handle Jupiter swap success
@@ -874,7 +892,7 @@ function App() {
             onCurrentCoinChange={handleCurrentCoinChange}
             onTotalCoinsChange={handleTotalCoinsChange}
             scrollTarget={feedJumpTarget}
-            feedOrder={FEED_ORDER}
+            feedOrder={CONTINUOUS_FEED_ORDER}
             advancedFilters={advancedFilters}
             onAdvancedFilter={handleAdvancedFilter}
             isAdvancedFilterActive={isAdvancedFilterActive}

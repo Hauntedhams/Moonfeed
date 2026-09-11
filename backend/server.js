@@ -2911,7 +2911,9 @@ app.get('/api/coins/graduating', async (req, res) => {
     // Use Solana Tracker for graduating tokens (real bonding-curve progress)
     const graduatingService = require('./graduatingService');
     
-    const graduatingTokens = await graduatingService.getGraduatingTokens();
+    // Only the 80%+ band — the <80% band is the separate Trenches feed (see
+    // graduatingService.js), so the two feeds don't show near-duplicate coins.
+    const graduatingTokens = await graduatingService.getGraduatingOnlyTokens();
     
     if (graduatingTokens.length === 0) {
       console.log('⚠️ No graduating tokens found');
@@ -2986,6 +2988,94 @@ app.get('/api/coins/graduating', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to fetch graduating coins',
+      details: error.message
+    });
+  }
+});
+
+// TRENCHES endpoint - Earlier bonding-curve pump.fun tokens than Graduating,
+// gated on real liquidity/market cap so it's promising early plays, not noise.
+app.get('/api/coins/trenches', async (req, res) => {
+  try {
+    console.log('⚔️ /api/coins/trenches endpoint called (Solana Tracker API)');
+
+    const limit = req.query.limit ? Math.min(parseInt(req.query.limit), 100) : 100;
+
+    const graduatingService = require('./graduatingService');
+    const trenchesTokens = await graduatingService.getTrenchesTokens();
+
+    if (trenchesTokens.length === 0) {
+      console.log('⚠️ No trenches tokens found');
+      return res.json({
+        success: true,
+        coins: [],
+        count: 0,
+        total: 0,
+        message: 'No trenches tokens available',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    const limitedCoins = trenchesTokens.slice(0, limit);
+
+    // Apply cached rugcheck data to coins
+    const rugcheckEnriched = rugcheckBatchProcessor.enrichCoinsWithCache(limitedCoins);
+    if (rugcheckEnriched > 0) {
+      console.log(`🔒 Applied cached rugcheck data to ${rugcheckEnriched}/${limitedCoins.length} trenches coins`);
+    }
+
+    // Queue trenches tokens for background rugcheck processing (if not already cached)
+    rugcheckBatchProcessor.queueFeedCoins(limitedCoins, 'trenches');
+
+    // 🆕 AUTO-ENRICH: Enrich top 20 trenches coins in the background for Age/Holders
+    const TOP_COINS_TO_ENRICH = 20;
+    if (limitedCoins.length > 0) {
+      onDemandEnrichment.enrichCoins(
+        limitedCoins.slice(0, TOP_COINS_TO_ENRICH),
+        { maxConcurrent: 3, timeout: 2000 }
+      ).then(enrichedCoins => {
+        enrichedCoins.forEach((enriched, index) => {
+          if (enriched.enriched && trenchesTokens[index]) {
+            Object.assign(trenchesTokens[index], enriched);
+          }
+        });
+        console.log(`✅ Auto-enriched top ${enrichedCoins.filter(c => c.enriched).length} trenches coins`);
+      }).catch(err => {
+        console.warn('⚠️ Background enrichment failed:', err.message);
+      });
+    }
+
+    // Apply live prices from Jupiter before serving
+    const coinsWithPrices = applyLivePrices(limitedCoins);
+
+    // 🔗 Resolve pool addresses for trenches coins missing pairAddress
+    const EAGER_RESOLVE_TRENCHES = 10;
+    const trenchesNeedingPools = coinsWithPrices.filter(c => !c.pairAddress && !c.poolAddress && c.mintAddress);
+    if (trenchesNeedingPools.length > 0) {
+      console.log(`🔗 Resolving pool addresses for ${trenchesNeedingPools.length} trenches coins (${EAGER_RESOLVE_TRENCHES} eagerly)...`);
+      await resolvePoolAddressesForCoins(trenchesNeedingPools.slice(0, EAGER_RESOLVE_TRENCHES));
+      if (trenchesNeedingPools.length > EAGER_RESOLVE_TRENCHES) {
+        resolvePoolAddressesForCoins(trenchesNeedingPools.slice(EAGER_RESOLVE_TRENCHES)).catch(err =>
+          console.warn('⚠️ Background trenches pool resolution error:', err.message)
+        );
+      }
+    }
+
+    console.log(`✅ Returning ${limitedCoins.length}/${trenchesTokens.length} trenches coins (limit: ${limit}, on-demand enrichment only)`);
+
+    res.json({
+      success: true,
+      coins: coinsWithPrices,
+      count: coinsWithPrices.length,
+      total: trenchesTokens.length,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('❌ Error in /api/coins/trenches endpoint:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch trenches coins',
       details: error.message
     });
   }

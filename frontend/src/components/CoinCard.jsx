@@ -74,7 +74,7 @@ function formatCompactNumber(num) {
   return num.toFixed(4);
 }
 
-const POPUP_FEED_ORDER = ['dextrending', 'whalefeed', 'graduating', 'new', 'trending'];
+const POPUP_FEED_ORDER = ['dextrending', 'whalefeed', 'graduating', 'trenches', 'new'];
 // Feed picker geometry: vertical rolodex — visible window height + per-feed row height (px)
 const FEED_PICKER_ROW_H = 34;
 const FEED_PICKER_OPEN_H = FEED_PICKER_ROW_H * 3;
@@ -82,17 +82,19 @@ const FEED_PICKER_OPEN_H = FEED_PICKER_ROW_H * 3;
 function normalizeFeedId(feedType) {
   const key = String(feedType || '').toLowerCase();
   if (POPUP_FEED_ORDER.includes(key)) return key;
+  // 'trending' coins now live at the tail of the combined 'dextrending' feed.
+  if (key.includes('trending') && !key.includes('dextrending')) return 'dextrending';
   return POPUP_FEED_ORDER.find((feed) => key.includes(feed)) || 'dextrending';
 }
 
 function formatFeedLabel(feedType) {
   const key = normalizeFeedId(feedType);
   const labels = {
-    trending: 'Trending',
-    new: 'New',
+    new: 'Rugs',
     graduating: 'Graduating',
-    dextrending: 'DEXtrending',
-    whalefeed: 'Whalefeed',
+    trenches: 'Trenches',
+    dextrending: 'Trending',
+    whalefeed: 'Whale',
     custom: 'Custom',
   };
   return labels[key] || feedType || 'Moonfeed';

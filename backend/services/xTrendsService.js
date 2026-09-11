@@ -297,7 +297,83 @@ function normalize(s) {
   return String(s || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
-function matchCoinsForEvent(event, pool) {
+// A coin that only hits our locally-cached pools (dextrending/whalefeed/
+// trending/new) — the event's namesake coin often isn't in ANY of those at
+// refresh time (fresh pump.fun launch, low volume, etc). Below this score we
+// fall back to a live Dexscreener search so e.g. a headline literally titled
+// "$NPC Meme Coin Surge" still surfaces the real $NPC coin as a related coin.
+const LIVE_SEARCH_MIN_SCORE = 6;
+const LIVE_SEARCH_MAX_TERMS = 3;
+const DEXSCREENER_SEARCH_URL = 'https://api.dexscreener.com/latest/dex/search';
+
+function scoreCoinAgainstTerms(coin, terms) {
+  const symbol = normalize(coin.symbol);
+  const name = normalize(coin.name);
+  const nameWords = new Set(name.split(' '));
+  const desc = normalize(coin.description).slice(0, 400);
+
+  let score = 0;
+  const hits = [];
+  for (const term of terms) {
+    if (!term) continue;
+    if (symbol === term) { score += 10; hits.push(term); continue; }
+    if (name === term) { score += 9; hits.push(term); continue; }
+    if (nameWords.has(term)) { score += 6; hits.push(term); continue; }
+    // Multi-word terms ("stonk chump") matching inside the name.
+    if (term.includes(' ') && name.includes(term)) { score += 8; hits.push(term); continue; }
+    if (term.length >= 4 && (symbol.includes(term) || term.includes(symbol) && symbol.length >= 4)) {
+      score += 4; hits.push(term); continue;
+    }
+    if (desc && term.length >= 5 && desc.includes(term)) { score += 2; hits.push(term); }
+  }
+  if (score <= 0) return null;
+
+  // Tiny bump for activity so a live coin outranks a dead namesake.
+  const vol = Number(coin.volume_24h_usd) || 0;
+  score += Math.min(3, Math.log10(1 + vol) / 2);
+
+  return { coin, score, hits };
+}
+
+// Live keyword search against Dexscreener (same public endpoint used
+// elsewhere in the app) — used ONLY as a fallback when the cached coin pools
+// don't have a good match, so this doesn't add load to the normal path.
+async function searchDexscreenerTokens(query) {
+  try {
+    const res = await fetch(`${DEXSCREENER_SEARCH_URL}?q=${encodeURIComponent(query)}`, {
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) return [];
+    const json = await res.json();
+    const pairs = Array.isArray(json?.pairs) ? json.pairs : [];
+    const byMint = new Map();
+    for (const p of pairs) {
+      if (p.chainId !== 'solana') continue;
+      const mint = p.baseToken?.address;
+      if (!mint || byMint.has(mint)) continue;
+      const liquidity = Number(p.liquidity?.usd) || 0;
+      byMint.set(mint, {
+        mintAddress: mint,
+        symbol: p.baseToken?.symbol || '',
+        name: p.baseToken?.name || '',
+        image: p.info?.imageUrl || null,
+        banner: null,
+        price_usd: parseFloat(p.priceUsd) || 0,
+        market_cap_usd: Number(p.fdv || p.marketCap) || 0,
+        volume_24h_usd: Number(p.volume?.h24) || 0,
+        priceChange24h: Number(p.priceChange?.h24) || 0,
+        pairAddress: p.pairAddress || null,
+        liquidity_usd: liquidity,
+      });
+    }
+    return [...byMint.values()].sort((a, b) => b.liquidity_usd - a.liquidity_usd).slice(0, 8);
+  } catch (error) {
+    console.warn(`[x-trends] live coin search failed for "${query}": ${error.message}`);
+    return [];
+  }
+}
+
+async function matchCoinsForEvent(event, pool) {
   const terms = [...new Set(
     [...event.keywords, ...event.hashtags, ...normalize(event.topic).split(' ')]
       .map(normalize)
@@ -307,35 +383,36 @@ function matchCoinsForEvent(event, pool) {
 
   const scored = [];
   for (const coin of pool) {
-    const symbol = normalize(coin.symbol);
-    const name = normalize(coin.name);
-    const nameWords = new Set(name.split(' '));
-    const desc = normalize(coin.description).slice(0, 400);
+    const result = scoreCoinAgainstTerms(coin, terms);
+    if (result) scored.push(result);
+  }
+  scored.sort((a, b) => b.score - a.score);
 
-    let score = 0;
-    const hits = [];
-    for (const term of terms) {
-      if (!term) continue;
-      if (symbol === term) { score += 10; hits.push(term); continue; }
-      if (name === term) { score += 9; hits.push(term); continue; }
-      if (nameWords.has(term)) { score += 6; hits.push(term); continue; }
-      // Multi-word terms ("stonk chump") matching inside the name.
-      if (term.includes(' ') && name.includes(term)) { score += 8; hits.push(term); continue; }
-      if (term.length >= 4 && (symbol.includes(term) || term.includes(symbol) && symbol.length >= 4)) {
-        score += 4; hits.push(term); continue;
+  const topScore = scored[0]?.score || 0;
+  if (topScore < LIVE_SEARCH_MIN_SCORE) {
+    // Prefer short/ticker-like terms (hashtags, keywords) over generic topic
+    // words for the live search — these are the closest thing Grok gives us
+    // to an actual coin symbol/name.
+    const searchTerms = [...new Set([...(event.hashtags || []), ...(event.keywords || [])])]
+      .map((t) => String(t).trim())
+      .filter((t) => t.length >= 2 && t.length <= 20)
+      .slice(0, LIVE_SEARCH_MAX_TERMS);
+
+    const seenMints = new Set(scored.map((s) => s.coin.mintAddress));
+    for (const term of searchTerms) {
+      const liveCoins = await searchDexscreenerTokens(term);
+      for (const coin of liveCoins) {
+        if (!coin.mintAddress || seenMints.has(coin.mintAddress)) continue;
+        const result = scoreCoinAgainstTerms(coin, terms);
+        if (result) {
+          scored.push(result);
+          seenMints.add(coin.mintAddress);
+        }
       }
-      if (desc && term.length >= 5 && desc.includes(term)) { score += 2; hits.push(term); }
     }
-    if (score <= 0) continue;
-
-    // Tiny bump for activity so a live coin outranks a dead namesake.
-    const vol = Number(coin.volume_24h_usd) || 0;
-    score += Math.min(3, Math.log10(1 + vol) / 2);
-
-    scored.push({ coin, score, hits });
+    scored.sort((a, b) => b.score - a.score);
   }
 
-  scored.sort((a, b) => b.score - a.score);
   return scored.slice(0, MAX_COINS_PER_EVENT).map(({ coin, score, hits }) => ({
     mintAddress: coin.mintAddress,
     symbol: coin.symbol,
@@ -358,10 +435,11 @@ async function refresh() {
   const { events, citations, liveSearchUsed } = await fetchGrokTrends();
   const pool = (typeof coinPoolGetter === 'function' ? coinPoolGetter() : []) || [];
 
-  const matchedTrends = prioritizeMatchedTrends(events.map((event) => ({
-    ...event,
-    coins: matchCoinsForEvent(event, pool),
-  })));
+  const eventsWithCoins = [];
+  for (const event of events) {
+    eventsWithCoins.push({ ...event, coins: await matchCoinsForEvent(event, pool) });
+  }
+  const matchedTrends = prioritizeMatchedTrends(eventsWithCoins);
   const trends = xNewsAlertService.decorateTrends(matchedTrends, liveSearchUsed);
 
   cache = { trends, updatedAt: Date.now(), model: XAI_MODEL, citations: citations.slice(0, 30), poolSize: pool.length, liveSearchUsed };
