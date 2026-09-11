@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import NativeChart from './NativeChart';
 import { getTransactions } from '../utils/transactionStorage';
 import { getSolUsdPrice } from '../utils/orderFillTracking';
+import { useTrackedTrades } from '../contexts/TrackedTradesContext';
 import CautionTapeBanner from './CautionTapeBanner';
 import './OrderDetailView.css';
 
@@ -22,6 +23,21 @@ function OrderDetailView({ order, walletAddress, solUsdPrice = 150, cancelling, 
   const [entryPriceUsd, setEntryPriceUsd] = useState(null);
   const [entryTime, setEntryTime] = useState(null);
   const [refocusSignal, setRefocusSignal] = useState(0);
+  const { getTradesForMint } = useTrackedTrades();
+  const tradeDots = useMemo(() => {
+    const trades = getTradesForMint(order?.tokenMint);
+    if (!trades.length) return null;
+    return trades
+      .slice(-80)
+      .filter((t) => t.priceUsd > 0)
+      .map((t) => ({
+        time: Math.floor(t.time / 1000),
+        price: t.priceUsd,
+        type: t.type,
+        wallet: t.walletAddress,
+        label: t.label,
+      }));
+  }, [getTradesForMint, order?.tokenMint]);
 
   // Hide the feed's floating buttons (comment, transactions, swipe hint, etc.)
   // while this full-screen chart is open.
@@ -226,6 +242,7 @@ function OrderDetailView({ order, walletAddress, solUsdPrice = 150, cancelling, 
             livePrice={currentPriceUsd}
             entryPrice={entryPriceUsd}
             markers={markers}
+            tradeDots={tradeDots}
             targetPrice={triggerPriceUsd}
             targetLabel={`${isSell ? 'Sell' : 'Buy'} target ${formatUsd(triggerPriceUsd)}`}
             targetColor={isSell ? '#ef5350' : '#26a69a'}

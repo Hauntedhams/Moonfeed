@@ -4213,6 +4213,7 @@ const CoinCard = memo(({
           limitOrderSide={buyDrawerOrderSide}
           onOpenBuyDrawer={openBuyDrawer}
           showMobileControls={false}
+          onBackToNativeChart={USE_NATIVE_CHART && useAdvancedGeckoChart ? () => setUseAdvancedGeckoChart(false) : null}
         />,
         mobileChartTargetRef.current
         );

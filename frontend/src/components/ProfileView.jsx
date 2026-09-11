@@ -3,6 +3,7 @@ import { useWallet as useJupiterWallet } from '@jup-ag/wallet-adapter';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { getFullApiUrl } from '../config/api';
 import { useTrackedWallets } from '../contexts/TrackedWalletsContext';
+import { useTrackedTrades } from '../contexts/TrackedTradesContext';
 import { useDarkMode } from '../contexts/DarkModeContext';
 import { useUserProfile } from '../contexts/UserProfileContext';
 import { useDemoMode } from '../contexts/DemoModeContext';
@@ -22,6 +23,7 @@ const ProfileView = ({ onTradeClick, onOpenPosition }) => {
   // Use Jupiter Wallet Kit adapter
   const jupiterWallet = useJupiterWallet();
   const { isDemoMode, demoPublicKey, disableDemoMode } = useDemoMode();
+  const { getTradesForMint } = useTrackedTrades();
 
   // When demo mode is active, override wallet state so all screens are accessible
   const publicKey = isDemoMode ? demoPublicKey : jupiterWallet.publicKey;
@@ -2208,6 +2210,18 @@ const ProfileView = ({ onTradeClick, onOpenPosition }) => {
           text: `Bought at ${fmtSol(avgEntryPrice)} SOL`,
         }] : null;
 
+        // Any tracked wallets' buys/sells of this coin, drawn as avatar bubbles.
+        const walletTrades = getTradesForMint(historyDetailCoin.tokenMint);
+        const tradeDots = walletTrades.length
+          ? walletTrades.slice(-80).filter((t) => t.priceUsd > 0).map((t) => ({
+              time: Math.floor(t.time / 1000),
+              price: t.priceUsd,
+              type: t.type,
+              wallet: t.walletAddress,
+              label: t.label,
+            }))
+          : null;
+
         return (
           <div className="chs-backdrop" onClick={() => { setHistoryDetailCoin(null); setHistoryDetailUseAdvancedChart(false); }}>
             <div className="chs-sheet" onClick={e => e.stopPropagation()}>
@@ -2244,6 +2258,7 @@ const ProfileView = ({ onTradeClick, onOpenPosition }) => {
                     isExpanded={true}
                     markers={entryMarker}
                     entryPrice={avgEntryPriceUsd}
+                    tradeDots={tradeDots}
                     onToggleAdvancedChart={() => setHistoryDetailUseAdvancedChart(true)}
                   />
                 )}

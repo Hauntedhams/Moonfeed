@@ -222,6 +222,24 @@ function CoinPostRow({ coin, onSelect, onRemove, onTradeClick }) {
     poolAddress: coin.poolAddress,
   }), [coin.mintAddress, coin.address, coin.pairAddress, coin.poolAddress]);
 
+  // Any tracked wallets' buys/sells of this coin, drawn as avatar bubbles.
+  const { getTradesForMint } = useTrackedTrades();
+  const tradeDots = useMemo(() => {
+    const mint = coin.mintAddress || coin.address;
+    const trades = getTradesForMint(mint);
+    if (!trades.length) return null;
+    return trades
+      .slice(-80)
+      .filter((t) => t.priceUsd > 0)
+      .map((t) => ({
+        time: Math.floor(t.time / 1000),
+        price: t.priceUsd,
+        type: t.type,
+        wallet: t.walletAddress,
+        label: t.label,
+      }));
+  }, [getTradesForMint, coin.mintAddress, coin.address]);
+
   return (
     <div className="tw-post" role="button" tabIndex={0} onClick={() => onSelect?.(coin)}>
       <div className="tw-post-header">
@@ -264,6 +282,7 @@ function CoinPostRow({ coin, onSelect, onRemove, onTradeClick }) {
           livePrice={price}
           trackedPrice={trackedAtPrice}
           trackedTime={coin.savedAt || coin.timestamp}
+          tradeDots={tradeDots}
         />
       </div>
       <div className="tw-post-actions">

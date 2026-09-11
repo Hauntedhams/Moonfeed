@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useDarkMode } from '../contexts/DarkModeContext';
 import './TwelveDataChart.css';
 
-const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDesktopMode = false, desktopSlotRef = null, showPriceScale, showActionButtons = true, showMobileControls = true, isExpanded = false, showLimitOrderLine = false, limitOrderPrice = null, limitOrderCurrentPrice = null, tradeLineMode = 'orders', marketBuyAmount = 0, limitOrderSide = 'buy', onCrosshairMove, onFirstPriceUpdate, onTradeClick, onExpand, onFullscreenChange, onOpenBuyDrawer }) => {
+const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDesktopMode = false, desktopSlotRef = null, showPriceScale, showActionButtons = true, showMobileControls = true, isExpanded = false, showLimitOrderLine = false, limitOrderPrice = null, limitOrderCurrentPrice = null, tradeLineMode = 'orders', marketBuyAmount = 0, limitOrderSide = 'buy', onCrosshairMove, onFirstPriceUpdate, onTradeClick, onExpand, onFullscreenChange, onOpenBuyDrawer, onBackToNativeChart }) => {
   const { isDarkMode: contextDarkMode } = useDarkMode();
   const [srcReady, setSrcReady] = useState(false);
   const [fullscreenMode, setFullscreenMode] = useState(null); // null | 'portrait' | 'landscape'
@@ -741,6 +741,20 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
               button floats above the cross-origin iframe. pointer-events:none on the wrapper,
               auto on the button itself, so clicks reach it without blocking the iframe. */}
           <div ref={fullscreenBtnRef} className="chart-portal-controls">
+            {onBackToNativeChart && (
+              <button
+                type="button"
+                className="chart-back-to-native-btn"
+                onClick={(e) => { e.stopPropagation(); onBackToNativeChart(); }}
+                title="Back to standard chart"
+                aria-label="Back to standard chart"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="15 18 9 12 15 6" />
+                </svg>
+                Standard
+              </button>
+            )}
             {limitOrderLineTop !== null && (
               <div className="chart-limit-order-line" style={{ top: `${limitOrderLineTop}%` }}>
                 <span>{tradeLineLabel}</span>

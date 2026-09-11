@@ -77,6 +77,7 @@ const parseTrade = (t) => {
       name: t.name || '',
       image: t.image || null,
       solAmount: t.solAmount ?? null,
+      priceUsd: Number(t.priceUsd) || 0,
       time: t.time || t.timestamp,
     };
   }
@@ -102,6 +103,7 @@ const parseTrade = (t) => {
     name: token.name || '',
     image: token.image || null,
     solAmount: fromIsSol ? from.amount : (toIsSol ? to.amount : null),
+    priceUsd: Number(t.price?.usd) || 0,
     time: t.time,
   };
 };
@@ -117,6 +119,7 @@ function TrackedWalletCard({ wallet, shouldLoad = true, onOpenProfile, onOpenPos
   const [stats, setStats] = useState(null);
   const [statsLoading, setStatsLoading] = useState(true);
   const [lastTrade, setLastTrade] = useState(null);
+  const [allTrades, setAllTrades] = useState([]);
   const [tradeLoading, setTradeLoading] = useState(true);
   const [detailsExpanded, setDetailsExpanded] = useState(false);
 
@@ -142,8 +145,9 @@ function TrackedWalletCard({ wallet, shouldLoad = true, onOpenProfile, onOpenPos
         const list = Array.isArray(raw) ? raw : [];
         const parsed = list.map(parseTrade).filter(Boolean);
         setLastTrade(parsed[0] || null);
+        setAllTrades(parsed);
       })
-      .catch(() => { if (!cancelled) setLastTrade(null); })
+      .catch(() => { if (!cancelled) { setLastTrade(null); setAllTrades([]); } })
       .finally(() => { if (!cancelled) setTradeLoading(false); });
     return () => { cancelled = true; };
   }, [address, shouldLoad]);
@@ -169,6 +173,23 @@ function TrackedWalletCard({ wallet, shouldLoad = true, onOpenProfile, onOpenPos
       text: 'Tracked wallet here',
     }];
   }, [wallet?.addedAt]);
+
+  // This wallet's own buy/sell points on the charted coin, drawn as clickable
+  // avatar bubbles (same visual language used everywhere else in the app) so
+  // the user can see exactly where the wallet they follow entered/exited.
+  const walletTradeDots = useMemo(() => {
+    if (!chartCoin?.mintAddress) return null;
+    const label = resolveWalletDisplayName(address, wallet?.label);
+    const forMint = allTrades.filter((t) => t.mint === chartCoin.mintAddress && t.priceUsd > 0);
+    if (!forMint.length) return null;
+    return forMint.slice(-40).map((t) => ({
+      time: Math.floor((t.time || 0) / 1000),
+      price: t.priceUsd,
+      type: t.type,
+      wallet: address,
+      label,
+    }));
+  }, [allTrades, chartCoin, address, wallet?.label]);
 
   return (
     <div className="twc-card">
@@ -209,7 +230,7 @@ function TrackedWalletCard({ wallet, shouldLoad = true, onOpenProfile, onOpenPos
       {/* Main Content: Chart */}
       <div className="twc-chart-wrap">
         {chartCoin ? (
-          <NativeChart coin={chartCoin} isActive={shouldLoad} isExpanded={false} markers={trackedMarker} />
+          <NativeChart coin={chartCoin} isActive={shouldLoad} isExpanded={false} markers={walletTradeDots?.length ? null : trackedMarker} tradeDots={walletTradeDots} />
         ) : (
           <div className="twc-chart-placeholder">
             {tradeLoading ? (

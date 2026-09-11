@@ -1636,16 +1636,34 @@ const NativeChart = ({
     const recompute = () => {
       const canvas = containerRef.current;
       const width = canvas?.clientWidth || 0;
+      const height = canvas?.clientHeight || 0;
       if (!width) return;
+      let visibleRange = null;
+      try { visibleRange = chart.timeScale().getVisibleRange(); } catch (_) { /* ignore */ }
       const pts = [];
       for (const d of tradeDots) {
         let x, y;
+        let clamped = false;
         try {
           x = chart.timeScale().timeToCoordinate(d.time);
           y = series.priceToCoordinate(d.price);
         } catch (_) { continue; } // chart/series disposed mid-loop
-        if (!Number.isFinite(x) || !Number.isFinite(y) || x < -10 || x > width + 10) continue;
-        pts.push({ ...d, x, y });
+        if (!Number.isFinite(y)) continue; // no valid price position at all
+        if (!Number.isFinite(x)) {
+          // Trade happened outside the currently loaded/visible window (e.g. a
+          // tracked-wallet buy from further back than the chart's history) —
+          // pin it to the nearest edge instead of silently dropping it, so the
+          // user can still see it happened and tap through to the details.
+          if (visibleRange && d.time < visibleRange.from) x = 10;
+          else if (visibleRange && d.time > visibleRange.to) x = width - 10;
+          else continue; // can't tell which side it's off on
+          clamped = true;
+        } else if (x < -10 || x > width + 10) {
+          x = x < -10 ? 10 : width - 10;
+          clamped = true;
+        }
+        y = Math.min(Math.max(y, 40), height ? height - 10 : y);
+        pts.push({ ...d, x, y, clamped });
       }
       pts.sort((a, b) => a.x - b.x);
       const clusters = [];
@@ -1655,9 +1673,10 @@ const NativeChart = ({
           const n = last.items.length;
           last.x = (last.x * n + p.x) / (n + 1);
           last.y = (last.y * n + p.y) / (n + 1);
+          last.clamped = last.clamped || p.clamped;
           last.items.push(p);
         } else {
-          clusters.push({ x: p.x, y: p.y, items: [p] });
+          clusters.push({ x: p.x, y: p.y, clamped: p.clamped, items: [p] });
         }
       }
       setDotClusters((prev) => {
@@ -2162,10 +2181,10 @@ const NativeChart = ({
             <button
               key={i}
               type="button"
-              className="native-chart-dot-cluster"
+              className={`native-chart-dot-cluster${c.clamped ? ' native-chart-dot-cluster--clamped' : ''}`}
               style={{ left: c.x, top: c.y }}
               onClick={(e) => { e.stopPropagation(); setOpenCluster(c); }}
-              title={`${c.items.length} trade${c.items.length > 1 ? 's' : ''}`}
+              title={c.clamped ? 'Trade off-screen — tap to view' : `${c.items.length} trade${c.items.length > 1 ? 's' : ''}`}
             >
               {c.items.slice(0, 3).map((d, j) => (
                 <span
