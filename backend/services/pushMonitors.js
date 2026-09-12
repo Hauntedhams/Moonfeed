@@ -30,6 +30,10 @@ const MAX_TRACKED_WALLETS = 60; // cap Helius load per cycle
 const GAIN_PCT = 10;
 const GAIN_REARM_PCT = 5;
 const GLOBAL_WHALE_STATE = '__global_whale_feed__';
+const GLOBAL_TRENCHES_STATE = '__global_trenches_feed__';
+const TRENCHES_GAIN_H1_PCT = 20;
+const TRENCHES_GAIN_M5_PCT = 15;
+const TRENCHES_REARM_H1_PCT = 8;
 // Held/tracked-coin crash thresholds (Dexscreener price-change windows).
 const CRASH_M5_PCT = -15;
 const CRASH_H1_PCT = -30;
@@ -39,6 +43,7 @@ let timer = null;
 let walletTimer = null;
 let softOrderTimer = null;
 let whaleCoinGetter = null;
+let trenchesCoinGetter = null;
 const symbolCache = new Map(); // mint -> { symbol, ts }
 const SYMBOL_TTL = 60 * 60 * 1000;
 
@@ -190,6 +195,84 @@ async function runWhaleGainsOnce() {
       data: { type: 'whaleGain', mint, symbol },
     });
     console.log(`[push] whale gain ${symbol} +${change24h.toFixed(1)}% sent to ${sent} device(s)`);
+  }
+}
+
+function setTrenchesCoinGetter(fn) {
+  trenchesCoinGetter = fn;
+}
+
+function trenchesGainAction(live, state) {
+  const h1 = Number(live?.h1);
+  const m5 = Number(live?.m5);
+  const isSurging = (Number.isFinite(h1) && h1 >= TRENCHES_GAIN_H1_PCT) || (Number.isFinite(m5) && m5 >= TRENCHES_GAIN_M5_PCT);
+  const isCooled = (!Number.isFinite(h1) || h1 < TRENCHES_REARM_H1_PCT) && (!Number.isFinite(m5) || m5 < 5);
+
+  if (!Number.isFinite(h1) && !Number.isFinite(m5)) return 'none';
+  if (!state) return 'seed';
+  if (isCooled && state.armed) return 'rearm';
+  if (isSurging && !state.armed) return 'notify';
+  return 'none';
+}
+
+async function runTrenchesGainsOnce() {
+  if (!pushService.isEnabled() || typeof trenchesCoinGetter !== 'function') return;
+  let trenchesCoins = [];
+  try {
+    trenchesCoins = (await trenchesCoinGetter()) || [];
+  } catch (_) {
+    return;
+  }
+  const byMint = new Map();
+  for (const coin of trenchesCoins) {
+    const mint = coin?.mintAddress || coin?.mint || coin?.address;
+    if (mint && !byMint.has(mint)) byMint.set(mint, coin);
+  }
+  if (!byMint.size) return;
+
+  const prices = await deepestPairs([...byMint.keys()]);
+  for (const [mint, coin] of byMint) {
+    const live = prices.get(mint);
+    if (!live) continue;
+    const state = await getState(GLOBAL_TRENCHES_STATE, mint, 'trenchesGain');
+    const action = trenchesGainAction(live, state);
+
+    const h1 = Number(live?.h1);
+    const m5 = Number(live?.m5);
+    const isH1 = Number.isFinite(h1) && h1 >= TRENCHES_GAIN_H1_PCT;
+    const pct = isH1 ? h1 : m5;
+
+    if (action === 'seed') {
+      const isSurging = (Number.isFinite(h1) && h1 >= TRENCHES_GAIN_H1_PCT) || (Number.isFinite(m5) && m5 >= TRENCHES_GAIN_M5_PCT);
+      await setState(GLOBAL_TRENCHES_STATE, mint, 'trenchesGain', isSurging, pct);
+      continue;
+    }
+    if (action === 'rearm') {
+      await setState(GLOBAL_TRENCHES_STATE, mint, 'trenchesGain', false, pct);
+      continue;
+    }
+    if (action !== 'notify') continue;
+
+    const claimed = await PushAlertState.findOneAndUpdate(
+      { walletAddress: GLOBAL_TRENCHES_STATE, mint, type: 'trenchesGain', armed: false },
+      { $set: { armed: true, lastValue: pct, updatedAt: new Date() } },
+      { new: true }
+    );
+    if (!claimed) continue;
+
+    const symbol = live.symbol || coin.symbol || mint.slice(0, 6);
+    const timeLabel = isH1 ? 'in the last hour' : 'in the last 5 mins';
+    const pctStr = Math.round(pct);
+    const title = `🚀 $${symbol} surged +${pctStr}% ${timeLabel}!`;
+    const body = `Discovered early in the Trenches feed — potential crazy profit opportunity! Tap to view live chart.`;
+
+    const sent = await sendToAllDevices('trenchesGain', {
+      title,
+      body,
+      image: live.image || coin.image || coin.profileImage || null,
+      data: { type: 'trenchesGain', mint, symbol, gainPct: String(pct) },
+    });
+    console.log(`[push] trenches breakout ${symbol} +${pctStr}% (${timeLabel}) sent to ${sent} device(s)`);
   }
 }
 
@@ -598,12 +681,14 @@ function start() {
     console.log('[push] price/wallet monitors not started (FCM disabled — set FIREBASE_SERVICE_ACCOUNT)');
     return;
   }
-  console.log('[push] price monitors started (tracked-gain + crash + whale-gain)');
+  console.log('[push] price monitors started (tracked-gain + crash + whale-gain + trenches-gain)');
   runOnce().catch((e) => console.error('[push] monitor error:', e.message));
   runWhaleGainsOnce().catch((e) => console.error('[push] whale-gain monitor error:', e.message));
+  runTrenchesGainsOnce().catch((e) => console.error('[push] trenches-gain monitor error:', e.message));
   timer = setInterval(() => {
     runOnce().catch((e) => console.error('[push] monitor error:', e.message));
     runWhaleGainsOnce().catch((e) => console.error('[push] whale-gain monitor error:', e.message));
+    runTrenchesGainsOnce().catch((e) => console.error('[push] trenches-gain monitor error:', e.message));
   }, POLL_INTERVAL_MS);
 
   console.log('[push] wallet-trade monitor started');
@@ -632,9 +717,12 @@ module.exports = {
   start,
   stop,
   setWhaleCoinGetter,
+  setTrenchesCoinGetter,
   whaleGainAction,
+  trenchesGainAction,
   runOnce,
   runWhaleGainsOnce,
+  runTrenchesGainsOnce,
   runWalletTradesOnce,
   runSoftOrdersOnce,
   handleWebhookSwap,

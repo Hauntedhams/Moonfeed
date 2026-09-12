@@ -691,6 +691,7 @@ const NOTIFICATION_CATEGORIES = [
   { key: 'trackedGain', label: 'Tracked coin gains', desc: 'A coin you track jumps +10%' },
   { key: 'holdingCrash', label: 'Holding crash alerts', desc: 'A coin you hold drops sharply' },
   { key: 'orderFill', label: 'Order fills', desc: 'A limit order you placed triggers' },
+  { key: 'trenchesGain', label: 'Trenches breakout alerts', desc: 'A fresh Trenches coin is surging fast' },
   { key: 'whaleGain', label: 'Whale activity', desc: 'Big wallets make notable moves' },
   { key: 'xNews', label: 'Breaking X news', desc: 'A trending story hits the X Tracker' },
 ];

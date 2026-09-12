@@ -1098,6 +1098,17 @@ const DEXTRENDING_CACHE_TTL = 15 * 60 * 1000; // 15 minutes cache
 // Global whale-gain pushes monitor the same centrally-ranked feed served to users.
 pushMonitors.setWhaleCoinGetter(() => whalefeedCoins);
 
+// Global trenches-gain pushes monitor breakout coins in the Trenches bonding-curve feed.
+pushMonitors.setTrenchesCoinGetter(async () => {
+  try {
+    const graduatingService = require('./graduatingService');
+    return await graduatingService.getTrenchesTokens();
+  } catch (err) {
+    console.warn('⚠️ Push monitor trenches token error:', err.message);
+    return [];
+  }
+});
+
 // X-trends matcher scans every pool the server already maintains (deduped by mint).
 xTrendsService.setCoinPoolGetter(() => {
   const seen = new Set();

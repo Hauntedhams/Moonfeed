@@ -28,6 +28,7 @@ import { getSolUsdPrice } from './utils/orderFillTracking'
 import useOrderFillNotifications from './hooks/useOrderFillNotifications'
 import useHoldingsCrashNotifications from './hooks/useHoldingsCrashNotifications'
 import useTrackedGainNotifications from './hooks/useTrackedGainNotifications'
+import useTrenchesGainNotifications from './hooks/useTrenchesGainNotifications'
 import useSwipeBack from './hooks/useSwipeBack'
 
 // Lazy load heavy components that aren't needed immediately
@@ -110,6 +111,7 @@ function App() {
   useOrderFillNotifications(); // background: notifies when a limit order fills
   useHoldingsCrashNotifications(); // background: notifies when a held coin starts crashing
   useTrackedGainNotifications(favorites); // background: notifies when a tracked coin is up +10%
+  useTrenchesGainNotifications(); // background: notifies when a fresh Trenches coin is surging fast
   const favoritesSyncedWalletRef = useRef(null); // account address we've already pulled synced favorites for
   const skipNextFavoritesSaveRef = useRef(false); // true right after loading remote data, to avoid an immediate re-save
   const favoritesHydratedRef = useRef(false); // blocks saving until the first remote read settles
@@ -720,7 +722,7 @@ function App() {
         setTimeout(() => {
           window.dispatchEvent(new CustomEvent('moonfeed:open-x-tracker'));
         }, 100);
-      } else if (d.type === 'whaleGain' && d.mint) {
+      } else if ((d.type === 'whaleGain' || d.type === 'trenchesGain' || d.type === 'trackedGain') && d.mint) {
         handleCoinFound({
           mintAddress: d.mint,
           tokenAddress: d.mint,

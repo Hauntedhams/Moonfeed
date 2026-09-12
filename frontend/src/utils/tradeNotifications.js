@@ -8,6 +8,7 @@ import { Filesystem, Directory } from '@capacitor/filesystem';
 const isNative = Capacitor.isNativePlatform();
 let permissionGranted = false;
 let serviceWorkerRegistrationPromise = null;
+let localActionListenerRegistered = false;
 
 // Notification ids must be 32-bit ints; derive one from the tx signature.
 function idFromSignature(signature) {
@@ -115,6 +116,25 @@ export async function getNotificationPermissionState() {
 export async function initTradeNotifications({ request = false } = {}) {
   try {
     if (isNative) {
+      if (!localActionListenerRegistered) {
+        localActionListenerRegistered = true;
+        try {
+          await LocalNotifications.addListener('localNotificationActionPerformed', (notificationAction) => {
+            const extra = notificationAction?.notification?.extra || {};
+            const mint = extra.tokenMint || extra.mint;
+            if (mint) {
+              window.dispatchEvent(new CustomEvent('moonfeed:push-action', {
+                detail: {
+                  type: extra.type || 'trenchesGain',
+                  mint,
+                  symbol: extra.symbol || '',
+                  ...extra,
+                },
+              }));
+            }
+          });
+        } catch (_) { /* ignore */ }
+      }
       let status = (await LocalNotifications.checkPermissions()).display;
       if (status !== 'granted' && request) {
         status = (await LocalNotifications.requestPermissions()).display;
@@ -288,6 +308,43 @@ export async function notifyTrackedGain({ mint, symbol, gainPct, trackedAtPrice,
     }
   } catch (err) {
     console.debug('[TradeNotifications] gain schedule error:', err?.message);
+  }
+}
+
+// Fire a native (or web) notification when a coin from the Trenches feed starts going up fast.
+export async function notifyTrenchesGain({ mint, symbol, gainPct, timeLabel = 'in the last hour', image }) {
+  if (!permissionGranted) return;
+  const pct = Math.round(Number(gainPct) || 0);
+  const title = `🚀 $${symbol || 'Trenches coin'} is up +${pct}% ${timeLabel}!`;
+  const body = `Discovered in the Trenches on Moonfeed — early buyers are seeing crazy profits! Tap to view live chart.`;
+
+  try {
+    if (isNative) {
+      await scheduleNative({
+        id: idFromSignature(`trenches-gain-${mint}-${Date.now()}`),
+        title,
+        body,
+        image,
+        extra: { type: 'trenchesGain', tokenMint: mint, mint, symbol },
+      });
+    } else if ('Notification' in window) {
+      const notificationOptions = {
+        body,
+        icon: isRemoteImage(image) ? image : '/android-chrome-192x192.png',
+        badge: '/favicon-32x32.png',
+        tag: `trenches-gain-${mint}`,
+        renotify: true,
+        data: { type: 'trenchesGain', tokenMint: mint, mint, symbol, url: '/' },
+      };
+      const registration = await getServiceWorkerRegistration();
+      if (registration?.showNotification) {
+        await registration.showNotification(title, notificationOptions);
+      } else {
+        new Notification(title, notificationOptions);
+      }
+    }
+  } catch (err) {
+    console.debug('[TradeNotifications] trenches-gain schedule error:', err?.message);
   }
 }
 
