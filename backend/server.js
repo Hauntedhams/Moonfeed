@@ -3058,10 +3058,17 @@ app.get('/api/coins/trenches', async (req, res) => {
 
     // Apply live prices from Jupiter before serving
     const coinsWithPrices = applyLivePrices(limitedCoins);
+    const eligibleCoins = coinsWithPrices.filter(coin => {
+      const marketCap = Number(
+        coin.market_cap_usd ?? coin.marketCapUsd ?? coin.marketCap
+          ?? coin.market_cap ?? coin.mcap ?? coin.fdv
+      );
+      return Number.isFinite(marketCap) && marketCap >= 1;
+    });
 
     // 🔗 Resolve pool addresses for trenches coins missing pairAddress
     const EAGER_RESOLVE_TRENCHES = 10;
-    const trenchesNeedingPools = coinsWithPrices.filter(c => !c.pairAddress && !c.poolAddress && c.mintAddress);
+    const trenchesNeedingPools = eligibleCoins.filter(c => !c.pairAddress && !c.poolAddress && c.mintAddress);
     if (trenchesNeedingPools.length > 0) {
       console.log(`🔗 Resolving pool addresses for ${trenchesNeedingPools.length} trenches coins (${EAGER_RESOLVE_TRENCHES} eagerly)...`);
       await resolvePoolAddressesForCoins(trenchesNeedingPools.slice(0, EAGER_RESOLVE_TRENCHES));
@@ -3072,12 +3079,12 @@ app.get('/api/coins/trenches', async (req, res) => {
       }
     }
 
-    console.log(`✅ Returning ${limitedCoins.length}/${trenchesTokens.length} trenches coins (limit: ${limit}, on-demand enrichment only)`);
+    console.log(`✅ Returning ${eligibleCoins.length}/${trenchesTokens.length} trenches coins (limit: ${limit}, on-demand enrichment only)`);
 
     res.json({
       success: true,
-      coins: coinsWithPrices,
-      count: coinsWithPrices.length,
+      coins: eligibleCoins,
+      count: eligibleCoins.length,
       total: trenchesTokens.length,
       timestamp: new Date().toISOString()
     });

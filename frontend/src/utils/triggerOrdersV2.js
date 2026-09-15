@@ -213,7 +213,7 @@ async function signDepositBase64(signTransaction, base64Tx) {
   return signAnyTransaction(signTransaction, base64Tx);
 }
 
-// ── JWT cache (in-memory + sessionStorage, 24h with safety margin) ─────────
+// ── JWT cache (in-memory + persistent storage, 24h with safety margin) ─────
 const tokenCache = new Map(); // wallet -> { token, expiresAt }
 const SESSION_KEY = (wallet) => `mf_trigger_jwt_${wallet}`;
 const TOKEN_TTL_MS = 23 * 60 * 60 * 1000;
@@ -223,14 +223,18 @@ export function getCachedTriggerToken(walletAddress) {
   const mem = tokenCache.get(walletAddress);
   if (mem && mem.expiresAt > Date.now()) return mem.token;
   try {
-    const raw = sessionStorage.getItem(SESSION_KEY(walletAddress));
+    const key = SESSION_KEY(walletAddress);
+    const raw = localStorage.getItem(key) || sessionStorage.getItem(key);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed.expiresAt > Date.now()) {
         tokenCache.set(walletAddress, parsed);
+        localStorage.setItem(key, raw);
+        sessionStorage.removeItem(key);
         return parsed.token;
       }
-      sessionStorage.removeItem(SESSION_KEY(walletAddress));
+      localStorage.removeItem(key);
+      sessionStorage.removeItem(key);
     }
   } catch (_) { /* ignore */ }
   return null;
@@ -239,13 +243,16 @@ export function getCachedTriggerToken(walletAddress) {
 export function clearTriggerToken(walletAddress) {
   if (!walletAddress) return;
   tokenCache.delete(walletAddress);
-  try { sessionStorage.removeItem(SESSION_KEY(walletAddress)); } catch (_) { /* ignore */ }
+  try {
+    localStorage.removeItem(SESSION_KEY(walletAddress));
+    sessionStorage.removeItem(SESSION_KEY(walletAddress));
+  } catch (_) { /* ignore */ }
 }
 
 function storeTriggerToken(walletAddress, token) {
   const entry = { token, expiresAt: Date.now() + TOKEN_TTL_MS };
   tokenCache.set(walletAddress, entry);
-  try { sessionStorage.setItem(SESSION_KEY(walletAddress), JSON.stringify(entry)); } catch (_) { /* ignore */ }
+  try { localStorage.setItem(SESSION_KEY(walletAddress), JSON.stringify(entry)); } catch (_) { /* ignore */ }
 }
 
 async function apiPost(path, body, jwt = null) {

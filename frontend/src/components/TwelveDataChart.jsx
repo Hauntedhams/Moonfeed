@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useDarkMode } from '../contexts/DarkModeContext';
 import './TwelveDataChart.css';
 
-const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDesktopMode = false, desktopSlotRef = null, showPriceScale, showActionButtons = true, showMobileControls = true, isExpanded = false, showLimitOrderLine = false, limitOrderPrice = null, limitOrderCurrentPrice = null, tradeLineMode = 'orders', marketBuyAmount = 0, limitOrderSide = 'buy', onCrosshairMove, onFirstPriceUpdate, onTradeClick, onExpand, onFullscreenChange, onOpenBuyDrawer, onBackToNativeChart }) => {
+const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDesktopMode = false, desktopSlotRef = null, showPriceScale, showActionButtons = true, showMobileControls = true, isExpanded = false, showLimitOrderLine = false, limitOrderPrice = null, limitOrderCurrentPrice = null, tradeLineMode = 'orders', marketBuyAmount = 0, limitOrderSide = 'buy', onCrosshairMove, onFirstPriceUpdate, onTradeClick, onExpand, onFullscreenChange, onOpenBuyDrawer, onBackToNativeChart, fullscreenRequestSignal = 0 }) => {
   const { isDarkMode: contextDarkMode } = useDarkMode();
   const [srcReady, setSrcReady] = useState(false);
   const [fullscreenMode, setFullscreenMode] = useState(null); // null | 'portrait' | 'landscape'
@@ -494,6 +494,18 @@ const TwelveDataChart = ({ coin, isActive = false, isActiveCard = false, isDeskt
       if (fullscreenMode) onFullscreenChange?.(false);
     };
   }, [fullscreenMode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // External open request — e.g. CoinCard's "View full chart" action button, which
+  // otherwise only knows how to open the native chart's own fullscreen overlay.
+  // Skips the initial mount (signal starts at 0) so this never auto-opens fullscreen.
+  const fullscreenRequestSeenRef = useRef(fullscreenRequestSignal);
+  useEffect(() => {
+    if (fullscreenRequestSignal !== fullscreenRequestSeenRef.current) {
+      fullscreenRequestSeenRef.current = fullscreenRequestSignal;
+      fullscreenModeRef.current = 'portrait';
+      setFullscreenMode('portrait');
+    }
+  }, [fullscreenRequestSignal]);
 
   const showFullscreenBtn = effectivePairAddress && (isExpanded || isDesktopMode);
 

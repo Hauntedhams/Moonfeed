@@ -92,6 +92,51 @@ export function getTransactions(walletAddress) {
   }
 }
 
+export function calculateOpenPosition(transactions, tokenMint, solUsdPrice = 0) {
+  let quantity = 0;
+  let costUsd = 0;
+  let costSol = 0;
+  const ordered = (transactions || [])
+    .filter(tx => tx.tokenMint === tokenMint)
+    .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+
+  for (const tx of ordered) {
+    if (!tx.type || tx.type === 'buy') {
+      const boughtQuantity = Number(tx.outputAmount) || 0;
+      let spentSol = Number(tx.inputAmount) || 0;
+      if (spentSol > 1e4) spentSol /= 1e9;
+      let unitUsd = Number(tx.pricePerTokenUsd) || 0;
+      const derivedUnitUsd = boughtQuantity > 0 && spentSol > 0 && solUsdPrice > 0
+        ? (spentSol / boughtQuantity) * solUsdPrice
+        : 0;
+      if (!(unitUsd > 0) || (derivedUnitUsd > 0 && (unitUsd > derivedUnitUsd * 10 || unitUsd < derivedUnitUsd / 10))) {
+        unitUsd = derivedUnitUsd;
+      }
+      if (boughtQuantity > 0) {
+        quantity += boughtQuantity;
+        costUsd += unitUsd > 0 ? boughtQuantity * unitUsd : 0;
+        costSol += Math.max(0, spentSol);
+      }
+    } else if (tx.type === 'sell') {
+      const soldQuantity = Number(tx.inputAmount) || 0;
+      if (soldQuantity > 0 && quantity > 0) {
+        const remainingRatio = Math.max(0, 1 - Math.min(soldQuantity, quantity) / quantity);
+        quantity *= remainingRatio;
+        costUsd *= remainingRatio;
+        costSol *= remainingRatio;
+      }
+    }
+  }
+
+  return {
+    quantity,
+    costUsd,
+    costSol,
+    averagePriceUsd: quantity > 0 ? costUsd / quantity : 0,
+    averageCostSol: quantity > 0 ? costSol / quantity : 0,
+  };
+}
+
 /**
  * Store a new transaction
  * @param {Object} transactionData - Transaction data to store

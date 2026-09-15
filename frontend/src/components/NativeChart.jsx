@@ -104,6 +104,7 @@ const NativeChart = ({
   livePrice = null,
   markers = null,
   tradeDots = null, // raw {time,price,type,wallet,label}[] — rendered as clustered avatar chips, not lightweight-charts markers
+  onTradeDotClick = null,
   tradePins = null, // [{id, timeMs, price, kind:'entry'|'exit', label}] — clickable ⊕ chips pinned to a trade point
   onTradePinClick = null,
   activeTradePinId = null,
@@ -1633,6 +1634,27 @@ const NativeChart = ({
     }
 
     const CLUSTER_PX = 22;
+    const nearestBar = (timeSec) => {
+      const count = dataLengthRef.current;
+      if (!count) return null;
+      let low = 0;
+      let high = count - 1;
+      try {
+        while (low < high) {
+          const middle = (low + high) >> 1;
+          const bar = series.dataByIndex(middle);
+          if (!bar) return null;
+          if (bar.time < timeSec) low = middle + 1;
+          else high = middle;
+        }
+        const bar = series.dataByIndex(low);
+        const previous = low > 0 ? series.dataByIndex(low - 1) : null;
+        if (previous && bar && Math.abs(previous.time - timeSec) < Math.abs(bar.time - timeSec)) return previous;
+        return bar || previous;
+      } catch (_) {
+        return null;
+      }
+    };
     const recompute = () => {
       const canvas = containerRef.current;
       const width = canvas?.clientWidth || 0;
@@ -1642,11 +1664,14 @@ const NativeChart = ({
       try { visibleRange = chart.timeScale().getVisibleRange(); } catch (_) { /* ignore */ }
       const pts = [];
       for (const d of tradeDots) {
+        const bar = nearestBar(d.time);
+        if (!bar) continue;
+        const dotPrice = Number(d.price) > 0 ? Number(d.price) : Number(bar.close ?? bar.value);
         let x, y;
         let clamped = false;
         try {
-          x = chart.timeScale().timeToCoordinate(d.time);
-          y = series.priceToCoordinate(d.price);
+          x = chart.timeScale().timeToCoordinate(bar.time);
+          y = series.priceToCoordinate(dotPrice);
         } catch (_) { continue; } // chart/series disposed mid-loop
         if (!Number.isFinite(y)) continue; // no valid price position at all
         if (!Number.isFinite(x)) {
@@ -1663,7 +1688,7 @@ const NativeChart = ({
           clamped = true;
         }
         y = Math.min(Math.max(y, 40), height ? height - 10 : y);
-        pts.push({ ...d, x, y, clamped });
+        pts.push({ ...d, price: dotPrice, x, y, clamped });
       }
       pts.sort((a, b) => a.x - b.x);
       const clusters = [];
@@ -2211,7 +2236,15 @@ const NativeChart = ({
             </div>
             <div className="native-chart-dot-modal-list">
               {[...openCluster.items].sort((a, b) => b.time - a.time).map((d, i) => (
-                <div key={i} className="native-chart-dot-modal-row">
+                <button
+                  key={d.signature || `${d.wallet}-${d.time}-${i}`}
+                  type="button"
+                  className="native-chart-dot-modal-row"
+                  onClick={() => {
+                    setOpenCluster(null);
+                    onTradeDotClick?.(d);
+                  }}
+                >
                   <span className="native-chart-dot-modal-avatar" style={{ background: gradientForWallet(d.wallet) }}>
                     <AnimalSilhouetteAvatar address={d.wallet} />
                   </span>
@@ -2221,7 +2254,8 @@ const NativeChart = ({
                   </span>
                   <span className="native-chart-dot-modal-price">{formatPrice(d.price)}</span>
                   <span className="native-chart-dot-modal-time">{formatDotTime(d.time)}</span>
-                </div>
+                  {onTradeDotClick && <span className="native-chart-dot-modal-chevron">›</span>}
+                </button>
               ))}
             </div>
           </div>

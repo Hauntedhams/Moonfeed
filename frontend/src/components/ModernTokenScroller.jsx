@@ -26,6 +26,25 @@ const LIVE_ZOOM_HINT_SEEN_KEY = 'moonfeed_live_zoom_hint_seen';
 const FEED_POS_KEY = 'moonfeed_feed_pos';
 const FEED_POS_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
+// The 'mixed' feed has no backend endpoint of its own — it blends together
+// whatever the user has already loaded from Trending/Whale/Graduating this
+// session. Module-level (not component state) so it survives feed switches
+// and even ModernTokenScroller remounts, and is populated passively whenever
+// any of these three feeds is fetched normally.
+const MIXED_SOURCE_FEEDS = ['dextrending', 'whalefeed', 'graduating'];
+const feedCoinsCache = { dextrending: [], whalefeed: [], graduating: [] };
+const MIN_VISIBLE_MARKET_CAP_USD = 1;
+
+const getMarketCapUsd = (coin) => Number(
+  coin?.market_cap_usd ?? coin?.marketCapUsd ?? coin?.marketCap
+    ?? coin?.market_cap ?? coin?.mcap ?? coin?.fdv
+);
+
+const hasVisibleMarketCap = (coin) => {
+  const marketCap = getMarketCapUsd(coin);
+  return Number.isFinite(marketCap) && marketCap >= MIN_VISIBLE_MARKET_CAP_USD;
+};
+
 // Debounce utility for performance
 const debounce = (func, wait) => {
   let timeout;
@@ -1045,10 +1064,14 @@ const ModernTokenScroller = ({
           hasBanner: !!mergedCoin.banner
         });
         
+        if (!hasVisibleMarketCap(mergedCoin)) {
+          console.warn(`Removed ${mergedCoin.symbol || mintAddress} after enrichment reported a missing or sub-$1 market cap`);
+          return null;
+        }
         return mergedCoin;
       }
       return coin;
-    }));
+    }).filter(Boolean));
   }, []);
 
   // OLD BATCH ENRICHMENT CODE - DISABLED
@@ -1214,11 +1237,13 @@ const ModernTokenScroller = ({
   const normalizeFeedCoins = useCallback((feedCoins, feedType) => {
     const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768;
     const maxCoins = isMobileDevice ? 20 : 50;
+    const eligibleCoins = feedCoins.filter(hasVisibleMarketCap);
+    if (eligibleCoins.length !== feedCoins.length) {
+      console.warn(`Filtered ${feedCoins.length - eligibleCoins.length} ${feedType} coin(s) with missing or sub-$1 market cap`);
+    }
     // Nudge the coins this user engages with most toward the top before the
     // mobile cap trims the tail (no-op until their taste profile has signal).
-    let normalizedCoins = onlyFavorites || singleCoin
-      ? [...feedCoins]
-      : personalizeCoins([...feedCoins]);
+    let normalizedCoins = onlyFavorites || singleCoin ? eligibleCoins : personalizeCoins(eligibleCoins);
 
     if (isMobileDevice && normalizedCoins.length > maxCoins) {
       console.log(`📱 MOBILE LIMIT: Reducing ${feedType} from ${normalizedCoins.length} to ${maxCoins} coins to prevent crashes`);
@@ -1254,6 +1279,50 @@ const ModernTokenScroller = ({
       }
       
       const currentFeedType = filters.type || 'trending';
+
+      // 'Mixed' has no endpoint of its own — blend Trending/Whale/Graduating
+      // coins that have already been loaded this session (fetching whichever
+      // of the three hasn't been visited yet, so Mixed always has content).
+      if (currentFeedType === 'mixed') {
+        console.log('🔀 Building MIXED feed from Trending + Whale + Graduating');
+        const perFeedLists = await Promise.all(MIXED_SOURCE_FEEDS.map(async (feedType) => {
+          if (feedCoinsCache[feedType]?.length) return feedCoinsCache[feedType];
+          try {
+            const res = await fetch(getFeedEndpoint(feedType), { method: 'GET', headers: { 'Content-Type': 'application/json' } });
+            if (!res.ok) return [];
+            const json = await res.json();
+            const list = Array.isArray(json.coins) ? json.coins : [];
+            if (list.length) feedCoinsCache[feedType] = list;
+            return list;
+          } catch (_) {
+            return [];
+          }
+        }));
+
+        const coinKey = (c) => c.mintAddress || c.tokenAddress || c.address;
+        const seenMints = new Set();
+        const interleaved = [];
+        const maxLen = Math.max(0, ...perFeedLists.map((l) => l.length));
+        for (let i = 0; i < maxLen; i++) {
+          for (const list of perFeedLists) {
+            const coin = list[i];
+            if (!coin) continue;
+            const key = coinKey(coin);
+            if (key && seenMints.has(key)) continue;
+            if (key) seenMints.add(key);
+            interleaved.push(coin);
+          }
+        }
+
+        const sortedMixed = normalizeFeedCoins(interleaved, 'mixed');
+        setCoins(sortedMixed);
+        onTotalCoinsChange?.(sortedMixed.length);
+        setRetryCount(0);
+        setIsBackendLoading(false);
+        setLoading(false);
+        return;
+      }
+
       let endpoint = getFeedEndpoint(currentFeedType);
       let requestOptions = { 
         method: 'GET',
@@ -1338,6 +1407,10 @@ const ModernTokenScroller = ({
       
       console.log(`✅ TRENDING LOAD: Successfully loaded ${data.coins.length} trending coins`);
       
+      if (MIXED_SOURCE_FEEDS.includes(currentFeedType) && data.coins.length) {
+        feedCoinsCache[currentFeedType] = data.coins;
+      }
+
       const sortedCoins = normalizeFeedCoins(data.coins, currentFeedType);
       
       setCoins(sortedCoins);
@@ -1358,7 +1431,7 @@ const ModernTokenScroller = ({
 
   const appendNextFeed = useCallback(async () => {
     if (!feedOrder.length || isLoadingMoreFeedRef.current || loading) return;
-    if (onlyFavorites || filters.type === 'custom' || advancedFilters) return;
+    if (onlyFavorites || filters.type === 'custom' || filters.type === 'mixed' || advancedFilters) return;
 
     const startingFeedType = filters.type || feedOrder[0];
     const loadedFeedTypes = loadedFeedTypesRef.current.length ? loadedFeedTypesRef.current : [startingFeedType];
@@ -1386,6 +1459,10 @@ const ModernTokenScroller = ({
       if (!data.coins || !Array.isArray(data.coins) || data.coins.length === 0) {
         console.warn(`⚠️ No coins available to append for ${nextFeedType}`);
         return;
+      }
+
+      if (MIXED_SOURCE_FEEDS.includes(nextFeedType)) {
+        feedCoinsCache[nextFeedType] = data.coins;
       }
 
       const nextCoins = normalizeFeedCoins(data.coins, nextFeedType);
@@ -1533,7 +1610,7 @@ const ModernTokenScroller = ({
     setPreloadIndex(null);
     trackedBuyAppliedRef.current = false;
     feedEndTriggerRef.current = null;
-    loadedFeedTypesRef.current = filters.type === 'custom' ? [] : [filters.type || feedOrder[0] || 'trending'];
+    loadedFeedTypesRef.current = (filters.type === 'custom' || filters.type === 'mixed') ? [] : [filters.type || feedOrder[0] || 'trending'];
     setExpandedCoin(null); // Close any expanded cards
 
     // Once the new feed's coins arrive, jump back to where the user last was in it
@@ -1684,7 +1761,7 @@ const ModernTokenScroller = ({
           const buy = recentBuys.get(coinMint(c));
           return buy && !c.trackedWalletBuy ? { ...c, trackedWalletBuy: buy } : c;
         });
-        const fresh = injectedCoins.filter((c) => !inFeed.has(coinMint(c)));
+        const fresh = injectedCoins.filter((c) => hasVisibleMarketCap(c) && !inFeed.has(coinMint(c)));
         if (fresh.length) {
           // Inject below the user's current position so indices they've seen don't shift
           let pos = Math.max(currentIndexRef.current + 2, 2);
@@ -1730,7 +1807,7 @@ const ModernTokenScroller = ({
           const data = await response.json();
           const full = data?.coin;
           // Skip coins that couldn't be priced — a bare card would look broken
-          if (!full || !(Number(full.price_usd ?? full.priceUsd ?? full.price) > 0)) return null;
+          if (!full || !(Number(full.price_usd ?? full.priceUsd ?? full.price) > 0) || !hasVisibleMarketCap(full)) return null;
           return {
             ...full,
             mintAddress: full.mintAddress || mint,
@@ -2114,7 +2191,7 @@ const ModernTokenScroller = ({
   }, [currentIndex]);
 
   useEffect(() => {
-    if (!feedOrder.length || onlyFavorites || filters.type === 'custom' || advancedFilters) return;
+    if (!feedOrder.length || onlyFavorites || filters.type === 'custom' || filters.type === 'mixed' || advancedFilters) return;
     // Within the last 2 cards, not just the exact last one — a short appended
     // batch (e.g. a small Trenches slice) can otherwise get skipped if a fast
     // scroll jumps straight past the one index this used to require.

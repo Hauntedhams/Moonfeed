@@ -1,6 +1,7 @@
 import React, { memo, useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { UnifiedWalletButton } from '@jup-ag/wallet-adapter';
+import { getArtworkCandidates } from '../utils/coinArtwork';
 import WalletConnectOnboarding from './WalletConnectOnboarding';
 import './CoinCard.css';
 import TwelveDataChart from './TwelveDataChart';
@@ -15,7 +16,7 @@ import { useOnDemandPrice } from '../hooks/useOnDemandPrice.js';
 import { useWallet } from '../contexts/WalletContext';
 import { getExpiryTimestamp, EXPIRY_OPTIONS, fetchTokenDecimals } from '../utils/triggerOrders.js';
 import { createSoftOrder } from '../utils/softOrders.js';
-import { getTransactions } from '../utils/transactionStorage';
+import { calculateOpenPosition, getTransactions } from '../utils/transactionStorage';
 import { getSolUsdPrice } from '../utils/orderFillTracking';
 import { WalletChip } from '../utils/walletIdentity';
 import { track, coinProps } from '../utils/analytics';
@@ -74,7 +75,7 @@ function formatCompactNumber(num) {
   return num.toFixed(4);
 }
 
-const POPUP_FEED_ORDER = ['dextrending', 'whalefeed', 'graduating', 'trenches', 'new'];
+const POPUP_FEED_ORDER = ['mixed', 'dextrending', 'whalefeed', 'graduating', 'trenches', 'new'];
 // Feed picker geometry: vertical rolodex — visible window height + per-feed row height (px)
 const FEED_PICKER_ROW_H = 34;
 const FEED_PICKER_OPEN_H = FEED_PICKER_ROW_H * 3;
@@ -95,6 +96,7 @@ function formatFeedLabel(feedType) {
     trenches: 'Trenches',
     dextrending: 'Trending',
     whalefeed: 'Whale',
+    mixed: 'Mixed',
     custom: 'Custom',
   };
   return labels[key] || feedType || 'Moonfeed';
@@ -166,7 +168,7 @@ const CoinCard = memo(({
   // at" price survives reloads/remounts instead of resetting to nothing.
   const effectiveTrackedPrice = trackedPrice || Number(trackedAtPrice) || Number(coin?.trackedAtPrice) || 0;
   const effectiveTrackedTime = trackedTimeState || trackedAtTime || coin?.savedAt || coin?.trackedAtTime || null;
-  const [bannerError, setBannerError] = useState(false); // Track banner image load failure
+  const [bannerSrcIndex, setBannerSrcIndex] = useState(0); // Index into banner URL fallbacks
   const [profileSrcIndex, setProfileSrcIndex] = useState(0); // Index into ordered list of profile image URLs to try
   const [profileLoaded, setProfileLoaded] = useState(false); // True once the winning profile img fires onLoad
   const [chartHoveredPrice, setChartHoveredPrice] = useState(null); // Track hovered price from chart
@@ -175,6 +177,7 @@ const CoinCard = memo(({
   const [nativeChartFullscreen, setNativeChartFullscreen] = useState(false);
   const [nativeChartControlsVisible, setNativeChartControlsVisible] = useState(false);
   const [useAdvancedGeckoChart, setUseAdvancedGeckoChart] = useState(false);
+  const [advancedChartFullscreenSignal, setAdvancedChartFullscreenSignal] = useState(0); // Bumped to open the advanced chart's own fullscreen mode
   const [chartResetSignal, setChartResetSignal] = useState(0); // Bumped to snap the chart's pan/zoom back to default
   const [buyDrawerOpen, setBuyDrawerOpen] = useState(false);
   // While the open-swipe is in progress: { mode, progress } with progress 0..1.
@@ -354,15 +357,28 @@ const CoinCard = memo(({
     if (!trades.length) return null;
     return trades
       .slice(-80)
-      .filter((t) => t.priceUsd > 0)
+      .filter((t) => Number(t.time) > 0 && t.walletAddress)
       .map((t) => ({
-        time: Math.floor(t.time / 1000),
-        price: t.priceUsd,
+        time: Math.floor((t.time < 1e12 ? t.time * 1000 : t.time) / 1000),
+        price: Number(t.priceUsd) || 0,
         type: t.type,
         wallet: t.walletAddress,
         label: t.label,
+        solAmount: t.solAmount,
+        usdAmount: t.usdAmount,
+        signature: t.signature,
       }));
   }, [getTradesForMint, mintAddress]);
+
+  const handleTradeDotClick = React.useCallback((trade) => {
+    handleWalletClick(trade?.wallet, {
+      type: trade?.type,
+      solAmount: trade?.solAmount,
+      usdAmount: trade?.usdAmount,
+      timestamp: Number(trade?.time) > 0 ? Number(trade.time) * 1000 : null,
+      signature: trade?.signature,
+    });
+  }, [handleWalletClick]);
 
   // The viewer's own average buy-in price for this coin (USD), drawn on the chart.
   const [entryPrice, setEntryPrice] = useState(null);
@@ -371,38 +387,13 @@ const CoinCard = memo(({
     let cancelled = false;
 
     const compute = async () => {
-      const buys = getTransactions(walletAddress).filter(
-        (tx) => tx.tokenMint === mintAddress && tx.type === 'buy' && Number(tx.outputAmount) > 0
-      );
-      if (!buys.length) { if (!cancelled) setEntryPrice(null); return; }
+      const transactions = getTransactions(walletAddress);
+      const relevant = transactions.filter((tx) => tx.tokenMint === mintAddress);
+      if (!relevant.length) { if (!cancelled) setEntryPrice(null); return; }
       // Older records only stored the SOL price; convert them with the current rate.
-      const solUsd = buys.some((tx) => !(Number(tx.pricePerTokenUsd) > 0)) ? await getSolUsdPrice() : 0;
-      let tokens = 0;
-      let cost = 0;
-      for (const tx of buys) {
-        let usd = Number(tx.pricePerTokenUsd);
-        if (!(usd > 0) && Number(tx.pricePerToken) > 0) {
-          usd = Number(tx.pricePerToken) * (solUsd || 200);
-        }
-        let outTok = Number(tx.outputAmount);
-        let inSol = Number(tx.inputAmount);
-        if (inSol > 1e4) inSol = inSol / 1e9; // handle raw lamports if unscaled
-        if (inSol > 0 && outTok > 0) {
-          const calcUsd = (inSol / outTok) * (solUsd || 200);
-          // If stored usd is a crazy outlier (> 10x or < 0.1x calcUsd), use calcUsd
-          if (!(usd > 0) || (calcUsd > 0 && (usd > calcUsd * 10 || usd < calcUsd / 10))) {
-            usd = calcUsd;
-          }
-        }
-        if (!(usd > 0)) continue;
-        // Ignore corrupt entry price if it's > 50x away from current displayPrice
-        if (displayPrice > 0 && (usd > displayPrice * 50 || usd < displayPrice / 50)) {
-          continue;
-        }
-        tokens += outTok > 0 ? outTok : 1;
-        cost += (outTok > 0 ? outTok : 1) * usd;
-      }
-      if (!cancelled) setEntryPrice(tokens > 0 ? cost / tokens : null);
+      const solUsd = relevant.some((tx) => !(Number(tx.pricePerTokenUsd) > 0)) ? await getSolUsdPrice() : 0;
+      const position = calculateOpenPosition(transactions, mintAddress, solUsd);
+      if (!cancelled) setEntryPrice(position.averagePriceUsd > 0 ? position.averagePriceUsd : null);
     };
 
     compute();
@@ -424,13 +415,15 @@ const CoinCard = memo(({
     }
   }, [isEnriched, enrichmentCompleted, coin.symbol]);
 
-  // Reset banner/profile error state when the coin changes
+  // Retry artwork when enrichment supplies new URLs for the same coin.
   const coinAddress = coin.mintAddress || coin.address;
+  const bannerSource = coin.banner || coin.bannerImage || coin.header || coin.bannerUrl || '';
+  const profileSourcesKey = [coin.profileImage, coin.image, coin.logo, coin.icon].filter(Boolean).join('|');
   useEffect(() => {
-    setBannerError(false);
+    setBannerSrcIndex(0);
     setProfileSrcIndex(0);
     setProfileLoaded(false);
-  }, [coinAddress]);
+  }, [coinAddress, bannerSource, profileSourcesKey]);
 
   // Close any open stat tooltip / graduation info when this card is no longer the
   // active card in view. On touch there's no mouseLeave, so tapping a stat would
@@ -895,6 +888,12 @@ const CoinCard = memo(({
 
   const openNativeChartFullscreen = (e) => {
     e?.stopPropagation();
+    // Advanced (GeckoTerminal) chart has its own built-in fullscreen mode —
+    // bump its request signal instead of opening the native-chart overlay.
+    if (useAdvancedGeckoChart) {
+      setAdvancedChartFullscreenSignal((n) => n + 1);
+      return;
+    }
     setNativeChartFullscreen(true);
     onChartFullscreenChange?.(true);
   };
@@ -948,7 +947,7 @@ const CoinCard = memo(({
   const handleBuyTouchStart = (e) => {
     const touch = e.touches?.[0];
     if (!touch) return;
-    if (e.target?.closest?.('.coin-info-popup')) {
+    if (e.target?.closest?.('.coin-info-popup, .header-metrics-row')) {
       buySwipeRef.current = { tracking: false, mode: null, progress: 0 };
       return;
     }
@@ -2335,11 +2334,12 @@ const CoinCard = memo(({
           // 🐮 Hardcoded banner for $MOO token
           const MOO_ADDRESS = 'FeqAiLPejhkTJ2nEiCCL7JdtJkZdPNTYSm8vAjrZmoon';
           const isMooToken = coin.mintAddress === MOO_ADDRESS || coin.address === MOO_ADDRESS;
-          const bannerUrl = isMooToken 
-            ? '/assets/moonfeed banner.png' 
-            : (coin.banner || coin.bannerImage || coin.header || coin.bannerUrl);
+          const bannerUrls = getArtworkCandidates(isMooToken
+            ? '/assets/moonfeed banner.png'
+            : (coin.banner || coin.bannerImage || coin.header || coin.bannerUrl));
+          const bannerUrl = bannerUrls[bannerSrcIndex] || null;
           
-          return (bannerUrl && !bannerError) ? (
+          return bannerUrl ? (
             <img 
               src={bannerUrl}
               alt={coin.name || 'Token banner'}
@@ -2348,7 +2348,7 @@ const CoinCard = memo(({
               decoding="async"
               onError={() => { 
                 debug.log(`Banner image failed to load for ${coin.symbol}:`, bannerUrl);
-                setBannerError(true);
+                setBannerSrcIndex((index) => index + 1);
               }}
               onLoad={() => {
                 debug.log(`✅ Banner loaded successfully for ${coin.symbol}${isMooToken ? ' (custom $MOO banner)' : ''}`);
@@ -2496,7 +2496,7 @@ const CoinCard = memo(({
           <div className="header-top-row">
             <div className="header-left">
               {(() => {
-                const profileSrcs = [...new Set([coin.profileImage, coin.image, coin.logo, coin.icon].filter(Boolean))];
+                const profileSrcs = getArtworkCandidates(coin.profileImage, coin.image, coin.logo, coin.icon);
                 const profileSrc = profileSrcs[profileSrcIndex] || null;
                 return (
                   <div className="info-layer-token-stack">
@@ -3863,7 +3863,7 @@ const CoinCard = memo(({
            is already on document.body at z-index 60-70; putting buttons there at
            z-index 9999 guarantees they always paint on top.
            On desktop: rendered in-place (no chart z-index conflict). */}
-      {!buyDrawerOpen && !useAdvancedGeckoChart && (function() {
+      {!buyDrawerOpen && (function() {
         // Keep the buttons portaled while the card is expanded, even if the
         // scroller's "active card" tracking briefly flips (e.g. triggered by
         // scrollIntoView when opening the Top Traders/Transactions panels).
@@ -4115,7 +4115,7 @@ const CoinCard = memo(({
           </span>
         </div>
       )}
-      {USE_NATIVE_CHART && _mobilePortal && nativeChartFullscreen && (
+      {USE_NATIVE_CHART && _mobilePortal && nativeChartFullscreen && !useAdvancedGeckoChart && (
         <div className="native-chart-fullscreen" onClick={closeNativeChartFullscreen}>
           <div className="native-chart-fullscreen-panel" onClick={(e) => e.stopPropagation()}>
             <button
@@ -4132,7 +4132,7 @@ const CoinCard = memo(({
               <span>{coin.symbol || coin.name || 'Chart'}</span>
               <button onClick={closeNativeChartFullscreen} aria-label="Close full chart">×</button>
             </div>
-            <NativeChart coin={coin} isActive={true} isExpanded={true} livePrice={displayPrice} entryPrice={entryPrice} trackedPrice={effectiveTrackedPrice} trackedTime={effectiveTrackedTime} focusTrackedSignal={focusTrackedSignal} tradeDots={tradeDots} resetViewSignal={chartResetSignal} orderLinePrice={coin.activeOrder?.triggerPriceUsd} orderLineLabel={coin.activeOrder?.side === 'buy' ? 'Buy target' : 'Sell target'} />
+            <NativeChart coin={coin} isActive={true} isExpanded={true} livePrice={displayPrice} entryPrice={entryPrice} trackedPrice={effectiveTrackedPrice} trackedTime={effectiveTrackedTime} focusTrackedSignal={focusTrackedSignal} tradeDots={tradeDots} onTradeDotClick={handleTradeDotClick} resetViewSignal={chartResetSignal} orderLinePrice={coin.activeOrder?.triggerPriceUsd} orderLineLabel={coin.activeOrder?.side === 'buy' ? 'Buy target' : 'Sell target'} />
           </div>
         </div>
       )}
@@ -4181,6 +4181,7 @@ const CoinCard = memo(({
               orderLineLabel={coin.activeOrder?.side === 'buy' ? 'Buy target' : 'Sell target'}
               focusTrackedSignal={focusTrackedSignal}
               tradeDots={tradeDots}
+              onTradeDotClick={handleTradeDotClick}
               resetViewSignal={chartResetSignal}
               onToggleAdvancedChart={() => setUseAdvancedGeckoChart(true)}
             />,
@@ -4214,6 +4215,7 @@ const CoinCard = memo(({
           onOpenBuyDrawer={openBuyDrawer}
           showMobileControls={false}
           onBackToNativeChart={USE_NATIVE_CHART && useAdvancedGeckoChart ? () => setUseAdvancedGeckoChart(false) : null}
+          fullscreenRequestSignal={advancedChartFullscreenSignal}
         />,
         mobileChartTargetRef.current
         );

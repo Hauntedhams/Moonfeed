@@ -3,7 +3,7 @@ import { useWallet as useJupiterWallet } from '@jup-ag/wallet-adapter';
 import { UnifiedWalletButton } from '@jup-ag/wallet-adapter';
 import WalletConnectOnboarding from './WalletConnectOnboarding';
 import { getFullApiUrl } from '../config/api';
-import { getTransactions, deleteTransaction, storeTransaction, clearTransactions } from '../utils/transactionStorage';
+import { calculateOpenPosition, getTransactions, deleteTransaction, storeTransaction, clearTransactions } from '../utils/transactionStorage';
 import { useDemoMode } from '../contexts/DemoModeContext';
 import { computeFillStats, getSolUsdPrice } from '../utils/orderFillTracking';
 import { fetchTriggerOrdersV2, cancelTriggerOrderV2, ensureTriggerAuth } from '../utils/triggerOrdersV2';
@@ -15,7 +15,7 @@ import './OrdersView.css';
 // Per-wallet holdings cache (stale-while-revalidate) so the Holdings tab
 // renders instantly on revisit instead of showing a spinner every time.
 // localStorage (not sessionStorage) so it also survives app cold starts.
-const HOLDINGS_CACHE_PREFIX = 'ordersView.holdings.v3.';
+const HOLDINGS_CACHE_PREFIX = 'ordersView.holdings.v4.';
 const HOLDINGS_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const readHoldingsCache = (walletAddress) => {
   try {
@@ -100,11 +100,6 @@ const loadTokenAccounts = async (owner) => {
     controller.abort();
   }
 };
-
-// Per-session record of automatic V2 sign-in attempts. A connected wallet is
-// asked to sign at most once per session — the manual banner is only a
-// fallback if the user rejects that signature.
-const autoV2AuthAttempted = new Set();
 
 const OrdersView = ({ onCoinClick, onTradeClick }) => {
   // Use Jupiter Wallet Kit adapter for universal wallet connection
@@ -237,7 +232,9 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
     const setupOrders = async () => {
       if (connected && publicKey) {
         if (statusFilter === 'holdings') {
-          fetchHoldings();
+          await fetchHoldings();
+          await fetchTransactions();
+          await fetchHoldings(true);
         } else {
           fetchOrders();
           fetchTransactions();
@@ -254,6 +251,25 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
     };
     
     setupOrders();
+  }, [connected, publicKey, statusFilter]);
+
+  useEffect(() => {
+    if (!connected || !publicKey || statusFilter !== 'holdings') return undefined;
+    const refresh = async () => {
+      await fetchTransactions();
+      await fetchHoldings(true);
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') refresh();
+    };
+    window.addEventListener('focus', refresh);
+    window.addEventListener('moonfeed:swap-success', refresh);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.removeEventListener('focus', refresh);
+      window.removeEventListener('moonfeed:swap-success', refresh);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
   }, [connected, publicKey, statusFilter]);
 
   // Fetch transactions from localStorage AND blockchain (Helius API)
@@ -423,52 +439,18 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
       const mintsMap = new Map(); // mint -> { mint, amount, decimals, symbol, name, image }
 
       // 1. Fetch on-chain balances (batched JSON-RPC, hedged across endpoints)
-      try {
-        const accounts = await loadTokenAccounts(walletAddress);
-        for (const item of accounts) {
-          const info = item.account?.data?.parsed?.info;
-          const amount = Number(info?.tokenAmount?.uiAmount) || 0;
-          const mint = info?.mint;
-          if (amount > 0 && mint) {
-            mintsMap.set(mint, {
-              mint,
-              amount,
-              decimals: info?.tokenAmount?.decimals || 6
-            });
-          }
-        }
-      } catch (rpcErr) {
-        console.warn('Holdings RPC failed on all endpoints:', rpcErr?.message || rpcErr);
-      }
-
-      // 2. Incorporate stored transactions to fill any tokens bought in-app
-      if (storedTxs && storedTxs.length > 0) {
-        const txByMint = {};
-        for (const tx of storedTxs) {
-          if (!tx.tokenMint) continue;
-          if (!txByMint[tx.tokenMint]) txByMint[tx.tokenMint] = { bought: 0, sold: 0, sampleTx: tx };
-          const qty = Number(tx.outputAmount) || 0;
-          if (!tx.type || tx.type === 'buy') {
-            txByMint[tx.tokenMint].bought += qty;
-          } else if (tx.type === 'sell') {
-            txByMint[tx.tokenMint].sold += Number(tx.inputAmount) || qty;
-          }
-        }
-
-        for (const [mint, stats] of Object.entries(txByMint)) {
-          if (!mintsMap.has(mint)) {
-            const netAmount = Math.max(0, stats.bought - stats.sold);
-            if (netAmount > 0) {
-              mintsMap.set(mint, {
-                mint,
-                amount: netAmount,
-                decimals: 6,
-                symbol: stats.sampleTx.tokenSymbol,
-                name: stats.sampleTx.tokenName,
-                image: stats.sampleTx.tokenImage
-              });
-            }
-          }
+      const accounts = await loadTokenAccounts(walletAddress);
+      for (const item of accounts) {
+        const info = item.account?.data?.parsed?.info;
+        const amount = Number(info?.tokenAmount?.uiAmountString ?? info?.tokenAmount?.uiAmount) || 0;
+        const mint = info?.mint;
+        if (amount > 0 && mint) {
+          const existing = mintsMap.get(mint);
+          mintsMap.set(mint, {
+            mint,
+            amount: (existing?.amount || 0) + amount,
+            decimals: info?.tokenAmount?.decimals ?? existing?.decimals ?? 6
+          });
         }
       }
 
@@ -484,10 +466,23 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
       // 3. Fetch Dexscreener market data for current USD prices & token names/images
       const mintAddrs = mintsToFetch.map(m => m.mint).slice(0, 30).join(',');
       const cachedByMint = new Map((cachedHoldings || []).map(h => [h.mint, h]));
+      const deepestPairByMint = (pairs) => {
+        const result = new Map();
+        for (const pair of pairs) {
+          const mint = pair.baseToken?.address;
+          if (!mint || !mintsMap.has(mint)) continue;
+          const current = result.get(mint);
+          const liquidity = Number(pair.liquidity?.usd) || 0;
+          if (!current || liquidity > (Number(current.liquidity?.usd) || 0)) result.set(mint, pair);
+        }
+        return result;
+      };
 
-      const buildList = (dexPairs) => mintsToFetch.map(item => {
+      const buildList = (dexPairs) => {
+        const pairByMint = deepestPairByMint(dexPairs);
+        return mintsToFetch.map(item => {
         const cached = cachedByMint.get(item.mint);
-        const pair = dexPairs.find(p => p.baseToken?.address === item.mint);
+        const pair = pairByMint.get(item.mint);
         const buys = storedTxs.filter(tx => tx.tokenMint === item.mint && (!tx.type || tx.type === 'buy'));
         const latestTx = buys[buys.length - 1] || storedTxs.find(tx => tx.tokenMint === item.mint);
 
@@ -496,28 +491,10 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
         const image = pair?.info?.imageUrl || pair?.baseToken?.image || item.image || latestTx?.tokenImage || cached?.image || null;
         const priceUsd = parseFloat(pair?.priceUsd || latestTx?.pricePerTokenUsd || cached?.priceUsd || 0);
 
-        // Find cost basis from local transaction history
-        let costBasisUsd = 0;
-        let totalCostUsd = 0;
-        let totalCostSol = 0;
-        if (buys.length > 0) {
-          let totalQty = 0;
-          buys.forEach(b => {
-            const qty = Number(b.outputAmount) || 0;
-            const price = Number(b.pricePerTokenUsd) || (Number(b.pricePerToken) * solUsdPrice) || 0;
-            if (Number(b.inputAmount) > 0) {
-              totalCostSol += Number(b.inputAmount);
-            }
-            if (qty > 0 && price > 0) totalQty += qty;
-          });
-          // Buy input is the authoritative amount spent. Deriving total cost
-          // from token quantity and a stored unit price can be wrong when an
-          // older transaction used the wrong token decimals.
-          totalCostUsd = totalCostSol * solUsdPrice;
-          if (totalQty > 0) costBasisUsd = totalCostUsd / totalQty;
-        }
-
-        const effectiveTotalBoughtUsd = totalCostUsd > 0 ? totalCostUsd : (costBasisUsd > 0 ? item.amount * costBasisUsd : 0);
+        const position = calculateOpenPosition(storedTxs, item.mint, solUsdPrice);
+        const costBasisUsd = position.averagePriceUsd;
+        const effectiveTotalBoughtUsd = costBasisUsd > 0 ? item.amount * costBasisUsd : 0;
+        const totalCostSol = position.averageCostSol > 0 ? item.amount * position.averageCostSol : 0;
         const currentValueUsd = item.amount * priceUsd;
         const pnlUsd = effectiveTotalBoughtUsd > 0 ? currentValueUsd - effectiveTotalBoughtUsd : null;
         const pnlPct = effectiveTotalBoughtUsd > 0 ? ((currentValueUsd - effectiveTotalBoughtUsd) / effectiveTotalBoughtUsd) * 100 : null;
@@ -538,7 +515,8 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
           pnlUsd,
           pnlPct,
         };
-      });
+        });
+      };
 
       const sortByValue = (rows) => rows.sort((a, b) => (b.currentValueUsd || 0) - (a.currentValueUsd || 0));
 
@@ -565,43 +543,10 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
       writeHoldingsCache(walletAddress, list);
     } catch (err) {
       console.error('Error fetching holdings:', err);
-      // Fallback: If stored transactions exist, present them rather than displaying error
-      try {
-        const walletAddress = publicKey?.toString?.();
-        const storedTxs = walletAddress ? getTransactions(walletAddress) : [];
-        if (storedTxs.length > 0) {
-          const buys = storedTxs.filter(t => !t.type || t.type === 'buy');
-          const fallbackList = [];
-          const seen = new Set();
-          for (const b of buys) {
-            if (!b.tokenMint || seen.has(b.tokenMint)) continue;
-            seen.add(b.tokenMint);
-            const price = Number(b.pricePerTokenUsd) || (Number(b.pricePerToken) * solUsdPrice) || 0;
-            const qty = Number(b.outputAmount) || 0;
-            fallbackList.push({
-              mint: b.tokenMint,
-              amount: qty,
-              symbol: b.tokenSymbol || b.tokenMint.slice(0, 6),
-              name: b.tokenName || b.tokenSymbol || 'Token',
-              image: b.tokenImage || null,
-              priceUsd: price,
-              costBasisUsd: price,
-              totalBoughtUsd: qty * price,
-              currentValueUsd: qty * price,
-              pnlUsd: 0,
-              pnlPct: 0,
-            });
-          }
-          if (fallbackList.length > 0) {
-            setHoldings(fallbackList);
-            return;
-          }
-        }
-      } catch (_) {}
-      // If cached holdings are already on screen, keep them instead of an error
-      if (!hasCached) {
-        setHoldingsError('Could not load on-chain holdings');
-      }
+      // Never turn local trade history into holdings. If chain balances cannot
+      // be verified, hide stale rows rather than showing coins already sold.
+      setHoldings([]);
+      setHoldingsError('Could not verify on-chain holdings. Tap Retry.');
     } finally {
       holdingsFetchRef.current = { inFlight: false, lastAt: Date.now(), wallet: walletAddress };
       setLoadingHoldings(false);
@@ -706,9 +651,8 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
         return list;
       })();
 
-      // V2 orders: try silently with the cached JWT first. If there isn't one
-      // and the wallet is connected, sign in automatically (once per session)
-      // instead of making the user tap a "Sign in" banner.
+      // V2 orders are private to Jupiter. Read them silently when a valid JWT
+      // is cached, but never open the wallet merely because a tab was selected.
       const v2Promise = (async () => {
         if (isDemoMode) return [];
         const v2Args = {
@@ -717,24 +661,10 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
           signTransaction: jupiterWallet.signTransaction || null,
           state: statusFilter === 'active' ? 'active' : 'past',
         };
-        let list = await fetchTriggerOrdersV2({ ...v2Args, interactive: false });
+        const list = await fetchTriggerOrdersV2({ ...v2Args, interactive: false });
         if (list !== null) {
           setNeedsV2Auth(false);
           return list;
-        }
-        // No cached JWT — auto sign-in once per session/wallet.
-        const canSign = jupiterWallet.signMessage || jupiterWallet.signTransaction;
-        if (canSign && !autoV2AuthAttempted.has(walletAddress)) {
-          autoV2AuthAttempted.add(walletAddress);
-          try {
-            list = await fetchTriggerOrdersV2({ ...v2Args, interactive: true });
-            if (list !== null) {
-              setNeedsV2Auth(false);
-              return list;
-            }
-          } catch (autoAuthErr) {
-            console.warn('[Orders] Auto V2 sign-in failed:', autoAuthErr?.message);
-          }
         }
         setNeedsV2Auth(true);
         return [];
@@ -792,8 +722,6 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
     setUnlockingV2(true);
     try {
       const walletAddress = publicKey.toString();
-      // Reset the per-session guard so the auto sign-in can run again too.
-      autoV2AuthAttempted.delete(walletAddress);
       await ensureTriggerAuth({
         walletAddress,
         signMessage: jupiterWallet.signMessage || null,
@@ -1174,7 +1102,7 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
 
           {statusFilter !== 'holdings' && needsV2Auth && !isDemoMode && connected && (
             <div className="orders-v2-unlock">
-              <span>Sign in with your wallet to load your limit orders</span>
+              <span>Unlock legacy private Jupiter order history</span>
               <button onClick={handleUnlockV2Orders} disabled={unlockingV2}>
                 {unlockingV2 ? 'Waiting for wallet…' : 'Sign in'}
               </button>
@@ -1278,12 +1206,12 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
                         <div className="holding-value-usd">{formatUsd(item.currentValueUsd)}</div>
                         {item.totalBoughtUsd > 0 ? (
                           <div className="holding-bought-highlight">
-                            <span className="holding-bought-label">Bought:</span>
+                            <span className="holding-bought-label">Cost:</span>
                             <span className="holding-bought-val">{formatUsd(item.totalBoughtUsd)}</span>
                           </div>
                         ) : item.costBasisUsd > 0 ? (
                           <div className="holding-bought-highlight">
-                            <span className="holding-bought-label">Bought at:</span>
+                            <span className="holding-bought-label">Avg. entry:</span>
                             <span className="holding-bought-val">{formatUsd(item.costBasisUsd)}</span>
                           </div>
                         ) : null}

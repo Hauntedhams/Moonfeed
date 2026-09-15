@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { API_CONFIG } from '../config/api';
+import { getArtworkCandidates, getBannerImage, getProfileImage } from '../utils/coinArtwork';
 import './FeedSelector.css';
 
 // Feed definitions (kept in sync with the old TopTabs base tabs).
 // 'trending' is no longer a separate selectable feed — its coins are folded
 // into the tail of 'dextrending' (see CONTINUOUS_FEED_ORDER below).
 export const BASE_FEEDS = [
+  { id: 'mixed', label: 'Mixed', detail: 'Blend of Trending + Whale + Graduating', icon: 'shuffle' },
   { id: 'dextrending', label: 'Trending', detail: 'Hot pools + momentum leaders', icon: 'trending-up' },
   { id: 'whalefeed', label: 'Whale', detail: 'Large, liquid multi-source picks', icon: 'whale' },
   { id: 'graduating', label: 'Graduating', detail: 'Pump.fun bonding-curve launches', icon: 'graduation-cap' },
@@ -24,6 +26,11 @@ const CUSTOM_FEED = { id: 'custom', label: 'Custom', detail: 'Your saved market 
 
 // Per-feed explainer shown in the expandable info drawer.
 const FEED_INFO = {
+  mixed: {
+    purpose: 'A blended feed combining coins from Trending, Whale and Graduating — the fastest way to sample everything at once.',
+    sources: 'Whichever of Trending, Whale and Graduating you\u2019ve already loaded this session (fetched fresh the first time you open Mixed).',
+    reason: 'Coins are interleaved from all three feeds and deduped by mint, so no single feed dominates the scroll.'
+  },
   dextrending: {
     purpose: 'Hot Solana coins selected from a broader multi-source pool, with new and rising DEX activity prioritized. Once you scroll past the hottest pools it keeps going straight into the broader momentum leaders — no need to switch feeds.',
     sources: 'Dexscreener (boosted, latest, profiles and keyword searches) plus CoinGecko Onchain trending and new Solana pools, followed by Solana Tracker momentum leaders.',
@@ -116,6 +123,15 @@ const renderIcon = (iconName) => {
           <path d="M3 4.5H21V6H3V4.5ZM6 10.5H18V12H6V10.5ZM9 16.5H15V18H9V16.5Z" fill="currentColor" />
         </svg>
       );
+    case 'shuffle':
+      return (
+        <svg {...iconProps}>
+          <path d="m18 14 4 4-4 4" />
+          <path d="m18 2 4 4-4 4" />
+          <path d="M2 18h1.973a4 4 0 0 0 3.3-1.74l6.454-9.52a4 4 0 0 1 3.3-1.74H22" />
+          <path d="M2 6h1.973a4 4 0 0 1 3.3 1.74l6.454 9.52a4 4 0 0 0 3.3 1.74H22" />
+        </svg>
+      );
     default:
       return null;
   }
@@ -139,12 +155,15 @@ const formatPrice = (price) => {
 // Avatar that falls back to an egg when a token has no (or a broken) image.
 // Self-contained error state avoids the flashing caused by onError src swaps.
 function TokenAvatar({ src, alt }) {
-  const [errored, setErrored] = useState(false);
-  const showImg = src && !errored;
+  const candidates = getArtworkCandidates(src);
+  const candidatesKey = candidates.join('|');
+  const [sourceIndex, setSourceIndex] = useState(0);
+  useEffect(() => setSourceIndex(0), [candidatesKey]);
+  const imageSrc = candidates[sourceIndex] || null;
   return (
     <div className="feed-selector-result-img">
-      {showImg ? (
-        <img src={src} alt={alt} loading="lazy" onError={() => setErrored(true)} />
+      {imageSrc ? (
+        <img src={imageSrc} alt={alt} loading="lazy" onError={() => setSourceIndex((index) => index + 1)} />
       ) : (
         <span className="feed-selector-result-egg" role="img" aria-label="no image">🥚</span>
       )}
@@ -231,6 +250,7 @@ function FeedSelector({
   useEffect(() => {
     if (!open || !browseFeed) return undefined;
     const endpointByFeed = {
+      mixed: '/api/coins/dextrending',
       dextrending: '/api/coins/dextrending',
       whalefeed: '/api/coins/whalefeed',
       graduating: '/api/coins/graduating',
@@ -258,24 +278,36 @@ function FeedSelector({
 
     // 'dextrending' is a combined feed (see CONTINUOUS_FEED_ORDER) — preview
     // its trending tail too, so this list matches what scrolling the real
-    // feed does once the dextrending coins run out.
+    // feed does once the dextrending coins run out. 'mixed' previews all
+    // three of its blended source feeds.
     const requests = [fetchList(`${API_ROOT}${endpoint}?limit=40&offset=0`)];
     if (browseFeed === 'dextrending') {
       requests.push(fetchList(`${API_ROOT}/api/coins/trending?limit=40&offset=0`));
+    } else if (browseFeed === 'mixed') {
+      requests.push(fetchList(`${API_ROOT}/api/coins/whalefeed?limit=40&offset=0`));
+      requests.push(fetchList(`${API_ROOT}/api/coins/graduating?limit=40&offset=0`));
     }
 
     Promise.all(requests)
-      .then(([primary, secondary]) => {
+      .then(([primary, ...rest]) => {
         if (cancelled) return;
         const primaryCoins = Array.isArray(primary.coins) ? primary.coins : [];
-        const secondaryCoins = Array.isArray(secondary?.coins) ? secondary.coins : [];
         const seenMints = new Set(primaryCoins.map(mintOf).filter(Boolean));
-        const uniqueSecondary = secondaryCoins.filter((c) => {
-          const key = mintOf(c);
-          return !key || !seenMints.has(key);
-        });
-        setPreviewCoins([...primaryCoins, ...uniqueSecondary]);
-        setPreviewTotal(totalOf(primary, primaryCoins) + (secondary ? totalOf(secondary, secondaryCoins) : 0));
+        let combined = [...primaryCoins];
+        let total = totalOf(primary, primaryCoins);
+        for (const extra of rest) {
+          const extraCoins = Array.isArray(extra?.coins) ? extra.coins : [];
+          const uniqueExtra = extraCoins.filter((c) => {
+            const key = mintOf(c);
+            if (key && seenMints.has(key)) return false;
+            if (key) seenMints.add(key);
+            return true;
+          });
+          combined = combined.concat(uniqueExtra);
+          if (extra) total += totalOf(extra, extraCoins);
+        }
+        setPreviewCoins(combined);
+        setPreviewTotal(total);
       })
       .catch(() => {
         if (!cancelled) setPreviewError('Could not load this feed right now.');
@@ -317,6 +349,8 @@ function FeedSelector({
   };
 
   const handleResultClick = async (tokenData) => {
+    const profileImage = getProfileImage(tokenData);
+    const banner = getBannerImage(tokenData);
     const coinData = {
       ...tokenData,
       id: tokenData.mintAddress || tokenData.mint || tokenData.id,
@@ -324,7 +358,9 @@ function FeedSelector({
       mintAddress: tokenData.mintAddress || tokenData.mint,
       symbol: tokenData.symbol,
       name: tokenData.name,
-      image: tokenData.image || tokenData.profilePic,
+      image: profileImage,
+      profileImage,
+      ...(banner ? { banner } : {}),
       priceUsd: tokenData.priceUsd || tokenData.price,
       marketCap: tokenData.marketCap,
       description: tokenData.description
@@ -515,7 +551,7 @@ function FeedSelector({
                   onClick={() => handleResultClick(token)}
                 >
                   <TokenAvatar
-                    src={token.image || token.logo || null}
+                    src={getProfileImage(token)}
                     alt={token.name || token.symbol}
                   />
                   <div className="feed-selector-result-info">
@@ -546,8 +582,7 @@ function FeedSelector({
                 </div>
                 {previewCoins.map((coin, index) => {
                   const change = Number(coin.price_change_24h || coin.change_24h || coin.priceChange24h) || 0;
-                  const art = coin.banner || coin.bannerImage || coin.header || coin.headerImage
-                    || coin.image || coin.logo || coin.profileImage || null;
+                  const art = getBannerImage(coin) || getProfileImage(coin);
                   return (
                     <button
                       key={coin.mintAddress || coin.address || coin.id || index}
@@ -556,7 +591,7 @@ function FeedSelector({
                     >
                       {art && <img src={art} alt="" className="feed-selector-coin-bg" loading="lazy" />}
                       <span className="feed-selector-coin-bg-overlay" />
-                      <TokenAvatar src={coin.image || coin.logo || coin.profileImage} alt={coin.symbol || coin.name} />
+                      <TokenAvatar src={getProfileImage(coin)} alt={coin.symbol || coin.name} />
                       <span className="feed-selector-coin-meta">
                         <span className="feed-selector-coin-title">
                           <strong>{coin.symbol || coin.name || 'Unknown'}</strong>

@@ -55,7 +55,7 @@ const favoritesCacheKey = (address) => `moonfeed_tracked_coins_${address}`;
 const LAST_FEED_KEY = 'moonfeed_last_feed';
 const FEED_POS_KEY = 'moonfeed_feed_pos';
 const FEED_LABELS = Object.fromEntries(BASE_FEEDS.map((feed) => [feed.id, feed.label]));
-const KNOWN_FEEDS = ['dextrending', 'whalefeed', 'graduating', 'trenches', 'new'];
+const KNOWN_FEEDS = ['mixed', 'dextrending', 'whalefeed', 'graduating', 'trenches', 'new'];
 const getInitialFilters = () => {
   try {
     const saved = localStorage.getItem(LAST_FEED_KEY);

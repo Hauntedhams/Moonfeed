@@ -105,7 +105,13 @@ class OnDemandEnrichmentService {
     // Check GLOBAL cache first - prevents redundant enrichment across all feeds
     if (!skipCache) {
       const cached = this.cache.get(mintAddress);
-      if (cached) {
+      const cachedCoin = cached ? { ...coin, ...cached } : null;
+      const cachedHasProfile = !!(cachedCoin?.profileImage || cachedCoin?.image || cachedCoin?.logo || cachedCoin?.icon);
+      const cachedHasBanner = !!(cachedCoin?.banner || cachedCoin?.bannerImage || cachedCoin?.header || cachedCoin?.bannerUrl);
+      const cachedAt = Date.parse(cachedCoin?.enrichedAt || '');
+      const artworkRetryDue = (!cachedHasProfile || !cachedHasBanner)
+        && (!Number.isFinite(cachedAt) || Date.now() - cachedAt >= 60 * 1000);
+      if (cached && !artworkRetryDue) {
         console.log(`✅ [GLOBAL CACHE HIT] ${coin.symbol || mintAddress} - saved enrichment API calls`);
         this.stats.cacheHits++;
         
@@ -170,7 +176,9 @@ class OnDemandEnrichmentService {
           }
         }
         
-        return { ...coin, ...cached };
+        return cachedCoin;
+      } else if (cached) {
+        console.log(`🎨 [CACHE ARTWORK RETRY] ${coin.symbol || mintAddress} - cached profile=${cachedHasProfile}, banner=${cachedHasBanner}`);
       }
     }
 
@@ -274,10 +282,13 @@ class OnDemandEnrichmentService {
         enrichedData.holders = jupData.holderCount;
 
         // Use Jupiter icon as profile image if none set yet
-        if (jupData.icon && !enrichedData.profileImage) {
-          enrichedData.profileImage = jupData.icon;
-          enrichedData.image = enrichedData.image || jupData.icon;
-          enrichedData.logo = enrichedData.logo || jupData.icon;
+        if (jupData.icon) {
+          enrichedData.icon = jupData.icon;
+          if (!enrichedData.profileImage) {
+            enrichedData.profileImage = jupData.icon;
+            enrichedData.image = enrichedData.image || jupData.icon;
+            enrichedData.logo = enrichedData.logo || jupData.icon;
+          }
         }
 
         // Store supply info for market cap computation
@@ -635,6 +646,19 @@ class OnDemandEnrichmentService {
           const bestLiq = parseFloat(best.liquidity?.usd || '0');
           return currentLiq > bestLiq ? current : best;
         });
+        const header = data.pairs.find(pair => pair.info?.header)?.info.header;
+        const imageUrl = data.pairs.find(pair => pair.info?.imageUrl)?.info.imageUrl;
+        const websiteImageUrl = data.pairs.find(pair => pair.info?.websites?.some(site => site?.imageUrl))
+          ?.info.websites.find(site => site?.imageUrl)?.imageUrl;
+        const pairWithArtwork = {
+          ...bestPair,
+          info: {
+            ...bestPair.info,
+            ...(header ? { header } : {}),
+            ...(imageUrl ? { imageUrl } : {}),
+            ...(websiteImageUrl && !header ? { header: websiteImageUrl } : {})
+          }
+        };
         
         // 🐛 DEBUG: Log available fields to check for holder data
         console.log(`🔍 DexScreener data for ${mintAddress}:`, {
@@ -644,7 +668,7 @@ class OnDemandEnrichmentService {
           availableFields: Object.keys(bestPair).filter(k => k.toLowerCase().includes('hold'))
         });
         
-        return bestPair;
+        return pairWithArtwork;
       }
 
       return null;
@@ -888,8 +912,8 @@ class OnDemandEnrichmentService {
     const baseToken = pair.baseToken || {};
     const info = pair.info || {};
 
-    // Extract banner (priority: header > imageUrl > baseToken.image)
-    const banner = info.header || info.imageUrl || baseToken.image || null;
+    // Keep wide banner artwork separate from the square token profile image.
+    const banner = info.header || info.websites?.find(site => site?.imageUrl)?.imageUrl || null;
 
     // Extract socials
     const socials = {};
