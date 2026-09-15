@@ -1109,11 +1109,15 @@ pushMonitors.setTrenchesCoinGetter(async () => {
   }
 });
 
-// X-trends matcher scans every pool the server already maintains (deduped by mint).
+// X-trends matcher scans every pool the server already maintains (deduped by
+// mint) — INCLUDING Trenches/Graduating, since that's where the freshest
+// pump.fun launches (e.g. a viral meme-template wave of copycat coins) sit,
+// often before they're big enough to show up in dextrending/whalefeed.
 xTrendsService.setCoinPoolGetter(() => {
+  const graduatingService = require('./graduatingService');
   const seen = new Set();
   const pool = [];
-  for (const coin of [...dextrendingCoins, ...whalefeedCoins, ...currentCoins, ...newCoins]) {
+  for (const coin of [...dextrendingCoins, ...whalefeedCoins, ...currentCoins, ...newCoins, ...graduatingService.getCachedTokens()]) {
     const mint = coin?.mintAddress;
     if (!mint || seen.has(mint)) continue;
     seen.add(mint);
@@ -1121,6 +1125,16 @@ xTrendsService.setCoinPoolGetter(() => {
   }
   return pool;
 });
+
+// Keep the bonding-curve (Graduating/Trenches) cache warm independent of user
+// traffic so the X-Tracker pool above always has fresh brand-new launches to
+// match against, not just whatever a request happened to warm.
+setInterval(() => {
+  const graduatingService = require('./graduatingService');
+  graduatingService.getGraduatingTokens().catch((err) => {
+    console.warn('⚠️ Trenches/graduating pool warm-up failed:', err.message);
+  });
+}, 2 * 60 * 1000);
 
 // Top traders cache to prevent duplicate API calls
 const topTradersCache = new Map();

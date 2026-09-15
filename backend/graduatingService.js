@@ -169,6 +169,15 @@ function clearCache() {
   graduatingCache = { data: [], timestamp: null, ttl: 2 * 60 * 1000 };
 }
 
+// Synchronous, no-network accessor for callers (e.g. xTrendsService's coin
+// pool getter) that need whatever bonding-curve data is already warm right
+// now rather than triggering/awaiting a fresh fetch. Empty until something
+// else (a /api/coins/graduating|trenches request or the push monitor) has
+// warmed the cache at least once.
+function getCachedTokens() {
+  return graduatingCache.data;
+}
+
 function getCacheStatus() {
   const now = Date.now();
   const age = graduatingCache.timestamp ? now - graduatingCache.timestamp : null;
@@ -223,5 +232,6 @@ module.exports = {
   getTrenchesTokens,
   fetchGraduatingTokens,
   clearCache,
-  getCacheStatus
+  getCacheStatus,
+  getCachedTokens
 };

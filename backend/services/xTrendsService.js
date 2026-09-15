@@ -69,7 +69,7 @@ const EVENT_SCHEMA = `Return ONLY a JSON array (no markdown fences, no prose) of
     "category": "politics | celebrity | sports | tech | finance | culture | world | crypto",
     "momentum": 1-100 (how fast this is trending right now),
     "eventTime": "best estimate of when the underlying event happened, relative to now (e.g. '2 hours ago', 'yesterday', 'this morning') based on the posts you found",
-    "eventType": "coin_launch | coin_move | news | viral",
+    "eventType": "coin_launch | coin_move | coin_wave | news | viral",
     "sourceType": "official | reported | unknown",
     "sourceUrl": "direct X URL for the strongest source post, preferably the official account's post, or empty string",
     "keywords": ["5-10 single words or short names people/memes would name a coin after — names, nicknames, catchphrases, hashtag words"],
@@ -95,20 +95,49 @@ ${EVENT_SCHEMA}`;
 // crypto-Twitter drama) since they compete against much bigger world/politics
 // stories for the model's limited search budget. This pass searches ONLY
 // crypto/meme-coin Twitter specifically so those stories aren't missed.
-const GROK_CRYPTO_PROMPT = `You are a crypto-Twitter analyst. Search X (Twitter) for what is
-trending RIGHT NOW specifically in crypto / Solana meme-coin culture (last 24
-hours, high engagement): new pump.fun / Solana meme coin launches tied to a
-person, meme, or news event; celebrity or politically-linked coin drama;
-viral crypto-Twitter moments; big coin pumps/dumps driven by a real-world
-event; crypto CEO/founder/exchange/protocol posts people are reacting to; and
-fresh memes or ticker narratives spreading through crypto accounts. Prioritize
-specific stories that could create or move meme coins over broad market takes.
-Coins announced by the person or organization on their own official X account
-are highest priority; include that exact post as sourceUrl when you find one.
-Use AT MOST 4 X searches total (try queries like "pump.fun", "solana meme coin",
-"new coin launched", "crypto CEO", "Binance Coinbase Solana meme", a trending
-name + "coin"), then stop searching and answer. Skip generic market analysis —
-only report events tied to a SPECIFIC person/meme/news/crypto-industry moment.
+const GROK_CRYPTO_PROMPT = `You are a crypto-Twitter analyst tracking meme coins in
+real time. Search X (Twitter) for what is trending RIGHT NOW in crypto / Solana
+meme-coin culture — prioritize the LAST FEW HOURS over the last 24, since meme
+coin trends move and die within hours, not days. Do not just report an event
+because it's the biggest story of the last day — a smaller story from the last
+hour that is actively accelerating is more valuable here than a bigger one that
+already peaked.
+
+IMPORTANT — "trending" here does NOT mean real news. The single biggest driver
+of new Solana meme coins is a JOKE going viral: an absurd AI-generated mashup
+image/video (often posted by an explicitly-labeled "Parody account"), a meme
+format, or a funny catchphrase — with zero real-world news value — that racks
+up huge likes/retweets/views and immediately spawns dozens of copycat coins and
+reply-guy jokes. Weigh RAW ENGAGEMENT (like/retweet/view counts on the actual
+post) as the signal of what's "popping" — not whether it's a real, important,
+or verifiable event. A silly, fabricated mashup with big numbers is MORE
+valuable to report here than a slow-burn real story with modest engagement.
+
+Specifically look for, in priority order:
+1. VIRAL JOKE/MASHUP MOMENTS: an absurd AI-generated image or video mixing two
+   unrelated things (e.g. a celebrity blended with an animal, vehicle, or
+   object — "Wheel Smith", "Bike Tyson"-style mashups are the current pattern,
+   but the format itself will keep changing) that is currently racking up big
+   engagement, especially from parody/meme accounts. Report the JOKE/FORMAT
+   ITSELF as the topic even if it has no news value at all.
+2. MEME-TEMPLATE WAVES: that same joke/format spawning many copycat coins in a
+   short window (one viral mashup name inspires dozens of similarly-named
+   tickers within hours). Treat the WAVE as the trend (topic = the format/joke,
+   not any single coin), and list every actual coin name/ticker you find riding
+   it in "keywords".
+3. New pump.fun / Solana meme coin launches tied to a person, meme, or event.
+4. Celebrity/politically-linked coin drama, crypto CEO/founder/exchange posts
+   people are reacting to, and real-world events already visibly moving coin
+   prices.
+Coins announced by the person/organization on their own official X account are
+highest priority for sourceUrl, but for #1/#2 the highest-engagement post OF
+THE JOKE ITSELF (parody account or not) is exactly what you should cite.
+Use AT MOST 5 X searches total (try queries like "parody account" + a current
+buzzy word, "pump.fun new", a currently-trending mashup name/format + "coin",
+"new coin just launched", a viral meme phrase from the last few hours), then
+stop searching and answer. Skip generic market analysis and skip requiring
+"real" news — a fabricated joke that's clearly popping right now is exactly
+what this pass exists to catch.
 
 ${EVENT_SCHEMA}`;
 
@@ -171,16 +200,44 @@ async function runPass(prompt, label) {
   return { events: parseEventsJson(content), citations, liveSearchUsed: toolCalls > 0, costUsd: totalCostUsd };
 }
 
+function topicKey(event) {
+  return normalize(event.topic).split(' ').filter((w) => w.length > 3).slice(0, 3).join(' ');
+}
+
 function dedupeEvents(events) {
   const seen = new Set();
   const out = [];
   for (const event of events) {
-    const key = normalize(event.topic).split(' ').filter((w) => w.length > 3).slice(0, 3).join(' ');
+    const key = topicKey(event);
     if (key && seen.has(key)) continue;
     if (key) seen.add(key);
     out.push(event);
   }
   return out;
+}
+
+// When the SAME story keeps showing up across refreshes (still trending), it
+// should keep its original discovery time so a genuinely new story can still
+// jump ahead of it — this map is what makes "newest first" mean newest STORY,
+// not just whichever refresh happened to run most recently.
+const firstSeenMap = new Map(); // topicKey -> first Date.now() we saw it
+const FIRST_SEEN_MAX_AGE_MS = 48 * 60 * 60 * 1000; // prune so the map can't grow forever
+
+function stampFirstSeen(events) {
+  const now = Date.now();
+  for (const [key, seenAt] of firstSeenMap) {
+    if (now - seenAt > FIRST_SEEN_MAX_AGE_MS) firstSeenMap.delete(key);
+  }
+  for (const event of events) {
+    const key = topicKey(event);
+    if (key && firstSeenMap.has(key)) {
+      event.firstSeenAt = firstSeenMap.get(key);
+    } else {
+      event.firstSeenAt = now;
+      if (key) firstSeenMap.set(key, now);
+    }
+  }
+  return events;
 }
 
 function isCryptoSpaceEvent(event) {
@@ -196,6 +253,7 @@ function isCryptoSpaceEvent(event) {
   return event.category === 'crypto'
     || event.eventType === 'coin_launch'
     || event.eventType === 'coin_move'
+    || event.eventType === 'coin_wave'
     || /\b(crypto|solana|pumpfun|pump fun|pump\.fun|meme coin|memecoin|coinbase|binance|kraken|bybit|okx|jupiter|phantom|solflare|wallet|token|launch|ticker|cto|ceo|founder|vitalik|cz|brian armstrong|anatoly|mert)\b/.test(haystack);
 }
 
@@ -204,6 +262,7 @@ function trendPriority(event) {
   let boost = 0;
   if (event.category === 'crypto') boost += 24;
   if (event.eventType === 'coin_launch') boost += 18;
+  if (event.eventType === 'coin_wave') boost += 20;
   if (event.eventType === 'coin_move') boost += 14;
   if (event.sourceType === 'official') boost += 5;
   return momentum + boost;
@@ -227,12 +286,13 @@ function trendDisplayScore(trend) {
     + Math.min(10, coinCount * 2);
 }
 
+// Final display order: newest STORY first (so a story that just appeared
+// beats one that's merely still trending from an earlier refresh), breaking
+// ties within the same discovery moment by the usual momentum/coin-match score.
 function prioritizeMatchedTrends(trends) {
-  const sorted = [...trends].sort((a, b) => trendDisplayScore(b) - trendDisplayScore(a));
-  const cryptoHead = sorted.filter(isCryptoSpaceEvent).slice(0, MIN_CRYPTO_EVENTS_TOTAL);
-  const cryptoIds = new Set(cryptoHead.map((trend) => trend.id));
-  const rest = sorted.filter((trend) => !cryptoIds.has(trend.id));
-  return [...cryptoHead, ...rest].slice(0, MAX_EVENTS_TOTAL);
+  return [...trends]
+    .sort((a, b) => (b.firstSeenAt || 0) - (a.firstSeenAt || 0) || trendDisplayScore(b) - trendDisplayScore(a))
+    .slice(0, MAX_EVENTS_TOTAL);
 }
 
 async function fetchGrokTrends() {
@@ -278,7 +338,7 @@ function parseEventsJson(content) {
     category: String(e.category || 'culture').toLowerCase(),
     momentum: Math.max(1, Math.min(100, parseInt(e.momentum, 10) || 50)),
     eventTime: String(e.eventTime || '').slice(0, 40),
-    eventType: ['coin_launch', 'coin_move', 'news', 'viral'].includes(eventType) ? eventType : 'news',
+    eventType: ['coin_launch', 'coin_move', 'coin_wave', 'news', 'viral'].includes(eventType) ? eventType : 'news',
     sourceType: ['official', 'reported', 'unknown'].includes(sourceType) ? sourceType : 'unknown',
     sourceUrl: /^https:\/\/(?:www\.)?(?:x\.com|twitter\.com)\//i.test(String(e.sourceUrl || ''))
       ? String(e.sourceUrl).slice(0, 500)
@@ -439,6 +499,7 @@ async function refresh() {
   for (const event of events) {
     eventsWithCoins.push({ ...event, coins: await matchCoinsForEvent(event, pool) });
   }
+  stampFirstSeen(eventsWithCoins);
   const matchedTrends = prioritizeMatchedTrends(eventsWithCoins);
   const trends = xNewsAlertService.decorateTrends(matchedTrends, liveSearchUsed);
 
