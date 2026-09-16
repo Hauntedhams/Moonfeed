@@ -58,6 +58,15 @@
   .range button { background:#21262d; border:1px solid #30363d; padding:6px 12px; }
   .range button.on { background:#1f6feb; border-color:#1f6feb; }
   svg text { font-size:10px; fill:#8b949e; }
+  .bar-row.clickable { cursor:pointer; border-radius:6px; }
+  .bar-row.clickable:hover { background:#1c2128; }
+  .modal-backdrop { display:none; position:fixed; inset:0; background:rgba(1,4,9,.7); z-index:50; align-items:flex-start; justify-content:center; padding:40px 16px; overflow-y:auto; }
+  .modal-backdrop.open { display:flex; }
+  .modal { background:#161b22; border:1px solid #30363d; border-radius:12px; padding:18px; max-width:760px; width:100%; max-height:85vh; display:flex; flex-direction:column; }
+  .modal-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+  .modal-head h3 { font-size:15px; color:#c9d1d9; }
+  .modal-body { overflow-y:auto; }
+  .modal-close { background:#21262d; border:1px solid #30363d; width:28px; height:28px; border-radius:8px; line-height:1; padding:0; }
 </style>
 </head>
 <body>
@@ -121,6 +130,16 @@
   </div>
 </div>
 <div id="msg"></div>
+
+<div class="modal-backdrop" id="ddBackdrop">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="ddTitle">Details</h3>
+      <button class="modal-close" onclick="closeDrilldown()">✕</button>
+    </div>
+    <div class="modal-body" id="ddBody"></div>
+  </div>
+</div>
 
 <script>
 const API = window.location.origin.includes('localhost') ? 'http://localhost:3001' : window.location.origin;
@@ -309,16 +328,82 @@ function duration(ms) {
 }
 
 // Horizontal bars — readable with any number of categories, no chart library.
+// `dd` on a row (a drilldown query spec) makes that row clickable, opening the
+// modal with the underlying wallets/events behind that number.
 function bars(rows, { modifier = '', total = null } = {}) {
   if (!rows.length) return '<span class="muted">No data yet.</span>';
   const max = total || Math.max(...rows.map(r => r.value), 1);
   return rows.map(r => `
-    <div class="bar-row">
+    <div class="bar-row${r.dd ? ' clickable' : ''}" ${r.dd ? `data-dd="${esc(JSON.stringify(r.dd))}"` : ''}>
       <span class="bar-label" title="${esc(r.label)}">${esc(r.label)}</span>
       <span class="bar-track"><span class="bar-fill ${r.modifier || modifier}" style="width:${Math.max(1, (r.value / max) * 100)}%"></span></span>
       <span class="bar-val">${r.display != null ? esc(r.display) : num(r.value)}</span>
     </div>`).join('');
 }
+
+// ── Drilldown modal — shows the raw wallets/devices behind a bar row ──
+function timeAgo(iso) {
+  const s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+  if (s < 60) return `${s}s ago`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+}
+
+function closeDrilldown() { document.getElementById('ddBackdrop').classList.remove('open'); }
+
+async function openDrilldown(spec) {
+  const backdrop = document.getElementById('ddBackdrop');
+  const body = document.getElementById('ddBody');
+  document.getElementById('ddTitle').textContent = spec.label ? `${spec.label} — last ${analyticsDays}d` : 'Details';
+  body.innerHTML = '<span class="muted">Loading…</span>';
+  backdrop.classList.add('open');
+  try {
+    if (spec.mode === 'sessions') {
+      const params = new URLSearchParams({ days: analyticsDays, lastEventType: spec.lastEventType });
+      const d = await api(`/api/analytics/drilldown-sessions?${params}`);
+      body.innerHTML = !d.sessions.length ? '<span class="muted">No sessions in range.</span>' : `
+        <table>
+          <tr><th>Wallet</th><th>Platform</th><th>Device</th><th>Scrolls</th><th>Coins seen</th><th>Last seen</th></tr>
+          ${d.sessions.map(s => `<tr>
+            <td class="mono">${s.walletAddress ? `${short(s.walletAddress)}<span class="copy" onclick="copyText('${esc(s.walletAddress)}')">copy</span>` : '<span class="muted">not connected</span>'}</td>
+            <td>${esc(s.platform || '—')}</td>
+            <td class="mono">${short(s.anonId)}</td>
+            <td>${num(s.scrollCount)}</td>
+            <td>${num(s.coinsViewed)}</td>
+            <td>${timeAgo(s.lastEventAt)}</td>
+          </tr>`).join('')}
+        </table>`;
+    } else {
+      const params = new URLSearchParams({ days: analyticsDays });
+      if (spec.type) params.set('type', spec.type);
+      if (spec.feed) params.set('feed', spec.feed);
+      if (spec.mint) params.set('mint', spec.mint);
+      if (spec.platform) params.set('platform', spec.platform);
+      const d = await api(`/api/analytics/drilldown?${params}`);
+      body.innerHTML = !d.events.length ? '<span class="muted">No events in range.</span>' : `
+        <table>
+          <tr><th>Wallet</th><th>Platform</th><th>Device</th><th>Feed</th><th>Coin</th><th>When</th></tr>
+          ${d.events.map(e => `<tr>
+            <td class="mono">${e.walletAddress ? `${short(e.walletAddress)}<span class="copy" onclick="copyText('${esc(e.walletAddress)}')">copy</span>` : '<span class="muted">not connected</span>'}</td>
+            <td>${esc(e.platform || '—')}</td>
+            <td class="mono">${short(e.anonId)}</td>
+            <td>${esc(e.feed || '—')}</td>
+            <td>${esc(e.symbol || (e.mint ? short(e.mint) : '—'))}</td>
+            <td>${timeAgo(e.ts)}</td>
+          </tr>`).join('')}
+        </table>`;
+    }
+  } catch (e) { body.innerHTML = `<span class="muted">${esc(e.message)}</span>`; }
+}
+
+document.getElementById('ddBackdrop').addEventListener('click', (e) => { if (e.target.id === 'ddBackdrop') closeDrilldown(); });
+document.getElementById('analytics').addEventListener('click', (e) => {
+  const row = e.target.closest('.bar-row[data-dd]');
+  if (row) return openDrilldown(JSON.parse(row.dataset.dd));
+  const coinRow = e.target.closest('tr[data-mint]');
+  if (coinRow) openDrilldown({ mint: coinRow.dataset.mint, label: coinRow.dataset.symbol || 'Coin activity' });
+});
 
 // Two-series line chart (sessions + events per day) drawn as inline SVG.
 function lineChart(points, seriesDefs) {
@@ -356,12 +441,12 @@ async function loadAnalytics() {
     const t = d.totals, f = d.funnel;
 
     const funnelRows = [
-      { label: 'Opened the app', value: f.opened },
-      { label: 'Scrolled the feed', value: f.scrolled },
-      { label: 'Expanded a card', value: f.expanded },
-      { label: 'Opened trade window', value: f.openedTrade },
-      { label: 'Connected a wallet', value: f.connected },
-      { label: 'Completed a swap', value: f.traded },
+      { label: 'Opened the app', value: f.opened, dd: { type: 'app_open', label: 'Opened the app' } },
+      { label: 'Scrolled the feed', value: f.scrolled, dd: { type: 'coin_view', label: 'Scrolled the feed' } },
+      { label: 'Expanded a card', value: f.expanded, dd: { type: 'card_expand', label: 'Expanded a card' } },
+      { label: 'Opened trade window', value: f.openedTrade, dd: { type: 'trade_window_open', label: 'Opened trade window' } },
+      { label: 'Connected a wallet', value: f.connected, dd: { type: 'wallet_connected', label: 'Connected a wallet' } },
+      { label: 'Completed a swap', value: f.traded, dd: { type: 'swap_success', label: 'Completed a swap' } },
     ].map(r => ({
       ...r, modifier: 'funnel',
       display: `${num(r.value)} (${f.opened ? Math.round((r.value / f.opened) * 100) : 0}%)`,
@@ -402,24 +487,24 @@ async function loadAnalytics() {
 
         <div class="chart-box">
           <h3>What users press</h3>
-          <div class="hint">Every tracked interaction in the period.</div>
-          ${bars(d.eventsByType.map(e => ({ label: e.type, value: e.count })))}
+          <div class="hint">Every tracked interaction in the period. Click a row for detail.</div>
+          ${bars(d.eventsByType.map(e => ({ label: e.type, value: e.count, dd: { type: e.type, label: e.type } })))}
         </div>
 
         <div class="chart-box">
           <h3>Last action before closing</h3>
-          <div class="hint">Where sessions end — the drop-off points.</div>
-          ${bars(d.exitPoints.map(e => ({ label: e.type, value: e.sessions })), { modifier: 'warn' })}
+          <div class="hint">Where sessions end — the drop-off points. Click a row for detail.</div>
+          ${bars(d.exitPoints.map(e => ({ label: e.type, value: e.sessions, dd: { mode: 'sessions', lastEventType: e.type, label: `Last action: ${e.type}` } })), { modifier: 'warn' })}
         </div>
 
         <div class="chart-box">
           <h3>Feeds used</h3>
-          ${bars(d.feedUsage.map(x => ({ label: x.feed, value: x.events })))}
+          ${bars(d.feedUsage.map(x => ({ label: x.feed, value: x.events, dd: { feed: x.feed, label: `Feed: ${x.feed}` } })))}
         </div>
 
         <div class="chart-box">
           <h3>Platforms</h3>
-          ${bars(d.platforms.map(x => ({ label: x.platform, value: x.sessions })))}
+          ${bars(d.platforms.map(x => ({ label: x.platform, value: x.sessions, dd: { platform: x.platform, label: `Platform: ${x.platform}` } })))}
         </div>
 
         <div class="chart-box">
@@ -432,9 +517,9 @@ async function loadAnalytics() {
           <div class="hint">Weighted by interaction: a swap counts far more than a scroll past.</div>
           ${d.topCoins.length ? `<table>
             <tr><th>Coin</th><th>Mint</th><th>Engagement</th><th>Views</th><th>Swaps</th></tr>
-            ${d.topCoins.map(c => `<tr>
+            ${d.topCoins.map(c => `<tr class="clickable" data-mint="${esc(c.mint)}" data-symbol="${esc(c.symbol || '')}" style="cursor:pointer">
               <td>${esc(c.symbol || '—')}</td>
-              <td class="mono">${short(c.mint)}<span class="copy" onclick="copyText('${esc(c.mint)}')">copy</span></td>
+              <td class="mono">${short(c.mint)}<span class="copy" onclick="event.stopPropagation();copyText('${esc(c.mint)}')">copy</span></td>
               <td class="green">${num(c.engagement)}</td>
               <td>${num(c.views)}</td>
               <td>${num(c.trades)}</td>

@@ -319,4 +319,70 @@ router.get('/summary', adminAuth, async (req, res) => {
   }
 });
 
+// ==================== DRILLDOWN ====================
+// Backs the clickable rows on the admin dashboard (e.g. "Connected a wallet" ->
+// the actual wallets, with platform/feed/coin context, that fired that event).
+
+router.get('/drilldown', adminAuth, async (req, res) => {
+  try {
+    if (!dbReady()) return res.status(503).json({ success: false, error: 'Database unavailable' });
+
+    const days = Math.min(90, Math.max(1, parseInt(req.query.days, 10) || 7));
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const limit = Math.min(500, Math.max(1, parseInt(req.query.limit, 10) || 200));
+
+    const type = str(req.query.type, 48);
+    const feed = str(req.query.feed, 32);
+    const mint = str(req.query.mint, 64);
+    const platform = str(req.query.platform, 24);
+    if (!type && !feed && !mint && !platform) {
+      return res.status(400).json({ success: false, error: 'At least one of type, feed, mint, platform is required' });
+    }
+
+    const match = { ts: { $gte: since } };
+    if (type) match.type = type;
+    if (feed) match.feed = feed;
+    if (mint) match.mint = mint;
+    if (platform) match.platform = platform;
+
+    const events = await AnalyticsEvent.find(match)
+      .sort({ ts: -1 })
+      .limit(limit)
+      .select('ts walletAddress platform feed mint symbol anonId sessionId label value -_id')
+      .lean();
+
+    res.json({ success: true, count: events.length, events });
+  } catch (error) {
+    console.error('[analytics] drilldown failed:', error.message);
+    res.status(500).json({ success: false, error: 'Failed to load drilldown' });
+  }
+});
+
+// Session-level drilldown — for rows derived from AnalyticsSession fields
+// (e.g. "last action before closing") rather than a single raw event type.
+router.get('/drilldown-sessions', adminAuth, async (req, res) => {
+  try {
+    if (!dbReady()) return res.status(503).json({ success: false, error: 'Database unavailable' });
+
+    const days = Math.min(90, Math.max(1, parseInt(req.query.days, 10) || 7));
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const limit = Math.min(500, Math.max(1, parseInt(req.query.limit, 10) || 200));
+    const lastEventType = str(req.query.lastEventType, 48);
+
+    const match = { startedAt: { $gte: since } };
+    if (lastEventType) match.lastEventType = lastEventType === 'unknown' ? null : lastEventType;
+
+    const sessions = await AnalyticsSession.find(match)
+      .sort({ lastEventAt: -1 })
+      .limit(limit)
+      .select('walletAddress platform anonId startedAt lastEventAt lastEventType scrollCount coinsViewed -_id')
+      .lean();
+
+    res.json({ success: true, count: sessions.length, sessions });
+  } catch (error) {
+    console.error('[analytics] drilldown-sessions failed:', error.message);
+    res.status(500).json({ success: false, error: 'Failed to load drilldown sessions' });
+  }
+});
+
 module.exports = router;
