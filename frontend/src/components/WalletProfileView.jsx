@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { getFullApiUrl, fetchJsonWithTimeout } from '../config/api';
 import { useTrackedWallets } from '../contexts/TrackedWalletsContext';
 import { sendPushNotification } from '../utils/tradeNotifications';
 import { maybeEnableNotifications, openNotificationSettings } from '../utils/notificationOptIn';
 import { resolveWalletDisplayName } from '../utils/walletIdentity';
 import useSwipeBack from '../hooks/useSwipeBack';
+import usePullToRefresh from '../hooks/usePullToRefresh';
 import './ProfileView.css';
 import './WalletProfileView.css';
 
@@ -208,29 +209,22 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
   const copyEnabled = trackedWallet ? trackedWallet.copyTradeEnabled !== false : false;
   const notificationsEnabled = trackedWallet ? trackedWallet.notificationsEnabled !== false : false;
 
-  // Fetch aggregate wallet analytics
-  useEffect(() => {
-    if (!walletAddress) return;
-    let cancelled = false;
-    setStatsLoading(true);
-    setStatsError(null);
-    setStats(null);
-    fetchJsonWithTimeout(getFullApiUrl(`/api/wallet/${walletAddress}`))
-      .then((d) => { if (!cancelled) { if (d.success) setStats(d); else setStatsError('No data'); } })
-      .catch((e) => { if (!cancelled) setStatsError(e.name === 'AbortError' ? 'Timed out' : e.message); })
-      .finally(() => { if (!cancelled) setStatsLoading(false); });
-    return () => { cancelled = true; };
+  // Fetch aggregate wallet analytics — also callable directly (pull-to-refresh)
+  const loadStats = useCallback((silent = false) => {
+    if (!walletAddress) return Promise.resolve();
+    if (!silent) { setStatsLoading(true); setStatsError(null); }
+    return fetchJsonWithTimeout(getFullApiUrl(`/api/wallet/${walletAddress}`))
+      .then((d) => { if (d.success) setStats(d); else setStatsError('No data'); })
+      .catch((e) => setStatsError(e.name === 'AbortError' ? 'Timed out' : e.message))
+      .finally(() => setStatsLoading(false));
   }, [walletAddress]);
 
-  // Fetch traded-coins feed
-  useEffect(() => {
-    if (!walletAddress) return;
-    let cancelled = false;
-    setCoinsLoading(true);
-    setCoins([]);
-    fetchJsonWithTimeout(getFullApiUrl(`/api/wallet/${walletAddress}/trades`))
+  // Fetch traded-coins feed — also callable directly (pull-to-refresh)
+  const loadCoins = useCallback((silent = false) => {
+    if (!walletAddress) return Promise.resolve();
+    if (!silent) { setCoinsLoading(true); setCoins([]); }
+    return fetchJsonWithTimeout(getFullApiUrl(`/api/wallet/${walletAddress}/trades`))
       .then((d) => {
-        if (cancelled) return;
         const raw = d?.data?.trades || d?.trades || d?.data || [];
         const list = Array.isArray(raw) ? raw : [];
         const parsed = list.map(parseTrade).filter(Boolean);
@@ -244,10 +238,28 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
         }
         setCoins(distinct);
       })
-      .catch(() => { if (!cancelled) setCoins([]); })
-      .finally(() => { if (!cancelled) setCoinsLoading(false); });
-    return () => { cancelled = true; };
+      .catch(() => setCoins([]))
+      .finally(() => setCoinsLoading(false));
   }, [walletAddress]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setStats(null);
+    Promise.resolve().then(() => { if (!cancelled) loadStats(); });
+    return () => { cancelled = true; };
+  }, [loadStats]);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.resolve().then(() => { if (!cancelled) loadCoins(); });
+    return () => { cancelled = true; };
+  }, [loadCoins]);
+
+  // Pulling down from the top re-checks this wallet for new trades/stats.
+  const { containerRef: pullRef, pullY, refreshing } = usePullToRefresh({
+    onRefresh: () => Promise.all([loadStats(true), loadCoins(true)]),
+    disabled: showAnalyticsModal || showRenameModal,
+  });
 
   const handleTrackToggle = () => {
     if (tracked) {
@@ -339,8 +351,19 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
   return (
     <div
       {...swipeBack.bind}
+      ref={(el) => { swipeBack.ref.current = el; pullRef.current = el; }}
       className="wpv-root"
     >
+      <div
+        className={`wpv-ptr-indicator ${refreshing ? 'wpv-ptr-indicator--active' : ''}`}
+        style={{ height: refreshing ? 44 : pullY }}
+        aria-hidden="true"
+      >
+        <span
+          className={`wpv-ptr-spinner ${refreshing ? 'wpv-ptr-spinner--spin' : ''}`}
+          style={!refreshing ? { transform: `rotate(${Math.min(180, (pullY / 70) * 180)}deg)` } : undefined}
+        />
+      </div>
       <button className="wpv-back" onClick={closeWithSlide} title="Back" aria-label="Back">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="15 18 9 12 15 6" />

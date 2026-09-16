@@ -249,18 +249,6 @@ function App() {
       .finally(() => { favoritesHydratedRef.current = true; });
   }, [connected, walletAddress]);
 
-  // Cache the active account's list for an instant reload before the remote read lands.
-  useEffect(() => {
-    if (connected && walletAddress) {
-      localStorage.setItem(favoritesCacheKey(walletAddress), JSON.stringify(favorites));
-    }
-  }, [favorites, connected, walletAddress]);
-
-  // Keep the latest values available to the background-flush handler below.
-  useEffect(() => {
-    latestFavoritesSaveRef.current = { walletAddress, favorites };
-  }, [walletAddress, favorites]);
-
   const toMinimalTrackedCoins = (favs) => favs.slice(0, 500).map(c => ({
     mintAddress: c.mintAddress || c.address,
     symbol: c.symbol || '',
@@ -269,6 +257,24 @@ function App() {
     addedAt: c.addedAt || Date.now(),
     trackedAtPrice: Number(c.trackedAtPrice) || Number(c.price_usd) || Number(c.priceUsd) || 0,
   }));
+
+  // Cache the active account's list for an instant reload before the remote read lands.
+  // Minimal fields only — the raw favorites objects carry rich coin data (banner,
+  // description, rugcheck, etc.) that can blow past the WebView's localStorage quota
+  // as the tracked list grows, crashing the app on next launch.
+  useEffect(() => {
+    if (!connected || !walletAddress) return;
+    try {
+      localStorage.setItem(favoritesCacheKey(walletAddress), JSON.stringify(toMinimalTrackedCoins(favorites)));
+    } catch (err) {
+      console.warn('Could not cache tracked coins locally:', err?.message);
+    }
+  }, [favorites, connected, walletAddress]);
+
+  // Keep the latest values available to the background-flush handler below.
+  useEffect(() => {
+    latestFavoritesSaveRef.current = { walletAddress, favorites };
+  }, [walletAddress, favorites]);
 
   const saveTrackedCoinsNow = (addr, favs) => {
     fetch(getFullApiUrl(`/api/users/${addr}/tracked-coins`), {
@@ -826,6 +832,7 @@ function App() {
           />
         </Suspense>
       ) : activeTab === 'coin-detail' && selectedCoin ? (
+        <ErrorBoundary>
         <div
           {...coinDetailSwipeBack.bind}
           style={{ position: 'relative' }}
@@ -880,6 +887,7 @@ function App() {
             onSearchClick={null} // No search button in coin detail view
           />
         </div>
+        </ErrorBoundary>
       ) : (
         <ErrorBoundary>
           <FeedSwipeContainer enabled={activeTab === 'home'} onSwitch={switchFeed}>

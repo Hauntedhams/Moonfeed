@@ -332,9 +332,11 @@
 }
 
 .native-chart-dot-modal-backdrop {
-  position: fixed;
+  /* Absolute (not fixed) so the sheet is confined to the chart's own box —
+     it floats over the graph itself instead of docking to the viewport edge. */
+  position: absolute;
   inset: 0;
-  z-index: 9990;
+  z-index: 40;
   background: rgba(0, 0, 0, 0.5);
   display: flex;
   align-items: flex-end;
@@ -344,7 +346,7 @@
 .native-chart-dot-modal {
   width: 100%;
   max-width: 480px;
-  max-height: 60vh;
+  max-height: 90%;
   background: #0f1729;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 16px 16px 0 0;

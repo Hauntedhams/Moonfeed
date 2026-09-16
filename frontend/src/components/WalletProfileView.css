@@ -75,6 +75,42 @@ html:not(.dark-mode) .wpv-root::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 0, 0, 0.32);
 }
 
+/* Pull-to-refresh indicator — a block-level spacer whose height tracks the
+   drag distance, so it naturally pushes the header/feed down as the user pulls. */
+.wpv-ptr-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  transition: height 0.18s ease;
+}
+
+.wpv-ptr-indicator--active {
+  transition: none;
+}
+
+.wpv-ptr-spinner {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-top-color: #58a6ff;
+  flex-shrink: 0;
+}
+
+.wpv-ptr-spinner--spin {
+  animation: wpvPtrSpin 0.7s linear infinite;
+}
+
+@keyframes wpvPtrSpin {
+  to { transform: rotate(360deg); }
+}
+
+html:not(.dark-mode) .wpv-ptr-spinner {
+  border-color: rgba(0, 0, 0, 0.15);
+  border-top-color: #1f6feb;
+}
+
 /* Back button — top-left, plain white arrow, no background.
    Sticky (not fixed) so it stays on-screen while scrolled AND rides along with
    the swipe-back drag transform instead of jumping out of view. */

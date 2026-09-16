@@ -1944,6 +1944,13 @@ html:not(.dark-mode) .coin-card-left-panel::-webkit-scrollbar-thumb:hover {
   transform: translateY(-1px);
 }
 
+.coin-name-original-toggle {
+  font-size: 0.7em;
+  font-weight: 500;
+  opacity: 0.75;
+  margin-left: 4px;
+}
+
 .banner-coin-name.clickable-name:active {
   transform: translateY(0);
 }

@@ -31,6 +31,7 @@ import {
 import debug from '../utils/debug.js';
 import { rafManager, eventListenerManager, cleanupManager } from '../utils/mobileOptimizations.js';
 import CautionTapeBanner from './CautionTapeBanner';
+import useAutoTranslate from '../hooks/useAutoTranslate';
 
 // Shared across ALL CoinCard instances: a wheel gesture over the action buttons
 // must advance exactly one card, even though every mounted card registers its own
@@ -157,6 +158,9 @@ const CoinCard = memo(({
   const [trackedPrice, setTrackedPrice] = useState(null);
   const [trackedTimeState, setTrackedTimeState] = useState(null);
   const [focusTrackedSignal, setFocusTrackedSignal] = useState(0);
+  // Auto-translates non-English coin names/descriptions (e.g. Chinese meme coins) to English.
+  const nameTranslation = useAutoTranslate(coin.name || coin.symbol || coin.ticker || '');
+  const descriptionTranslation = useAutoTranslate(coin.description || '');
   // Feed picker inside the coin-info popup: null = closed pill; open = { index (float
   // while dragging), dragging }. The picked feed only applies on tap-outside.
   const [feedPicker, setFeedPicker] = useState(null);
@@ -2374,7 +2378,16 @@ const CoinCard = memo(({
           }}
           title="View coin info"
         >
-          {coin.name || coin.symbol || coin.ticker || 'Meme coin'}
+          {nameTranslation.display || coin.symbol || coin.ticker || 'Meme coin'}
+          {nameTranslation.hasTranslation && (
+            <span
+              className="coin-name-original-toggle"
+              onClick={(e) => { e.stopPropagation(); nameTranslation.setShowOriginal((s) => !s); }}
+              title={nameTranslation.showOriginal ? 'Show translation' : 'Show original name'}
+            >
+              {nameTranslation.showOriginal ? ' 🌐' : ` (${nameTranslation.original})`}
+            </span>
+          )}
         </button>
         
         {/* Banner Text Overlay */}
@@ -2384,8 +2397,17 @@ const CoinCard = memo(({
               {coin.description && (
                 <>
                   <span className="banner-coin-description-inline">
-                    {coin.description}
+                    {descriptionTranslation.display}
                   </span>
+                  {descriptionTranslation.hasTranslation && (
+                    <button
+                      className="read-more-button"
+                      onClick={(e) => { e.stopPropagation(); descriptionTranslation.setShowOriginal((s) => !s); }}
+                      title="Toggle translation"
+                    >
+                      {descriptionTranslation.showOriginal ? 'translated' : 'original'}
+                    </button>
+                  )}
                   {coin.description.length > 50 && (
                     <button 
                       className="read-more-button"
@@ -2416,7 +2438,7 @@ const CoinCard = memo(({
             {coin.description && (
               <>
                 <span className="banner-coin-description-inline desktop-description">
-                  {coin.description}
+                  {descriptionTranslation.display}
                 </span>
                 {coin.description.length > 50 && (
                   <button 
@@ -4318,7 +4340,16 @@ const CoinCard = memo(({
               </div>
             )}
             <div className="coin-info-popup-bio">
-              {coin.description || 'No bio available yet.'}
+              {descriptionTranslation.display || 'No bio available yet.'}
+              {descriptionTranslation.hasTranslation && (
+                <button
+                  type="button"
+                  className="read-more-button"
+                  onClick={(e) => { e.stopPropagation(); descriptionTranslation.setShowOriginal((s) => !s); }}
+                >
+                  {descriptionTranslation.showOriginal ? 'show translation' : 'show original'}
+                </button>
+              )}
             </div>
           </div>
         </div>,
@@ -4397,7 +4428,16 @@ const CoinCard = memo(({
               </h3>
             </div>
             <div className="description-modal-body">
-              {coin.description}
+              {descriptionTranslation.display}
+              {descriptionTranslation.hasTranslation && (
+                <button
+                  type="button"
+                  className="read-more-button"
+                  onClick={() => descriptionTranslation.setShowOriginal((s) => !s)}
+                >
+                  {descriptionTranslation.showOriginal ? 'show translation' : 'show original'}
+                </button>
+              )}
             </div>
           </div>
         </div>,

@@ -1624,7 +1624,10 @@ const ModernTokenScroller = ({
     
     // Fetch new feed data
     fetchCoins();
-  }, [filters.type, onlyFavorites, JSON.stringify(advancedFilters)]); // Use specific dependencies instead of fetchCoins
+    // singleCoin's mint is included so switching the pinned coin (e.g. tapping
+    // a different coin from a wallet profile's feed while already in
+    // single-coin mode) reloads it instead of silently keeping the old one.
+  }, [filters.type, onlyFavorites, JSON.stringify(advancedFilters), singleCoin?.mintAddress || singleCoin?.address]); // Use specific dependencies instead of fetchCoins
 
   // ── Feed position persistence ────────────────────────────────────────────
   // Save the coin the user is on (per feed) so we can return them to the exact
