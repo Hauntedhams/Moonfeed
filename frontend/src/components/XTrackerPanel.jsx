@@ -1,14 +1,18 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { getFullApiUrl } from '../config/api';
+import { getArtworkCandidates } from '../utils/coinArtwork';
 import './XTrackerPanel.css';
 
 const timeAgo = (ts) => {
   if (!ts) return '';
-  const mins = Math.max(0, Math.round((Date.now() - ts) / 60000));
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  return `${Math.round(mins / 60)}h ago`;
+  const secs = Math.max(0, Math.round((Date.now() - ts) / 1000));
+  if (secs < 60) return `${secs}s`;
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.round(mins / 60);
+  if (hours < 48) return `${hours}h`;
+  return `${Math.round(hours / 24)}d`;
 };
 
 const formatMc = (mc) => {
@@ -19,13 +23,260 @@ const formatMc = (mc) => {
   return `$${Math.round(mc)}`;
 };
 
-const XTrackerPanel = ({ onClose }) => {
+const formatDelay = (secs) => {
+  if (!Number.isFinite(secs)) return '';
+  const sign = secs < 0 ? '-' : '+';
+  const abs = Math.abs(secs);
+  return abs < 60 ? `${sign}${abs}s` : `${sign}${Math.round(abs / 60)}m`;
+};
+
+const VERIFICATION_LABEL = {
+  ca: 'CA in tweet',
+  linked: 'Links this tweet',
+  author: 'Links author',
+};
+
+const FILTERS = [
+  { id: 'all', label: 'All' },
+  { id: 'coins', label: 'Coins' },
+  { id: 'founder', label: 'Founders' },
+  { id: 'kol', label: 'KOLs' },
+  { id: 'celebrity', label: 'Celebs' },
+  { id: 'news', label: 'News' },
+];
+
+const MAX_TWEETS = 200;
+
+const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const HighlightedText = ({ text, terms }) => {
+  const parts = useMemo(() => {
+    const words = [...new Set(terms.filter((t) => t && t.length >= 2))].sort((a, b) => b.length - a.length);
+    if (!words.length) return [text];
+    const re = new RegExp(`(\\$?(?:${words.map(escapeRegExp).join('|')}))(?![A-Za-z0-9])`, 'gi');
+    return text.split(re);
+  }, [text, terms]);
+  return parts.map((part, i) => (i % 2 === 1
+    ? <mark key={i} className="xfeed-hl">{part}</mark>
+    : <React.Fragment key={i}>{part}</React.Fragment>));
+};
+
+const CoinAvatar = ({ coin }) => {
+  const candidates = useMemo(() => getArtworkCandidates(coin.image), [coin.image]);
+  const [index, setIndex] = useState(0);
+  if (!candidates[index]) {
+    return <span className="xfeed-coin-img xfeed-coin-img--fallback">{(coin.symbol || '?')[0]}</span>;
+  }
+  return (
+    <img
+      src={candidates[index]}
+      alt=""
+      className="xfeed-coin-img"
+      loading="lazy"
+      onError={() => setIndex((i) => i + 1)}
+    />
+  );
+};
+
+const TweetCard = ({ tweet, isNew, onOpenCoin }) => {
+  const highlightTerms = useMemo(() => [
+    ...(tweet.signals?.cashtags || []),
+    ...tweet.coins.map((c) => c.matchedTerm).filter((t) => t && t !== 'ca'),
+  ], [tweet]);
+
+  return (
+    <article className={`xfeed-card ${isNew ? 'xfeed-card--new' : ''} ${tweet.coins.some((c) => c.verification) ? 'xfeed-card--verified' : ''}`}>
+      <header className="xfeed-card-head">
+        {tweet.author.avatar ? (
+          <img src={tweet.author.avatar} alt="" className="xfeed-avatar" loading="lazy" />
+        ) : (
+          <span className="xfeed-avatar xfeed-avatar--fallback">{(tweet.author.name || '?')[0]}</span>
+        )}
+        <div className="xfeed-author">
+          <span className="xfeed-author-name">{tweet.author.name}</span>
+          <span className="xfeed-author-sub">
+            @{tweet.author.handle}
+            {tweet.author.label && <span className="xfeed-author-label">{tweet.author.label}</span>}
+          </span>
+        </div>
+        <a className="xfeed-time" href={tweet.url} target="_blank" rel="noopener noreferrer" title="Open on X">
+          {timeAgo(tweet.createdAtMs)} &#8599;
+        </a>
+      </header>
+
+      {tweet.replyTo && <p className="xfeed-reply-to">Replying to @{tweet.replyTo}</p>}
+      {tweet.text && (
+        <p className="xfeed-text"><HighlightedText text={tweet.text} terms={highlightTerms} /></p>
+      )}
+
+      {tweet.media?.[0] && (
+        <a href={tweet.url} target="_blank" rel="noopener noreferrer" className="xfeed-media">
+          <img src={tweet.media[0].url} alt="" loading="lazy" />
+        </a>
+      )}
+
+      {tweet.quoted && (
+        <div className="xfeed-quote">
+          <span className="xfeed-quote-author">{tweet.quoted.author?.name} <span>@{tweet.quoted.author?.handle}</span></span>
+          <p className="xfeed-quote-text"><HighlightedText text={tweet.quoted.text || ''} terms={highlightTerms} /></p>
+        </div>
+      )}
+
+      {tweet.coins.length > 0 && (
+        <div className="xfeed-coins">
+          <span className="xfeed-coins-label">Coins off this tweet</span>
+          {tweet.coins.map((coin, i) => (
+            <button key={coin.mintAddress} type="button" className="xfeed-coin-row" onClick={() => onOpenCoin(coin)}>
+              <span className="xfeed-coin-rank">{i + 1}</span>
+              <CoinAvatar coin={coin} />
+              <span className="xfeed-coin-meta">
+                <span className="xfeed-coin-symbol">
+                  ${coin.symbol}
+                  {coin.verification && (
+                    <span className={`xfeed-badge xfeed-badge--${coin.verification}`}>&#10003; {VERIFICATION_LABEL[coin.verification]}</span>
+                  )}
+                  {coin.isFirst && <span className="xfeed-badge xfeed-badge--first">1st</span>}
+                </span>
+                <span className="xfeed-coin-name">{coin.name}</span>
+              </span>
+              <span className="xfeed-coin-stats">
+                <span className="xfeed-coin-mc">{formatMc(coin.market_cap_usd)}</span>
+                <span className="xfeed-coin-delay">
+                  {coin.source === 'launch' ? `${formatDelay(coin.secondsAfterTweet)} after` : 'existing'}
+                </span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </article>
+  );
+};
+
+const LiveFeed = ({ onOpenCoin, onTrendsAvailable }) => {
+  const [tweets, setTweets] = useState([]);
+  const [status, setStatus] = useState({ loading: true, error: null, enabled: true, live: false });
+  const [filter, setFilter] = useState('all');
+  const [newIds, setNewIds] = useState(() => new Set());
+  const [, setTick] = useState(0);
+
+  const mergeTweet = useCallback((tweet, isFresh) => {
+    setTweets((prev) => {
+      const next = prev.filter((t) => t.id !== tweet.id);
+      next.push(tweet);
+      next.sort((a, b) => b.createdAtMs - a.createdAtMs);
+      return next.slice(0, MAX_TWEETS);
+    });
+    if (isFresh) {
+      setNewIds((prev) => new Set(prev).add(tweet.id));
+      setTimeout(() => setNewIds((prev) => {
+        const next = new Set(prev);
+        next.delete(tweet.id);
+        return next;
+      }), 2500);
+    }
+  }, []);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch(getFullApiUrl('/api/x-feed?limit=120'));
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      setTweets(json.tweets || []);
+      setStatus((s) => ({ ...s, loading: false, error: null, enabled: json.enabled !== false }));
+      onTrendsAvailable?.(Boolean(json.trendsEnabled));
+    } catch (err) {
+      setStatus((s) => ({ ...s, loading: false, error: err.message }));
+    }
+  }, [onTrendsAvailable]);
+
+  useEffect(() => {
+    load();
+    if (typeof EventSource === 'undefined') {
+      const poll = setInterval(load, 6000);
+      return () => clearInterval(poll);
+    }
+    const source = new EventSource(getFullApiUrl('/api/x-feed/stream'));
+    source.onopen = () => setStatus((s) => ({ ...s, live: true }));
+    source.onerror = () => setStatus((s) => ({ ...s, live: false }));
+    const onTweet = (e) => { try { mergeTweet(JSON.parse(e.data), true); } catch { /* malformed frame */ } };
+    const onUpdate = (e) => { try { mergeTweet(JSON.parse(e.data), false); } catch { /* malformed frame */ } };
+    source.addEventListener('tweet', onTweet);
+    source.addEventListener('update', onUpdate);
+    return () => source.close();
+  }, [load, mergeTweet]);
+
+  useEffect(() => {
+    const id = setInterval(() => setTick((n) => n + 1), 5000);
+    return () => clearInterval(id);
+  }, []);
+
+  const visible = useMemo(() => tweets.filter((t) => {
+    if (t.lowSignal) return false;
+    if (filter === 'all') return true;
+    if (filter === 'coins') return t.coins.length > 0;
+    return t.author?.category === filter;
+  }), [tweets, filter]);
+
+  return (
+    <>
+      <div className="xfeed-toolbar">
+        <span className={`xfeed-live ${status.live ? 'xfeed-live--on' : ''}`}>
+          <span className="xfeed-live-dot" />
+          {status.live ? 'LIVE' : 'Connecting…'}
+        </span>
+        <div className="xfeed-filters">
+          {FILTERS.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              className={`xfeed-filter ${filter === f.id ? 'active' : ''}`}
+              onClick={() => setFilter(f.id)}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {status.loading && !tweets.length && (
+        <div className="xtracker-status" role="status" aria-live="polite">
+          <span className="xtracker-loader" aria-hidden="true">
+            <span className="xtracker-loader-ring" />
+            <span className="xtracker-loader-scan" />
+            <span className="xtracker-loader-mark">X</span>
+          </span>
+          Connecting to the live X feed…
+        </div>
+      )}
+
+      {!status.loading && !status.enabled && (
+        <div className="xtracker-status">The live X feed isn't configured on the server yet.</div>
+      )}
+
+      {!status.loading && status.error && !tweets.length && (
+        <div className="xtracker-status">
+          Couldn't load the feed right now.
+          <button className="xtracker-retry-btn" onClick={load}>Try again</button>
+        </div>
+      )}
+
+      {!status.loading && status.enabled && !status.error && !visible.length && (
+        <div className="xtracker-status">
+          {filter === 'coins' ? 'No tweets with launched coins yet — they show up here seconds after a coin drops.' : 'Waiting for the next post…'}
+        </div>
+      )}
+
+      {visible.map((tweet) => (
+        <TweetCard key={tweet.id} tweet={tweet} isNew={newIds.has(tweet.id)} onOpenCoin={onOpenCoin} />
+      ))}
+    </>
+  );
+};
+
+const TrendsFeed = ({ onOpenCoin }) => {
   const [state, setState] = useState({ loading: true, error: null, data: null });
   const [showMomentumInfo, setShowMomentumInfo] = useState(false);
-  const [dragOffset, setDragOffset] = useState(0);
-  const [isDragging, setIsDragging] = useState(false);
-  const bodyRef = useRef(null);
-  const touchStartY = useRef(null);
 
   const load = useCallback(async () => {
     setState((s) => ({ ...s, loading: true, error: null }));
@@ -41,8 +292,72 @@ const XTrackerPanel = ({ onClose }) => {
 
   useEffect(() => { load(); }, [load]);
 
+  const trends = state.data?.trends || [];
+
+  return (
+    <>
+      {state.loading && !trends.length && (
+        <div className="xtracker-status" role="status">Scanning X for trending events…</div>
+      )}
+      {!state.loading && (state.error || !trends.length) && (
+        <div className="xtracker-status">
+          Couldn't load trends right now.
+          <button className="xtracker-retry-btn" onClick={load}>Try again</button>
+        </div>
+      )}
+      {trends.map((trend) => (
+        <article key={trend.id || trend.topic} className="xtracker-card">
+          <div className="xtracker-card-top">
+            <div className="xtracker-card-labels">
+              {trend.alertWorthy && <span className="xtracker-breaking">Breaking</span>}
+              <span className="xtracker-category">{trend.category}</span>
+            </div>
+            <button type="button" className="xtracker-momentum" onClick={() => setShowMomentumInfo(true)}>
+              <span className="xtracker-momentum-track">
+                <span className="xtracker-momentum-fill" style={{ width: `${trend.momentum}%` }} />
+              </span>
+              {trend.momentum}
+            </button>
+          </div>
+          <h4 className="xtracker-headline">{trend.headline}</h4>
+          <p className="xtracker-summary">{trend.summary}</p>
+          {trend.coins?.length > 0 && (
+            <div className="xtracker-coin-row">
+              {trend.coins.map((coin) => (
+                <button key={coin.mintAddress} className="xtracker-coin-chip" onClick={() => onOpenCoin(coin)}>
+                  <span className="xtracker-coin-symbol">{coin.symbol}</span>
+                  <span className="xtracker-coin-sub">{formatMc(coin.market_cap_usd)}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </article>
+      ))}
+      {showMomentumInfo && (
+        <div className="xtracker-info-overlay" onClick={() => setShowMomentumInfo(false)}>
+          <div className="xtracker-info-card" onClick={(e) => e.stopPropagation()}>
+            <div className="xtracker-info-header">
+              <strong>Momentum score</strong>
+              <button className="menu-panel-close" onClick={() => setShowMomentumInfo(false)} aria-label="Close">✕</button>
+            </div>
+            <p>A 1-100 score for how fast a topic is trending on X right now, not how important it is overall.</p>
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+
+const XTrackerPanel = ({ onClose }) => {
+  const [tab, setTab] = useState('live');
+  const [trendsAvailable, setTrendsAvailable] = useState(false);
+  const [dragOffset, setDragOffset] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const bodyRef = useRef(null);
+  const touchStartY = useRef(null);
+
   const handleTouchStart = (e) => {
-    if (e.target.closest('button') || bodyRef.current?.scrollTop > 0) return;
+    if (e.target.closest('button, a') || bodyRef.current?.scrollTop > 0) return;
     touchStartY.current = e.touches[0].clientY;
   };
 
@@ -64,7 +379,7 @@ const XTrackerPanel = ({ onClose }) => {
     if (shouldClose) onClose();
   };
 
-  const openCoin = (coin) => {
+  const openCoin = useCallback((coin) => {
     onClose();
     window.dispatchEvent(new CustomEvent('moonfeed:open-coin', {
       detail: {
@@ -80,10 +395,7 @@ const XTrackerPanel = ({ onClose }) => {
         market_cap_usd: coin.market_cap_usd,
       },
     }));
-  };
-
-  const { data } = state;
-  const trends = data?.trends || [];
+  }, [onClose]);
 
   return createPortal(
     <div className="menu-panel-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -104,151 +416,21 @@ const XTrackerPanel = ({ onClose }) => {
             X Tracker
           </h3>
           <div className="xtracker-header-actions">
-            {data?.updatedAt > 0 && (
-              <span className="xtracker-updated">{timeAgo(data.updatedAt)}</span>
+            {trendsAvailable && (
+              <div className="xfeed-tabs">
+                <button type="button" className={tab === 'live' ? 'active' : ''} onClick={() => setTab('live')}>Live</button>
+                <button type="button" className={tab === 'trends' ? 'active' : ''} onClick={() => setTab('trends')}>Trends</button>
+              </div>
             )}
-            <button
-              className="xtracker-refresh-btn"
-              onClick={load}
-              disabled={state.loading}
-              aria-label="Refresh trends"
-              title="Refresh"
-            >
-              ⟳
-            </button>
             <button className="menu-panel-close" onClick={onClose} aria-label="Close">✕</button>
           </div>
         </div>
 
         <div ref={bodyRef} className="menu-panel-body xtracker-body">
-          <p className="xtracker-intro">
-            What's trending on X right now — and the coins riding each wave.
-          </p>
-
-          {state.loading && !trends.length && (
-            <div className="xtracker-status" role="status" aria-live="polite">
-              <span className="xtracker-loader" aria-hidden="true">
-                <span className="xtracker-loader-ring" />
-                <span className="xtracker-loader-scan" />
-                <span className="xtracker-loader-mark">X</span>
-              </span>
-              Scanning X for trending events…
-            </div>
-          )}
-
-          {!state.loading && data && data.enabled === false && (
-            <div className="xtracker-status">
-              X tracking isn't configured on the server yet.
-            </div>
-          )}
-
-          {!state.loading && (state.error || (data?.enabled && !trends.length)) && (
-            <div className="xtracker-status">
-              Couldn't load trends right now.
-              <button className="xtracker-retry-btn" onClick={load}>Try again</button>
-            </div>
-          )}
-
-          {trends.map((trend) => (
-            <article key={trend.id || trend.topic} className="xtracker-card">
-              <div className="xtracker-card-top">
-                <div className="xtracker-card-labels">
-                  {trend.alertWorthy && <span className="xtracker-breaking">Breaking</span>}
-                  <span className="xtracker-category">{trend.category}</span>
-                </div>
-                <button
-                  type="button"
-                  className="xtracker-momentum"
-                  onClick={() => setShowMomentumInfo(true)}
-                  aria-label="What does the momentum score mean?"
-                >
-                  <span className="xtracker-momentum-track">
-                    <span
-                      className="xtracker-momentum-fill"
-                      style={{ width: `${trend.momentum}%` }}
-                    />
-                  </span>
-                  {trend.momentum}
-                </button>
-              </div>
-
-              <h4 className="xtracker-headline">{trend.headline}</h4>
-              {trend.eventTime && (
-                <span className="xtracker-event-time">{trend.eventTime}</span>
-              )}
-              <p className="xtracker-summary">{trend.summary}</p>
-              {trend.sourceUrl && (
-                <a className="xtracker-source-link" href={trend.sourceUrl} target="_blank" rel="noopener noreferrer">
-                  View source on X &#8599;
-                </a>
-              )}
-
-              {trend.hashtags?.length > 0 && (
-                <div className="xtracker-hashtags">
-                  {trend.hashtags.map((h) => (
-                    <span key={h} className="xtracker-hashtag">#{h}</span>
-                  ))}
-                </div>
-              )}
-
-              {trend.coins?.length > 0 ? (
-                <div className="xtracker-coins">
-                  <span className="xtracker-coins-label">Related coins</span>
-                  <div className="xtracker-coin-row">
-                    {trend.coins.map((coin) => {
-                      const chg = Number(coin.priceChange24h) || 0;
-                      return (
-                        <button
-                          key={coin.mintAddress}
-                          className="xtracker-coin-chip"
-                          onClick={() => openCoin(coin)}
-                          title={`${coin.name} — matched: ${(coin.matchedTerms || []).join(', ')}`}
-                        >
-                          {coin.image ? (
-                            <img src={coin.image} alt="" className="xtracker-coin-img" loading="lazy" />
-                          ) : (
-                            <span className="xtracker-coin-img xtracker-coin-img--fallback">
-                              {(coin.symbol || '?')[0]}
-                            </span>
-                          )}
-                          <span className="xtracker-coin-meta">
-                            <span className="xtracker-coin-symbol">{coin.symbol}</span>
-                            <span className="xtracker-coin-sub">
-                              {formatMc(coin.market_cap_usd)}
-                              <span className={`xtracker-coin-chg ${chg >= 0 ? 'up' : 'down'}`}>
-                                {chg >= 0 ? '+' : ''}{chg.toFixed(1)}%
-                              </span>
-                            </span>
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ) : (
-                <p className="xtracker-no-coins">No matching coins in the feeds yet — they usually appear within minutes of an event.</p>
-              )}
-            </article>
-          ))}
+          {tab === 'live'
+            ? <LiveFeed onOpenCoin={openCoin} onTrendsAvailable={setTrendsAvailable} />
+            : <TrendsFeed onOpenCoin={openCoin} />}
         </div>
-
-        {showMomentumInfo && (
-          <div className="xtracker-info-overlay" onClick={() => setShowMomentumInfo(false)}>
-            <div className="xtracker-info-card" onClick={(e) => e.stopPropagation()}>
-              <div className="xtracker-info-header">
-                <strong>Momentum score</strong>
-                <button className="menu-panel-close" onClick={() => setShowMomentumInfo(false)} aria-label="Close">✕</button>
-              </div>
-              <p>
-                A 1-100 score for how fast a topic is trending on X <em>right now</em>,
-                based on post volume and engagement found in live search — not how
-                important the event is overall. A higher bar means it's spreading
-                faster at this moment; a lower bar means it's still trending, just
-                more slowly.
-              </p>
-            </div>
-          </div>
-        )}
       </div>
     </div>,
     document.body

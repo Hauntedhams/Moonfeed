@@ -46,6 +46,7 @@ const softOrderRoutes = require('./routes/softOrders');
 const pushMonitors = require('./services/pushMonitors');
 const onDemandEnrichment = require('./services/OnDemandEnrichmentService');
 const xTrendsService = require('./services/xTrendsService');
+const xFeedService = require('./services/xFeedService');
 const geckoTerminalService = require('./geckoTerminalService');
 const chartDataService = require('./chartDataService');
 const { getJupiterReferralService } = require('./services/jupiterReferralService');
@@ -181,6 +182,17 @@ app.get('/api/x-trends', async (req, res) => {
     console.error('❌ /api/x-trends error:', error.message);
     res.status(500).json({ success: false, error: 'Failed to load X trends' });
   }
+});
+
+// Live X feed: tracked accounts' tweets + the pump.fun coins launched off them
+app.get('/api/x-feed', (req, res) => {
+  res.json({ success: true, trendsEnabled: xTrendsService.isEnabled(), ...xFeedService.getFeed({ limit: Number(req.query.limit) || 80 }) });
+});
+
+app.get('/api/x-feed/stream', (req, res) => xFeedService.attachStream(req, res));
+
+app.get('/api/x-feed/status', require('./middleware/adminAuth'), (req, res) => {
+  res.json({ success: true, ...xFeedService.getStatus() });
 });
 
 // ═══════════════════════════════════════════════════════════════
@@ -1116,7 +1128,10 @@ pushMonitors.setTrenchesCoinGetter(async () => {
 // mint) — INCLUDING Trenches/Graduating, since that's where the freshest
 // pump.fun launches (e.g. a viral meme-template wave of copycat coins) sit,
 // often before they're big enough to show up in dextrending/whalefeed.
-xTrendsService.setCoinPoolGetter(() => {
+xTrendsService.setCoinPoolGetter(buildXCoinPool);
+xFeedService.setCoinPoolGetter(buildXCoinPool);
+
+function buildXCoinPool() {
   const graduatingService = require('./graduatingService');
   const seen = new Set();
   const pool = [];
@@ -1127,7 +1142,7 @@ xTrendsService.setCoinPoolGetter(() => {
     pool.push(coin);
   }
   return pool;
-});
+}
 
 // Keep the bonding-curve (Graduating/Trenches) cache warm independent of user
 // traffic so the X-Tracker pool above always has fresh brand-new launches to
@@ -3415,6 +3430,9 @@ server.listen(PORT, async () => {
 
   // Register/sync the Helius wallet-trade webhook (no-op until env is set)
   try { require('./services/heliusWebhookService').start(); } catch (e) { console.error('[webhook] failed to start:', e.message); }
+
+  // Live X feed + pump.fun launch matching (no-op until TWITTERAPI_IO_KEY is set)
+  xFeedService.start().catch((e) => console.error('[x-feed] failed to start:', e.message));
   
   // Initialize feeds and start auto-refreshers
   initializeWithLatestBatch();

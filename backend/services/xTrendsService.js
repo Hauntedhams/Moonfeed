@@ -51,7 +51,9 @@ function setCoinPoolGetter(fn) {
 }
 
 function isEnabled() {
-  return Boolean(XAI_API_KEY);
+  // Opt-in: Grok x_search passes were the X Tracker's dominant cost (~$80+/mo);
+  // the live feed (xFeedService) replaces them by default.
+  return Boolean(XAI_API_KEY) && process.env.X_TRENDS_GROK_ENABLED === 'true';
 }
 
 // ── Grok call ────────────────────────────────────────────────────────────────
@@ -514,7 +516,7 @@ async function refresh() {
 
 async function getTrends() {
   if (!isEnabled()) {
-    return { enabled: false, trends: [], updatedAt: 0, error: 'XAI_API_KEY not configured' };
+    return { enabled: false, trends: [], updatedAt: 0, error: 'Grok trends disabled' };
   }
 
   const age = Date.now() - cache.updatedAt;

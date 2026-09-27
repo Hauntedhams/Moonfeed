@@ -22,6 +22,10 @@ services:
         value: https://api.moonfeed.app/api/webhook/helius
       - key: HELIUS_WEBHOOK_SECRET
         sync: false
+      - key: TWITTERAPI_IO_KEY
+        sync: false
+      - key: X_TRENDS_GROK_ENABLED
+        value: "false"
     healthCheckPath: /api/health
     autoDeploy: true
     # Health check configuration - increased for slow cold starts
