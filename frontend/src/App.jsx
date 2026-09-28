@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react'
 import './App.css'
 import { useWallet } from '@jup-ag/wallet-adapter'
 import { getFullApiUrl } from './config/api'
@@ -7,6 +7,7 @@ import TrackedView from './components/TrackedView'
 import BottomNavBar from './components/BottomNavBar'
 import FeedSelector, { FEED_ORDER, CONTINUOUS_FEED_ORDER, BASE_FEEDS } from './components/FeedSelector'
 import FeedSwipeContainer from './components/FeedSwipeContainer'
+import FeedFilterStrip from './components/FeedFilterStrip'
 import ErrorBoundary from './components/ErrorBoundary'
 import { WalletProvider } from './contexts/WalletContext'
 import { TrackedWalletsProvider } from './contexts/TrackedWalletsContext'
@@ -122,6 +123,8 @@ function App() {
   const filtersRef = useRef(filters);
   filtersRef.current = filters;
   const [feedToast, setFeedToast] = useState(null); // Feed name flashed after a swipe switch
+  const [feedDrop, setFeedDrop] = useState(null); // 'out' | 'in' while a strip-confirmed feed switch animates
+  const feedDropTimersRef = useRef([]);
   const lastAutoFeedTypeRef = useRef(filters.type); // last feed shown on the home scroller, via switch or auto-scroll
   const [feedJumpTarget, setFeedJumpTarget] = useState(null); // Jump home feed to a coin picked from the feed browser
   const [advancedFilters, setAdvancedFilters] = useState(null); // For advanced filtering
@@ -444,7 +447,7 @@ function App() {
 
   // CoinCard's name popup can swipe horizontally through the same home feeds
   // controlled by FeedSelector.
-  const switchFeed = useCallback((directionOrFeed) => {
+  const switchFeed = useCallback((directionOrFeed, { toast = true } = {}) => {
     const explicitFeed = KNOWN_FEEDS.includes(directionOrFeed) ? directionOrFeed : null;
     const direction = Number(directionOrFeed) || 1;
     const current = KNOWN_FEEDS.includes(filtersRef.current?.type) ? filtersRef.current.type : FEED_ORDER[0];
@@ -454,9 +457,30 @@ function App() {
     setAdvancedFilters(null);
     setIsAdvancedFilterActive(false);
     setFilters({ type: nextFeed });
-    setFeedToast({ feed: nextFeed, key: Date.now() });
+    if (toast) setFeedToast({ feed: nextFeed, key: Date.now() });
     lastAutoFeedTypeRef.current = nextFeed;
   }, []);
+
+  // Top feed strip confirmed a feed (slide-down): drop the old feed out, switch, drop the new one in.
+  const confirmFeedFromStrip = useCallback((feedId) => {
+    if (!KNOWN_FEEDS.includes(feedId) || feedId === filtersRef.current?.type) return;
+    feedDropTimersRef.current.forEach(clearTimeout);
+    setFeedDrop('out');
+    feedDropTimersRef.current = [
+      setTimeout(() => {
+        switchFeed(feedId, { toast: false });
+        setFeedDrop('in');
+      }, 180),
+      setTimeout(() => setFeedDrop(null), 500),
+    ];
+  }, [switchFeed]);
+
+  useEffect(() => () => feedDropTimersRef.current.forEach(clearTimeout), []);
+
+  const stripFeeds = useMemo(
+    () => (isAdvancedFilterActive ? [...BASE_FEEDS, { id: 'custom', label: 'Custom' }] : BASE_FEEDS),
+    [isAdvancedFilterActive]
+  );
 
   // Flash the new feed's name over the card for a moment after a switch.
   useEffect(() => {
@@ -788,6 +812,14 @@ function App() {
           />
         )}
 
+        {activeTab === 'home' && (
+          <FeedFilterStrip
+            feeds={stripFeeds}
+            activeFeed={filters.type || 'graduating'}
+            onConfirm={confirmFeedFromStrip}
+          />
+        )}
+
         {feedToast && activeTab === 'home' && (
           <div key={feedToast.key} className="feed-name-toast" aria-hidden="true">
             {FEED_LABELS[feedToast.feed] || feedToast.feed}
@@ -890,7 +922,7 @@ function App() {
         </ErrorBoundary>
       ) : (
         <ErrorBoundary>
-          <FeedSwipeContainer enabled={activeTab === 'home'} onSwitch={switchFeed}>
+          <FeedSwipeContainer phase={feedDrop}>
           <ModernTokenScroller
             onFavoritesChange={handleFavoritesChange}
             favorites={favorites}

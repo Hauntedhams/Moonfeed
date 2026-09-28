@@ -890,7 +890,7 @@ const NativeChart = ({
 
     // Candlestick mode: coin has a DEX pool → GeckoTerminal OHLCV.
     if (pool) {
-      const url = `${API_CONFIG.BASE_URL}/api/geckoterminal/ohlcv/solana/${pool}/${tf.interval}?aggregate=${tf.aggregate}&limit=1000`;
+      const url = `${API_CONFIG.BASE_URL}/api/geckoterminal/ohlcv/solana/${pool}/${tf.interval}?aggregate=${tf.aggregate}&limit=1000${mint ? `&token=${encodeURIComponent(mint)}` : ''}`;
       // The backend can transiently 503 a cold (uncached) pool if the provider's own
       // rate limit is hit — retry a couple of times before treating it as empty/error.
       const RETRY_DELAYS_MS = [0, 900, 2000];

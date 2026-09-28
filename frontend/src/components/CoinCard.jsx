@@ -310,28 +310,25 @@ const CoinCard = memo(({
     coin.price_usd || coin.priceUsd || coin.price || 0
   );
 
-  // Full tx stream (history + trade table + ticks) ONLY when the user is actually
-  // looking at trades: expanded card or open transactions panel. Helius streams
-  // bill per byte 24/7 — collapsed cards (mobile AND desktop) use the free
-  // Dexscreener-backed price channel below instead.
-  const wantsFullTxStream = isExpanded || showLiveTransactions;
-  // Collapsed current card: free ~1.5s price updates (server-side Dexscreener
-  // poll, zero Helius credits). Gated on the settled chart mount AND a 300ms
-  // debounce so fast scrolls never churn WebSockets (the old WKWebView crash).
-  const tickStreamWanted = !wantsFullTxStream && isCurrentCard && (mountChart ?? isVisible);
-  const [tickStreamSettled, setTickStreamSettled] = useState(false);
+  // Full tx stream (history + trade table + ticks) for the expanded card / open
+  // panel AND the settled in-view card, so trades are already loaded before expanding.
+  // The 300ms debounce on the settled chart mount keeps fast scrolls from churning
+  // WebSockets (the old WKWebView crash).
+  const inViewWanted = isActiveCard && (mountChart ?? isVisible);
+  const [inViewSettled, setInViewSettled] = useState(false);
   useEffect(() => {
-    if (!tickStreamWanted) {
-      setTickStreamSettled(false);
+    if (!inViewWanted) {
+      setInViewSettled(false);
       return;
     }
-    const t = setTimeout(() => setTickStreamSettled(true), 300);
+    const t = setTimeout(() => setInViewSettled(true), 300);
     return () => clearTimeout(t);
-  }, [tickStreamWanted]);
+  }, [inViewWanted]);
+  const wantsFullTxStream = isExpanded || showLiveTransactions || inViewSettled;
 
   const { transactions, livePrice: rpcLivePrice, isConnected: txConnected, historyLoaded: txHistoryLoaded, error: txError, clearTransactions } = useSolanaTransactions(
     mintAddress,
-    wantsFullTxStream || (tickStreamWanted && tickStreamSettled),
+    wantsFullTxStream || (isCurrentCard && (mountChart ?? isVisible)),
     wantsFullTxStream ? 'full' : 'price'
   );
 
@@ -3142,6 +3139,7 @@ const CoinCard = memo(({
               <TopTradersList
                 coinAddress={mintAddress}
                 isExpanded={isExpanded}
+                preload={inViewSettled}
                 isOpen={showInlineTopTraders}
                 previewLimit={3}
                 onWalletClick={handleWalletClick}

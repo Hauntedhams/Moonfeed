@@ -768,8 +768,11 @@ app.get('/api/geckoterminal/ohlcv/:network/:poolAddress/:timeframe', async (req,
   try {
     const { network, poolAddress, timeframe } = req.params;
     const { aggregate = 1, limit = 100 } = req.query;
+    // Which side of the pool to price; GeckoTerminal defaults to the pool's base token,
+    // which for pairs like ZEC/MASK is NOT the coin being charted.
+    const token = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(String(req.query.token || '')) ? String(req.query.token) : '';
 
-    const cacheKey = `ohlcv_${network}_${poolAddress}_${timeframe}_${aggregate}_${limit}`;
+    const cacheKey = `ohlcv_${network}_${poolAddress}_${timeframe}_${aggregate}_${limit}${token ? `_${token}` : ''}`;
     
     // Check cache first
     const cached = geckoCache.get(cacheKey);
@@ -798,6 +801,7 @@ app.get('/api/geckoterminal/ohlcv/:network/:poolAddress/:timeframe', async (req,
       limit: limit.toString(),
       currency: 'usd'
     });
+    if (token) params.set('token', token);
     const { url, headers } = geckoOhlcvRequest(network, poolAddress, timeframe, params);
 
     // Share one upstream fetch across all concurrent callers for this exact key.
