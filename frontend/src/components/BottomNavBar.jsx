@@ -2,9 +2,10 @@ import React, { useState } from 'react';
 import './BottomNavBar.css';
 import { useAlerts } from '../contexts/AlertsContext';
 
-function BottomNavBar({ activeTab, setActiveTab, onSearchClick, onOrdersClick, notificationCount }) {
+function BottomNavBar({ activeTab, setActiveTab, onSearchClick, onOrdersClick, notificationCount, tradesBadgeCount }) {
   const { unreadCount } = useAlerts();
   const badgeCount = notificationCount ?? unreadCount ?? 0;
+  const tradesBadge = tradesBadgeCount ?? 0;
 
   return (
     <nav className="bottom-nav">
@@ -27,6 +28,9 @@ function BottomNavBar({ activeTab, setActiveTab, onSearchClick, onOrdersClick, n
             <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             <path d="M9 12h6m-6 4h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
+          {tradesBadge > 0 && (
+            <span className="nav-badge">{tradesBadge > 99 ? '99+' : tradesBadge}</span>
+          )}
         </span>
         <span className="nav-label">Trades</span>
       </button>

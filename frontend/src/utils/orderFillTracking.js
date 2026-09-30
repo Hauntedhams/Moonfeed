@@ -1,14 +1,31 @@
 // Computes realized profit stats for filled limit orders and dedupes push
 // notifications so each fill is only ever announced once per device.
 import { notifyOrderFilled } from './tradeNotifications';
+import { recordOrderSwap } from './orderSwapLog';
 
 let cachedSolUsd = 150; // sensible default until the first fetch resolves
 let cachedAt = 0;
 const SOL_PRICE_TTL = 5 * 60 * 1000;
+const WSOL_MINT = 'So11111111111111111111111111111111111111112';
 
-// Cached SOL/USD price (CoinGecko), used to convert an order's SOL value to USD.
+// Cached SOL/USD price. Dexscreener first — keyless CoinGecko rate-limits so
+// often that the old CoinGecko-only version silently served the $150 default,
+// skewing every USD entry/invested figure derived from SOL amounts.
 export async function getSolUsdPrice() {
   if (Date.now() - cachedAt < SOL_PRICE_TTL) return cachedSolUsd;
+  try {
+    const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${WSOL_MINT}`);
+    const data = await res.json();
+    const best = (data?.pairs || [])
+      .filter((p) => p.baseToken?.address === WSOL_MINT && Number(p.priceUsd) > 0)
+      .sort((a, b) => (Number(b.liquidity?.usd) || 0) - (Number(a.liquidity?.usd) || 0))[0];
+    const price = Number(best?.priceUsd);
+    if (price > 0) {
+      cachedSolUsd = price;
+      cachedAt = Date.now();
+      return cachedSolUsd;
+    }
+  } catch (_) { /* fall through */ }
   try {
     const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
     const data = await res.json();
@@ -100,6 +117,16 @@ export async function checkAndNotifyFilledOrders(walletAddress, orders, transact
 
     const stats = computeFillStats(order, transactions, solUsdPrice);
     notifyOrderFilled(order, stats);
+    recordOrderSwap({
+      orderId,
+      wallet: walletAddress,
+      mint: order.tokenMint,
+      symbol: order.tokenSymbol,
+      image: order.tokenImage,
+      side: order.orderType || order.type || null,
+      solAmount: Number(order.estimatedValue) || 0,
+      signature: order.closeTxSignature || null,
+    });
     notified.add(orderId);
     changed = true;
   }

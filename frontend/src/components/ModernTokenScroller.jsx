@@ -6,6 +6,7 @@ import { API_CONFIG, getApiUrl } from '../config/api';
 import { useWallet } from '../contexts/WalletContext';
 import { useWalletConnectOnboarding } from './WalletConnectOnboarding';
 import { useTrackedTrades } from '../contexts/TrackedTradesContext';
+import { FOLLOW_WALLETS_FEED, FOLLOW_COINS_FEED, FOLLOWING_FEEDS, buildFollowWalletsFeed, buildFollowCoinsFeed } from '../utils/followingFeeds';
 import { personalizeCoins } from '../utils/feedPersonalization';
 import './ModernTokenScroller.css';
 
@@ -167,6 +168,7 @@ const ModernTokenScroller = ({
   const isScrollLocked = useRef(false);
   const feedEndTriggerRef = useRef(null);
   const loadedFeedTypesRef = useRef([]);
+  const followFeedPendingRef = useRef(false);
   const isLoadingMoreFeedRef = useRef(false);
   const enrichmentInFlightRef = useRef(new Map());
   const trackedBuyAppliedRef = useRef(false); // one-shot per feed load: tracked-wallet buys woven in
@@ -1323,6 +1325,24 @@ const ModernTokenScroller = ({
         return;
       }
 
+      // Following feeds are built client-side from tracked wallets' trades / tracked coins.
+      if (FOLLOWING_FEEDS.includes(currentFeedType)) {
+        if (currentFeedType === FOLLOW_WALLETS_FEED && !tradesLoaded) {
+          followFeedPendingRef.current = true;
+          return; // finally clears loading; the tradesLoaded effect refetches
+        }
+        followFeedPendingRef.current = false;
+        const built = currentFeedType === FOLLOW_WALLETS_FEED
+          ? await buildFollowWalletsFeed(tradesByMint)
+          : await buildFollowCoinsFeed(favorites);
+        const list = normalizeFeedCoins(built, currentFeedType);
+        setCoins(list);
+        onTotalCoinsChange?.(list.length);
+        setRetryCount(0);
+        setIsBackendLoading(false);
+        return;
+      }
+
       let endpoint = getFeedEndpoint(currentFeedType);
       let requestOptions = { 
         method: 'GET',
@@ -1427,11 +1447,21 @@ const ModernTokenScroller = ({
     } finally {
       setLoading(false);
     }
-  }, [onlyFavorites, favorites, singleCoin, filters, advancedFilters, getFeedEndpoint, normalizeFeedCoins]);
+  }, [onlyFavorites, favorites, singleCoin, filters, advancedFilters, getFeedEndpoint, normalizeFeedCoins, tradesLoaded, tradesByMint]);
+
+  // Tracked-wallet trades load after the feed can be opened — build the wallets feed once they land.
+  useEffect(() => {
+    if (tradesLoaded && followFeedPendingRef.current && filters.type === FOLLOW_WALLETS_FEED) fetchCoins();
+  }, [tradesLoaded, filters.type]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Tracked coins hydrate from the account after mount; rebuild if the coins feed opened empty.
+  useEffect(() => {
+    if (filters.type === FOLLOW_COINS_FEED && !onlyFavorites && !loading && coins.length === 0 && favorites?.length) fetchCoins();
+  }, [favorites?.length, filters.type]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const appendNextFeed = useCallback(async () => {
     if (!feedOrder.length || isLoadingMoreFeedRef.current || loading) return;
-    if (onlyFavorites || filters.type === 'custom' || filters.type === 'mixed' || advancedFilters) return;
+    if (onlyFavorites || filters.type === 'custom' || filters.type === 'mixed' || FOLLOWING_FEEDS.includes(filters.type) || advancedFilters) return;
 
     const startingFeedType = filters.type || feedOrder[0];
     const loadedFeedTypes = loadedFeedTypesRef.current.length ? loadedFeedTypesRef.current : [startingFeedType];
@@ -1610,7 +1640,7 @@ const ModernTokenScroller = ({
     setPreloadIndex(null);
     trackedBuyAppliedRef.current = false;
     feedEndTriggerRef.current = null;
-    loadedFeedTypesRef.current = (filters.type === 'custom' || filters.type === 'mixed') ? [] : [filters.type || feedOrder[0] || 'trending'];
+    loadedFeedTypesRef.current = (filters.type === 'custom' || filters.type === 'mixed' || FOLLOWING_FEEDS.includes(filters.type)) ? [] : [filters.type || feedOrder[0] || 'trending'];
     setExpandedCoin(null); // Close any expanded cards
 
     // Once the new feed's coins arrive, jump back to where the user last was in it
@@ -1730,7 +1760,7 @@ const ModernTokenScroller = ({
   // coin cards. CoinCard shows a "<wallet> recently bought in" banner for any
   // coin carrying `trackedWalletBuy`.
   useEffect(() => {
-    if (onlyFavorites || singleCoin) return undefined;
+    if (onlyFavorites || singleCoin || FOLLOWING_FEEDS.includes(filters.type)) return undefined;
     if (!tradesLoaded || loading || coins.length === 0) return undefined;
     if (trackedBuyAppliedRef.current) return undefined;
     trackedBuyAppliedRef.current = true;
@@ -2251,7 +2281,7 @@ const ModernTokenScroller = ({
   // console.log(`📊 ModernTokenScroller render: coins=${coins.length}, loading=${loading}, error=${error}, isMobile=${isMobile}, visibleRange=${JSON.stringify(visibleRange)}`);
   }
   
-  if (loading && coins.length === 0) {
+  if (loading && coins.length === 0 || (followFeedPendingRef.current && coins.length === 0 && filters.type === FOLLOW_WALLETS_FEED)) {
     return (
       <div className="modern-scroller-loading">
         <div className="moonfeed-loader" aria-hidden="true">
@@ -2293,6 +2323,19 @@ const ModernTokenScroller = ({
   }
   
   if (coins.length === 0) {
+    if (FOLLOWING_FEEDS.includes(filters.type)) {
+      const walletsFeed = filters.type === FOLLOW_WALLETS_FEED;
+      return (
+        <div className="modern-scroller-empty">
+          <h3>{walletsFeed ? 'No wallet buys yet' : 'No tracked coins yet'}</h3>
+          <p>
+            {walletsFeed
+              ? 'Track wallets from Top Traders or a wallet profile — their fresh buys will show up here first.'
+              : 'Tap Track on any coin and it will show up here.'}
+          </p>
+        </div>
+      );
+    }
     return (
       <div className="modern-scroller-empty">
         <div className="empty-icon">🌙</div>

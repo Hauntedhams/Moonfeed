@@ -657,6 +657,8 @@ async function runSoftOrdersOnce() {
           mint: o.mint,
           symbol,
           side: o.side,
+          triggerPriceUsd: String(o.triggerPriceUsd),
+          triggeredPriceUsd: String(live.price),
           ...(o.amountSol ? { amountSol: String(o.amountSol) } : {}),
           ...(o.amountTokens ? { amountTokens: String(o.amountTokens) } : {}),
         },

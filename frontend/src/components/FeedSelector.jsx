@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { API_CONFIG } from '../config/api';
 import { getArtworkCandidates, getBannerImage, getProfileImage } from '../utils/coinArtwork';
+import { useTrackedTrades } from '../contexts/TrackedTradesContext';
+import { FOLLOW_WALLETS_FEED, FOLLOW_COINS_FEED, buildFollowWalletsFeed, buildFollowCoinsFeed } from '../utils/followingFeeds';
 import './FeedSelector.css';
 
 // Feed definitions (kept in sync with the old TopTabs base tabs).
@@ -13,6 +15,8 @@ export const BASE_FEEDS = [
   { id: 'graduating', label: 'Graduating', detail: 'Pump.fun bonding-curve launches', icon: 'graduation-cap' },
   { id: 'trenches', label: 'Trenches', detail: 'Early pump.fun plays with real traction', icon: 'fire' },
   { id: 'new', label: 'Rugs', detail: 'Fresh runners — high risk, high reward', icon: 'sparkles' },
+  { id: FOLLOW_WALLETS_FEED, label: 'Wallets', detail: 'Fresh buys from wallets you track', icon: 'users' },
+  { id: FOLLOW_COINS_FEED, label: 'My Coins', detail: 'Coins you track, newest first', icon: 'star' },
 ];
 
 export const FEED_ORDER = BASE_FEEDS.map((feed) => feed.id);
@@ -60,11 +64,21 @@ const FEED_INFO = {
     purpose: 'Your own filtered feed built from the criteria you choose.',
     sources: 'Applies your filters across our full token pool.',
     reason: 'Use this when the presets don’t match what you’re looking for and you want full control.'
+  },
+  [FOLLOW_WALLETS_FEED]: {
+    purpose: 'Coins the wallets you track are trading — so you can get in near their entry.',
+    sources: 'Recent trades from your tracked wallets.',
+    reason: 'Coins a tracked wallet just bought and hasn’t sold yet come first, newest buy on top. Coins they’ve already sold follow after.'
+  },
+  [FOLLOW_COINS_FEED]: {
+    purpose: 'Every coin you’ve tapped Track on, as full coin cards.',
+    sources: 'Your tracked coins, synced to your account.',
+    reason: 'Most recently tracked first, so the coins you just started watching are at the top.'
   }
 };
 
 // Small inline icon renderer (matches the old TopTabs icon set)
-const renderIcon = (iconName) => {
+export const renderIcon = (iconName) => {
   const iconProps = {
     width: 16,
     height: 16,
@@ -77,6 +91,21 @@ const renderIcon = (iconName) => {
   };
 
   switch (iconName) {
+    case 'users':
+      return (
+        <svg {...iconProps}>
+          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+          <circle cx="9" cy="7" r="4" />
+          <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+        </svg>
+      );
+    case 'star':
+      return (
+        <svg {...iconProps}>
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+        </svg>
+      );
     case 'sparkles':
       return (
         <svg {...iconProps}>
@@ -182,6 +211,7 @@ function FeedSelector({
   onCoinSelect,
   onFeedCoinSelect,
   hasCustomFilters = false,
+  favorites = [],
   onAdvancedFilterClick,
   onFeedListOpen
 }) {
@@ -196,6 +226,7 @@ function FeedSelector({
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState(null);
   const rootRef = useRef(null);
+  const { tradesByMint } = useTrackedTrades();
 
   const feeds = hasCustomFilters ? [...BASE_FEEDS, CUSTOM_FEED] : BASE_FEEDS;
   const activeFeed = feeds.find((f) => f.id === activeFilter) || BASE_FEEDS[0];
@@ -249,6 +280,25 @@ function FeedSelector({
   // Load the browsed feed's coins for the right-hand column.
   useEffect(() => {
     if (!open || !browseFeed) return undefined;
+    if (browseFeed === FOLLOW_WALLETS_FEED || browseFeed === FOLLOW_COINS_FEED) {
+      let cancelled = false;
+      setPreviewLoading(true);
+      setPreviewError(null);
+      setPreviewCoins([]);
+      setPreviewTotal(null);
+      const build = browseFeed === FOLLOW_WALLETS_FEED
+        ? buildFollowWalletsFeed(tradesByMint)
+        : buildFollowCoinsFeed(favorites);
+      build
+        .then((list) => {
+          if (cancelled) return;
+          setPreviewCoins(list);
+          setPreviewTotal(list.length);
+        })
+        .catch(() => { if (!cancelled) setPreviewError('Could not load this feed right now.'); })
+        .finally(() => { if (!cancelled) setPreviewLoading(false); });
+      return () => { cancelled = true; };
+    }
     const endpointByFeed = {
       mixed: '/api/coins/dextrending',
       dextrending: '/api/coins/dextrending',

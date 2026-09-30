@@ -127,6 +127,7 @@ const NativeChart = ({
   focusTrackedSignal = 0,
   orderLinePrice = null,
   orderLineLabel = 'Order target',
+  orderLines = null, // [{ price, label, kind: 'takeProfit'|'stopLoss'|'buy' }] — the wallet's active soft orders
   onToggleAdvancedChart = null,
 }) => {
   const { isDarkMode } = useDarkMode();
@@ -142,7 +143,7 @@ const NativeChart = ({
   const targetLineRef = useRef(null);
   const entryLineRef = useRef(null);
   const trackedLineRef = useRef(null);
-  const orderLineRef = useRef(null);
+  const orderLinesRef = useRef([]);
   const markersRef = useRef(null);
   const projSeriesRef = useRef(null);
   const projShapeRef = useRef(null); // stable noise so scrolling stretches one path, not a new one
@@ -364,7 +365,7 @@ const NativeChart = ({
       targetLineRef.current = null;
       entryLineRef.current = null;
       trackedLineRef.current = null;
-      orderLineRef.current = null;
+      orderLinesRef.current = [];
       markersRef.current = null;
       projSeriesRef.current = null;
       if (focusAnimationRef.current) cancelAnimationFrame(focusAnimationRef.current);
@@ -1232,31 +1233,50 @@ const NativeChart = ({
     }
   }, [status, entryPrice, tfIndex]);
 
-  // Active limit-order target — shows where a pending order will fire.
+  // Active order targets — where pending orders will fire. Combines the
+  // deep-link single line (coin.activeOrder) with the wallet's live soft
+  // orders (take-profit green / stop-loss red / buy-at blue).
   useEffect(() => {
     const series = seriesRef.current;
     if (!series || status !== 'ready') return;
 
-    if (orderLineRef.current) {
-      try { series.removePriceLine(orderLineRef.current); } catch (e) { /* series changed */ }
-      orderLineRef.current = null;
+    for (const line of orderLinesRef.current) {
+      try { series.removePriceLine(line); } catch (e) { /* series changed */ }
+    }
+    orderLinesRef.current = [];
+
+    const wanted = [];
+    const legacy = Number(orderLinePrice);
+    if (Number.isFinite(legacy) && legacy > 0) {
+      wanted.push({ price: legacy, label: orderLineLabel, color: '#f87171' });
+    }
+    for (const l of orderLines || []) {
+      const price = Number(l?.price);
+      if (!(price > 0)) continue;
+      // Skip duplicates of the deep-link line (same order arriving both ways).
+      if (wanted.some((w) => Math.abs(w.price - price) / price < 0.005)) continue;
+      wanted.push({
+        price,
+        label: l.label || 'Order',
+        color: l.kind === 'stopLoss' ? '#f87171' : l.kind === 'buy' ? '#60a5fa' : '#34d399',
+      });
     }
 
-    const price = Number(orderLinePrice);
-    if (!Number.isFinite(price) || price <= 0) return;
-    try {
-      orderLineRef.current = series.createPriceLine({
-        price,
-        color: '#f87171',
-        lineWidth: 1,
-        lineStyle: 2,
-        axisLabelVisible: true,
-        title: orderLineLabel,
-      });
-    } catch (e) {
-      // Area fallback series may not support price lines in all chart builds.
+    for (const l of wanted) {
+      try {
+        orderLinesRef.current.push(series.createPriceLine({
+          price: l.price,
+          color: l.color,
+          lineWidth: 1,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: l.label,
+        }));
+      } catch (e) {
+        // Area fallback series may not support price lines in all chart builds.
+      }
     }
-  }, [status, orderLinePrice, orderLineLabel, tfIndex]);
+  }, [status, orderLinePrice, orderLineLabel, orderLines, tfIndex]);
 
   // Zoom into the tracked position on the chart scale
   const zoomToTracked = useCallback(() => {

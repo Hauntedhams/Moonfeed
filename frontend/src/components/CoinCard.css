@@ -24,9 +24,9 @@
      BUT exempt TikTok action bar, expand-handle & info layer so they animate in BOTH directions.
      The full-screen sheets (pdv/wpv/odv) are exempt too — their drag-dismiss
      spring-back and slide-out rely on the transform transition. */
-  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content):not(.coin-buy-drawer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track):not(.feed-swipe-container):not(.feed-filter-strip):not(.feed-filter-track):not(.feed-filter-item):not(.feed-filter-hint):not(.orders-page):not(.swipe-back-page):not(.pdv-root):not(.wpv-root):not(.odv-root),
-  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content):not(.coin-buy-drawer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track):not(.feed-swipe-container):not(.feed-filter-strip):not(.feed-filter-track):not(.feed-filter-item):not(.feed-filter-hint):not(.orders-page):not(.swipe-back-page):not(.pdv-root):not(.wpv-root):not(.odv-root)::before,
-  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content):not(.coin-buy-drawer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track):not(.feed-swipe-container):not(.feed-filter-strip):not(.feed-filter-track):not(.feed-filter-item):not(.feed-filter-hint):not(.orders-page):not(.swipe-back-page):not(.pdv-root):not(.wpv-root):not(.odv-root)::after {
+  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content):not(.coin-buy-drawer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track):not(.feed-swipe-container):not(.feed-filter-strip):not(.feed-filter-track):not(.feed-filter-item):not(.feed-filter-hint):not(.orders-page):not(.swipe-back-page):not(.pdv-root):not(.wpv-root):not(.odv-root):not(.crs-root):not(.crs-top):not(.crs-sheet),
+  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content):not(.coin-buy-drawer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track):not(.feed-swipe-container):not(.feed-filter-strip):not(.feed-filter-track):not(.feed-filter-item):not(.feed-filter-hint):not(.orders-page):not(.swipe-back-page):not(.pdv-root):not(.wpv-root):not(.odv-root):not(.crs-root):not(.crs-top):not(.crs-sheet)::before,
+  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content):not(.coin-buy-drawer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track):not(.feed-swipe-container):not(.feed-filter-strip):not(.feed-filter-track):not(.feed-filter-item):not(.feed-filter-hint):not(.orders-page):not(.swipe-back-page):not(.pdv-root):not(.wpv-root):not(.odv-root):not(.crs-root):not(.crs-top):not(.crs-sheet)::after {
     transition: none !important;
     transition-duration: 0s !important;
   }
@@ -41,7 +41,7 @@
   .info-layer-profile-image:hover,
   .header-metric:hover,
   .header-social-icon:hover,
-  *:not(.tiktok-action-btn):not(.tiktok-action-buttons):not(.expand-handle):not(.coin-info-layer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track):not(.feed-swipe-container):not(.feed-filter-strip):not(.feed-filter-track):not(.feed-filter-item):not(.feed-filter-hint):not(.orders-page):not(.swipe-back-page):not(.pdv-root):not(.wpv-root):not(.odv-root):hover {
+  *:not(.tiktok-action-btn):not(.tiktok-action-buttons):not(.expand-handle):not(.coin-info-layer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track):not(.feed-swipe-container):not(.feed-filter-strip):not(.feed-filter-track):not(.feed-filter-item):not(.feed-filter-hint):not(.orders-page):not(.swipe-back-page):not(.pdv-root):not(.wpv-root):not(.odv-root):not(.crs-root):not(.crs-top):not(.crs-sheet):hover {
     transform: none !important;
     opacity: 1 !important;
   }
@@ -105,8 +105,8 @@
   /* Container passes touches/wheel through so the whole card scrolls as one layer;
      only the buttons themselves capture taps (see rule below). */
   pointer-events: none;
-  /* Use clip-path to mask from bottom → top during collapse */
-  clip-path: inset(0 0 0 0);
+  /* Use clip-path to mask from bottom → top during collapse; negative bottom/sides keep the counts under the buttons visible. */
+  clip-path: inset(0 -20px -20px -20px);
   transition:
     gap 0.3s cubic-bezier(0.4, 0, 0.2, 1),
     clip-path 0.45s cubic-bezier(0.4, 0, 0.2, 1);
@@ -321,6 +321,22 @@
   display: none;
 }
 
+/* IG-style count under each floating action button. */
+.tiktok-action-btn .tiktok-action-count {
+  position: absolute;
+  top: calc(100% + 3px);
+  left: -12px;
+  right: -12px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
+
 .tiktok-action-btn:hover {
   transform: scale(1.2);
   opacity: 1;
@@ -438,7 +454,7 @@ html.dark-mode .coin-expand-swipe-arrow-icon {
 .native-chart-mobile-right-actions {
   position: fixed;
   /* left set by the alignment effect so this row sits just left of the Top Traders button */
-  bottom: calc(env(safe-area-inset-bottom) + 94px);
+  bottom: calc(env(safe-area-inset-bottom) + 108px);
   z-index: 9999;
   display: flex;
   align-items: center;
@@ -2088,57 +2104,103 @@ body.dark-mode .graduation-progress-caption {
   align-self: center;
 }
 
-/* Banner Follow Button */
+/* Banner Follow Button: "+" circle → "✓ Tracked" flash → "✓ $.0₄441" tracked-at price.
+   No transform-based motion — the mobile :hover rule strips transforms after a tap. */
 .banner-follow-button {
-  background: rgba(0, 0, 0, 0.05); /* Light gray for light mode */
-  border: 1.5px solid rgba(0, 0, 0, 0.2); /* Dark border for light mode */
-  color: rgba(0, 0, 0, 0.8); /* Dark text for light mode */
-  cursor: pointer;
-  padding: 6px 14px;
-  border-radius: 20px;
-  transition: all 0.2s ease;
-  display: flex;
-  align-items: flex-start; /* Changed from center - align charts to top */
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
-  font-size: 0.8rem;
-  font-weight: 600;
+  gap: 5px;
+  height: 30px;
+  min-width: 30px;
+  padding: 0 7px;
+  border-radius: 15px;
+  border: 1.5px solid rgba(0, 0, 0, 0.2);
+  background: rgba(0, 0, 0, 0.05);
+  color: rgba(0, 0, 0, 0.8);
+  cursor: pointer;
   flex-shrink: 0;
   white-space: nowrap;
-  text-transform: capitalize;
-  letter-spacing: 0.3px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.2px;
+  position: relative;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
-.banner-follow-button:hover {
-  background: rgba(0, 0, 0, 0.1); /* Slightly darker on hover */
-  border-color: rgba(0, 0, 0, 0.3);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+.dark-mode .banner-follow-button {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.banner-follow-button .follow-icon {
+  flex-shrink: 0;
 }
 
 .banner-follow-button.following {
+  padding: 0 11px 0 9px;
   background: rgba(0, 0, 0, 0.85);
   border-color: rgba(0, 0, 0, 0.85);
   color: rgba(255, 255, 255, 0.95);
-  position: relative;
+}
+
+.dark-mode .banner-follow-button.following {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.35);
+  color: #fff;
+}
+
+.banner-follow-button.following .follow-icon {
+  color: #34d399;
+}
+
+.banner-follow-button.following.confirming,
+.dark-mode .banner-follow-button.following.confirming {
+  background: rgba(16, 185, 129, 0.9);
+  border-color: rgba(52, 211, 153, 0.95);
+  color: #fff;
+  animation: followConfirmGlow 1.4s ease-out;
+}
+
+.banner-follow-button.following.confirming .follow-icon {
+  color: #fff;
+}
+
+/* Keyed remount on Tracked ↔ price swap reveals the new text left-to-right. */
+.banner-follow-button .follow-label {
+  display: inline-block;
   overflow: hidden;
-  z-index: 1; /* keeps the tracked price sliding out from underneath */
+  animation: followLabelReveal 0.32s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+@keyframes followLabelReveal {
+  from { max-width: 0; opacity: 0; }
+  to { max-width: 110px; opacity: 1; }
+}
+
+@keyframes followConfirmGlow {
+  0% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.7); }
+  60% { box-shadow: 0 0 0 7px rgba(52, 211, 153, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); }
 }
 
 /* Only swap "Following" -> "Unfollow" on devices with a real hover (desktop/mouse).
    On touch devices the :hover state sticks after tap, causing both labels to overlap. */
 @media (hover: hover) and (pointer: fine) {
-  .banner-follow-button.following:hover {
+  .banner-follow-button.following:not(.confirming):hover {
     background: rgba(239, 68, 68, 0.85);
     border-color: rgba(239, 68, 68, 0.85);
   }
 
-  /* Hide the "Tracking" label via visibility so a color !important override
-    elsewhere can't keep it visible and overlap the "Untrack" pseudo-element. */
-  .banner-follow-button.following:hover .follow-label {
+  .banner-follow-button.following:not(.confirming):hover .follow-label,
+  .banner-follow-button.following:not(.confirming):hover .follow-icon {
     visibility: hidden;
   }
 
-  .banner-follow-button.following:hover::after {
+  .banner-follow-button.following:not(.confirming):hover::after {
     content: 'Untrack';
     position: absolute;
     top: 50%;
@@ -2156,25 +2218,204 @@ body.dark-mode .graduation-progress-caption {
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   flex-shrink: 0;
 }
 
-.tracked-price {
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 0.72rem;
-  font-weight: 600;
+/* ⚡ Instant buy pill (in-app trading wallet), right of the Track button */
+.instant-trade-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 30px;
+  padding: 0 11px 0 9px;
+  border-radius: 15px;
+  border: 1.5px solid rgba(245, 158, 11, 0.55);
+  background: rgba(245, 158, 11, 0.1);
+  color: #d97706;
+  font-size: 0.78rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  /* Pops out of the right side of the Tracked button, same spring feel as the
-     expand-handle releasing its action buttons */
-  animation: trackedPriceRelease 0.38s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  cursor: pointer;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
-@keyframes trackedPriceRelease {
-  0%   { opacity: 0; transform: translateX(-18px) scale(0.5); }
-  55%  { opacity: 1; transform: translateX(3px) scale(1.1); }
-  100% { opacity: 1; transform: translateX(0) scale(1); }
+.dark-mode .instant-trade-button {
+  border-color: rgba(251, 191, 36, 0.5);
+  background: rgba(251, 191, 36, 0.1);
+  color: #fbbf24;
 }
+
+.instant-trade-button.armed,
+.dark-mode .instant-trade-button.armed {
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  border-color: #fbbf24;
+  color: #1a1204;
+}
+
+/* Socials-row instant control: [one-tap switch][⚡ Buy][options] in one pill */
+.instant-trade-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 30px;
+  padding: 0 3px 0 6px;
+  border-radius: 15px;
+  border: 1.5px solid rgba(245, 158, 11, 0.5);
+  background: rgba(245, 158, 11, 0.08);
+  flex-shrink: 0;
+}
+
+.instant-trade-control.armed {
+  border-color: #fbbf24;
+  background: rgba(251, 191, 36, 0.18);
+}
+
+.instant-trade-control .instant-trade-button,
+.dark-mode .instant-trade-control .instant-trade-button,
+.instant-trade-control .instant-trade-button.armed {
+  height: 100%;
+  padding: 0 6px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: #d97706;
+}
+
+.dark-mode .instant-trade-control .instant-trade-button,
+.dark-mode .instant-trade-control .instant-trade-button.armed {
+  color: #fbbf24;
+}
+
+.instant-toggle {
+  position: relative;
+  width: 28px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: rgba(120, 120, 128, 0.45);
+  cursor: pointer;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.2s ease;
+}
+
+.instant-toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  transition: left 0.2s ease;
+}
+
+.instant-trade-control.armed .instant-toggle {
+  background: #f59e0b;
+}
+
+.instant-trade-control.armed .instant-toggle-knob {
+  left: 14px;
+}
+
+.instant-options-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-left: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 0 12px 12px 0;
+  background: transparent;
+  color: #d97706;
+  cursor: pointer;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.dark-mode .instant-options-btn {
+  color: #fbbf24;
+}
+
+/* Follow button docked on the avatar's bottom edge (TikTok-style "+").
+   Fixed-width flex anchor: a wider tracked pill overflows evenly both sides without resizing the header. */
+.info-layer-follow-anchor {
+  position: relative;
+  z-index: 2;
+  width: 48px;
+  height: 20px;
+  margin-top: -17px;
+  display: flex;
+  justify-content: center;
+  pointer-events: auto;
+}
+
+.info-layer-follow-anchor .banner-follow-button {
+  height: 20px;
+  min-width: 20px;
+  padding: 0;
+  gap: 3px;
+  border-radius: 10px;
+  border: 2px solid #fff;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+  font-size: 0.64rem;
+}
+
+.dark-mode .info-layer-follow-anchor .banner-follow-button {
+  border-color: #1a1a1a;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+}
+
+.info-layer-follow-anchor .banner-follow-button.following,
+.dark-mode .info-layer-follow-anchor .banner-follow-button.following {
+  padding: 0 7px 0 5px;
+  background: rgba(20, 20, 26, 0.92);
+  color: #fff;
+}
+
+.info-layer-follow-anchor .banner-follow-button.following.confirming,
+.dark-mode .info-layer-follow-anchor .banner-follow-button.following.confirming {
+  background: rgba(16, 185, 129, 0.95);
+}
+
+.instant-trade-button.busy {
+  opacity: 0.55;
+  animation: instantBusyPulse 0.9s ease-in-out infinite;
+}
+
+@keyframes instantBusyPulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.9; }
+}
+
+/* Transient buy result — absolute so it never stretches the banner row */
+.instant-trade-flash {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  white-space: nowrap;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 10px;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.instant-trade-flash.ok { background: rgba(34, 197, 94, 0.92); color: #fff; }
+.instant-trade-flash.err { background: rgba(239, 68, 68, 0.92); color: #fff; }
+
 
 /* Side arrow toggle that reveals the "Notify at" chips */
 .alert-arrow-btn {

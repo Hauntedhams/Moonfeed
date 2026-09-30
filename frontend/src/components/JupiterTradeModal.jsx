@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import TriggerOrderModal from './TriggerOrderModal';
-import CautionTapeBanner from './CautionTapeBanner';
+import InstantTradePanel from './InstantTradePanel';
 import { useWallet } from '../contexts/WalletContext';
 import { useWallet as useJupiterWallet } from '@jup-ag/wallet-adapter';
 import { useWalletConnectOnboarding } from './WalletConnectOnboarding';
@@ -13,8 +12,6 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('swap'); // 'swap' or 'limit'
   const [swapSuccessInfo, setSwapSuccessInfo] = useState(null);
-  // Side to preselect on the Limit Order page when jumping there post-swap
-  const [limitPrefillSide, setLimitPrefillSide] = useState(null);
   // Live status of the sell order queued by the slide-out "Sell at" flow
   // (CoinCard places it automatically after this swap — no manual setup needed).
   const [autoOrderStatus, setAutoOrderStatus] = useState(null); // { status, triggerPrice, error }
@@ -255,7 +252,6 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
     setError(null);
     setActiveTab('swap');
     setSwapSuccessInfo(null);
-    setLimitPrefillSide(null);
     setAutoOrderStatus(null);
     onClose();
   };
@@ -298,11 +294,6 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
     swipeStart.current = null;
   };
 
-  const handleOrderCreated = (result) => {
-    console.log('✅ Limit order created:', result);
-    // You can add success notification here
-  };
-
   if (!isOpen || !jupiterWallet.connected) return null;
 
   return (
@@ -343,9 +334,9 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
                   className={`tab-btn ${activeTab === 'limit' ? 'active' : ''}`}
                   onClick={() => handleTabChange('limit')}
                 >
-                  <span className="tab-icon">🎯</span>
-                  Limit Order
-                  <span className="caution-tape-badge">PRICE ALERT</span>
+                  <span className="tab-icon">⚡</span>
+                  Instant Trade
+                  <span className="caution-tape-badge">AUTO TP/SL</span>
                 </button>
               </div>
             </>
@@ -510,19 +501,14 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
                   </div>
                 </div>
 
-                {/* Page 2 — Limit Order (swipe left to reach) */}
+                {/* Page 2 — Instant Trade (swipe left to reach): device-local
+                    trading wallet with auto take-profit / stop-loss execution. */}
                 <div className="jt-swipe-page jt-swipe-page--limit">
-                  <CautionTapeBanner />
-                  <TriggerOrderModal
+                  <InstantTradePanel
                     embedded
-                    isOpen={isOpen}
                     coin={coin}
                     onClose={handleClose}
-                    onOrderCreated={handleOrderCreated}
-                    initialInputAmount={initialSolAmount}
-                    initialPercentage={initialPercentage}
-                    initialSide={limitPrefillSide || initialSide}
-                    initialTriggerPrice={initialTriggerPrice}
+                    connectedWallet={walletAddress}
                   />
                   <div className="jupiter-modal-footer limit-order-footer">
                     <p className="non-custodial-disclaimer">
@@ -581,12 +567,11 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
                           <button
                             className="setup-limit-link"
                             onClick={() => {
-                              setLimitPrefillSide('sell');
                               setSwapSuccessInfo(null);
                               setActiveTab('limit');
                             }}
                           >
-                            Retry in Limit Order tab →
+                            Open Instant Trade →
                           </button>
                         </>
                       )}
@@ -595,17 +580,11 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
                     <button
                       className="setup-limit-link"
                       onClick={() => {
-                        const SOL_MINT = 'So11111111111111111111111111111111111111112';
-                        const swapResult = swapSuccessInfo?.swapResult;
-                        // After a buy, preselect sell (take-profit) on the limit page
-                        if (swapResult?.inputMint === SOL_MINT || swapResult?.outputMint === coin?.mintAddress) {
-                          setLimitPrefillSide('sell');
-                        }
                         setSwapSuccessInfo(null);
                         setActiveTab('limit');
                       }}
                     >
-                      Setup limit order? →
+                      Set up auto sell targets? →
                     </button>
                   )}
                 </div>

@@ -1,0 +1,95 @@
+/* Wallet switcher pill + dropdown (Trades / Profile headers) */
+
+.wallet-switcher {
+  position: relative;
+  display: inline-block;
+  margin-bottom: 10px;
+}
+
+.wallet-switcher-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  padding: 6px 12px;
+  color: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.wallet-switcher-icon {
+  display: inline-flex;
+  align-items: center;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.wallet-switcher-icon.bolt { color: #f59e0b; }
+
+.wallet-switcher-label {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.15;
+}
+
+.wallet-switcher-addr {
+  font-size: 0.66rem;
+  font-weight: 500;
+  font-family: monospace;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.wallet-switcher-chevron {
+  color: rgba(255, 255, 255, 0.5);
+  transition: rotate 0.18s ease;
+}
+
+.wallet-switcher-chevron.open { rotate: 180deg; }
+
+.wallet-switcher-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 220px;
+  background: #191c24;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  padding: 6px;
+  z-index: 300;
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.wallet-switcher-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  background: none;
+  border: none;
+  border-radius: 10px;
+  padding: 9px 10px;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+
+.wallet-switcher-item:hover { background: rgba(255, 255, 255, 0.06); }
+.wallet-switcher-item.active { background: rgba(99, 102, 241, 0.16); }
+.wallet-switcher-item:disabled { opacity: 0.45; cursor: default; }
+
+.wallet-switcher-item-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+  flex: 1;
+}
+
+.wallet-switcher-check { color: #818cf8; font-weight: 800; }

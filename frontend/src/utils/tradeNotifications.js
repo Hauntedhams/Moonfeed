@@ -233,6 +233,51 @@ export async function notifyOrderFilled(order, stats) {
   }
 }
 
+// Fire a native (or web) notification when the trading wallet auto-executes a
+// triggered take-profit / stop-loss / buy target. Tapping opens the coin card
+// with the position drawn on the chart (type 'autoTradeExecuted').
+export async function notifyAutoTradeExecuted({ mint, symbol, side, kind, solAmount, image, error }) {
+  if (!permissionGranted) return;
+  const name = symbol || 'Your coin';
+  const kindLabel = kind === 'stopLoss' ? 'stop loss' : kind === 'takeProfit' ? 'sell target' : 'buy target';
+  const sol = Number(solAmount) > 0 ? `${Number(solAmount).toFixed(4)} SOL` : '';
+  const title = error
+    ? `${name} hit your ${kindLabel} — auto-${side} failed`
+    : `${name} hit your ${kindLabel} — auto-${side === 'buy' ? 'bought' : 'sold'}`;
+  const body = error
+    ? `${error} Tap to trade manually.`
+    : `${side === 'buy' ? `Bought with ${sol}` : `Received ${sol}`}. Tap to view the position.`;
+
+  try {
+    if (isNative) {
+      await scheduleNative({
+        id: idFromSignature(`autoexec-${mint}-${Date.now()}`),
+        title,
+        body,
+        image,
+        extra: { type: 'autoTradeExecuted', tokenMint: mint, symbol: symbol || '' },
+      });
+    } else if ('Notification' in window) {
+      const notificationOptions = {
+        body,
+        icon: isRemoteImage(image) ? image : '/android-chrome-192x192.png',
+        badge: '/favicon-32x32.png',
+        tag: `auto-exec-${mint}`,
+        renotify: true,
+        data: { type: 'autoTradeExecuted', tokenMint: mint, url: '/' },
+      };
+      const registration = await getServiceWorkerRegistration();
+      if (registration?.showNotification) {
+        await registration.showNotification(title, notificationOptions);
+      } else {
+        new Notification(title, notificationOptions);
+      }
+    }
+  } catch (err) {
+    console.debug('[TradeNotifications] auto-exec schedule error:', err?.message);
+  }
+}
+
 // Fire a native (or web) notification when a coin the user holds starts crashing.
 export async function notifyHoldingCrash({ mint, symbol, dropPct, windowLabel, valueUsd, image }) {
   if (!permissionGranted) return;

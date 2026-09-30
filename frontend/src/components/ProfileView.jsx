@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useWallet as useJupiterWallet } from '@jup-ag/wallet-adapter';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { getFullApiUrl } from '../config/api';
@@ -7,6 +7,8 @@ import { useTrackedTrades } from '../contexts/TrackedTradesContext';
 import { useDarkMode } from '../contexts/DarkModeContext';
 import { useUserProfile } from '../contexts/UserProfileContext';
 import { useDemoMode } from '../contexts/DemoModeContext';
+import { useWalletView } from '../hooks/useWalletView';
+import WalletSwitcher from './WalletSwitcher';
 import WalletPopup from './WalletPopup';
 import JupiterWalletButton from './JupiterWalletButton';
 import NativeChart from './NativeChart';
@@ -26,8 +28,15 @@ const ProfileView = ({ onTradeClick, onOpenPosition }) => {
   const { getTradesForMint } = useTrackedTrades();
 
   // When demo mode is active, override wallet state so all screens are accessible
-  const publicKey = isDemoMode ? demoPublicKey : jupiterWallet.publicKey;
-  const connected = isDemoMode ? true : (jupiterWallet.connected || false);
+  const basePublicKey = isDemoMode ? demoPublicKey : jupiterWallet.publicKey;
+  // Wallet view switcher: main connected wallet vs the ⚡ trading wallet
+  const { mode: walletViewMode, setMode: setWalletViewMode, instantWallet } = useWalletView();
+  const viewingInstant = walletViewMode === 'instant' && Boolean(instantWallet);
+  const publicKey = useMemo(
+    () => (viewingInstant ? new PublicKey(instantWallet.publicKey) : basePublicKey),
+    [viewingInstant, instantWallet, basePublicKey]
+  );
+  const connected = viewingInstant ? true : (isDemoMode ? true : (jupiterWallet.connected || false));
   const disconnect = jupiterWallet.disconnect;
   const signTransaction = jupiterWallet.signTransaction;
 
@@ -769,6 +778,15 @@ const ProfileView = ({ onTradeClick, onOpenPosition }) => {
             <p className="wallet-hint">
               Browse everything for free — a wallet is only needed to customize your profile and trade.
             </p>
+            {instantWallet && (
+              <button
+                type="button"
+                className="orders-view-instant-link"
+                onClick={() => setWalletViewMode('instant')}
+              >
+                View your trading wallet instead
+              </button>
+            )}
           </div>
 
           <div className="pv-ig-actions">
@@ -897,6 +915,13 @@ const ProfileView = ({ onTradeClick, onOpenPosition }) => {
             </button>
           </div>
         </div>
+
+        <WalletSwitcher
+          mode={viewingInstant ? 'instant' : 'main'}
+          onChange={setWalletViewMode}
+          mainAddress={basePublicKey?.toString() || null}
+          instantAddress={instantWallet?.publicKey || null}
+        />
 
         <button className="pv-ig-addr-chip" onClick={() => copyToClipboard(publicKey?.toString())} title="Copy full address">
           {formatAddress(publicKey)}

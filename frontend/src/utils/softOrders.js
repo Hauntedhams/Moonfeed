@@ -58,3 +58,24 @@ export async function cancelSoftOrder(orderId, walletAddress) {
   await parseJson(res);
   return true;
 }
+
+// Shared short-lived cache so every mounted coin card doesn't refetch the
+// wallet's active orders on each scroll step.
+let activeOrdersCache = { key: '', ts: 0, promise: null };
+
+export function fetchActiveSoftOrdersCached(wallets, maxAgeMs = 30000) {
+  const key = [...new Set(wallets)].filter(Boolean).sort().join(',');
+  if (!key) return Promise.resolve([]);
+  if (activeOrdersCache.promise && activeOrdersCache.key === key && Date.now() - activeOrdersCache.ts < maxAgeMs) {
+    return activeOrdersCache.promise;
+  }
+  const promise = Promise.all(
+    key.split(',').map((w) => fetchSoftOrders(w, 'active').catch(() => []))
+  ).then((lists) => lists.flat());
+  activeOrdersCache = { key, ts: Date.now(), promise };
+  return promise;
+}
+
+export function bustActiveSoftOrdersCache() {
+  activeOrdersCache = { key: '', ts: 0, promise: null };
+}

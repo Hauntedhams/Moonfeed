@@ -167,6 +167,9 @@ app.use('/api/webhook/helius', require('./routes/heliusWebhook'));
 // Mount soft (server-monitored) limit orders
 app.use('/api/soft-orders', softOrderRoutes);
 
+// Instant-trade swap builder/broadcaster for the in-app trading wallet
+app.use('/api/instant-trade', require('./routes/instantTrade'));
+
 // First-party product analytics (ingest is public, dashboard aggregations need ADMIN_API_KEY)
 app.use('/api/analytics', require('./routes/analytics'));
 

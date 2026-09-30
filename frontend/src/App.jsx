@@ -30,6 +30,7 @@ import useOrderFillNotifications from './hooks/useOrderFillNotifications'
 import useHoldingsCrashNotifications from './hooks/useHoldingsCrashNotifications'
 import useTrackedGainNotifications from './hooks/useTrackedGainNotifications'
 import useTrenchesGainNotifications from './hooks/useTrenchesGainNotifications'
+import useInstantAutoExecutor from './hooks/useInstantAutoExecutor'
 import useSwipeBack from './hooks/useSwipeBack'
 
 // Lazy load heavy components that aren't needed immediately
@@ -56,7 +57,7 @@ const favoritesCacheKey = (address) => `moonfeed_tracked_coins_${address}`;
 const LAST_FEED_KEY = 'moonfeed_last_feed';
 const FEED_POS_KEY = 'moonfeed_feed_pos';
 const FEED_LABELS = Object.fromEntries(BASE_FEEDS.map((feed) => [feed.id, feed.label]));
-const KNOWN_FEEDS = ['mixed', 'dextrending', 'whalefeed', 'graduating', 'trenches', 'new'];
+const KNOWN_FEEDS = ['mixed', 'dextrending', 'whalefeed', 'graduating', 'trenches', 'new', 'followwallets', 'followcoins'];
 const getInitialFilters = () => {
   try {
     const saved = localStorage.getItem(LAST_FEED_KEY);
@@ -92,6 +93,26 @@ const getInitialCoinDetail = () => {
   return null;
 };
 
+// Navigation history — every drill-in (coin detail, wallet profile, position
+// detail) pushes the screen it left so the top-left back button retraces the
+// user's exact path, one step at a time, all the way to the home screen.
+// Persisted so a silent reload reopens the same page with back intact.
+const NAV_STATE_KEY = 'moonfeed_nav_state';
+const NAV_STACK_MAX = 40;
+const getInitialNavState = () => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(NAV_STATE_KEY));
+    if (saved && Date.now() - (saved.ts || 0) < COIN_DETAIL_RESTORE_MAX_AGE) {
+      return {
+        walletProfile: saved.walletProfile || null,
+        positionDetail: saved.positionDetail || null,
+        stack: Array.isArray(saved.stack) ? saved.stack : [],
+      };
+    }
+  } catch (_) {}
+  return null;
+};
+
 function App() {
   // Build timestamp - only log once on initial load
   if (!window.__MOONFEED_LOGGED__) {
@@ -113,6 +134,13 @@ function App() {
   useHoldingsCrashNotifications(); // background: notifies when a held coin starts crashing
   useTrackedGainNotifications(favorites); // background: notifies when a tracked coin is up +10%
   useTrenchesGainNotifications(); // background: notifies when a fresh Trenches coin is surging fast
+  useInstantAutoExecutor(); // background: auto-executes the trading wallet's TP/SL triggers while the app is open
+  const [tradesBadgeCount, setTradesBadgeCount] = useState(0); // Trades nav badge for auto-executed orders
+  useEffect(() => {
+    const onAutoTrade = () => setTradesBadgeCount((c) => c + 1);
+    window.addEventListener('moonfeed:auto-trade-executed', onAutoTrade);
+    return () => window.removeEventListener('moonfeed:auto-trade-executed', onAutoTrade);
+  }, []);
   const favoritesSyncedWalletRef = useRef(null); // account address we've already pulled synced favorites for
   const skipNextFavoritesSaveRef = useRef(false); // true right after loading remote data, to avoid an immediate re-save
   const favoritesHydratedRef = useRef(false); // blocks saving until the first remote read settles
@@ -141,8 +169,12 @@ function App() {
   const [currentCoinIndex, setCurrentCoinIndex] = useState(0); // Current coin index in scroller
   const [totalCoinsInList, setTotalCoinsInList] = useState(0); // Total coins in current list
   const [previousTab, setPreviousTab] = useState(restoredCoinDetail?.previousTab || 'home'); // Tab to go back to from coin-detail
-  const [walletProfile, setWalletProfile] = useState(null); // Wallet profile overlay state: { address, displayName? }
-  const [positionDetail, setPositionDetail] = useState(null); // { wallet, mint } to show a single position's entry/exit detail
+  const [restoredNav] = useState(getInitialNavState); // read once per page load
+  const [walletProfile, setWalletProfile] = useState(restoredNav?.walletProfile || null); // Wallet profile overlay state: { address, displayName? }
+  const [positionDetail, setPositionDetail] = useState(restoredNav?.positionDetail || null); // { wallet, mint } to show a single position's entry/exit detail
+  const navStackRef = useRef(restoredNav?.stack || []); // saved list of screens the user drilled through
+  const navStateRef = useRef(null); // always-current snapshot of the visible screen
+  navStateRef.current = { activeTab, selectedCoin, previousTab, walletProfile, positionDetail };
   const lastViewedMintRef = useRef(null); // dedupes repeated coin_view analytics for the same card
 
   // Initialize referral tracking, mobile optimizer, and performance monitoring on app load
@@ -328,8 +360,96 @@ function App() {
     };
   }, []);
 
+  // ── Navigation history ──────────────────────────────────────────────────
+  const minifyNavSnapshot = (s) => ({
+    activeTab: s.activeTab,
+    previousTab: s.previousTab,
+    selectedCoin: s.selectedCoin ? snapshotCoinForRestore(s.selectedCoin) : null,
+    walletProfile: s.walletProfile || null,
+    positionDetail: s.positionDetail || null,
+  });
+
+  // Push the CURRENT screen onto the history stack before navigating away.
+  const pushNav = () => {
+    try {
+      const snap = minifyNavSnapshot(navStateRef.current);
+      const stack = navStackRef.current;
+      const top = stack[stack.length - 1];
+      if (top && JSON.stringify(top) === JSON.stringify(snap)) return;
+      stack.push(snap);
+      if (stack.length > NAV_STACK_MAX) stack.shift();
+    } catch (_) { /* snapshot must never block navigation */ }
+  };
+
+  // Root navigation (bottom nav, feed jumps) starts a fresh context.
+  const clearNavStack = () => { navStackRef.current = []; };
+
+  const restoreNavSnapshot = (snap) => {
+    setWalletProfile(snap.walletProfile || null);
+    setPositionDetail(snap.positionDetail || null);
+    setPreviousTab(snap.previousTab || 'home');
+    if (snap.activeTab === 'coin-detail' && snap.selectedCoin) {
+      setSelectedCoin(snap.selectedCoin);
+      setCurrentViewedCoin(snap.selectedCoin);
+      setActiveTab('coin-detail');
+    } else {
+      setActiveTab(snap.activeTab && snap.activeTab !== 'coin-detail' ? snap.activeTab : 'home');
+    }
+  };
+
+  // Top-left back: retrace the saved path; with no history left, peel one
+  // layer at a time until the home screen. `origin` names the layer the back
+  // press came from — entries that would keep that same layer open are skipped
+  // so back always closes the screen the user pressed it on. Reads live state
+  // from navStateRef so event-listener call sites never act on a stale closure.
+  const navigateBack = (origin) => {
+    const cur = navStateRef.current;
+    const keepsOriginOpen = (snap) => {
+      if (origin === 'pdv') {
+        return snap.positionDetail && cur.positionDetail &&
+          snap.positionDetail.wallet === cur.positionDetail.wallet &&
+          snap.positionDetail.mint === cur.positionDetail.mint;
+      }
+      if (origin === 'wpv') {
+        return !snap.positionDetail && snap.walletProfile && cur.walletProfile &&
+          snap.walletProfile.address === cur.walletProfile.address;
+      }
+      if (origin === 'coin-detail') {
+        const mintOf = (c) => c?.mintAddress || c?.address;
+        return snap.activeTab === 'coin-detail' && !snap.walletProfile && !snap.positionDetail &&
+          mintOf(snap.selectedCoin) && mintOf(snap.selectedCoin) === mintOf(cur.selectedCoin);
+      }
+      return false;
+    };
+    let snap = navStackRef.current.pop();
+    while (snap && keepsOriginOpen(snap)) snap = navStackRef.current.pop();
+    if (snap) { restoreNavSnapshot(snap); return; }
+    if (cur.positionDetail) { setPositionDetail(null); return; }
+    if (cur.walletProfile) { setWalletProfile(null); return; }
+    if (cur.activeTab === 'coin-detail') { setActiveTab(cur.previousTab || 'home'); return; }
+    setActiveTab('home');
+  };
+
+  // Persist the stack + open overlays so a silent reload (WKWebView
+  // memory-pressure crash) restores the exact page AND its back path.
+  useEffect(() => {
+    try {
+      if (walletProfile || positionDetail || navStackRef.current.length) {
+        localStorage.setItem(NAV_STATE_KEY, JSON.stringify({
+          walletProfile: walletProfile || null,
+          positionDetail: positionDetail || null,
+          stack: navStackRef.current,
+          ts: Date.now(),
+        }));
+      } else {
+        localStorage.removeItem(NAV_STATE_KEY);
+      }
+    } catch (_) {}
+  }, [walletProfile, positionDetail, activeTab, selectedCoin]);
+
   // Handle coin click from favorites grid
   const handleCoinClick = (coin) => {
+    pushNav();
     setPreviousTab('tracked');
     setSelectedCoin(coin);
     setCurrentViewedCoin(coin);
@@ -339,7 +459,7 @@ function App() {
   // Edge swipe-back for the single-coin detail view. The page follows the
   // finger from the left edge and slides out on commit (shared gesture — see
   // hooks/useSwipeBack.js).
-  const goBackFromCoinDetail = () => setActiveTab(previousTab || 'home');
+  const goBackFromCoinDetail = () => navigateBack('coin-detail');
   const coinDetailSwipeBack = useSwipeBack({
     onBack: goBackFromCoinDetail,
     ignoreSelector: '.native-chart',
@@ -453,6 +573,7 @@ function App() {
     const current = KNOWN_FEEDS.includes(filtersRef.current?.type) ? filtersRef.current.type : FEED_ORDER[0];
     const nextIndex = (FEED_ORDER.indexOf(current) + direction + FEED_ORDER.length) % FEED_ORDER.length;
     const nextFeed = explicitFeed || FEED_ORDER[nextIndex];
+    navStackRef.current = []; // switching feeds is root navigation
     setActiveTab('home');
     setAdvancedFilters(null);
     setIsAdvancedFilterActive(false);
@@ -478,7 +599,7 @@ function App() {
   useEffect(() => () => feedDropTimersRef.current.forEach(clearTimeout), []);
 
   const stripFeeds = useMemo(
-    () => (isAdvancedFilterActive ? [...BASE_FEEDS, { id: 'custom', label: 'Custom' }] : BASE_FEEDS),
+    () => (isAdvancedFilterActive ? [...BASE_FEEDS, { id: 'custom', label: 'Custom', icon: 'filter' }] : BASE_FEEDS),
     [isAdvancedFilterActive]
   );
 
@@ -533,6 +654,7 @@ function App() {
   // Handle coin selection from coin list modal
   const handleCoinFromList = (coin) => {
     console.log('🪙 Coin selected from list:', coin.symbol);
+    pushNav();
     setPreviousTab('home');
     setSelectedCoin(coin);
     setCurrentViewedCoin(coin);
@@ -542,6 +664,7 @@ function App() {
 
   // Handle coin selection from the Tracked > Coins list
   const handleTrackedCoinSelect = (coin) => {
+    pushNav();
     setPreviousTab('tracked');
     setSelectedCoin(coin);
     setCurrentViewedCoin(coin);
@@ -570,7 +693,12 @@ function App() {
       enriched: newCoinData.enriched
     });
     
-    // Set the found coin as selected and navigate to coin detail view
+    // Set the found coin as selected and navigate to coin detail view.
+    // Re-opening the coin already on screen must not add a history step.
+    const cur = navStateRef.current;
+    const currentMint = cur.selectedCoin?.mintAddress || cur.selectedCoin?.address;
+    const nextMint = newCoinData.mintAddress || newCoinData.address;
+    if (!(cur.activeTab === 'coin-detail' && currentMint && currentMint === nextMint)) pushNav();
     setPreviousTab('home');
     setSelectedCoin(newCoinData);
     setCurrentViewedCoin(newCoinData);
@@ -579,6 +707,7 @@ function App() {
 
   const handleFeedCoinSelect = (coin, { feed, index, coins } = {}) => {
     if (!coin) return;
+    clearNavStack(); // jumping the home feed is root navigation, not a drill-in
     const feedType = KNOWN_FEEDS.includes(feed) ? feed : filtersRef.current?.type || 'dextrending';
     const mint = coin.mintAddress || coin.tokenAddress || coin.address;
     try {
@@ -693,16 +822,21 @@ function App() {
   const handleOrdersClick = () => {
     if (IS_EXTENSION) { openFullSite(); return; }
     console.log('📋 Orders button clicked - navigating to orders page');
+    setTradesBadgeCount(0);
+    clearNavStack();
     setActiveTab('orders');
   };
 
   // Open a full-screen profile view for any wallet address (from tx / PNL clicks)
   const handleWalletClick = (address, profileHint = {}) => {
     if (!address) return;
+    const cur = navStateRef.current;
     if (profileHint.mint) {
+      if (!(cur.positionDetail?.wallet === address && cur.positionDetail?.mint === profileHint.mint)) pushNav();
       setPositionDetail({ wallet: address, mint: profileHint.mint, profileHint });
       return;
     }
+    if (cur.walletProfile?.address !== address) pushNav();
     setWalletProfile({ address, ...profileHint });
   };
 
@@ -729,23 +863,22 @@ function App() {
   }, []);
 
   // Push-notification taps (dispatched from pushNotifications.js). A triggered
-  // soft order deep-links straight into a prefilled instant swap.
+  // or auto-executed soft order opens the coin card with the position drawn on
+  // the chart (entry line + the order's target line).
   useEffect(() => {
     const onPushAction = (e) => {
       const d = e.detail || {};
-      if (d.type === 'softOrderTriggered' && d.mint) {
-        const coin = {
+      if ((d.type === 'softOrderTriggered' || d.type === 'autoTradeExecuted') && d.mint) {
+        const trigger = parseFloat(d.triggerPriceUsd);
+        handleCoinFound({
           mintAddress: d.mint,
           tokenAddress: d.mint,
           address: d.mint,
           symbol: d.symbol || '',
           name: d.symbol || '',
-        };
-        const solAmount = parseFloat(d.amountSol);
-        handleTradeClick(coin, {
-          tab: 'swap',
-          side: d.side === 'buy' ? 'buy' : 'sell',
-          ...(solAmount > 0 ? { solAmount } : {}),
+          ...(trigger > 0
+            ? { activeOrder: { side: d.side === 'buy' ? 'buy' : 'sell', triggerPriceUsd: trigger } }
+            : {}),
         });
       } else if (d.type === 'xNews') {
         setActiveTab('home');
@@ -768,7 +901,10 @@ function App() {
 
   // Open the FOMO-style entry/exit position detail for a wallet's specific trade
   const handleOpenPosition = (wallet, mint, profileHint = {}) => {
-    if (wallet && mint) setPositionDetail({ wallet, mint, profileHint });
+    if (!wallet || !mint) return;
+    const cur = navStateRef.current;
+    if (!(cur.positionDetail?.wallet === wallet && cur.positionDetail?.mint === mint)) pushNav();
+    setPositionDetail({ wallet, mint, profileHint });
   };
 
   return (
@@ -807,6 +943,7 @@ function App() {
             onCoinSelect={handleCoinFound}
             onFeedCoinSelect={handleFeedCoinSelect}
             hasCustomFilters={isAdvancedFilterActive}
+            favorites={favorites}
             onFeedListOpen={handleActiveTabClick}
             onAdvancedFilterClick={() => setAdvancedFilterModalOpen(true)}
           />
@@ -845,6 +982,7 @@ function App() {
         <Suspense fallback={<div style={{ padding: '20px', textAlign: 'center' }}>Loading...</div>}>
           <OrdersView
             onCoinClick={(coinData) => {
+              pushNav();
               setPreviousTab('orders');
               setSelectedCoin(coinData);
               setCurrentViewedCoin(coinData);
@@ -954,11 +1092,13 @@ function App() {
           } else if (IS_EXTENSION && (tab === 'profile' || tab === 'orders')) {
             openFullSite();
           } else {
+            clearNavStack(); // bottom-nav tabs are root screens, not drill-ins
             setActiveTab(tab);
           }
         }}
         onSearchClick={handleSearchClick}
         onOrdersClick={handleOrdersClick}
+        tradesBadgeCount={tradesBadgeCount}
       />
       <Suspense fallback={null}>
         <CoinSearchModal
@@ -975,9 +1115,10 @@ function App() {
           <WalletProfileView
             walletAddress={walletProfile.address}
             profileHint={walletProfile}
-            onBack={() => setWalletProfile(null)}
+            onBack={() => navigateBack('wpv')}
             onOpenPosition={handleOpenPosition}
             onCoinClick={(coinData) => {
+              pushNav();
               setWalletProfile(null);
               setPositionDetail(null);
               setPreviousTab(activeTab);
@@ -996,13 +1137,15 @@ function App() {
             walletAddress={positionDetail.wallet}
             mint={positionDetail.mint}
             profileHint={positionDetail.profileHint}
-            onBack={() => setPositionDetail(null)}
+            onBack={() => navigateBack('pdv')}
             onOpenProfile={(profileHint = {}) => {
+              pushNav();
               setWalletProfile({ address: positionDetail.wallet, ...profileHint });
               setPositionDetail(null);
             }}
             onMimicTrade={(coin) => { setPositionDetail(null); handleTradeClick(coin); }}
             onCoinClick={(coinData) => {
+              pushNav();
               setWalletProfile(null);
               setPositionDetail(null);
               setPreviousTab(activeTab);

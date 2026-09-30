@@ -9,18 +9,22 @@ import NativeChart from './NativeChart';
 import { USE_NATIVE_CHART } from '../config/features';
 import LiquidityLockIndicator from './LiquidityLockIndicator';
 import TopTradersList from './TopTradersList';
+import CoinReelSheet, { formatReelCount } from './CoinReelSheet';
 import WalletPopup from './WalletPopup';
 import { useLiveData } from '../hooks/useLiveDataContext.jsx';
 import { useSolanaTransactions } from '../hooks/useSolanaTransactions.jsx';
 import { useOnDemandPrice } from '../hooks/useOnDemandPrice.js';
 import { useWallet } from '../contexts/WalletContext';
 import { getExpiryTimestamp, EXPIRY_OPTIONS, fetchTokenDecimals } from '../utils/triggerOrders.js';
-import { createSoftOrder } from '../utils/softOrders.js';
+import { createSoftOrder, fetchActiveSoftOrdersCached, bustActiveSoftOrdersCache } from '../utils/softOrders.js';
 import { calculateOpenPosition, getTransactions } from '../utils/transactionStorage';
 import { getSolUsdPrice } from '../utils/orderFillTracking';
 import { WalletChip } from '../utils/walletIdentity';
 import { track, coinProps } from '../utils/analytics';
 import { useTrackedTrades } from '../contexts/TrackedTradesContext';
+import InstantTradePanel from './InstantTradePanel';
+import { getPresets as getInstantPresets, savePresets, loadTradingWallet } from '../utils/instantTradeWallet';
+import { executeInstantBuy } from '../utils/instantTrade';
 import { API_CONFIG } from '../config/api.js';
 import { 
   calculateGraduationPercentage, 
@@ -43,6 +47,26 @@ let _wheelGestureIdleTimer = null;
 const BUY_AMOUNT_MIN = 0.01;
 const BUY_AMOUNT_MAX = 5;
 const BUY_AMOUNT_STEP = 0.01;
+
+const SUBSCRIPT_DIGITS = '₀₁₂₃₄₅₆₇₈₉';
+
+// Compact price for the Track pill: $1.23, $.0523, $.0₄441 (subscript = count of leading zeros).
+function formatShortPrice(price) {
+  const p = Number(price);
+  if (!(p > 0)) return '';
+  if (p >= 1000) return `$${(p / 1000).toFixed(1).replace(/\.0$/, '')}K`;
+  if (p >= 1) return `$${p.toFixed(2)}`;
+  let zeros = Math.ceil(-Math.log10(p)) - 1;
+  let sig = Math.round(p * 10 ** (zeros + 3));
+  if (sig >= 1000) { zeros -= 1; sig = Math.round(sig / 10); }
+  if (zeros < 0) return '$1.00';
+  const digits = String(sig).replace(/0+$/, '') || '0';
+  if (zeros >= 2) {
+    const sub = String(zeros).split('').map((d) => SUBSCRIPT_DIGITS[d]).join('');
+    return `$.0${sub}${digits}`;
+  }
+  return `$.${'0'.repeat(zeros)}${digits}`;
+}
 
 // Deterministic gradient color from a coin symbol/name string
 function getCoinGradient(seed) {
@@ -76,7 +100,7 @@ function formatCompactNumber(num) {
   return num.toFixed(4);
 }
 
-const POPUP_FEED_ORDER = ['mixed', 'dextrending', 'whalefeed', 'graduating', 'trenches', 'new'];
+const POPUP_FEED_ORDER = ['mixed', 'dextrending', 'whalefeed', 'graduating', 'trenches', 'new', 'followwallets', 'followcoins'];
 // Feed picker geometry: vertical rolodex — visible window height + per-feed row height (px)
 const FEED_PICKER_ROW_H = 34;
 const FEED_PICKER_OPEN_H = FEED_PICKER_ROW_H * 3;
@@ -98,6 +122,8 @@ function formatFeedLabel(feedType) {
     dextrending: 'Trending',
     whalefeed: 'Whale',
     mixed: 'Mixed',
+    followwallets: 'Wallets',
+    followcoins: 'My Coins',
     custom: 'Custom',
   };
   return labels[key] || feedType || 'Moonfeed';
@@ -146,7 +172,9 @@ const CoinCard = memo(({
   const [txSortMode, setTxSortMode] = useState('recent'); // 'recent' (default) | 'biggest'
   const [showTxSortMenu, setShowTxSortMenu] = useState(false);
   const [showInlineTopTraders, setShowInlineTopTraders] = useState(false);
-  const [showComments, setShowComments] = useState(false); // TikTok-style comments bottom sheet
+  const [reelSheet, setReelSheet] = useState(null); // 'comments' | 'transactions' | 'topTraders' — IG-Reels-style panel
+  const [reelTxSort, setReelTxSort] = useState('recent');
+  const [topTradersCount, setTopTradersCount] = useState(0);
   const [comments, setComments] = useState([]); // Cached comments for count badge
   const [showActionButtons, setShowActionButtons] = useState(false); // Hidden in collapsed/preview state; shown only when card is expanded
   const [hasToggledActions, setHasToggledActions] = useState(false); // Track if user has toggled (avoids mount animation)
@@ -158,6 +186,15 @@ const CoinCard = memo(({
   const [trackedPrice, setTrackedPrice] = useState(null);
   const [trackedTimeState, setTrackedTimeState] = useState(null);
   const [focusTrackedSignal, setFocusTrackedSignal] = useState(0);
+  // Instant trade (in-app trading wallet): ⚡ button next to Track
+  const [showInstantPanel, setShowInstantPanel] = useState(false);
+  const [instantArmed, setInstantArmed] = useState(() => getInstantPresets().enabled);
+  const [instantBuySol, setInstantBuySol] = useState(() => getInstantPresets().buySol);
+  const [trackConfirm, setTrackConfirm] = useState(false); // briefly shows "Tracked" before the price
+  const trackConfirmTimerRef = useRef(null);
+  const [instantBusy, setInstantBusy] = useState(false);
+  const [instantFlash, setInstantFlash] = useState(null); // { ok, text }
+  const instantPressRef = useRef(null); // long-press opens settings while one-tap mode is armed
   // Auto-translates non-English coin names/descriptions (e.g. Chinese meme coins) to English.
   const nameTranslation = useAutoTranslate(coin.name || coin.symbol || coin.ticker || '');
   const descriptionTranslation = useAutoTranslate(coin.description || '');
@@ -324,7 +361,7 @@ const CoinCard = memo(({
     const t = setTimeout(() => setInViewSettled(true), 300);
     return () => clearTimeout(t);
   }, [inViewWanted]);
-  const wantsFullTxStream = isExpanded || showLiveTransactions || inViewSettled;
+  const wantsFullTxStream = isExpanded || showLiveTransactions || inViewSettled || reelSheet === 'transactions';
 
   const { transactions, livePrice: rpcLivePrice, isConnected: txConnected, historyLoaded: txHistoryLoaded, error: txError, clearTransactions } = useSolanaTransactions(
     mintAddress,
@@ -382,13 +419,20 @@ const CoinCard = memo(({
   }, [handleWalletClick]);
 
   // The viewer's own average buy-in price for this coin (USD), drawn on the chart.
+  // Covers both the connected wallet's swaps and the instant trading wallet's.
   const [entryPrice, setEntryPrice] = useState(null);
   useEffect(() => {
-    if (!walletAddress || !mintAddress) { setEntryPrice(null); return undefined; }
+    if (!mintAddress) { setEntryPrice(null); return undefined; }
     let cancelled = false;
 
     const compute = async () => {
-      const transactions = getTransactions(walletAddress);
+      const tradingWallet = await loadTradingWallet().catch(() => null);
+      const transactions = [
+        ...(walletAddress ? getTransactions(walletAddress) : []),
+        ...(tradingWallet && tradingWallet.publicKey !== walletAddress
+          ? getTransactions(tradingWallet.publicKey)
+          : []),
+      ];
       const relevant = transactions.filter((tx) => tx.tokenMint === mintAddress);
       if (!relevant.length) { if (!cancelled) setEntryPrice(null); return; }
       // Older records only stored the SOL price; convert them with the current rate.
@@ -400,8 +444,52 @@ const CoinCard = memo(({
     compute();
     const onSwap = () => compute();
     window.addEventListener('moonfeed:swap-success', onSwap);
-    return () => { cancelled = true; window.removeEventListener('moonfeed:swap-success', onSwap); };
+    window.addEventListener('moonfeed:instant-trade', onSwap);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('moonfeed:swap-success', onSwap);
+      window.removeEventListener('moonfeed:instant-trade', onSwap);
+    };
   }, [walletAddress, mintAddress, displayPrice]);
+
+  // Active soft-order targets for this coin (take-profit / stop-loss / buy-at),
+  // across both the connected and trading wallets, drawn on the chart next to
+  // the buy-in line.
+  const [orderLines, setOrderLines] = useState([]);
+  useEffect(() => {
+    if (!mintAddress) { setOrderLines([]); return undefined; }
+    let cancelled = false;
+
+    const compute = async () => {
+      const tradingWallet = await loadTradingWallet().catch(() => null);
+      const wallets = [walletAddress, tradingWallet?.publicKey].filter(Boolean);
+      if (!wallets.length) { if (!cancelled) setOrderLines([]); return; }
+      const orders = await fetchActiveSoftOrdersCached(wallets).catch(() => []);
+      const lines = orders
+        .filter((o) => o.tokenMint === mintAddress && Number(o.triggerPriceUsd) > 0)
+        .map((o) => ({
+          price: Number(o.triggerPriceUsd),
+          kind: o.type === 'buy' ? 'buy' : o.triggerCondition === 'below' ? 'stopLoss' : 'takeProfit',
+          label: o.type === 'buy' ? 'Buy at' : o.triggerCondition === 'below' ? 'Stop loss' : 'Sell at',
+        }));
+      if (!cancelled) {
+        // Keep the reference stable when nothing changed so the chart effect doesn't churn.
+        setOrderLines((prev) => (JSON.stringify(prev) === JSON.stringify(lines) ? prev : lines));
+      }
+    };
+
+    compute();
+    const onOrdersChanged = () => { bustActiveSoftOrdersCache(); compute(); };
+    window.addEventListener('moonfeed:instant-trade', onOrdersChanged);
+    window.addEventListener('moonfeed:auto-trade-executed', onOrdersChanged);
+    window.addEventListener('moonfeed:swap-success', onOrdersChanged);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('moonfeed:instant-trade', onOrdersChanged);
+      window.removeEventListener('moonfeed:auto-trade-executed', onOrdersChanged);
+      window.removeEventListener('moonfeed:swap-success', onOrdersChanged);
+    };
+  }, [walletAddress, mintAddress]);
 
   // 🆕 ON-VIEW ENRICHMENT: Trigger enrichment when coin becomes visible
   const [enrichmentRequested, setEnrichmentRequested] = useState(false);
@@ -574,8 +662,8 @@ const CoinCard = memo(({
       }
     }
     // Also close comments when not visible
-    if (!isVisible && showComments) {
-      setShowComments(false);
+    if (!isVisible && reelSheet) {
+      setReelSheet(null);
     }
   }, [isVisible, coin.symbol, coin.name]);
 
@@ -675,6 +763,107 @@ const CoinCard = memo(({
     if (abs >= 1_000_000) return `${(n/1_000_000).toFixed(1)}M`;
     if (abs >= 1_000) return `${(n/1_000).toFixed(1)}K`;
     return n.toFixed(abs < 1 ? 4 : 2);
+  };
+
+  const txUsdValue = (tx) => {
+    const tokenAmt = tx.tokenAmount || tx.amount || 0;
+    if (Number(tx.priceUsd) > 0) return tokenAmt * Number(tx.priceUsd);
+    return (tx.solAmount || 0) * (solUsd > 0 ? solUsd : 1);
+  };
+
+  const renderTxRow = (tx, index, isOpen) => {
+    const isBuy = tx.side === 'buy';
+    const sideColor = isBuy ? '#4CAF50' : '#F44336';
+    const wallet = tx.wallet || tx.feePayer || 'Unknown';
+    const solAmt = tx.solAmount || 0;
+    const tokenAmt = tx.tokenAmount || tx.amount || 0;
+    const usdAmt = Number(tx.priceUsd) > 0
+      ? tokenAmt * Number(tx.priceUsd)
+      : (solUsd > 0 ? solAmt * solUsd : 0);
+    const age = tx.timestamp ? getTimeAgo(tx.timestamp) : '';
+    const dexName = tx.dex || '';
+
+    return (
+      <div
+        key={`${tx.signature}-${index}`}
+        className="transaction-item"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(40px, 48px) minmax(0, 1fr) minmax(76px, 100px) minmax(32px, 40px)',
+          gap: '8px',
+          padding: '11px 8px',
+          alignItems: 'center',
+          borderBottom: '1px solid rgba(255,255,255,0.04)',
+        }}
+      >
+        <span style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          <span style={{
+            fontSize: '11px',
+            fontWeight: '700',
+            color: sideColor,
+            textTransform: 'uppercase',
+          }}>
+            {isBuy ? 'Buy' : 'Sell'}
+          </span>
+          {dexName && (
+            <span style={{ fontSize: '9px', color: 'rgba(255,255,255,0.35)' }} title={dexName}>
+              {dexName.replace(' V4', '').replace(' V2', '').replace(' V3', '').substring(0, 6)}
+            </span>
+          )}
+        </span>
+
+        <WalletChip
+          address={wallet !== 'Unknown' ? wallet : null}
+          size={30}
+          onClick={isOpen && wallet !== 'Unknown' ? (e) => { e.stopPropagation(); handleWalletClick(wallet); } : undefined}
+        />
+
+        <span style={{ display: 'flex', flexDirection: 'column', gap: '1px', alignItems: 'flex-end' }}>
+          <span style={{
+            fontSize: '12px',
+            fontWeight: '800',
+            color: sideColor,
+            textAlign: 'right',
+          }}>
+            {usdAmt > 0 ? `$${formatCompact(usdAmt)}` : '—'}
+          </span>
+          <span style={{
+            fontSize: '9.5px',
+            color: 'rgba(255,255,255,0.4)',
+            textAlign: 'right',
+            fontFamily: 'monospace',
+          }}>
+            {solAmt > 0 ? `${solAmt < 0.01 ? solAmt.toFixed(4) : solAmt.toFixed(2)} SOL` : ''}
+          </span>
+        </span>
+
+        {isOpen ? (
+          <a
+            href={`https://solscan.io/tx/${tx.signature}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              fontSize: '10px',
+              color: 'rgba(255,255,255,0.35)',
+              textAlign: 'right',
+              textDecoration: 'none',
+            }}
+            title="View on Solscan"
+          >
+            {age}
+          </a>
+        ) : (
+          <span style={{
+            fontSize: '10px',
+            color: 'rgba(255,255,255,0.35)',
+            textAlign: 'right',
+          }}>
+            {age}
+          </span>
+        )}
+      </div>
+    );
   };
 
   const formatPrice = (v) => {
@@ -790,6 +979,73 @@ const CoinCard = memo(({
 
   const orderChartFocused = buyDrawerOpen && buyDrawerMode === 'orders';
   const orderTargetPercent = displayPrice > 0 ? ((buyOrderPrice - displayPrice) / displayPrice) * 100 : 0;
+
+  // ── Instant trade (⚡ button) ──────────────────────────────────────────────
+  useEffect(() => {
+    const onPresetsChange = (e) => {
+      setInstantArmed(Boolean(e.detail?.enabled));
+      if (e.detail?.buySol) setInstantBuySol(e.detail.buySol);
+    };
+    window.addEventListener('moonfeed:instant-presets-changed', onPresetsChange);
+    return () => {
+      window.removeEventListener('moonfeed:instant-presets-changed', onPresetsChange);
+      clearTimeout(trackConfirmTimerRef.current);
+    };
+  }, []);
+
+  const handleInstantPressStart = () => {
+    clearTimeout(instantPressRef.current?.timer);
+    instantPressRef.current = {
+      longFired: false,
+      // Long-press opens settings even in one-tap mode (which otherwise buys on tap)
+      timer: setTimeout(() => {
+        if (instantPressRef.current) instantPressRef.current.longFired = true;
+        setShowInstantPanel(true);
+      }, 550),
+    };
+  };
+
+  const handleInstantPressEnd = () => {
+    clearTimeout(instantPressRef.current?.timer);
+  };
+
+  const handleInstantToggle = async (e) => {
+    e.stopPropagation();
+    const next = !instantArmed;
+    if (next && !(await loadTradingWallet())) {
+      setShowInstantPanel(true); // needs a trading wallet first
+      return;
+    }
+    savePresets({ enabled: next });
+    setInstantArmed(next);
+  };
+
+  const handleInstantTap = async (e) => {
+    e.stopPropagation();
+    if (instantPressRef.current?.longFired) {
+      instantPressRef.current = null;
+      return;
+    }
+    const presets = getInstantPresets();
+    const tradingWallet = await loadTradingWallet();
+    if (!(presets.enabled && tradingWallet)) {
+      setShowInstantPanel(true);
+      return;
+    }
+    if (instantBusy) return;
+    setInstantBusy(true);
+    setInstantFlash(null);
+    try {
+      const out = await executeInstantBuy(coin);
+      setInstantFlash({ ok: true, text: `✓ Bought ${presets.buySol} SOL` });
+      console.log(`⚡ Instant buy ${coin.symbol}: ${out.signature}`);
+    } catch (err) {
+      setInstantFlash({ ok: false, text: (err?.message || 'Buy failed').slice(0, 90) });
+    } finally {
+      setInstantBusy(false);
+      setTimeout(() => setInstantFlash(null), 5000);
+    }
+  };
 
   // Holder mode: the wallet already owns this coin (beyond dust), so "Sell at"
   // places a sell order on the existing tokens — no buy-in step.
@@ -1759,6 +2015,23 @@ const CoinCard = memo(({
     }
   };
 
+  // Mobile: comments / trades / top traders open over a shrunk live chart (IG Reels style).
+  const openReelSheet = (panel) => {
+    if (isDesktopMode && panel !== 'comments') {
+      openPanelFromCard(panel);
+      return;
+    }
+    if (panel !== 'comments') track(panel === 'transactions' ? 'transactions_open' : 'top_traders_open', coinProps(coin));
+    setReelSheet(panel);
+  };
+
+  const txCount24h =
+    Number(coin.transactions_24h) ||
+    (Number(coin.buys_24h) || 0) + (Number(coin.sells_24h) || 0) ||
+    (Number(coin.txns?.h24?.buys) || 0) + (Number(coin.txns?.h24?.sells) || 0) ||
+    transactions.length;
+  const reelCounts = { comments: comments.length, transactions: txCount24h, topTraders: topTradersCount };
+
   const showMetricBreakdown = (e, type, value, element) => {
     e?.stopPropagation();
     setPinnedMetric({ type, value, element });
@@ -2555,6 +2828,44 @@ const CoinCard = memo(({
                         />
                       )}
                     </div>
+                    {/* Follow sits centered on the avatar's bottom edge; absolute so its width never shifts the header */}
+                    <div className="info-layer-follow-anchor">
+                      <button
+                        className={`banner-follow-button ${isFavorite ? 'following' : ''}${isFavorite && trackConfirm ? ' confirming' : ''}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          clearTimeout(trackConfirmTimerRef.current);
+                          if (isFavorite) {
+                            setTrackConfirm(false);
+                            setTrackedPrice(null);
+                            onFavoriteToggle?.(coin, displayPrice);
+                          } else {
+                            setTrackedPrice(displayPrice);
+                            setTrackedTimeState(Date.now());
+                            setTrackConfirm(true);
+                            trackConfirmTimerRef.current = setTimeout(() => setTrackConfirm(false), 1400);
+                            onFavoriteToggle?.(coin, displayPrice);
+                          }
+                        }}
+                        title={isFavorite ? 'Tracking since this price — tap to untrack' : 'Track this coin'}
+                        aria-label={isFavorite ? 'Untrack this coin' : 'Track this coin'}
+                      >
+                        {!isFavorite ? (
+                          <svg className="follow-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" aria-hidden="true">
+                            <path d="M12 5v14M5 12h14" />
+                          </svg>
+                        ) : (
+                          <>
+                            <svg className="follow-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                            <span key={trackConfirm || !(effectiveTrackedPrice > 0) ? 'label' : 'price'} className="follow-label">
+                              {trackConfirm || !(effectiveTrackedPrice > 0) ? 'Tracked' : formatShortPrice(effectiveTrackedPrice)}
+                            </span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
                 );
               })()}
@@ -2659,38 +2970,58 @@ const CoinCard = memo(({
                     </a>
                   )}
                   <div className="follow-alert-wrap">
-                    <button 
-                      className={`banner-follow-button ${isFavorite ? 'following' : ''}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (isFavorite) {
-                          setTrackedPrice(null);
-                          onFavoriteToggle?.(coin, displayPrice);
-                        } else {
-                          const now = Date.now();
-                          setTrackedPrice(displayPrice);
-                          setTrackedTimeState(now);
-                          onFavoriteToggle?.(coin, displayPrice);
-                        }
-                      }}
-                      title={isFavorite ? 'Stop tracking this coin' : 'Track this coin'}
-                    >
-                      <span className="follow-label">{isFavorite ? 'Tracked' : 'Track'}</span>
-                    </button>
-                    {isFavorite && effectiveTrackedPrice > 0 && (
-                      <span 
-                        className="tracked-price clickable"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setFocusTrackedSignal(s => s + 1);
-                        }}
-                        style={{ cursor: 'pointer' }}
-                        title="Tracked at this price — click to zoom to it on the chart"
+                    <div className={`instant-trade-control${instantArmed ? ' armed' : ''}`}>
+                      <button
+                        type="button"
+                        className="instant-toggle"
+                        role="switch"
+                        aria-checked={instantArmed}
+                        aria-label="One-tap instant buy"
+                        title={instantArmed ? 'One-tap buy is ON — tap to turn off' : 'Turn on one-tap buy'}
+                        onClick={handleInstantToggle}
                       >
-                        {formatPrice(effectiveTrackedPrice)}
-                      </span>
+                        <span className="instant-toggle-knob" />
+                      </button>
+                      <button
+                        className={`instant-trade-button${instantArmed ? ' armed' : ''}${instantBusy ? ' busy' : ''}`}
+                        onClick={handleInstantTap}
+                        onPointerDown={handleInstantPressStart}
+                        onPointerUp={handleInstantPressEnd}
+                        onPointerLeave={handleInstantPressEnd}
+                        title={instantArmed ? 'Instant buy at your preset — hold to open settings' : 'Instant trade'}
+                        aria-label={instantArmed ? `Instant buy ${instantBuySol} SOL` : 'Instant trade'}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                          <path d="M13 2 4.5 13.5H11L9.5 22 19 10h-6.5L13 2z" />
+                        </svg>
+                        <span>{instantBusy ? 'Buying…' : instantArmed ? `Buy ${instantBuySol}` : 'Buy'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="instant-options-btn"
+                        onClick={(e) => { e.stopPropagation(); setShowInstantPanel(true); }}
+                        title="Instant trade options"
+                        aria-label="Instant trade options"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+                          <path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0" />
+                          <circle cx="16" cy="6" r="2" />
+                          <circle cx="10" cy="12" r="2" />
+                          <circle cx="18" cy="18" r="2" />
+                        </svg>
+                      </button>
+                    </div>
+                    {instantFlash && (
+                      <span className={`instant-trade-flash ${instantFlash.ok ? 'ok' : 'err'}`}>{instantFlash.text}</span>
                     )}
                   </div>
+                  {showInstantPanel && (
+                    <InstantTradePanel
+                      coin={coin}
+                      connectedWallet={walletAddress}
+                      onClose={() => setShowInstantPanel(false)}
+                    />
+                  )}
                 </div>
               </div>
             </div>
@@ -2987,11 +3318,6 @@ const CoinCard = memo(({
                       </div>
                     ) : (() => {
                       const isOpen = showLiveTransactions;
-                      const txUsdValue = (tx) => {
-                        const tokenAmt = tx.tokenAmount || tx.amount || 0;
-                        if (Number(tx.priceUsd) > 0) return tokenAmt * Number(tx.priceUsd);
-                        return (tx.solAmount || 0) * (solUsd > 0 ? solUsd : 1);
-                      };
                       const sortedTxns = isOpen && txSortMode === 'biggest'
                         ? [...transactions].sort((a, b) => txUsdValue(b) - txUsdValue(a))
                         : transactions;
@@ -3006,100 +3332,7 @@ const CoinCard = memo(({
                           className={`transactions-marquee-track ${canRoll ? 'rolling' : ''}`}
                           style={canRoll ? { animationDuration: `${previewTxns.length * 2.2}s` } : undefined}
                         >
-                          {rows.map((tx, index) => {
-                            const isBuy = tx.side === 'buy';
-                            const sideColor = isBuy ? '#4CAF50' : '#F44336';
-                            const wallet = tx.wallet || tx.feePayer || 'Unknown';
-                            const solAmt = tx.solAmount || 0;
-                            const tokenAmt = tx.tokenAmount || tx.amount || 0;
-                            const usdAmt = Number(tx.priceUsd) > 0
-                              ? tokenAmt * Number(tx.priceUsd)
-                              : (solUsd > 0 ? solAmt * solUsd : 0);
-                            const age = tx.timestamp ? getTimeAgo(tx.timestamp) : '';
-                            const dexName = tx.dex || '';
-
-                            return (
-                              <div
-                                key={`${tx.signature}-${index}`}
-                                className="transaction-item"
-                                style={{
-                                  display: 'grid',
-                                  gridTemplateColumns: 'minmax(40px, 48px) minmax(0, 1fr) minmax(76px, 100px) minmax(32px, 40px)',
-                                  gap: '8px',
-                                  padding: '11px 8px',
-                                  alignItems: 'center',
-                                  borderBottom: '1px solid rgba(255,255,255,0.04)',
-                                }}
-                              >
-                                <span style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                  <span style={{
-                                    fontSize: '11px',
-                                    fontWeight: '700',
-                                    color: sideColor,
-                                    textTransform: 'uppercase',
-                                  }}>
-                                    {isBuy ? 'Buy' : 'Sell'}
-                                  </span>
-                                  {dexName && (
-                                    <span style={{ fontSize: '9px', color: 'rgba(255,255,255,0.35)' }} title={dexName}>
-                                      {dexName.replace(' V4', '').replace(' V2', '').replace(' V3', '').substring(0, 6)}
-                                    </span>
-                                  )}
-                                </span>
-
-                                <WalletChip
-                                  address={wallet !== 'Unknown' ? wallet : null}
-                                  size={30}
-                                  onClick={isOpen && wallet !== 'Unknown' ? (e) => { e.stopPropagation(); handleWalletClick(wallet); } : undefined}
-                                />
-
-                                <span style={{ display: 'flex', flexDirection: 'column', gap: '1px', alignItems: 'flex-end' }}>
-                                  <span style={{
-                                    fontSize: '12px',
-                                    fontWeight: '800',
-                                    color: sideColor,
-                                    textAlign: 'right',
-                                  }}>
-                                    {usdAmt > 0 ? `$${formatCompact(usdAmt)}` : '—'}
-                                  </span>
-                                  <span style={{
-                                    fontSize: '9.5px',
-                                    color: 'rgba(255,255,255,0.4)',
-                                    textAlign: 'right',
-                                    fontFamily: 'monospace',
-                                  }}>
-                                    {solAmt > 0 ? `${solAmt < 0.01 ? solAmt.toFixed(4) : solAmt.toFixed(2)} SOL` : ''}
-                                  </span>
-                                </span>
-
-                                {isOpen ? (
-                                  <a
-                                    href={`https://solscan.io/tx/${tx.signature}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    onClick={(e) => e.stopPropagation()}
-                                    style={{
-                                      fontSize: '10px',
-                                      color: 'rgba(255,255,255,0.35)',
-                                      textAlign: 'right',
-                                      textDecoration: 'none',
-                                    }}
-                                    title="View on Solscan"
-                                  >
-                                    {age}
-                                  </a>
-                                ) : (
-                                  <span style={{
-                                    fontSize: '10px',
-                                    color: 'rgba(255,255,255,0.35)',
-                                    textAlign: 'right',
-                                  }}>
-                                    {age}
-                                  </span>
-                                )}
-                              </div>
-                            );
-                          })}
+                          {rows.map((tx, index) => renderTxRow(tx, index, isOpen))}
                         </div>
                       );
                     })()}
@@ -3143,6 +3376,7 @@ const CoinCard = memo(({
                 isOpen={showInlineTopTraders}
                 previewLimit={3}
                 onWalletClick={handleWalletClick}
+                onCountChange={setTopTradersCount}
               />
             </div>
           </div>
@@ -3901,12 +4135,12 @@ const CoinCard = memo(({
           // directly over the expand/collapse curve, so the buttons appear
           // to fly straight up out of it. Fixed regardless of expand state —
           // this pair must never move when the card expands/collapses.
-          bottom: 'calc(env(safe-area-inset-bottom) + 94px)',
+          bottom: 'calc(env(safe-area-inset-bottom) + 108px)',
           top: 'auto',
           flexDirection: 'column',
           justifyContent: 'flex-end',
           alignItems: 'center',
-          gap: '16px',
+          gap: '26px',
           // Scale/reveal originates at the bottom (the Expand button) and rises up.
           transformOrigin: 'bottom center',
           zIndex: 9999,
@@ -3916,13 +4150,28 @@ const CoinCard = memo(({
           transition: isScrolling ? 'none' : 'opacity 0.15s ease',
         } : undefined}
       >
-        {/* Live transaction window — tapping from the standard (collapsed) card
-             expands it first, then opens the transactions panel. */}
         <button
-          className={`tiktok-action-btn ${showLiveTransactions ? 'active' : ''}`}
+          className={`tiktok-action-btn ${reelSheet === 'comments' ? 'active' : ''}`}
           onClick={(e) => {
             e.stopPropagation();
-            openPanelFromCard('transactions');
+            openReelSheet('comments');
+          }}
+          title="Comments"
+          aria-label="Open comments"
+        >
+          <span className="tiktok-action-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+          </span>
+          <span className="tiktok-action-count">{formatReelCount(reelCounts.comments)}</span>
+        </button>
+
+        <button
+          className={`tiktok-action-btn ${showLiveTransactions || reelSheet === 'transactions' ? 'active' : ''}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            openReelSheet('transactions');
           }}
           title="Live transactions"
           aria-label="Open live transactions"
@@ -3936,14 +4185,15 @@ const CoinCard = memo(({
             </svg>
           </span>
           <span className="tiktok-action-label">Trades</span>
+          <span className="tiktok-action-count">{formatReelCount(reelCounts.transactions)}</span>
         </button>
 
         {/* Top PnL traders window — shares the same vertical line as Trades, over the arrow. */}
         <button
-          className={`tiktok-action-btn ${showInlineTopTraders ? 'active' : ''}`}
+          className={`tiktok-action-btn ${showInlineTopTraders || reelSheet === 'topTraders' ? 'active' : ''}`}
           onClick={(e) => {
             e.stopPropagation();
-            openPanelFromCard('topTraders');
+            openReelSheet('topTraders');
           }}
           title="Top PnL traders"
           aria-label="Open top PnL traders"
@@ -3957,6 +4207,7 @@ const CoinCard = memo(({
               <path d="M7 4H4a2 2 0 0 0 2 4h1" />
             </svg>
           </span>
+          <span className="tiktok-action-count">{formatReelCount(reelCounts.topTraders)}</span>
         </button>
       </div>
       {USE_NATIVE_CHART && _mobilePortal && (
@@ -3995,24 +4246,6 @@ const CoinCard = memo(({
               <polyline points="1 4 1 10 7 10" />
               <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
             </svg>
-          </button>
-          {/* Comments */}
-          <button
-            className={`native-chart-action-btn ${nativeChartControlsVisible ? 'visible' : ''} ${showComments ? 'active' : ''}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              setShowComments(prev => !prev);
-            }}
-            title="Comments"
-            aria-label="Open comments"
-            style={{ position: 'relative' }}
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-            </svg>
-            {comments.length > 0 && (
-              <span className="native-chart-action-badge">{comments.length}</span>
-            )}
           </button>
           {/* Share / Copy Address */}
           <button
@@ -4152,7 +4385,7 @@ const CoinCard = memo(({
               <span>{coin.symbol || coin.name || 'Chart'}</span>
               <button onClick={closeNativeChartFullscreen} aria-label="Close full chart">×</button>
             </div>
-            <NativeChart coin={coin} isActive={true} isExpanded={true} livePrice={displayPrice} entryPrice={entryPrice} trackedPrice={effectiveTrackedPrice} trackedTime={effectiveTrackedTime} focusTrackedSignal={focusTrackedSignal} tradeDots={tradeDots} onTradeDotClick={handleTradeDotClick} resetViewSignal={chartResetSignal} orderLinePrice={coin.activeOrder?.triggerPriceUsd} orderLineLabel={coin.activeOrder?.side === 'buy' ? 'Buy target' : 'Sell target'} />
+            <NativeChart coin={coin} isActive={true} isExpanded={true} livePrice={displayPrice} entryPrice={entryPrice} trackedPrice={effectiveTrackedPrice} trackedTime={effectiveTrackedTime} focusTrackedSignal={focusTrackedSignal} tradeDots={tradeDots} onTradeDotClick={handleTradeDotClick} resetViewSignal={chartResetSignal} orderLinePrice={coin.activeOrder?.triggerPriceUsd} orderLineLabel={coin.activeOrder?.side === 'buy' ? 'Buy target' : 'Sell target'} orderLines={orderLines} />
           </div>
         </div>
       )}
@@ -4199,6 +4432,7 @@ const CoinCard = memo(({
               trackedTime={effectiveTrackedTime}
               orderLinePrice={coin.activeOrder?.triggerPriceUsd}
               orderLineLabel={coin.activeOrder?.side === 'buy' ? 'Buy target' : 'Sell target'}
+              orderLines={orderLines}
               focusTrackedSignal={focusTrackedSignal}
               tradeDots={tradeDots}
               onTradeDotClick={handleTradeDotClick}
@@ -4529,24 +4763,48 @@ const CoinCard = memo(({
         document.body
       )}
 
-      {/* ====== TIKTOK-STYLE BOTTOM SHEET: Comments ====== */}
-      {showComments && createPortal(
-        <div className="tiktok-sheet-overlay" onClick={() => setShowComments(false)}>
-          <div className="tiktok-sheet tiktok-sheet-comments" onClick={(e) => e.stopPropagation()}>
-            {/* Handle bar */}
-            <div className="tiktok-sheet-handle">
-              <div className="tiktok-sheet-handle-bar" />
-            </div>
-
-            {/* Header */}
-            <div className="tiktok-sheet-header">
-              <span className="tiktok-sheet-title">
-                {comments.length} {comments.length === 1 ? 'Comment' : 'Comments'}
-              </span>
-              <button className="tiktok-sheet-close" onClick={() => setShowComments(false)}>✕</button>
-            </div>
-
-            {/* Comment input */}
+      {/* ====== IG-REELS-STYLE PANEL: live chart on top, comments / trades / top traders below ====== */}
+      {reelSheet && (
+        <CoinReelSheet
+          panel={reelSheet}
+          onPanelChange={setReelSheet}
+          onClose={() => setReelSheet(null)}
+          counts={reelCounts}
+          header={(() => {
+            const change = Number(coin.change_24h || coin.priceChange24h || coin.change24h || 0);
+            const img = coin.image || coin.logo || coin.icon || coin.profileImage;
+            return (
+              <div className="crs-coin">
+                {img && <img className="crs-coin-img" src={img} alt="" onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }} />}
+                <span className="crs-coin-symbol">{coin.symbol || coin.name || ''}</span>
+                <span className="crs-coin-price">
+                  {formatPrice(displayPrice)}
+                  {change !== 0 && (
+                    <span className={`crs-coin-change ${change > 0 ? 'up' : 'down'}`}>
+                      {change > 0 ? '+' : ''}{change.toFixed(2)}%
+                    </span>
+                  )}
+                </span>
+              </div>
+            );
+          })()}
+          chart={USE_NATIVE_CHART ? (
+            <NativeChart
+              coin={coin}
+              isActive={true}
+              isExpanded={true}
+              livePrice={displayPrice}
+              entryPrice={entryPrice}
+              trackedPrice={effectiveTrackedPrice}
+              trackedTime={effectiveTrackedTime}
+              tradeDots={tradeDots}
+              onTradeDotClick={handleTradeDotClick}
+              orderLinePrice={coin.activeOrder?.triggerPriceUsd}
+              orderLineLabel={coin.activeOrder?.side === 'buy' ? 'Buy target' : 'Sell target'}
+              orderLines={orderLines}
+            />
+          ) : null}
+          footer={reelSheet === 'comments' ? (
             <div className="tiktok-sheet-comment-input">
               {walletConnected ? (
                 <form 
@@ -4609,9 +4867,10 @@ const CoinCard = memo(({
                 </div>
               )}
             </div>
-
-            {/* Comments list */}
-            <div className="tiktok-sheet-body">
+          ) : null}
+        >
+          {reelSheet === 'comments' && (
+            <div className="crs-comments">
               {comments.length === 0 ? (
                 <div className="tiktok-sheet-empty">
                   <div>Leave a comment</div>
@@ -4647,9 +4906,38 @@ const CoinCard = memo(({
                 ))
               )}
             </div>
-          </div>
-        </div>,
-        document.body
+          )}
+
+          {reelSheet === 'transactions' && (
+            <div className="crs-transactions">
+              <div className="crs-tx-toolbar">
+                <button className={`crs-chip${reelTxSort === 'recent' ? ' active' : ''}`} onClick={() => setReelTxSort('recent')}>Most recent</button>
+                <button className={`crs-chip${reelTxSort === 'biggest' ? ' active' : ''}`} onClick={() => setReelTxSort('biggest')}>Biggest</button>
+              </div>
+              {transactions.length === 0 ? (
+                <div className="crs-empty">
+                  {txHistoryLoaded ? 'No recent swaps' : 'Waiting for transactions…'}
+                  <small>{txConnected ? 'Listening for new swaps' : 'Connecting…'}</small>
+                </div>
+              ) : (
+                (reelTxSort === 'biggest'
+                  ? [...transactions].sort((a, b) => txUsdValue(b) - txUsdValue(a))
+                  : transactions
+                ).map((tx, index) => renderTxRow(tx, index, true))
+              )}
+            </div>
+          )}
+
+          {reelSheet === 'topTraders' && (
+            <TopTradersList
+              coinAddress={mintAddress}
+              isExpanded={true}
+              isOpen={true}
+              onWalletClick={handleWalletClick}
+              onCountChange={setTopTradersCount}
+            />
+          )}
+        </CoinReelSheet>
       )}
     </div>
   );

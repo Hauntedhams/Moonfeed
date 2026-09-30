@@ -9,7 +9,7 @@ import './TopTradersList.css';
 // user back at the same row instead of resetting to the top.
 const scrollPositions = new Map();
 
-const TopTradersList = ({ coinAddress, isExpanded, preload = false, isOpen = true, previewLimit = 3, onWalletClick = null }) => {
+const TopTradersList = ({ coinAddress, isExpanded, preload = false, isOpen = true, previewLimit = 3, onWalletClick = null, onCountChange = null }) => {
   const [traders, setTraders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -79,6 +79,7 @@ const TopTradersList = ({ coinAddress, isExpanded, preload = false, isOpen = tru
         console.log(`✅ Setting ${result.data.length} traders to state`);
         setTraders(result.data);
         setLoaded(true);
+        onCountChange?.(result.data.length);
         console.log(`✅ Successfully loaded ${result.data.length} top traders`);
       } else {
         console.error('❌ Invalid response format:', {

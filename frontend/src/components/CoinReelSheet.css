@@ -1,0 +1,273 @@
+/* Instagram-Reels-style coin panel: live chart shrunk to the top, list sheet below.
+   Sits under the wallet/position overlays (z 4000) so tapping a wallet opens on top of it. */
+body.crs-open .tiktok-action-buttons,
+body.crs-open .native-chart-mobile-right-actions,
+body.crs-open .coin-expand-swipe-arrow,
+body.crs-open .coin-buy-swipe-hotzone,
+body.crs-open .feed-filter-anchor {
+  display: none !important;
+}
+
+.crs-root {
+  --crs-sheet-h: 62dvh;
+  position: fixed;
+  inset: 0;
+  z-index: 3900;
+  background: #000;
+  overflow: hidden;
+  animation: crsFadeIn 0.22s ease-out backwards;
+}
+
+.crs-root.crs-closing {
+  opacity: 0;
+  transition: opacity 0.24s ease-in;
+}
+
+.crs-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: calc(100dvh - var(--crs-sheet-h) + 18px);
+  display: flex;
+  flex-direction: column;
+  padding-top: env(safe-area-inset-top);
+  transform-origin: 50% 0;
+  animation: crsTopIn 0.34s cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
+}
+
+.crs-top-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px 4px 6px;
+  min-height: 40px;
+  color: #fff;
+}
+
+.crs-back {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  color: #fff;
+  padding: 0;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.crs-coin {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.crs-coin-img {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.crs-coin-symbol {
+  font-size: 15px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.crs-coin-price {
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.crs-coin-change {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.crs-coin-change.up { color: #34d399; }
+.crs-coin-change.down { color: #f87171; }
+
+.crs-chart {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  /* Leave room for the sheet's rounded top edge overlapping the chart. */
+  padding-bottom: 18px;
+}
+
+.crs-chart .native-chart {
+  height: 100%;
+}
+
+.crs-sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--crs-sheet-h);
+  display: flex;
+  flex-direction: column;
+  background: #16181d;
+  border-radius: 18px 18px 0 0;
+  box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.45);
+  color: #fff;
+  will-change: transform;
+  animation: crsSheetIn 0.34s cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
+}
+
+.crs-handle {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: center;
+  padding: 9px 0 6px;
+  cursor: pointer;
+}
+
+.crs-handle-bar {
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.crs-tabs {
+  flex-shrink: 0;
+  display: flex;
+  gap: 4px;
+  padding: 0 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.crs-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 10px 4px 11px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  background: none;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.crs-tab.active {
+  color: #fff;
+  border-bottom-color: #fff;
+}
+
+.crs-tab-count {
+  font-size: 11px;
+  font-weight: 700;
+  opacity: 0.7;
+}
+
+.crs-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.crs-footer {
+  flex-shrink: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: env(safe-area-inset-bottom);
+  background: #16181d;
+}
+
+.crs-empty {
+  padding: 40px 20px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 14px;
+}
+
+.crs-empty small {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+/* Trades list */
+.crs-tx-toolbar {
+  display: flex;
+  gap: 6px;
+  padding: 10px 12px 4px;
+}
+
+.crs-chip {
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: none;
+  color: rgba(255, 255, 255, 0.7);
+  border-radius: 14px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.crs-chip.active {
+  background: #fff;
+  border-color: #fff;
+  color: #000;
+}
+
+.crs-body .transaction-item {
+  padding-left: 12px !important;
+  padding-right: 12px !important;
+}
+
+/* Top traders: the sheet body is the scroller, not the list's own window. */
+.crs-body .top-traders-container.open .traders-scroll-window {
+  max-height: none;
+  overflow: visible;
+}
+
+/* Comments */
+.crs-body .tiktok-comment-row {
+  padding: 12px 16px;
+}
+
+.crs-footer .tiktok-sheet-comment-input {
+  border-bottom: none;
+}
+
+@keyframes crsFadeIn {
+  from { background-color: rgba(0, 0, 0, 0); }
+  to { background-color: #000; }
+}
+
+@keyframes crsTopIn {
+  from { transform: scale(1.18); opacity: 0.35; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+@keyframes crsSheetIn {
+  from { transform: translate3d(0, 100%, 0); }
+  to { transform: translate3d(0, 0, 0); }
+}

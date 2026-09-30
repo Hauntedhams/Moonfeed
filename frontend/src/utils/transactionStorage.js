@@ -109,8 +109,10 @@ export function calculateOpenPosition(transactions, tokenMint, solUsdPrice = 0) 
       const derivedUnitUsd = boughtQuantity > 0 && spentSol > 0 && solUsdPrice > 0
         ? (spentSol / boughtQuantity) * solUsdPrice
         : 0;
-      if (!(unitUsd > 0) || (derivedUnitUsd > 0 && (unitUsd > derivedUnitUsd * 10 || unitUsd < derivedUnitUsd / 10))) {
-        unitUsd = derivedUnitUsd;
+      // Stored USD may have been stamped with a stale/fallback SOL rate; the
+      // SOL amount is exact, so prefer the derived value on real disagreement.
+      if (!(unitUsd > 0) || (derivedUnitUsd > 0 && (unitUsd > derivedUnitUsd * 1.25 || unitUsd < derivedUnitUsd / 1.25))) {
+        unitUsd = derivedUnitUsd || unitUsd;
       }
       if (boughtQuantity > 0) {
         quantity += boughtQuantity;
