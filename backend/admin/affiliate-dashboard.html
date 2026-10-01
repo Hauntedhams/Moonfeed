@@ -48,6 +48,11 @@
   .kpi .s { font-size:11px; color:#6e6e73; margin-top:3px; }
   .kpi .spark { margin-top:auto; padding-top:8px; }
   .kpi .spark svg { display:block; }
+  button.kpi { color:#1d1d1f; text-align:left; font-weight:400; cursor:pointer; }
+  button.kpi:hover { background:#f8faff; border-color:#a8cfff; }
+  button.kpi:focus-visible { outline:2px solid #0071e3; outline-offset:2px; }
+  .dd-comment { white-space:pre-wrap; overflow-wrap:anywhere; min-width:180px; max-width:360px; }
+  .modal-body table { min-width:540px; }
   .charts { display:grid; grid-template-columns:repeat(auto-fit,minmax(340px,1fr)); gap:14px; }
   .chart-box { background:#fff; border:1px solid #e8e8ed; border-radius:12px; padding:16px; box-shadow:0 1px 2px rgba(0,0,0,.03); }
   .chart-box h3 { font-size:14px; color:#1d1d1f; margin-bottom:2px; font-weight:700; }
@@ -373,11 +378,86 @@ function closeDrilldown() { document.getElementById('ddBackdrop').classList.remo
 async function openDrilldown(spec) {
   const backdrop = document.getElementById('ddBackdrop');
   const body = document.getElementById('ddBody');
-  document.getElementById('ddTitle').textContent = spec.label ? `${spec.label} — last ${analyticsDays}d` : 'Details';
+  document.getElementById('ddTitle').textContent = spec.label
+    ? `${spec.label} — ${['wallets', 'installs'].includes(spec.kind) ? 'all-time' : `last ${analyticsDays}d`}` : 'Details';
   body.innerHTML = '<span class="muted">Loading…</span>';
   backdrop.classList.add('open');
   try {
-    if (spec.mode === 'sessions') {
+    if (spec.kind) {
+      const d = await api(`/api/analytics/detail?${new URLSearchParams({ kind: spec.kind, days: analyticsDays })}`);
+      const since = Date.now() - analyticsDays * 86400000;
+      if (spec.kind === 'comments') {
+        body.innerHTML = !d.comments.length ? '<span class="muted">No comments in this range.</span>' : `
+          <p class="muted">Latest ${d.comments.length} comments in range (up to 200).</p>
+          <table><tr><th>Comment</th><th>Coin</th><th>Wallet</th><th>Likes</th><th>When</th></tr>
+          ${d.comments.map(c => `<tr>
+            <td class="dd-comment">${esc(c.comment)}</td>
+            <td><b>${esc(c.coinSymbol || '—')}</b><br><span class="mono">${esc(short(c.coinAddress))}</span><span class="copy" data-copy="${esc(c.coinAddress)}">copy</span></td>
+            <td class="mono">${esc(short(c.walletAddress))}<span class="copy" data-copy="${esc(c.walletAddress)}">copy</span></td>
+            <td>${num(c.likes)}</td><td>${timeAgo(c.timestamp)}</td>
+          </tr>`).join('')}</table>`;
+      } else if (spec.kind === 'wallets') {
+        body.innerHTML = !d.wallets.length ? '<span class="muted">No connected wallets recorded.</span>' : `
+          <p class="muted">${d.wallets.length} unique wallets with sessions on record (up to 200).</p>
+          <table><tr><th>Wallet</th><th>Platform</th><th>Sessions</th><th>In range</th><th>First seen</th><th>Last seen</th></tr>
+          ${d.wallets.map(w => `<tr>
+            <td class="mono">${esc(short(w.address))}<span class="copy" data-copy="${esc(w.address)}">copy</span></td>
+            <td>${esc((w.platforms || []).filter(Boolean).join(', ') || '—')}</td>
+            <td>${num(w.sessions)}</td><td>${num(w.inRange)}</td>
+            <td>${timeAgo(w.firstSeen)}</td><td>${timeAgo(w.lastSeen)}</td>
+          </tr>`).join('')}</table>`;
+      } else if (spec.kind === 'installs') {
+        const active = d.devices.filter(device => new Date(device.lastSeenAt).getTime() >= since).length;
+        body.innerHTML = !d.devices.length ? '<span class="muted">No push-registered devices yet.</span>' : `
+          <p class="muted">${d.devices.length} registered devices · ${active} active in the last ${analyticsDays}d (up to 200). Unlinked devices have no wallet identity on record.</p>
+          <table><tr><th>Device</th><th>Platform</th><th>Wallet</th><th>Status</th><th>Installed</th><th>Last seen</th></tr>
+          ${d.devices.map(device => `<tr>
+            <td class="mono">${esc(device.id)}</td>
+            <td>${esc(device.platform || '—')}</td>
+            <td class="mono">${device.walletAddress ? `${esc(short(device.walletAddress))}<span class="copy" data-copy="${esc(device.walletAddress)}">copy</span>` : '<span class="muted">Not linked</span>'}</td>
+            <td>${new Date(device.lastSeenAt).getTime() >= since ? '<span class="green">Active</span>' : '<span class="muted">Inactive</span>'}${new Date(device.createdAt).getTime() >= since ? '<br><span class="muted">New in range</span>' : ''}</td>
+            <td>${timeAgo(device.createdAt)}</td><td>${timeAgo(device.lastSeenAt)}</td>
+          </tr>`).join('')}</table>`;
+      } else if (spec.kind === 'sessions') {
+        body.innerHTML = !d.sessions.length ? '<span class="muted">No sessions in range.</span>' : `
+          <p class="muted">Latest ${d.sessions.length} sessions (up to 200).</p>
+          <table><tr><th>Wallet</th><th>Platform</th><th>Device</th><th>Duration</th><th>Scrolls</th><th>Coins</th><th>When</th></tr>
+          ${d.sessions.map(s => `<tr>
+            <td class="mono">${s.walletAddress ? `${esc(short(s.walletAddress))}<span class="copy" data-copy="${esc(s.walletAddress)}">copy</span>` : '—'}</td>
+            <td>${esc(s.platform || '—')}</td><td class="mono">${esc(short(s.anonId))}</td>
+            <td>${duration(Math.max(0, new Date(s.lastEventAt) - new Date(s.startedAt)))}</td>
+            <td>${num(s.scrollCount)}</td><td>${num(s.coinsViewed)}</td><td>${timeAgo(s.startedAt)}</td>
+          </tr>`).join('')}</table>`;
+      } else if (spec.kind === 'activeDevices') {
+        body.innerHTML = !d.devices.length ? '<span class="muted">No active devices in range.</span>' : `
+          <p class="muted">${d.devices.length} unique analytics devices in range (up to 200).</p>
+          <table><tr><th>Device</th><th>Platforms</th><th>Wallets</th><th>Sessions</th><th>First seen</th><th>Last seen</th></tr>
+          ${d.devices.map(device => `<tr>
+            <td class="mono">${esc(short(device.id))}</td>
+            <td>${esc((device.platforms || []).filter(Boolean).join(', ') || '—')}</td>
+            <td>${(device.wallets || []).filter(Boolean).map(w => `<span class="mono">${esc(short(w))}<span class="copy" data-copy="${esc(w)}">copy</span></span>`).join('<br>') || '—'}</td>
+            <td>${num(device.sessions)}</td><td>${timeAgo(device.firstSeen)}</td><td>${timeAgo(device.lastSeen)}</td>
+          </tr>`).join('')}</table>`;
+      } else if (spec.kind === 'interactions') {
+        body.innerHTML = !d.events.length ? '<span class="muted">No interactions in range.</span>' : `
+          <p class="muted">Latest ${d.events.length} interactions (up to 200).</p>
+          <table><tr><th>Action</th><th>Coin</th><th>Device</th><th>Wallet</th><th>When</th></tr>
+          ${d.events.map(event => `<tr>
+            <td>${esc(event.type)}</td><td>${esc(event.symbol || (event.mint && short(event.mint)) || '—')}</td>
+            <td class="mono">${esc(short(event.anonId))}</td><td class="mono">${esc(short(event.walletAddress))}</td>
+            <td>${timeAgo(event.ts)}</td>
+          </tr>`).join('')}</table>`;
+      } else if (spec.kind === 'buy' || spec.kind === 'sell') {
+        body.innerHTML = !d.trades.length ? '<span class="muted">No verified trades in range.</span>' : `
+          <p class="muted">Latest ${d.trades.length} verified ${spec.kind === 'buy' ? 'entries' : 'exits'} (up to 200).</p>
+          <table><tr><th>Wallet</th><th>Size</th><th>Volume</th><th>Token</th><th>When</th></tr>
+          ${d.trades.map(t => `<tr>
+            <td class="mono">${esc(short(t.userWallet))}<span class="copy" data-copy="${esc(t.userWallet)}">copy</span></td>
+            <td>${sol(t.tradeVolume)}</td><td>${usd(t.tradeVolumeUsd)}</td>
+            <td class="mono">${esc(short(spec.kind === 'buy' ? t.tokenOut : t.tokenIn))}</td><td>${timeAgo(t.timestamp)}</td>
+          </tr>`).join('')}</table>`;
+      }
+    } else if (spec.mode === 'sessions') {
       const params = new URLSearchParams({ days: analyticsDays, lastEventType: spec.lastEventType });
       const d = await api(`/api/analytics/drilldown-sessions?${params}`);
       body.innerHTML = !d.sessions.length ? '<span class="muted">No sessions in range.</span>' : `
@@ -416,7 +496,13 @@ async function openDrilldown(spec) {
 }
 
 document.getElementById('ddBackdrop').addEventListener('click', (e) => { if (e.target.id === 'ddBackdrop') closeDrilldown(); });
+document.getElementById('ddBody').addEventListener('click', (e) => {
+  const target = e.target.closest('[data-copy]');
+  if (target) copyText(target.dataset.copy);
+});
 document.getElementById('analytics').addEventListener('click', (e) => {
+  const tile = e.target.closest('.kpi[data-kind]');
+  if (tile) return openDrilldown({ kind: tile.dataset.kind, label: tile.dataset.label });
   const row = e.target.closest('.bar-row[data-dd]');
   if (row) return openDrilldown(JSON.parse(row.dataset.dd));
   const coinRow = e.target.closest('tr[data-mint]');
@@ -464,8 +550,8 @@ async function loadAnalytics() {
     const devFresh = dev.reduce((s, p) => s + (p.fresh || 0), 0);
     const buy = d.trading?.buy || {}, sell = d.trading?.sell || {};
     const dailyOf = k => d.daily.map(p => p[k] || 0);
-    const stat = (label, value, sub = '', sparkline = '') => `
-      <div class="kpi"><div class="l">${label}</div><div class="n">${value}</div>${sub ? `<div class="s">${sub}</div>` : ''}${sparkline ? `<div class="spark">${sparkline}</div>` : ''}</div>`;
+    const stat = (label, value, sub = '', sparkline = '', kind = '') => `
+      <${kind ? 'button type="button"' : 'div'} class="kpi"${kind ? ` data-kind="${kind}" data-label="${esc(label)}"` : ''}><div class="l">${label}</div><div class="n">${value}</div>${sub ? `<div class="s">${sub}</div>` : ''}${sparkline ? `<div class="spark">${sparkline}</div>` : ''}</${kind ? 'button' : 'div'}>`;
 
     const funnelRows = [
       { label: 'Opened the app', value: f.opened, dd: { type: 'app_open', label: 'Opened the app' } },
@@ -481,15 +567,15 @@ async function loadAnalytics() {
 
     el.innerHTML = `
       <div class="kpis">
-        ${stat('Sessions', num(t.sessions), '', spark(dailyOf('sessions')))}
-        ${stat('Active devices', num(t.devices), '', spark(dailyOf('devices'), '#34c759'))}
-        ${stat('Interactions', num(t.events), '', spark(dailyOf('events'), '#ff9500'))}
-        ${stat('Wallets connected', num(t.wallets), `${num(d.walletsAllTime)} unique all-time`)}
-        ${stat('Installs', num(devTotal), `${num(devActive)} active · ${num(devFresh)} new in range`)}
-        ${stat('Comments', num(cm.inRange), `${num(cm.total)} all-time · ${num(cm.commenters)} commenters`)}
-        ${stat('Avg entry', usd(buy.avgUsd || 0), `${num(buy.trades)} buys · ${usd(buy.totalUsd || 0)} total`)}
-        ${stat('Avg exit', usd(sell.avgUsd || 0), `${num(sell.trades)} sells · ${usd(sell.totalUsd || 0)} total`)}
-        ${stat('Avg session', duration(t.avgDurationMs), `${t.sessions ? (t.scrolls / t.sessions).toFixed(1) : '0'} scrolls / session`)}
+        ${stat('Sessions', num(t.sessions), '', spark(dailyOf('sessions')), 'sessions')}
+        ${stat('Active devices', num(t.devices), '', spark(dailyOf('devices'), '#34c759'), 'activeDevices')}
+        ${stat('Interactions', num(t.events), '', spark(dailyOf('events'), '#ff9500'), 'interactions')}
+        ${stat('Wallets connected', num(t.wallets), `${num(d.walletsAllTime)} unique all-time`, '', 'wallets')}
+        ${stat('Installs', num(devTotal), `${num(devActive)} active · ${num(devFresh)} new in range`, '', 'installs')}
+        ${stat('Comments', num(cm.inRange), `${num(cm.total)} all-time · ${num(cm.commenters)} commenters`, '', 'comments')}
+        ${stat('Avg entry', usd(buy.avgUsd || 0), `${num(buy.trades)} buys · ${usd(buy.totalUsd || 0)} total`, '', 'buy')}
+        ${stat('Avg exit', usd(sell.avgUsd || 0), `${num(sell.trades)} sells · ${usd(sell.totalUsd || 0)} total`, '', 'sell')}
+        ${stat('Avg session', duration(t.avgDurationMs), `${t.sessions ? (t.scrolls / t.sessions).toFixed(1) : '0'} scrolls / session`, '', 'sessions')}
       </div>
 
       <div class="charts">

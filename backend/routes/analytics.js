@@ -408,6 +408,80 @@ router.get('/summary', adminAuth, async (req, res) => {
 // Backs the clickable rows on the admin dashboard (e.g. "Connected a wallet" ->
 // the actual wallets, with platform/feed/coin context, that fired that event).
 
+router.get('/detail', adminAuth, async (req, res) => {
+  try {
+    if (!dbReady()) return res.status(503).json({ success: false, error: 'Database unavailable' });
+    const days = Math.min(90, Math.max(1, parseInt(req.query.days, 10) || 7));
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+    if (req.query.kind === 'comments') {
+      const comments = await Comment.find({ timestamp: { $gte: since } })
+        .sort({ timestamp: -1 }).limit(200)
+        .select('coinAddress coinSymbol walletAddress comment timestamp likes edited -_id').lean();
+      return res.json({ success: true, comments });
+    }
+    if (req.query.kind === 'wallets') {
+      const wallets = await AnalyticsSession.aggregate([
+        { $match: { walletAddress: { $nin: [null, ''] } } },
+        { $group: {
+          _id: '$walletAddress', sessions: { $sum: 1 },
+          firstSeen: { $min: '$startedAt' }, lastSeen: { $max: '$lastEventAt' },
+          inRange: { $sum: { $cond: [{ $gte: ['$startedAt', since] }, 1, 0] } },
+          platforms: { $addToSet: '$platform' },
+        } },
+        { $sort: { lastSeen: -1 } },
+        { $limit: 200 },
+        { $project: { _id: 0, address: '$_id', sessions: 1, firstSeen: 1, lastSeen: 1, inRange: 1, platforms: 1 } },
+      ]);
+      return res.json({ success: true, wallets });
+    }
+    if (req.query.kind === 'installs') {
+      const devices = await DeviceToken.find({})
+        .sort({ lastSeenAt: -1 }).limit(200)
+        .select('platform walletAddress createdAt lastSeenAt').lean();
+      return res.json({ success: true, devices: devices.map(({ _id, ...device }) => ({
+        ...device, id: String(_id).slice(-8),
+      })) });
+    }
+    if (req.query.kind === 'sessions') {
+      const sessions = await AnalyticsSession.find({ startedAt: { $gte: since } })
+        .sort({ lastEventAt: -1 }).limit(200)
+        .select('anonId walletAddress platform startedAt lastEventAt eventCount scrollCount coinsViewed -_id').lean();
+      return res.json({ success: true, sessions });
+    }
+    if (req.query.kind === 'activeDevices') {
+      const devices = await AnalyticsSession.aggregate([
+        { $match: { startedAt: { $gte: since } } },
+        { $group: {
+          _id: '$anonId', sessions: { $sum: 1 },
+          firstSeen: { $min: '$startedAt' }, lastSeen: { $max: '$lastEventAt' },
+          platforms: { $addToSet: '$platform' }, wallets: { $addToSet: '$walletAddress' },
+        } },
+        { $sort: { lastSeen: -1 } }, { $limit: 200 },
+        { $project: { _id: 0, id: '$_id', sessions: 1, firstSeen: 1, lastSeen: 1, platforms: 1, wallets: 1 } },
+      ]);
+      return res.json({ success: true, devices });
+    }
+    if (req.query.kind === 'interactions') {
+      const events = await AnalyticsEvent.find({ ts: { $gte: since } })
+        .sort({ ts: -1 }).limit(200)
+        .select('type ts anonId walletAddress platform symbol mint -_id').lean();
+      return res.json({ success: true, events });
+    }
+    if (req.query.kind === 'buy' || req.query.kind === 'sell') {
+      const trades = await AffiliateTrade.find({
+        timestamp: { $gte: since }, tokenOut: req.query.kind === 'sell' ? SOL_MINT : { $ne: SOL_MINT },
+      }).sort({ timestamp: -1 }).limit(200)
+        .select('userWallet tradeVolume tradeVolumeUsd tokenIn tokenOut timestamp -_id').lean();
+      return res.json({ success: true, trades });
+    }
+    return res.status(400).json({ success: false, error: 'Unknown detail type' });
+  } catch (error) {
+    console.error('[analytics] detail failed:', error.message);
+    res.status(500).json({ success: false, error: 'Failed to load analytics details' });
+  }
+});
+
 router.get('/drilldown', adminAuth, async (req, res) => {
   try {
     if (!dbReady()) return res.status(503).json({ success: false, error: 'Database unavailable' });
