@@ -21,6 +21,6 @@ fi
 
 # Start the server
 echo "🔥 Starting server..."
-# Keep ample headroom in the 2GB container for buffers, native modules,
+# Keep ample headroom in the 4GB container for buffers, native modules,
 # WebSocket/RPC connections, and the Node runtime outside the V8 heap.
-exec node --max-old-space-size=1280 server.js
+exec node --max-old-space-size=3072 server.js

@@ -313,7 +313,7 @@ async function getChartData(mintAddress, timeframe = '5m') {
   chartCache.set(cacheKey, { data: chartData, timestamp: Date.now() });
 
   // Evict old cache entries
-  if (chartCache.size > 500) {
+  if (chartCache.size > 1500) {
     const oldest = chartCache.keys().next().value;
     chartCache.delete(oldest);
   }

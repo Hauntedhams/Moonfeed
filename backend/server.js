@@ -71,7 +71,9 @@ function getMemoryMB() {
 }
 
 // Middleware
-app.use(compression()); // Enable gzip compression for all responses
+// level 4 ≈ same wire size as the default (6) on JSON but ~40% less CPU per
+// response — keeps the event loop free for feed building under load.
+app.use(compression({ level: 4 }));
 app.use(cors({
   origin: [
     'http://localhost:5173', 
@@ -90,7 +92,6 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json());
-app.use(compression()); // Enable compression
 
 // Version endpoint to verify deployment
 app.get('/api/version', (req, res) => {
@@ -597,7 +598,7 @@ async function resolvePoolAddress(mintAddress) {
       poolAddressCache.set(mintAddress, { poolAddress: bestPool, timestamp: Date.now() });
 
       // Evict oldest entries if cache grows too large
-      if (poolAddressCache.size > 2000) {
+      if (poolAddressCache.size > 6000) {
         const oldest = poolAddressCache.keys().next().value;
         poolAddressCache.delete(oldest);
       }
@@ -831,7 +832,7 @@ app.get('/api/geckoterminal/ohlcv/:network/:poolAddress/:timeframe', async (req,
         throw new Error('Invalid OHLCV data format from GeckoTerminal');
       }
       geckoCache.set(cacheKey, { data, timestamp: Date.now() });
-      if (geckoCache.size > 500) {
+      if (geckoCache.size > 2000) {
         geckoCache.delete(geckoCache.keys().next().value);
       }
       return data;

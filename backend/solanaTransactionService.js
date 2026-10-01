@@ -74,7 +74,7 @@ class SolanaTransactionService {
     }
 
     // Evict old cache entries
-    if (this.txCache.size > 200) {
+    if (this.txCache.size > 600) {
       const oldest = this.txCache.keys().next().value;
       this.txCache.delete(oldest);
     }

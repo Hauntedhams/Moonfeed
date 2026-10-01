@@ -54,7 +54,7 @@ class OnDemandEnrichmentService {
     
     // 🚀 OPTIMIZED CACHE - Using compact storage (40% less RAM)
     this.cache = new CompactCacheStorage({
-      maxSize: 500,
+      maxSize: 2000,
       ttl: 10 * 60 * 1000 // 10 minutes
     });
     
@@ -77,6 +77,21 @@ class OnDemandEnrichmentService {
       cacheMisses: 0,
       totalEnrichments: 0,
       averageTime: 0
+    };
+  }
+
+  withBondingMetrics(coin, data) {
+    if (!(coin.bondingCurveProgress > 0 && coin.bondingCurveProgress < 100)) return data;
+    return {
+      ...data,
+      bondingCurveProgress: coin.bondingCurveProgress,
+      liquidity: coin.liquidity,
+      liquidityUsd: coin.liquidity,
+      liquidity_usd: coin.liquidity,
+      marketCap: coin.marketCap,
+      market_cap: coin.marketCap,
+      market_cap_usd: coin.marketCap,
+      fdv: coin.marketCap
     };
   }
 
@@ -105,7 +120,7 @@ class OnDemandEnrichmentService {
     // Check GLOBAL cache first - prevents redundant enrichment across all feeds
     if (!skipCache) {
       const cached = this.cache.get(mintAddress);
-      const cachedCoin = cached ? { ...coin, ...cached } : null;
+      const cachedCoin = cached ? this.withBondingMetrics(coin, { ...coin, ...cached }) : null;
       const cachedHasProfile = !!(cachedCoin?.profileImage || cachedCoin?.image || cachedCoin?.logo || cachedCoin?.icon);
       const cachedHasBanner = !!(cachedCoin?.banner || cachedCoin?.bannerImage || cachedCoin?.header || cachedCoin?.bannerUrl);
       const cachedAt = Date.parse(cachedCoin?.enrichedAt || '');
@@ -141,7 +156,7 @@ class OnDemandEnrichmentService {
               };
               // Update the cache with the complete data
               this.cache.set(mintAddress, coin, updatedData);
-              return { ...coin, ...updatedData };
+              return this.withBondingMetrics(coin, { ...coin, ...updatedData });
             } else {
               // Still not in batch processor cache - fetch immediately
               console.log(`⚡ [IMMEDIATE FETCH] ${coin.symbol || mintAddress} - fetching rugcheck now...`);
@@ -165,7 +180,7 @@ class OnDemandEnrichmentService {
                     rugcheckPending: false
                   };
                   this.cache.set(mintAddress, coin, updatedData);
-                  return { ...coin, ...updatedData };
+                  return this.withBondingMetrics(coin, { ...coin, ...updatedData });
                 }
               } catch (immErr) {
                 console.warn(`⚠️ Immediate rugcheck failed for ${coin.symbol}:`, immErr.message);
@@ -512,6 +527,8 @@ class OnDemandEnrichmentService {
           console.log(`📊 Computed market cap for ${coin.symbol}: $${enrichedData.marketCap.toLocaleString()}`);
         }
       }
+
+      Object.assign(enrichedData, this.withBondingMetrics(coin, enrichedData));
 
       // Update enrichment time to include rugcheck attempt
       enrichedData.enrichmentTime = Date.now() - startTime;
