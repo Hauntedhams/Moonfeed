@@ -15,6 +15,7 @@ import { useLiveData } from '../hooks/useLiveDataContext.jsx';
 import { useSolanaTransactions } from '../hooks/useSolanaTransactions.jsx';
 import { useOnDemandPrice } from '../hooks/useOnDemandPrice.js';
 import { useWallet } from '../contexts/WalletContext';
+import { useActiveAccount } from '../hooks/useWalletView';
 import { getExpiryTimestamp, EXPIRY_OPTIONS, fetchTokenDecimals } from '../utils/triggerOrders.js';
 import { createSoftOrder, fetchActiveSoftOrdersCached, bustActiveSoftOrdersCache } from '../utils/softOrders.js';
 import { calculateOpenPosition, getTransactions } from '../utils/transactionStorage';
@@ -24,7 +25,7 @@ import { track, coinProps } from '../utils/analytics';
 import { useTrackedTrades } from '../contexts/TrackedTradesContext';
 import InstantTradePanel from './InstantTradePanel';
 import { getPresets as getInstantPresets, savePresets, loadTradingWallet } from '../utils/instantTradeWallet';
-import { executeInstantBuy } from '../utils/instantTrade';
+import { executeInstantBuy, executeInstantSell } from '../utils/instantTrade';
 import { API_CONFIG } from '../config/api.js';
 import { 
   calculateGraduationPercentage, 
@@ -190,9 +191,11 @@ const CoinCard = memo(({
   const [showInstantPanel, setShowInstantPanel] = useState(false);
   const [instantArmed, setInstantArmed] = useState(() => getInstantPresets().enabled);
   const [instantBuySol, setInstantBuySol] = useState(() => getInstantPresets().buySol);
+  const [instantSellPct, setInstantSellPct] = useState(() => Number(getInstantPresets().sellPct) || 100);
   const [trackConfirm, setTrackConfirm] = useState(false); // briefly shows "Tracked" before the price
   const trackConfirmTimerRef = useRef(null);
   const [instantBusy, setInstantBusy] = useState(false);
+  const [instantSellBusy, setInstantSellBusy] = useState(false);
   const [instantFlash, setInstantFlash] = useState(null); // { ok, text }
   const instantPressRef = useRef(null); // long-press opens settings while one-tap mode is armed
   // Auto-translates non-English coin names/descriptions (e.g. Chinese meme coins) to English.
@@ -227,6 +230,12 @@ const CoinCard = memo(({
   const [buyDrawerInstant, setBuyDrawerInstant] = useState(false);
   const [buyDrawerMode, setBuyDrawerMode] = useState('buy');
   const [buyDrawerOrderSide, setBuyDrawerOrderSide] = useState('buy');
+  // Three draggable order lines: take-profit (sell above), stop-loss (sell
+  // below) and entry (buy below). The selected one is live-edited through
+  // buyOrderPrice; the other two render as static chart lines.
+  const [orderLineSel, setOrderLineSel] = useState('tp');
+  const [orderAltLines, setOrderAltLines] = useState({ entry: 0, tp: 0, sl: 0 });
+  const [presetSaveFlash, setPresetSaveFlash] = useState(false);
   const [buySolAmount, setBuySolAmount] = useState(0.1);
   const [buySolAmountInput, setBuySolAmountInput] = useState('0.10');
   const [buyOrderPrice, setBuyOrderPrice] = useState(0);
@@ -297,6 +306,8 @@ const CoinCard = memo(({
   // 🔥 CRITICAL FIX: Get coins Map directly from context to force re-renders when it updates
   const { getCoin, getChart, connected, connectionStatus, coins, updateCount } = useLiveData();
   const { walletAddress, connected: walletConnected, signTransaction, signMessage, connection } = useWallet();
+  // Account identity for comments — the ⚡ trading wallet counts as signed in.
+  const { address: accountAddress, connected: accountConnected } = useActiveAccount();
   
   // 🔥 PRICE UPDATE FIX: Directly read from coins Map and use it to trigger re-renders
   const address = coin.mintAddress || coin.address;
@@ -943,23 +954,28 @@ const CoinCard = memo(({
     updateBuySolAmount(buySolAmountInput || buySolAmount);
   };
 
-  const prepareBuyDrawer = (mode = 'buy') => {
-    // Swipe-right opens market buy ('buy'); swipe-left opens the limit order ('orders'),
-    // defaulted to "sell at" since a left swipe is a take-profit/exit gesture.
-    const requestedMode = mode === 'orders' ? 'orders' : 'buy';
+  // Default prices for each order line, relative to the live market price.
+  const orderLineDefault = (key, base) =>
+    clampBuyOrderPrice(key === 'entry' ? base * 0.94 : key === 'sl' ? base * 0.75 : base * 1.25);
+
+  const prepareBuyDrawer = () => {
+    // Orders-only drawer: any open gesture seeds the three draggable lines
+    // (entry / sell-high / sell-low) and selects the take-profit line.
     const base = Number(displayPrice) || Number(fallbackPrice) || 0;
-    setBuyDrawerMode(requestedMode);
-    if (requestedMode === 'orders') {
-      setBuyDrawerOrderSide('sell');
-      // Sell targets default above market (take-profit); buy targets default below (dip-buy).
-      setBuyOrderPrice((current) => current > 0 ? current : clampBuyOrderPrice(base * 1.06));
-    } else {
-      setBuyOrderPrice((current) => current > 0 ? current : clampBuyOrderPrice(base * 0.94));
-    }
+    const seeds = {
+      entry: orderAltLines.entry > 0 ? orderAltLines.entry : orderLineDefault('entry', base),
+      tp: orderAltLines.tp > 0 ? orderAltLines.tp : orderLineDefault('tp', base),
+      sl: orderAltLines.sl > 0 ? orderAltLines.sl : orderLineDefault('sl', base),
+    };
+    setBuyDrawerMode('orders');
+    setOrderAltLines(seeds);
+    setOrderLineSel('tp');
+    setBuyDrawerOrderSide('sell');
+    setBuyOrderPrice(seeds.tp);
   };
 
-  const openBuyDrawer = (mode = 'buy') => {
-    prepareBuyDrawer(mode);
+  const openBuyDrawer = () => {
+    prepareBuyDrawer();
     setBuyDrawerInstant(false);
     setBuyDrawerOpen(true);
   };
@@ -968,7 +984,13 @@ const CoinCard = memo(({
   // amount) back to its defaults without closing the drawer.
   const resetOrderDrawer = () => {
     const base = Number(displayPrice) || Number(fallbackPrice) || 0;
-    setBuyOrderPrice(clampBuyOrderPrice(buyDrawerOrderSide === 'sell' ? base * 1.06 : base * 0.94));
+    const seeds = {
+      entry: orderLineDefault('entry', base),
+      tp: orderLineDefault('tp', base),
+      sl: orderLineDefault('sl', base),
+    };
+    setOrderAltLines(seeds);
+    setBuyOrderPrice(seeds[orderLineSel] || seeds.tp);
     setOrderStepMultiplier(1);
     setOrderExpiry('7d');
     setOrderAmountInput('0.10');
@@ -980,11 +1002,65 @@ const CoinCard = memo(({
   const orderChartFocused = buyDrawerOpen && buyDrawerMode === 'orders';
   const orderTargetPercent = displayPrice > 0 ? ((buyOrderPrice - displayPrice) / displayPrice) * 100 : 0;
 
+  // Mirror the live-edited price back into its slot so unselected lines keep
+  // their value when the user switches between entry / sell-high / sell-low.
+  useEffect(() => {
+    if (!orderChartFocused || !(buyOrderPrice > 0)) return;
+    setOrderAltLines((cur) => cur[orderLineSel] === buyOrderPrice ? cur : { ...cur, [orderLineSel]: buyOrderPrice });
+  }, [buyOrderPrice, orderLineSel, orderChartFocused]);
+
+  const selectOrderLine = (key) => {
+    if (key === orderLineSel) return;
+    setOrderLineSel(key);
+    setBuyDrawerOrderSide(key === 'entry' ? 'buy' : 'sell');
+    setOrderError(null);
+    setOrderSuccess(null);
+    const base = Number(displayPrice) || Number(fallbackPrice) || 0;
+    const stored = orderAltLines[key];
+    setBuyOrderPrice(stored > 0 ? stored : orderLineDefault(key, base));
+  };
+
+  // Save the dragged sell-high/sell-low targets as the ⚡ instant-buy bracket
+  // presets (percentages from entry), so every instant buy auto-sets them.
+  const saveInstantOrderPresets = () => {
+    const base = Number(displayPrice) || Number(fallbackPrice) || 0;
+    if (!(base > 0)) return;
+    const tp = orderLineSel === 'tp' ? buyOrderPrice : orderAltLines.tp;
+    const sl = orderLineSel === 'sl' ? buyOrderPrice : orderAltLines.sl;
+    const partial = {};
+    if (tp > base) partial.autoSellPct = Math.max(1, Math.round(((tp - base) / base) * 100));
+    if (sl > 0 && sl < base) partial.stopLossPct = Math.max(1, Math.round(((base - sl) / base) * 100));
+    if (!Object.keys(partial).length) return;
+    savePresets(partial);
+    setPresetSaveFlash(true);
+    setTimeout(() => setPresetSaveFlash(false), 2400);
+  };
+
+  // The two unselected draft lines render as static chart lines alongside any
+  // real active soft orders; the selected one is the draggable target.
+  const draftOrderLines = useMemo(() => {
+    if (!orderChartFocused) return orderLines;
+    const extra = [];
+    if (orderLineSel !== 'entry' && orderAltLines.entry > 0) extra.push({ price: orderAltLines.entry, label: 'Entry', kind: 'buy' });
+    if (orderLineSel !== 'tp' && orderAltLines.tp > 0) extra.push({ price: orderAltLines.tp, label: 'Sell high', kind: 'takeProfit' });
+    if (orderLineSel !== 'sl' && orderAltLines.sl > 0) extra.push({ price: orderAltLines.sl, label: 'Sell low', kind: 'stopLoss' });
+    return [...(orderLines || []), ...extra];
+  }, [orderChartFocused, orderLines, orderLineSel, orderAltLines]);
+
+  // Opening the order drawer from anywhere in the card animates the expanded
+  // layer back to the top so the chart (and the lines being dragged) is visible.
+  useEffect(() => {
+    if (!orderChartFocused || isDesktopMode) return;
+    const layer = mobileChartTargetRef.current?.closest('.coin-info-layer');
+    if (layer && layer.scrollTop > 0) layer.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [orderChartFocused, isDesktopMode]);
+
   // ── Instant trade (⚡ button) ──────────────────────────────────────────────
   useEffect(() => {
     const onPresetsChange = (e) => {
       setInstantArmed(Boolean(e.detail?.enabled));
       if (e.detail?.buySol) setInstantBuySol(e.detail.buySol);
+      if (e.detail?.sellPct != null) setInstantSellPct(Number(e.detail.sellPct) || 100);
     };
     window.addEventListener('moonfeed:instant-presets-changed', onPresetsChange);
     return () => {
@@ -1047,6 +1123,30 @@ const CoinCard = memo(({
     }
   };
 
+  // Sells the trading wallet's position at the saved sell-amount preset.
+  const handleInstantSellTap = async (e) => {
+    e.stopPropagation();
+    const tradingWallet = await loadTradingWallet();
+    if (!tradingWallet) {
+      setShowInstantPanel(true);
+      return;
+    }
+    if (instantSellBusy || instantBusy) return;
+    const pct = Math.min(100, Math.max(1, Number(getInstantPresets().sellPct) || 100));
+    setInstantSellBusy(true);
+    setInstantFlash(null);
+    try {
+      const out = await executeInstantSell(coin, pct);
+      setInstantFlash({ ok: true, text: pct === 100 ? '✓ Sold position' : `✓ Sold ${pct}%` });
+      console.log(`⚡ Instant sell ${coin.symbol}: ${out.signature}`);
+    } catch (err) {
+      setInstantFlash({ ok: false, text: (err?.message || 'Sell failed').slice(0, 90) });
+    } finally {
+      setInstantSellBusy(false);
+      setTimeout(() => setInstantFlash(null), 5000);
+    }
+  };
+
   // Holder mode: the wallet already owns this coin (beyond dust), so "Sell at"
   // places a sell order on the existing tokens — no buy-in step.
   const heldTokens = Number(heldTokenAmount) || 0;
@@ -1069,6 +1169,8 @@ const CoinCard = memo(({
   useEffect(() => {
     setHeldTokenAmount(null);
     setSellTokenAmountInput('');
+    setOrderAltLines({ entry: 0, tp: 0, sl: 0 });
+    setBuyOrderPrice(0);
   }, [mintAddress]);
 
   useEffect(() => {
@@ -1242,9 +1344,9 @@ const CoinCard = memo(({
     if (!buyDrawerOpen) {
       if (!swipe.mode) {
         if (Math.abs(deltaX) < 14 || Math.abs(deltaX) < Math.abs(deltaY) * 1.35) return;
-        // Swipe right opens the market buy; swipe left opens the limit order.
-        swipe.mode = deltaX > 0 ? 'buy' : 'orders';
-        prepareBuyDrawer(swipe.mode);
+        // Either horizontal direction slides out the limit-order drawer.
+        swipe.mode = 'orders';
+        prepareBuyDrawer();
       }
       e.preventDefault();
       e.stopPropagation();
@@ -1261,7 +1363,8 @@ const CoinCard = memo(({
       updateBuySolAmount(nextAmount);
     }
 
-    if (buyDrawerMode === 'orders' && swipe.startedInPriceWheel && Math.abs(deltaY) > 4) {
+    if (buyDrawerMode === 'orders' && Math.abs(deltaY) > 4) {
+      // Anywhere on this screen: vertical drag moves the selected order line.
       e.preventDefault();
       e.stopPropagation();
       const nextPrice = swipe.startPrice - deltaY * getOrderTargetStep() * 0.18;
@@ -1281,7 +1384,7 @@ const CoinCard = memo(({
     setBuyDrawerDrag({ mode, progress: commit ? 1 : 0, settling: true });
     setTimeout(() => {
       if (commit) {
-        openBuyDrawer(mode);
+        openBuyDrawer();
         setBuyDrawerInstant(true);
       }
       setBuyDrawerDrag(null);
@@ -2988,20 +3091,6 @@ const CoinCard = memo(({
                         <span className="instant-toggle-knob" />
                       </button>
                       <button
-                        className={`instant-trade-button${instantArmed ? ' armed' : ''}${instantBusy ? ' busy' : ''}`}
-                        onClick={handleInstantTap}
-                        onPointerDown={handleInstantPressStart}
-                        onPointerUp={handleInstantPressEnd}
-                        onPointerLeave={handleInstantPressEnd}
-                        title={instantArmed ? 'Instant buy at your preset — hold to open settings' : 'Instant trade'}
-                        aria-label={instantArmed ? `Instant buy ${instantBuySol} SOL` : 'Instant trade'}
-                      >
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                          <path d="M13 2 4.5 13.5H11L9.5 22 19 10h-6.5L13 2z" />
-                        </svg>
-                        <span>{instantBusy ? 'Buying…' : instantArmed ? `Buy ${instantBuySol}` : 'Buy'}</span>
-                      </button>
-                      <button
                         type="button"
                         className="instant-options-btn"
                         onClick={(e) => { e.stopPropagation(); setShowInstantPanel(true); }}
@@ -3016,6 +3105,25 @@ const CoinCard = memo(({
                         </svg>
                       </button>
                     </div>
+                    <button
+                      className={`instant-buy-bubble${instantArmed ? ' armed' : ''}${instantBusy ? ' busy' : ''}`}
+                      onClick={handleInstantTap}
+                      onPointerDown={handleInstantPressStart}
+                      onPointerUp={handleInstantPressEnd}
+                      onPointerLeave={handleInstantPressEnd}
+                      title={instantArmed ? 'Instant buy at your preset — hold to open settings' : 'Instant trade'}
+                      aria-label={instantArmed ? `Instant buy ${instantBuySol} SOL` : 'Instant trade'}
+                    >
+                      <span>{instantBusy ? 'Buying…' : instantArmed ? `Buy ${instantBuySol}` : 'Buy'}</span>
+                    </button>
+                    <button
+                      className={`instant-sell-bubble${instantSellBusy ? ' busy' : ''}`}
+                      onClick={handleInstantSellTap}
+                      title={instantSellPct < 100 ? `Instant sell ${instantSellPct}% of your position` : 'Instant sell your whole position'}
+                      aria-label={instantSellPct < 100 ? `Instant sell ${instantSellPct}% of your position` : 'Instant sell your whole position'}
+                    >
+                      <span>{instantSellBusy ? 'Selling…' : instantSellPct < 100 ? `Sell ${instantSellPct}%` : 'Sell'}</span>
+                    </button>
                     {instantFlash && (
                       <span className={`instant-trade-flash ${instantFlash.ok ? 'ok' : 'err'}`}>{instantFlash.text}</span>
                     )}
@@ -3756,100 +3864,40 @@ const CoinCard = memo(({
                 style={buyDrawerDrag ? { transform: `translateX(${(buyDrawerDrag.progress - 1) * 100}%)` } : undefined}
               >
                 <div className="coin-buy-drawer-header">
-                  <div className="coin-buy-mode-tabs" aria-label="Trade mode">
-                    <button
-                      className={`coin-buy-mode-tab${buyDrawerMode === 'buy' ? ' active' : ''}`}
-                      onClick={() => setBuyDrawerMode('buy')}
-                    >
-                      Buy
-                    </button>
-                    <button
-                      className={`coin-buy-mode-tab${buyDrawerMode === 'orders' ? ' active' : ''}`}
-                      onClick={() => setBuyDrawerMode('orders')}
-                    >
-                      Orders <span className="caution-tape-badge">PRICE ALERT</span>
-                    </button>
+                  <div className="coin-buy-drawer-title">
+                    Limit Order <span className="caution-tape-badge">PRICE ALERT</span>
                   </div>
                   <button className="coin-buy-close" onClick={() => setBuyDrawerOpen(false)} aria-label="Close">×</button>
                 </div>
                 <div className="coin-buy-symbol">{coin.symbol || coin.name || 'TOKEN'}</div>
                 <div className="coin-buy-market-price">Market {formatPrice(displayPrice)}</div>
 
-                {buyDrawerMode === 'buy' ? (
-                  <>
-                    <div
-                      className="coin-buy-amount-panel"
-                      onWheel={handleBuyAmountWheel}
-                      onTouchStart={handleBuyTouchStart}
-                      onTouchMove={handleBuyTouchMove}
-                      onTouchEnd={handleBuyTouchEnd}
-                      role="spinbutton"
-                      aria-valuetext={`${buySolAmount.toFixed(2)} SOL`}
-                      tabIndex={0}
-                      onKeyDown={(e) => {
-                        if (e.key === 'ArrowUp') adjustBuySolAmount(1);
-                        if (e.key === 'ArrowDown') adjustBuySolAmount(-1);
-                      }}
-                    >
-                      <span className="coin-buy-amount-label">Buy amount</span>
-                      <button className="coin-buy-step" onClick={() => adjustBuySolAmount(1)} aria-label="Increase buy amount">⌃</button>
-                      <div className="coin-buy-amount-value">{buySolAmount.toFixed(2)} SOL</div>
-                      <button className="coin-buy-step" onClick={() => adjustBuySolAmount(-1)} aria-label="Decrease buy amount">⌄</button>
-                      <div className="coin-buy-amount-range">
-                        <span>{BUY_AMOUNT_MIN.toFixed(2)} SOL</span>
-                        <span>{BUY_AMOUNT_MAX.toFixed(0)} SOL</span>
-                      </div>
-                    </div>
-
-                    <label className="coin-buy-custom-amount">
-                      <span>Custom amount</span>
-                      <div className="coin-buy-custom-input-wrap">
-                        <input
-                          type="number"
-                          min={BUY_AMOUNT_MIN}
-                          max={BUY_AMOUNT_MAX}
-                          step={BUY_AMOUNT_STEP}
-                          value={buySolAmountInput}
-                          onChange={(e) => handleBuySolAmountInputChange(e.target.value)}
-                          onBlur={normalizeBuySolAmountInput}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') e.currentTarget.blur();
-                          }}
-                          aria-label="Custom buy amount in SOL"
-                        />
-                        <strong>SOL</strong>
-                      </div>
-                    </label>
-
-                    <button className="coin-buy-submit" onClick={submitBuyDrawerTrade} disabled={!onTradeClick || buySolAmount <= 0}>
-                      Buy now
-                    </button>
-                  </>
-                ) : (
+                {(
                   <>
                     <CautionTapeBanner compact />
-                    <div className="coin-buy-order-side-toggle" aria-label="Order side">
-                      <button
-                        className={`coin-buy-order-side-btn${buyDrawerOrderSide === 'buy' ? ' active' : ''}`}
-                        onClick={() => {
-                          setBuyDrawerOrderSide('buy');
-                          setOrderAmountInput('0.10');
-                          setOrderError(null);
-                          setOrderSuccess(null);
-                        }}
-                      >
-                        Buy at
-                      </button>
-                      <button
-                        className={`coin-buy-order-side-btn${buyDrawerOrderSide === 'sell' ? ' active' : ''}`}
-                        onClick={() => {
-                          setBuyDrawerOrderSide('sell');
-                          setOrderError(null);
-                          setOrderSuccess(null);
-                        }}
-                      >
-                        Sell at
-                      </button>
+                    <div className="coin-order-line-btns" role="radiogroup" aria-label="Order line to drag">
+                      {[
+                        { key: 'tp', label: 'Sell +', cls: 'tp' },
+                        { key: 'sl', label: 'Sell −', cls: 'sl' },
+                        { key: 'entry', label: 'Entry', cls: 'entry' },
+                      ].map(({ key, label, cls }) => {
+                        const price = key === orderLineSel ? buyOrderPrice : orderAltLines[key];
+                        const pct = displayPrice > 0 && price > 0 ? ((price - displayPrice) / displayPrice) * 100 : null;
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            role="radio"
+                            aria-checked={orderLineSel === key}
+                            className={`coin-order-line-btn coin-order-line-btn--${cls}${orderLineSel === key ? ' active' : ''}`}
+                            onClick={() => selectOrderLine(key)}
+                          >
+                            <span className="coin-order-line-btn-label">{label}</span>
+                            <span className="coin-order-line-btn-pct">{pct == null ? '—' : `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`}</span>
+                          </button>
+                        );
+                      })}
+                      <div className="coin-order-line-hint">Slide up or down anywhere to move the selected line</div>
                     </div>
 
                     {buyDrawerOrderSide === 'sell' && (
@@ -4109,6 +4157,18 @@ const CoinCard = memo(({
                             : `Buy in & set sell order`}
                       </button>
                     )}
+
+                    <button
+                      type="button"
+                      className={`coin-buy-save-presets${presetSaveFlash ? ' saved' : ''}`}
+                      onClick={saveInstantOrderPresets}
+                      disabled={presetSaveFlash}
+                    >
+                      {presetSaveFlash ? '✓ Saved for Instant Buy' : 'Save targets for ⚡ Instant Buy'}
+                    </button>
+                    <div className="coin-buy-save-note">
+                      Saves Sell + / Sell − as auto take-profit &amp; stop-loss for every ⚡ instant buy.
+                    </div>
                   </>
                 )}
               </aside>
@@ -4433,13 +4493,13 @@ const CoinCard = memo(({
               onOrderTargetChange={orderChartFocused ? handleOrderTargetChange : null}
               onOrderTargetNudge={orderChartFocused ? adjustBuyOrderPrice : null}
               targetLabel={orderTargetLabel}
-              targetColor={buyDrawerOrderSide === 'sell' ? '#22d3ee' : '#4ade80'}
+              targetColor={orderLineSel === 'entry' ? '#60a5fa' : orderLineSel === 'sl' ? '#f87171' : '#22d3ee'}
               entryPrice={entryPrice}
               trackedPrice={effectiveTrackedPrice}
               trackedTime={effectiveTrackedTime}
               orderLinePrice={coin.activeOrder?.triggerPriceUsd}
               orderLineLabel={coin.activeOrder?.side === 'buy' ? 'Buy target' : 'Sell target'}
-              orderLines={orderLines}
+              orderLines={draftOrderLines}
               focusTrackedSignal={focusTrackedSignal}
               tradeDots={tradeDots}
               onTradeDotClick={handleTradeDotClick}
@@ -4813,14 +4873,14 @@ const CoinCard = memo(({
           ) : null}
           footer={reelSheet === 'comments' ? (
             <div className="tiktok-sheet-comment-input">
-              {walletConnected ? (
+              {accountConnected ? (
                 <form 
                   className="tiktok-comment-form"
                   onSubmit={async (e) => {
                     e.preventDefault();
                     const textarea = e.target.querySelector('textarea');
                     const text = textarea?.value?.trim();
-                    if (!text || !walletAddress) return;
+                    if (!text || !accountAddress) return;
                     try {
                       const response = await fetch(`${API_CONFIG.BASE_URL}/api/comments`, {
                         method: 'POST',
@@ -4828,7 +4888,7 @@ const CoinCard = memo(({
                         body: JSON.stringify({
                           coinAddress: mintAddress,
                           coinSymbol: coin.symbol || coin.name || '',
-                          walletAddress,
+                          walletAddress: accountAddress,
                           comment: text,
                         }),
                       });

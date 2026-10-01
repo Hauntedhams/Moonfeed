@@ -9,8 +9,13 @@ const express = require('express');
 const mongoose = require('mongoose');
 const router = express.Router();
 const { AnalyticsEvent, AnalyticsSession } = require('../models/Analytics');
+const Comment = require('../models/Comment');
+const DeviceToken = require('../models/DeviceToken');
+const { AffiliateTrade } = require('../models/Affiliate');
 const adminAuth = require('../middleware/adminAuth');
 const { eventWeight, getTasteProfile } = require('../services/analyticsService');
+
+const SOL_MINT = 'So11111111111111111111111111111111111111112';
 
 const MAX_EVENTS_PER_REQUEST = 100;
 const MAX_STR = 120;
@@ -166,6 +171,11 @@ router.get('/summary', adminAuth, async (req, res) => {
       platforms,
       topCoins,
       feedUsage,
+      commentTotals,
+      commentsByCoin,
+      deviceStats,
+      tradeSides,
+      walletsAllTime,
     ] = await Promise.all([
       AnalyticsSession.aggregate([
         { $match: sessionMatch },
@@ -297,6 +307,71 @@ router.get('/summary', adminAuth, async (req, res) => {
         { $sort: { events: -1 } },
         { $project: { _id: 0, feed: '$_id', events: 1 } },
       ]),
+
+      // Comments: all-time totals + how many landed in the selected range.
+      Comment.aggregate([
+        {
+          $group: {
+            _id: null,
+            total: { $sum: 1 },
+            commenters: { $addToSet: '$walletAddress' },
+            inRange: { $sum: { $cond: [{ $gte: ['$timestamp', since] }, 1, 0] } },
+            likes: { $sum: '$likes' },
+          },
+        },
+        { $project: { _id: 0, total: 1, inRange: 1, likes: 1, commenters: { $size: '$commenters' } } },
+      ]),
+
+      // Which coins people talk about (all-time, most-discussed first).
+      Comment.aggregate([
+        {
+          $group: {
+            _id: '$coinAddress',
+            symbol: { $last: '$coinSymbol' },
+            count: { $sum: 1 },
+            likes: { $sum: '$likes' },
+            commenters: { $addToSet: '$walletAddress' },
+            lastAt: { $max: '$timestamp' },
+          },
+        },
+        { $sort: { count: -1 } },
+        { $limit: 12 },
+        { $project: { _id: 0, mint: '$_id', symbol: 1, count: 1, likes: 1, lastAt: 1, commenters: { $size: '$commenters' } } },
+      ]),
+
+      // Push-registered devices = real installs: total, active in range, new in range.
+      DeviceToken.aggregate([
+        {
+          $group: {
+            _id: '$platform',
+            total: { $sum: 1 },
+            active: { $sum: { $cond: [{ $gte: ['$lastSeenAt', since] }, 1, 0] } },
+            fresh: { $sum: { $cond: [{ $gte: ['$createdAt', since] }, 1, 0] } },
+          },
+        },
+        { $project: { _id: 0, platform: '$_id', total: 1, active: 1, fresh: 1 } },
+        { $sort: { total: -1 } },
+      ]),
+
+      // Avg entry (buy) / exit (sell) sizes from the on-chain-verified fee ledger.
+      AffiliateTrade.aggregate([
+        { $match: { timestamp: { $gte: since } } },
+        {
+          $group: {
+            _id: { $cond: [{ $eq: ['$tokenOut', SOL_MINT] }, 'sell', 'buy'] },
+            trades: { $sum: 1 },
+            totalSol: { $sum: '$tradeVolume' },
+            avgSol: { $avg: '$tradeVolume' },
+            totalUsd: { $sum: '$tradeVolumeUsd' },
+            avgUsd: { $avg: '$tradeVolumeUsd' },
+            traders: { $addToSet: '$userWallet' },
+          },
+        },
+        { $project: { _id: 0, side: '$_id', trades: 1, totalSol: 1, avgSol: 1, totalUsd: 1, avgUsd: 1, traders: { $size: '$traders' } } },
+      ]),
+
+      // Every wallet that has EVER connected (range-scoped count is in totals).
+      AnalyticsSession.distinct('walletAddress', { walletAddress: { $ne: null } }),
     ]);
 
     res.json({
@@ -312,6 +387,16 @@ router.get('/summary', adminAuth, async (req, res) => {
       platforms,
       topCoins,
       feedUsage,
+      comments: {
+        ...(commentTotals[0] || { total: 0, inRange: 0, likes: 0, commenters: 0 }),
+        byCoin: commentsByCoin,
+      },
+      devices: deviceStats,
+      trading: {
+        buy: tradeSides.find(t => t.side === 'buy') || { trades: 0, totalSol: 0, avgSol: 0, totalUsd: 0, avgUsd: 0, traders: 0 },
+        sell: tradeSides.find(t => t.side === 'sell') || { trades: 0, totalSol: 0, avgSol: 0, totalUsd: 0, avgUsd: 0, traders: 0 },
+      },
+      walletsAllTime: walletsAllTime.length,
     });
   } catch (error) {
     console.error('[analytics] summary failed:', error.message);

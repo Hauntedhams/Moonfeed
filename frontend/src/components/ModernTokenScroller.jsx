@@ -3,8 +3,8 @@ import CoinCard from './CoinCard';
 import MoonfeedInfoButton from './MoonfeedInfoModal';
 import InteractiveTutorial from './InteractiveTutorial';
 import { API_CONFIG, getApiUrl } from '../config/api';
-import { useWallet } from '../contexts/WalletContext';
 import { useWalletConnectOnboarding } from './WalletConnectOnboarding';
+import { useActiveAccount } from '../hooks/useWalletView';
 import { useTrackedTrades } from '../contexts/TrackedTradesContext';
 import { FOLLOW_WALLETS_FEED, FOLLOW_COINS_FEED, FOLLOWING_FEEDS, buildFollowWalletsFeed, buildFollowCoinsFeed } from '../utils/followingFeeds';
 import { personalizeCoins } from '../utils/feedPersonalization';
@@ -100,7 +100,8 @@ const ModernTokenScroller = ({
   showFiltersButton = true, // Hide the top-left info/hamburger button (e.g. a fixed back button takes that spot instead)
   scrollTarget = null // { feed, mint, index, nonce } from the feed browser; keeps browsing in the full feed
 }) => {
-  const { connected: walletConnected } = useWallet();
+  // The ⚡ trading wallet counts as a signed-in account for tracking coins.
+  const { connected: walletConnected } = useActiveAccount();
   const { openWalletConnect } = useWalletConnectOnboarding();
   const { tradesByMint, tradesLoaded } = useTrackedTrades();
   // Debug: Log if onSearchClick is passed

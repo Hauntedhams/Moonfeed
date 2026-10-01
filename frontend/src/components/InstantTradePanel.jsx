@@ -9,8 +9,9 @@ import {
   getPresets, savePresets,
 } from '../utils/instantTradeWallet';
 import {
-  executeInstantBuy, executeInstantSell, getTradingWalletBalances, withdrawSol, SWAP_FEE_OVERHEAD_SOL,
+  executeInstantBuy, executeInstantSell, getTradingWalletBalances, withdrawSol, withdrawToken, listTradingWalletTokens, SWAP_FEE_OVERHEAD_SOL,
 } from '../utils/instantTrade';
+import { getSolUsdPrice } from '../utils/orderFillTracking';
 import './InstantTradePanel.css';
 
 const BUY_CHIPS = [0.01, 0.05, 0.1, 0.25, 0.5, 1];
@@ -18,6 +19,7 @@ const SLIPPAGE_CHIPS = [1, 3, 5, 10];
 const AUTO_SELL_CHIPS = [0, 25, 50, 100];
 const STOP_LOSS_CHIPS = [0, 10, 25, 50];
 const SELL_PCTS = [25, 50, 75, 100];
+const CUSTOM_SELL_CHIPS = [10, 25, 50, 75];
 
 const shortAddr = (a) => (a ? `${a.slice(0, 4)}…${a.slice(-4)}` : '');
 const fmtSol = (n) => (Number(n) || 0).toLocaleString(undefined, { maximumFractionDigits: 4 });
@@ -39,9 +41,33 @@ const InstantTradePanel = ({ coin, onClose, connectedWallet, embedded = false })
   const [view, setView] = useState('main'); // 'main' | 'import' | 'export' | 'withdraw'
   const [importValue, setImportValue] = useState('');
   const [withdrawDest, setWithdrawDest] = useState(connectedWallet || '');
+  const [walletTokens, setWalletTokens] = useState(null); // null = loading, [] = none
   const [copied, setCopied] = useState(false);
+  const [solUsd, setSolUsd] = useState(0);
+  const [secretVisible, setSecretVisible] = useState(false);
+  const [confirmReveal, setConfirmReveal] = useState(false);
 
   const mint = coin?.mintAddress || coin?.address;
+
+  useEffect(() => { getSolUsdPrice().then(setSolUsd).catch(() => {}); }, []);
+
+  useEffect(() => {
+    if (view !== 'export') {
+      setSecretVisible(false);
+      setConfirmReveal(false);
+    }
+  }, [view]);
+
+  useEffect(() => {
+    const hideSecret = () => {
+      if (document.hidden) {
+        setSecretVisible(false);
+        setConfirmReveal(false);
+      }
+    };
+    document.addEventListener('visibilitychange', hideSecret);
+    return () => document.removeEventListener('visibilitychange', hideSecret);
+  }, []);
 
   const refreshBalances = useCallback(async () => {
     try {
@@ -62,6 +88,36 @@ const InstantTradePanel = ({ coin, onClose, connectedWallet, embedded = false })
   useEffect(() => {
     if (wallet) refreshBalances();
   }, [wallet, refreshBalances]);
+
+  // The withdraw view lists every coin in the wallet (not just the open card's).
+  const loadWalletTokens = useCallback(async () => {
+    setWalletTokens(null);
+    try {
+      const tokens = await listTradingWalletTokens();
+      let withSymbols = tokens;
+      if (tokens.length) {
+        try {
+          const mints = tokens.map((t) => t.mint).slice(0, 30).join(',');
+          const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mints}`);
+          const data = res.ok ? await res.json() : null;
+          const symbolByMint = new Map();
+          (data?.pairs || []).forEach((p) => {
+            if (p.baseToken?.address && !symbolByMint.has(p.baseToken.address)) {
+              symbolByMint.set(p.baseToken.address, p.baseToken.symbol);
+            }
+          });
+          withSymbols = tokens.map((t) => ({ ...t, symbol: symbolByMint.get(t.mint) || null }));
+        } catch { /* symbols are cosmetic */ }
+      }
+      setWalletTokens(withSymbols);
+    } catch {
+      setWalletTokens([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (view === 'withdraw' && wallet) loadWalletTokens();
+  }, [view, wallet, loadWalletTokens]);
 
   const updatePresets = (partial) => setPresets(savePresets(partial));
 
@@ -113,6 +169,13 @@ const InstantTradePanel = ({ coin, onClose, connectedWallet, embedded = false })
 
   const handleWithdraw = () => runAction('withdraw', () => withdrawSol(withdrawDest),
     (out) => `Withdrew ${fmtSol(out.solWithdrawn)} SOL`);
+
+  const handleWithdrawToken = (token) => runAction(`wtoken-${token.mint}`, async () => {
+    const out = await withdrawToken(token.mint, withdrawDest);
+    loadWalletTokens();
+    refreshBalances();
+    return out;
+  }, (out) => `Sent ${fmtTokens(out.amount)} ${token.symbol || 'tokens'}`);
 
   const copyAddress = async () => {
     try {
@@ -174,18 +237,32 @@ const InstantTradePanel = ({ coin, onClose, connectedWallet, embedded = false })
         ) : view === 'export' ? (
           <div className="itp-setup">
             <p className="itp-copy itp-copy--warn">Anyone with this key controls the wallet's funds. Never share it or paste it into websites.</p>
-            <div className="itp-secret">{wallet.secretKey}</div>
-            <button
-              type="button" className="itp-btn itp-btn--primary"
-              onClick={() => navigator.clipboard.writeText(wallet.secretKey).catch(() => {})}
-            >
-              Copy secret key
-            </button>
+            <div className="itp-secret-row">
+              <div className={`itp-secret${secretVisible ? '' : ' itp-secret--hidden'}`}>
+                {secretVisible ? wallet.secretKey : 'Key hidden'}
+              </div>
+              <button type="button" className="itp-btn itp-btn--ghost" onClick={() => navigator.clipboard.writeText(wallet.secretKey).catch(() => {})} title="Copy secret key to clipboard">
+                Copy
+              </button>
+            </div>
+            {confirmReveal ? (
+              <div className="itp-reveal-confirm">
+                <p className="itp-copy itp-copy--warn">Are you sure you want to reveal your secret key? Anyone watching your screen can take your funds.</p>
+                <div className="itp-reveal-actions">
+                  <button type="button" className="itp-btn itp-btn--ghost" onClick={() => setConfirmReveal(false)}>Cancel</button>
+                  <button type="button" className="itp-btn itp-btn--danger" onClick={() => { setSecretVisible(true); setConfirmReveal(false); }}>Reveal key</button>
+                </div>
+              </div>
+            ) : (
+              <button type="button" className="itp-btn itp-btn--ghost" onClick={() => { setSecretVisible(false); setConfirmReveal(!secretVisible); }}>
+                {secretVisible ? 'Hide key' : 'Reveal key'}
+              </button>
+            )}
             <button type="button" className="itp-btn itp-btn--ghost" onClick={() => setView('main')}>Done</button>
           </div>
         ) : view === 'withdraw' ? (
           <div className="itp-setup">
-            <p className="itp-copy">Withdraw all SOL ({fmtSol(balances.sol)} SOL) to:</p>
+            <p className="itp-copy">Withdraw from the trading wallet to:</p>
             <input
               className="itp-import-input itp-import-input--single"
               value={withdrawDest}
@@ -194,8 +271,39 @@ const InstantTradePanel = ({ coin, onClose, connectedWallet, embedded = false })
               autoCorrect="off" autoCapitalize="off" spellCheck={false}
             />
             <button type="button" className="itp-btn itp-btn--primary" disabled={!withdrawDest.trim() || busy} onClick={handleWithdraw}>
-              {busy === 'withdraw' ? 'Withdrawing…' : 'Withdraw SOL'}
+              {busy === 'withdraw' ? 'Withdrawing…' : `Withdraw ${fmtSol(balances.sol)} SOL`}
             </button>
+            {walletTokens === null ? (
+              <p className="itp-copy itp-withdraw-tokens-hint">Checking for coins in this wallet…</p>
+            ) : walletTokens.length > 0 ? (
+              <>
+                <p className="itp-copy itp-withdraw-tokens-hint">Coins in this wallet:</p>
+                {walletTokens.map((token) => (
+                  <div className="itp-withdraw-token-row" key={token.mint}>
+                    <span className="itp-withdraw-token-info">
+                      <span className="itp-withdraw-token-symbol">{token.symbol || `${token.mint.slice(0, 4)}…${token.mint.slice(-4)}`}</span>
+                      <span className="itp-withdraw-token-amount">{fmtTokens(token.amount)}</span>
+                    </span>
+                    <button
+                      type="button"
+                      className="itp-btn itp-btn--ghost itp-withdraw-token-btn"
+                      disabled={!withdrawDest.trim() || !!busy}
+                      onClick={() => handleWithdrawToken(token)}
+                    >
+                      {busy === `wtoken-${token.mint}` ? 'Sending…' : 'Withdraw'}
+                    </button>
+                  </div>
+                ))}
+              </>
+            ) : null}
+            {result && view === 'withdraw' && (
+              <div className={`itp-result ${result.ok ? 'itp-result--ok' : 'itp-result--err'}`}>
+                {result.text}
+                {result.signature && (
+                  <a href={`https://solscan.io/tx/${result.signature}`} target="_blank" rel="noopener noreferrer"> View tx ↗</a>
+                )}
+              </div>
+            )}
             <button type="button" className="itp-btn itp-btn--ghost" onClick={() => setView('main')}>Back</button>
           </div>
         ) : (
@@ -219,6 +327,17 @@ const InstantTradePanel = ({ coin, onClose, connectedWallet, embedded = false })
             <div className="itp-sell-row">
               <span className="itp-sell-label">
                 Sell {balances.tokens > 0 ? `(${fmtTokens(balances.tokens)} ${coin?.symbol})` : '— no holdings'}
+                {(() => {
+                  const price = Number(coin?.price_usd) || 0;
+                  if (!(balances.tokens > 0 && price > 0)) return null;
+                  const usd = balances.tokens * price;
+                  const sol = solUsd > 0 ? usd / solUsd : 0;
+                  return (
+                    <span className="itp-sell-worth">
+                      ≈ ${usd.toLocaleString(undefined, { maximumFractionDigits: 2 })}{sol > 0 ? ` (${fmtSol(sol)} SOL)` : ''}
+                    </span>
+                  );
+                })()}
               </span>
               <div className="itp-sell-btns">
                 {SELL_PCTS.map((pct) => (
@@ -309,6 +428,36 @@ const InstantTradePanel = ({ coin, onClose, connectedWallet, embedded = false })
                   ))}
                 </div>
               </div>
+
+              <div className="itp-preset-row itp-toggle-row">
+                <span className="itp-preset-label">
+                  Custom sell amount
+                  <span className="itp-preset-sub">The coin card's Sell button sells this much of the position (off = 100%)</span>
+                </span>
+                <button
+                  type="button"
+                  className={`itp-toggle ${Number(presets.sellPct) > 0 && Number(presets.sellPct) < 100 ? 'on' : ''}`}
+                  role="switch"
+                  aria-checked={Number(presets.sellPct) > 0 && Number(presets.sellPct) < 100}
+                  aria-label="Custom instant-sell amount"
+                  onClick={() => updatePresets({ sellPct: Number(presets.sellPct) < 100 && Number(presets.sellPct) > 0 ? 100 : 50 })}
+                >
+                  <span className="itp-toggle-knob" />
+                </button>
+              </div>
+              {Number(presets.sellPct) > 0 && Number(presets.sellPct) < 100 && (
+                <div className="itp-chip-row">
+                  {CUSTOM_SELL_CHIPS.map((v) => (
+                    <button
+                      key={v} type="button"
+                      className={`itp-chip ${Number(presets.sellPct) === v ? 'active' : ''}`}
+                      onClick={() => updatePresets({ sellPct: v })}
+                    >
+                      {v}%
+                    </button>
+                  ))}
+                </div>
+              )}
 
               <div className="itp-preset-row itp-toggle-row">
                 <span className="itp-preset-label">

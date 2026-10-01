@@ -5,6 +5,7 @@ import { getFullApiUrl } from './config/api'
 import ModernTokenScroller from './components/ModernTokenScroller'
 import TrackedView from './components/TrackedView'
 import BottomNavBar from './components/BottomNavBar'
+import XTrackerPanel from './components/XTrackerPanel'
 import FeedSelector, { FEED_ORDER, CONTINUOUS_FEED_ORDER, BASE_FEEDS } from './components/FeedSelector'
 import FeedSwipeContainer from './components/FeedSwipeContainer'
 import FeedFilterStrip from './components/FeedFilterStrip'
@@ -31,7 +32,9 @@ import useHoldingsCrashNotifications from './hooks/useHoldingsCrashNotifications
 import useTrackedGainNotifications from './hooks/useTrackedGainNotifications'
 import useTrenchesGainNotifications from './hooks/useTrenchesGainNotifications'
 import useInstantAutoExecutor from './hooks/useInstantAutoExecutor'
+import { useActiveAccount } from './hooks/useWalletView'
 import useSwipeBack from './hooks/useSwipeBack'
+import { hasUnreadXNews, markXNewsRead, unreadXTweetCount, markXTweetsRead } from './utils/xNewsAlerts'
 
 // Lazy load heavy components that aren't needed immediately
 const WalletDebug = lazy(() => import('./components/WalletDebug'))
@@ -130,12 +133,77 @@ function App() {
   const [favorites, setFavorites] = useState([]);
   const { publicKey, connected } = useWallet();
   const walletAddress = publicKey?.toString() || null;
+  // Account identity for tracking/follow features — the ⚡ trading wallet counts
+  // as a signed-in Moonfeed account (when selected in the wallet switcher, or
+  // automatically whenever no main wallet is connected).
+  const { address: accountAddress, connected: accountConnected } = useActiveAccount();
   useOrderFillNotifications(); // background: notifies when a limit order fills
   useHoldingsCrashNotifications(); // background: notifies when a held coin starts crashing
   useTrackedGainNotifications(favorites); // background: notifies when a tracked coin is up +10%
   useTrenchesGainNotifications(); // background: notifies when a fresh Trenches coin is surging fast
   useInstantAutoExecutor(); // background: auto-executes the trading wallet's TP/SL triggers while the app is open
   const [tradesBadgeCount, setTradesBadgeCount] = useState(0); // Trades nav badge for auto-executed orders
+  const [xTrackerOpen, setXTrackerOpen] = useState(false);
+  const xTrackerOpenRef = useRef(false);
+  xTrackerOpenRef.current = xTrackerOpen;
+  const [xNewsUnread, setXNewsUnread] = useState(false);
+  const [xTweetUnread, setXTweetUnread] = useState(0);
+  const xTrendsRef = useRef([]);
+  const xTweetsRef = useRef([]);
+  const pendingXAlertRef = useRef(null);
+  useEffect(() => {
+    let cancelled = false;
+    const checkXNews = async () => {
+      try {
+        const response = await fetch(getFullApiUrl('/api/x-trends'));
+        if (!response.ok) return;
+        const data = await response.json();
+        if (cancelled) return;
+        xTrendsRef.current = data?.trends || [];
+        if (xTrackerOpenRef.current) markXNewsRead(xTrendsRef.current);
+        setXNewsUnread(hasUnreadXNews(xTrendsRef.current) || Boolean(pendingXAlertRef.current));
+      } catch { /* retry on the next interval */ }
+    };
+    const checkXTweets = async () => {
+      try {
+        const response = await fetch(getFullApiUrl('/api/x-feed?limit=120'));
+        if (!response.ok) return;
+        const data = await response.json();
+        if (cancelled) return;
+        xTweetsRef.current = data?.tweets || [];
+        if (xTrackerOpenRef.current) markXTweetsRead(xTweetsRef.current);
+        setXTweetUnread(unreadXTweetCount(xTweetsRef.current));
+      } catch { /* retry on the next interval */ }
+    };
+    const onXNews = (event) => {
+      if (xTrackerOpenRef.current) {
+        if (event.detail?.alertKey) markXNewsRead([{ alertWorthy: true, alertKey: event.detail.alertKey }]);
+        checkXNews();
+        return;
+      }
+      if (event.detail?.alertKey) pendingXAlertRef.current = event.detail.alertKey;
+      setXNewsUnread(true);
+      checkXNews();
+    };
+    checkXNews();
+    checkXTweets();
+    const timer = setInterval(() => { checkXNews(); checkXTweets(); }, 2 * 60 * 1000);
+    window.addEventListener('moonfeed:x-news-updated', onXNews);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+      window.removeEventListener('moonfeed:x-news-updated', onXNews);
+    };
+  }, []);
+  const openXTrackerFromNav = () => {
+    markXNewsRead(xTrendsRef.current);
+    markXTweetsRead(xTweetsRef.current);
+    if (pendingXAlertRef.current) markXNewsRead([{ alertWorthy: true, alertKey: pendingXAlertRef.current }]);
+    pendingXAlertRef.current = null;
+    setXNewsUnread(false);
+    setXTweetUnread(0);
+    setXTrackerOpen(true);
+  };
   useEffect(() => {
     const onAutoTrade = () => setTradesBadgeCount((c) => c + 1);
     window.addEventListener('moonfeed:auto-trade-executed', onAutoTrade);
@@ -210,14 +278,16 @@ function App() {
     track('tab_view', { label: activeTab });
   }, [activeTab]);
 
-  // Register the device for remote (closed-app) push and associate it with the account.
-  // PASSIVE: only registers when the OS permission was already granted — the
-  // prompt only ever appears after an explicit user action (see notificationOptIn).
+  // Register the device for remote (closed-app) push and associate it with the
+  // ACTIVE account (main wallet OR the ⚡ trading wallet) — the same identity the
+  // tracked coins/wallets/soft orders sync under, so the server monitors can find
+  // this device. PASSIVE: only registers when the OS permission was already
+  // granted — the prompt only ever appears after an explicit user action.
   useEffect(() => {
-    initRemotePush(connected ? walletAddress : null).catch((err) => {
+    initRemotePush(accountConnected ? accountAddress : null).catch((err) => {
       console.debug('[push] init failed:', err?.message);
     });
-  }, [connected, walletAddress]);
+  }, [accountConnected, accountAddress]);
 
   // Listen for favorites changes from TokenScroller
   const handleFavoritesChange = (newFavs) => {
@@ -234,42 +304,43 @@ function App() {
     const added = newFavs.filter(c => !prevMints.has(c.mintAddress || c.address));
     added.forEach(c => track('coin_tracked', coinProps(c, { feed: filtersRef.current?.type })));
     if (added.length) {
-      maybeEnableNotifications(walletAddress).catch(() => {});
+      maybeEnableNotifications(accountAddress).catch(() => {});
     }
   };
 
-  // Coin tracking belongs to the connected account. Clear legacy guest records
-  // so a signed-out user can never see or manage a tracked coin.
+  // Coin tracking belongs to the active account (connected wallet OR the ⚡
+  // trading wallet). Clear legacy guest records so a signed-out user can never
+  // see or manage a tracked coin.
   useEffect(() => {
-    if (!connected || !walletAddress) {
+    if (!accountConnected || !accountAddress) {
       setFavorites([]);
       localStorage.removeItem('favorites');
     }
-  }, [connected, walletAddress]);
+  }, [accountConnected, accountAddress]);
 
   // When a wallet signs in, pull this account's synced tracked-coins (favorites) list
   // from the backend so tracked coins follow the user across devices.
   useEffect(() => {
-    if (!connected || !walletAddress) {
+    if (!accountConnected || !accountAddress) {
       favoritesSyncedWalletRef.current = null;
       favoritesHydratedRef.current = false;
       return;
     }
-    if (favoritesSyncedWalletRef.current === walletAddress) return;
-    favoritesSyncedWalletRef.current = walletAddress;
+    if (favoritesSyncedWalletRef.current === accountAddress) return;
+    favoritesSyncedWalletRef.current = accountAddress;
     favoritesHydratedRef.current = false;
 
     // Show the cached list immediately; the remote read reconciles it.
     let cached = [];
     try {
-      cached = JSON.parse(localStorage.getItem(favoritesCacheKey(walletAddress)) || '[]');
+      cached = JSON.parse(localStorage.getItem(favoritesCacheKey(accountAddress)) || '[]');
     } catch (_) { /* ignore corrupt cache */ }
     if (Array.isArray(cached) && cached.length) {
       skipNextFavoritesSaveRef.current = true;
       setFavorites(cached);
     }
 
-    fetch(getFullApiUrl(`/api/users/${walletAddress}/tracked-coins`))
+    fetch(getFullApiUrl(`/api/users/${accountAddress}/tracked-coins`))
       .then(res => (res.ok ? res.json() : null))
       .then(data => {
         const remote = Array.isArray(data?.trackedCoins) ? data.trackedCoins : [];
@@ -282,7 +353,7 @@ function App() {
       })
       .catch(err => console.warn('Could not load tracked coins from account:', err.message))
       .finally(() => { favoritesHydratedRef.current = true; });
-  }, [connected, walletAddress]);
+  }, [accountConnected, accountAddress]);
 
   const toMinimalTrackedCoins = (favs) => favs.slice(0, 500).map(c => ({
     mintAddress: c.mintAddress || c.address,
@@ -298,18 +369,18 @@ function App() {
   // description, rugcheck, etc.) that can blow past the WebView's localStorage quota
   // as the tracked list grows, crashing the app on next launch.
   useEffect(() => {
-    if (!connected || !walletAddress) return;
+    if (!accountConnected || !accountAddress) return;
     try {
-      localStorage.setItem(favoritesCacheKey(walletAddress), JSON.stringify(toMinimalTrackedCoins(favorites)));
+      localStorage.setItem(favoritesCacheKey(accountAddress), JSON.stringify(toMinimalTrackedCoins(favorites)));
     } catch (err) {
       console.warn('Could not cache tracked coins locally:', err?.message);
     }
-  }, [favorites, connected, walletAddress]);
+  }, [favorites, accountConnected, accountAddress]);
 
   // Keep the latest values available to the background-flush handler below.
   useEffect(() => {
-    latestFavoritesSaveRef.current = { walletAddress, favorites };
-  }, [walletAddress, favorites]);
+    latestFavoritesSaveRef.current = { walletAddress: accountAddress, favorites };
+  }, [accountAddress, favorites]);
 
   const saveTrackedCoinsNow = (addr, favs) => {
     fetch(getFullApiUrl(`/api/users/${addr}/tracked-coins`), {
@@ -323,7 +394,7 @@ function App() {
   // Save tracked coins to the signed-in account (minimal fields — full coin data
   // is re-enriched from the feed when displayed) whenever they change.
   useEffect(() => {
-    if (!connected || !walletAddress) return;
+    if (!accountConnected || !accountAddress) return;
     // Saving before the remote read lands would push an empty list over real data.
     if (!favoritesHydratedRef.current) return;
     if (skipNextFavoritesSaveRef.current) {
@@ -332,13 +403,13 @@ function App() {
     }
     pendingFavoritesSaveTimerRef.current = setTimeout(() => {
       pendingFavoritesSaveTimerRef.current = null;
-      saveTrackedCoinsNow(walletAddress, favorites);
+      saveTrackedCoinsNow(accountAddress, favorites);
     }, 800);
     return () => {
       clearTimeout(pendingFavoritesSaveTimerRef.current);
       pendingFavoritesSaveTimerRef.current = null;
     };
-  }, [favorites, connected, walletAddress]);
+  }, [favorites, accountConnected, accountAddress]);
 
   // A debounced save can be silently lost if the app is backgrounded/closed before
   // the timer fires (e.g. tracking a coin then immediately switching apps) — flush
@@ -1085,7 +1156,7 @@ function App() {
       </div>
       
       <BottomNavBar 
-        activeTab={activeTab === 'coin-detail' ? 'tracked' : activeTab} 
+        activeTab={xTrackerOpen ? 'x-tracker' : activeTab}
         setActiveTab={(tab) => {
           if (tab === 'trade') {
             handleGlobalTradeClick();
@@ -1099,7 +1170,10 @@ function App() {
         onSearchClick={handleSearchClick}
         onOrdersClick={handleOrdersClick}
         tradesBadgeCount={tradesBadgeCount}
+        onXTrackerClick={openXTrackerFromNav}
+        xNewsUnread={xTweetUnread || (xNewsUnread ? 1 : 0)}
       />
+      {xTrackerOpen && <XTrackerPanel onClose={() => setXTrackerOpen(false)} />}
       <Suspense fallback={null}>
         <CoinSearchModal
           visible={searchModalOpen}

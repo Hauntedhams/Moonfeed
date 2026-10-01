@@ -400,6 +400,39 @@ router.post('/stats-batch', (req, res) => {
 });
 
 /**
+ * GET /api/wallet/token-decimals/:mint
+ * Authoritative mint decimals via Helius. Exists because the client-side
+ * fallbacks (tokens.jup.ag misses fresh mints; public RPC 403s from devices)
+ * silently guessed 6 — a 9-decimal mint then corrupts every local amount 1000x.
+ */
+const tokenDecimalsCache = new Map(); // mint -> decimals (immutable on-chain)
+router.get('/token-decimals/:mint', async (req, res) => {
+  try {
+    const { mint } = req.params;
+    if (!mint || mint.length < 32) {
+      return res.status(400).json({ success: false, error: 'Invalid mint' });
+    }
+    if (tokenDecimalsCache.has(mint)) {
+      return res.json({ success: true, mint, decimals: tokenDecimalsCache.get(mint), cached: true });
+    }
+    const { Connection, PublicKey } = require('@solana/web3.js');
+    const { HELIUS_RPC_URL } = require('../solanaRpcConfig');
+    const connection = new Connection(HELIUS_RPC_URL, 'confirmed');
+    const supply = await connection.getTokenSupply(new PublicKey(mint));
+    const decimals = supply?.value?.decimals;
+    if (typeof decimals !== 'number') throw new Error('No decimals in supply response');
+    tokenDecimalsCache.set(mint, decimals);
+    if (tokenDecimalsCache.size > 2000) {
+      tokenDecimalsCache.delete(tokenDecimalsCache.keys().next().value);
+    }
+    res.json({ success: true, mint, decimals });
+  } catch (error) {
+    console.error('❌ Error fetching token decimals:', error.message);
+    res.status(500).json({ success: false, error: 'Failed to fetch token decimals', details: error.message });
+  }
+});
+
+/**
  * GET /api/wallet/:owner/balance?mint=<mint>
  * On-chain SOL balance (no mint) or SPL/Token-2022 balance for a specific mint,
  * read via Helius RPC. Exists so the browser never has to hit the public
@@ -425,11 +458,19 @@ router.get('/:owner/balance', async (req, res) => {
 
     const mintKey = new PublicKey(mint);
     const accounts = await connection.getParsedTokenAccountsByOwner(ownerKey, { mint: mintKey });
-    const amount = accounts.value.reduce(
-      (sum, acc) => sum + (acc.account.data.parsed?.info?.tokenAmount?.uiAmount || 0),
-      0
-    );
-    res.json({ success: true, owner, mint, amount });
+    let amount = 0;
+    let amountRaw = 0n;
+    let decimals = null;
+    for (const acc of accounts.value) {
+      const tokenAmount = acc.account.data.parsed?.info?.tokenAmount;
+      if (!tokenAmount) continue;
+      amount += Number(tokenAmount.uiAmountString ?? tokenAmount.uiAmount) || 0;
+      try { amountRaw += BigInt(tokenAmount.amount || '0'); } catch (_) { /* non-numeric */ }
+      if (typeof tokenAmount.decimals === 'number') decimals = tokenAmount.decimals;
+    }
+    // amountRaw + decimals are the on-chain truth — clients must prefer them over
+    // reconstructing raw amounts from the UI amount with guessed decimals.
+    res.json({ success: true, owner, mint, amount, amountRaw: amountRaw.toString(), decimals });
   } catch (error) {
     console.error('❌ Error fetching wallet balance:', error.message);
     res.status(500).json({ success: false, error: 'Failed to fetch wallet balance', details: error.message });

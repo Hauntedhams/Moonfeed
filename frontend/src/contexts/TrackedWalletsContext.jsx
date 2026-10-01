@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { useWallet } from '@jup-ag/wallet-adapter';
 import { getFullApiUrl } from '../config/api';
 import { useWalletConnectOnboarding } from '../components/WalletConnectOnboarding';
+import { useActiveAccount } from '../hooks/useWalletView';
 import { maybeEnableNotifications } from '../utils/notificationOptIn';
 import { resolveWalletDisplayName } from '../utils/walletIdentity';
 
@@ -20,9 +20,10 @@ export const useTrackedWallets = () => {
 
 export const TrackedWalletsProvider = ({ children }) => {
   const [trackedWallets, setTrackedWallets] = useState([]);
-  const { publicKey, connected } = useWallet();
+  // Account identity — the ⚡ trading wallet counts as a signed-in account
+  // (selected in the wallet switcher, or when no main wallet is connected).
+  const { address: walletAddress, connected } = useActiveAccount();
   const { openWalletConnect } = useWalletConnectOnboarding();
-  const walletAddress = publicKey?.toString() || null;
   // Alias usable inside functions whose params shadow `walletAddress`.
   const accountAddress = walletAddress;
   const syncedWalletRef = useRef(null); // account address we've already pulled synced data for

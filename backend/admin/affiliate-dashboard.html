@@ -6,73 +6,78 @@
 <title>Moonfeed — Affiliate Admin</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:#0d1117; color:#e6edf3; min-height:100vh; padding:24px; }
-  .wrap { max-width:1100px; margin:0 auto; }
-  h1 { display:flex; align-items:center; gap:8px; font-size:22px; margin-bottom:4px; }
-  .brand-logo { width:28px; height:28px; object-fit:contain; border-radius:50%; }
-  .sub { color:#8b949e; font-size:13px; margin-bottom:24px; }
-  .card { background:#161b22; border:1px solid #30363d; border-radius:12px; padding:18px; margin-bottom:18px; }
-  .card h2 { font-size:15px; margin-bottom:12px; color:#c9d1d9; }
-  label { display:block; font-size:12px; color:#8b949e; margin:10px 0 4px; }
-  input, select { width:100%; padding:9px 12px; background:#0d1117; border:1px solid #30363d; border-radius:8px; color:#e6edf3; font-size:14px; }
-  input:focus { outline:none; border-color:#58a6ff; }
-  button { background:#238636; color:#fff; border:none; padding:9px 16px; border-radius:8px; cursor:pointer; font-weight:600; font-size:13px; }
-  button:hover { background:#2ea043; }
-  button.secondary { background:#21262d; border:1px solid #30363d; }
-  button.secondary:hover { background:#30363d; }
+  body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:#f5f5f7; color:#1d1d1f; min-height:100vh; padding:24px; }
+  .wrap { max-width:1180px; margin:0 auto; }
+  h1 { display:flex; align-items:center; gap:10px; font-size:24px; margin-bottom:4px; font-weight:700; letter-spacing:-.02em; }
+  .brand-logo { width:30px; height:30px; object-fit:contain; border-radius:8px; }
+  .sub { color:#6e6e73; font-size:13px; margin-bottom:24px; }
+  .section-title { font-size:19px; font-weight:700; letter-spacing:-.01em; margin:26px 0 12px; }
+  .card { background:#fff; border:1px solid #e8e8ed; border-radius:14px; padding:20px; margin-bottom:16px; box-shadow:0 1px 2px rgba(0,0,0,.03); }
+  .card h2 { font-size:16px; margin-bottom:12px; color:#1d1d1f; font-weight:700; }
+  label { display:block; font-size:12px; color:#6e6e73; margin:10px 0 4px; }
+  input, select { width:100%; padding:9px 12px; background:#fff; border:1px solid #d2d2d7; border-radius:9px; color:#1d1d1f; font-size:14px; }
+  input:focus { outline:none; border-color:#0071e3; box-shadow:0 0 0 3px rgba(0,113,227,.12); }
+  button { background:#0071e3; color:#fff; border:none; padding:9px 16px; border-radius:9px; cursor:pointer; font-weight:600; font-size:13px; }
+  button:hover { background:#0077ed; }
+  button.secondary { background:#f5f5f7; border:1px solid #d2d2d7; color:#1d1d1f; }
+  button.secondary:hover { background:#e8e8ed; }
   .row { display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; }
   .row > div { flex:1; min-width:140px; }
   table { width:100%; border-collapse:collapse; font-size:13px; }
-  th { text-align:left; color:#8b949e; font-weight:600; padding:8px 10px; border-bottom:1px solid #30363d; font-size:11px; text-transform:uppercase; letter-spacing:.04em; }
-  td { padding:10px; border-bottom:1px solid #21262d; vertical-align:middle; }
+  th { text-align:left; color:#6e6e73; font-weight:600; padding:8px 10px; border-bottom:1px solid #e8e8ed; font-size:11px; text-transform:uppercase; letter-spacing:.05em; }
+  td { padding:10px; border-bottom:1px solid #f2f2f5; vertical-align:middle; }
   tr:last-child td { border-bottom:none; }
   .mono { font-family:ui-monospace,Menlo,monospace; font-size:12px; }
   .pill { display:inline-block; padding:2px 9px; border-radius:99px; font-size:11px; font-weight:600; }
-  .pill.pending { background:#3d2e00; color:#d29922; }
-  .pill.paid { background:#0f2e1b; color:#3fb950; }
-  .green { color:#3fb950; font-weight:700; }
-  .amber { color:#d29922; font-weight:700; }
-  .copy { cursor:pointer; color:#58a6ff; font-size:11px; margin-left:6px; user-select:none; }
+  .pill.pending { background:#fff4dc; color:#9a6700; }
+  .pill.paid { background:#e6f6ec; color:#1a7f4b; }
+  .green { color:#1a7f4b; font-weight:700; }
+  .amber { color:#9a6700; font-weight:700; }
+  .copy { cursor:pointer; color:#0071e3; font-size:11px; margin-left:6px; user-select:none; }
   .copy:hover { text-decoration:underline; }
-  #msg { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#1f6feb; color:#fff; padding:10px 18px; border-radius:8px; font-size:13px; display:none; z-index:10; }
-  .muted { color:#8b949e; font-size:12px; }
+  #msg { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#0071e3; color:#fff; padding:10px 18px; border-radius:10px; font-size:13px; display:none; z-index:10; box-shadow:0 6px 18px rgba(0,0,0,.18); }
+  .muted { color:#6e6e73; font-size:12px; }
   .keybar { display:flex; gap:10px; align-items:center; }
   .keybar input { max-width:420px; }
-  details summary { cursor:pointer; color:#8b949e; font-size:13px; margin-bottom:10px; }
-  .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; margin-bottom:16px; }
-  .kpi { background:#0d1117; border:1px solid #30363d; border-radius:10px; padding:12px 14px; }
-  .kpi .n { font-size:22px; font-weight:700; }
-  .kpi .l { font-size:11px; color:#8b949e; text-transform:uppercase; letter-spacing:.04em; margin-top:2px; }
-  .charts { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:16px; }
-  .chart-box { background:#0d1117; border:1px solid #30363d; border-radius:10px; padding:14px; }
-  .chart-box h3 { font-size:13px; color:#c9d1d9; margin-bottom:2px; }
-  .chart-box .hint { font-size:11px; color:#8b949e; margin-bottom:10px; }
+  details summary { cursor:pointer; color:#6e6e73; font-size:13px; margin-bottom:10px; }
+  /* ── App Store Connect-style metric windows ── */
+  .kpis { display:grid; grid-template-columns:repeat(auto-fill,minmax(186px,1fr)); gap:12px; margin-bottom:16px; }
+  .kpi { background:#fff; border:1px solid #e8e8ed; border-radius:12px; padding:14px 16px 10px; box-shadow:0 1px 2px rgba(0,0,0,.03); display:flex; flex-direction:column; }
+  .kpi .l { font-size:11px; color:#6e6e73; text-transform:uppercase; letter-spacing:.05em; font-weight:600; order:-1; margin-bottom:8px; }
+  .kpi .n { font-size:28px; font-weight:700; letter-spacing:-.02em; line-height:1.1; }
+  .kpi .s { font-size:11px; color:#6e6e73; margin-top:3px; }
+  .kpi .spark { margin-top:auto; padding-top:8px; }
+  .kpi .spark svg { display:block; }
+  .charts { display:grid; grid-template-columns:repeat(auto-fit,minmax(340px,1fr)); gap:14px; }
+  .chart-box { background:#fff; border:1px solid #e8e8ed; border-radius:12px; padding:16px; box-shadow:0 1px 2px rgba(0,0,0,.03); }
+  .chart-box h3 { font-size:14px; color:#1d1d1f; margin-bottom:2px; font-weight:700; }
+  .chart-box .hint { font-size:11px; color:#6e6e73; margin-bottom:10px; }
   .bar-row { display:grid; grid-template-columns:130px 1fr 62px; align-items:center; gap:8px; margin-bottom:6px; font-size:12px; }
-  .bar-track { background:#161b22; border-radius:5px; height:14px; overflow:hidden; }
-  .bar-fill { background:linear-gradient(90deg,#1f6feb,#58a6ff); height:100%; border-radius:5px; }
-  .bar-fill.funnel { background:linear-gradient(90deg,#238636,#3fb950); }
-  .bar-fill.warn { background:linear-gradient(90deg,#9e6a03,#d29922); }
-  .bar-val { text-align:right; color:#8b949e; font-variant-numeric:tabular-nums; }
-  .bar-label { color:#c9d1d9; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .bar-track { background:#f0f0f2; border-radius:5px; height:14px; overflow:hidden; }
+  .bar-fill { background:linear-gradient(90deg,#0071e3,#58a6ff); height:100%; border-radius:5px; }
+  .bar-fill.funnel { background:linear-gradient(90deg,#1a7f4b,#34c759); }
+  .bar-fill.warn { background:linear-gradient(90deg,#c93400,#ff9500); }
+  .bar-val { text-align:right; color:#6e6e73; font-variant-numeric:tabular-nums; }
+  .bar-label { color:#1d1d1f; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .range { display:flex; gap:6px; }
-  .range button { background:#21262d; border:1px solid #30363d; padding:6px 12px; }
-  .range button.on { background:#1f6feb; border-color:#1f6feb; }
-  svg text { font-size:10px; fill:#8b949e; }
+  .range button { background:#fff; border:1px solid #d2d2d7; padding:6px 12px; color:#1d1d1f; }
+  .range button.on { background:#0071e3; border-color:#0071e3; color:#fff; }
+  svg text { font-size:10px; fill:#86868b; }
   .bar-row.clickable { cursor:pointer; border-radius:6px; }
-  .bar-row.clickable:hover { background:#1c2128; }
-  .modal-backdrop { display:none; position:fixed; inset:0; background:rgba(1,4,9,.7); z-index:50; align-items:flex-start; justify-content:center; padding:40px 16px; overflow-y:auto; }
+  .bar-row.clickable:hover { background:#f5f5f7; }
+  .modal-backdrop { display:none; position:fixed; inset:0; background:rgba(29,29,31,.45); z-index:50; align-items:flex-start; justify-content:center; padding:40px 16px; overflow-y:auto; }
   .modal-backdrop.open { display:flex; }
-  .modal { background:#161b22; border:1px solid #30363d; border-radius:12px; padding:18px; max-width:760px; width:100%; max-height:85vh; display:flex; flex-direction:column; }
+  .modal { background:#fff; border:1px solid #e8e8ed; border-radius:14px; padding:18px; max-width:760px; width:100%; max-height:85vh; display:flex; flex-direction:column; box-shadow:0 18px 50px rgba(0,0,0,.22); }
   .modal-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
-  .modal-head h3 { font-size:15px; color:#c9d1d9; }
+  .modal-head h3 { font-size:15px; color:#1d1d1f; }
   .modal-body { overflow-y:auto; }
-  .modal-close { background:#21262d; border:1px solid #30363d; width:28px; height:28px; border-radius:8px; line-height:1; padding:0; }
+  .modal-close { background:#f5f5f7; border:1px solid #d2d2d7; color:#1d1d1f; width:28px; height:28px; border-radius:8px; line-height:1; padding:0; }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1><img class="brand-logo" src="https://moonfeed.app/moonfeed-logo.png" alt="Moonfeed logo"> Moonfeed — Affiliate Admin</h1>
-  <div class="sub">Influencer links, tracked volume, and monthly payouts. Influencer share defaults to 25% of the 1% fee = 0.25% of trade volume.</div>
+  <h1><img class="brand-logo" src="https://moonfeed.app/moonfeed-logo.png" alt="Moonfeed logo"> Moonfeed — Admin</h1>
+  <div class="sub">App usage metrics, influencer links, tracked volume, and monthly payouts.</div>
 
   <div class="card">
     <h2>Admin key</h2>
@@ -205,7 +210,7 @@ async function loadAffiliates() {
     </table>`;
     document.getElementById('keyStatus').textContent = '✓ authorized';
   } catch (e) {
-    el.innerHTML = `<span style="color:#f85149">${e.message}</span>`;
+    el.innerHTML = `<span style="color:#d70015">${e.message}</span>`;
     document.getElementById('keyStatus').textContent = '';
   }
 }
@@ -327,6 +332,19 @@ function duration(ms) {
   return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`;
 }
 
+// Tiny App-Store-Connect-style sparkline for the metric windows.
+function spark(vals, color = '#0071e3') {
+  if (!vals || vals.length < 2) return '';
+  const W = 150, H = 34;
+  const max = Math.max(...vals, 1), min = Math.min(...vals, 0), span = (max - min) || 1;
+  const pt = (v, i) => `${(i * W / (vals.length - 1)).toFixed(1)},${(H - 2 - ((v - min) / span) * (H - 6)).toFixed(1)}`;
+  const pts = vals.map(pt).join(' ');
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="34" preserveAspectRatio="none">
+    <polygon fill="${color}" fill-opacity="0.08" points="0,${H} ${pts} ${W},${H}"/>
+    <polyline fill="none" stroke="${color}" stroke-width="1.6" stroke-linejoin="round" points="${pts}"/>
+  </svg>`;
+}
+
 // Horizontal bars — readable with any number of categories, no chart library.
 // `dd` on a row (a drilldown query spec) makes that row clickable, opening the
 // modal with the underlying wallets/events behind that number.
@@ -422,7 +440,7 @@ function lineChart(points, seriesDefs) {
   const legend = seriesDefs.map((s, i) =>
     `<text x="${PAD + i * 100}" y="14" fill="${s.color}">■ ${esc(s.label)}</text>`).join('');
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="170" role="img">
-    <line x1="${PAD}" y1="${H - PAD}" x2="${W - PAD}" y2="${H - PAD}" stroke="#30363d" />
+    <line x1="${PAD}" y1="${H - PAD}" x2="${W - PAD}" y2="${H - PAD}" stroke="#e8e8ed" />
     <text x="${PAD - 4}" y="${y(max) + 4}" text-anchor="end">${num(max)}</text>
     ${paths}${xLabels}${legend}
   </svg>`;
@@ -439,6 +457,15 @@ async function loadAnalytics() {
   try {
     const d = await api(`/api/analytics/summary?days=${analyticsDays}`);
     const t = d.totals, f = d.funnel;
+    const cm = d.comments || { total: 0, inRange: 0, likes: 0, commenters: 0, byCoin: [] };
+    const dev = d.devices || [];
+    const devTotal = dev.reduce((s, p) => s + (p.total || 0), 0);
+    const devActive = dev.reduce((s, p) => s + (p.active || 0), 0);
+    const devFresh = dev.reduce((s, p) => s + (p.fresh || 0), 0);
+    const buy = d.trading?.buy || {}, sell = d.trading?.sell || {};
+    const dailyOf = k => d.daily.map(p => p[k] || 0);
+    const stat = (label, value, sub = '', sparkline = '') => `
+      <div class="kpi"><div class="l">${label}</div><div class="n">${value}</div>${sub ? `<div class="s">${sub}</div>` : ''}${sparkline ? `<div class="spark">${sparkline}</div>` : ''}</div>`;
 
     const funnelRows = [
       { label: 'Opened the app', value: f.opened, dd: { type: 'app_open', label: 'Opened the app' } },
@@ -454,12 +481,15 @@ async function loadAnalytics() {
 
     el.innerHTML = `
       <div class="kpis">
-        <div class="kpi"><div class="n">${num(t.sessions)}</div><div class="l">Sessions</div></div>
-        <div class="kpi"><div class="n">${num(t.devices)}</div><div class="l">Devices</div></div>
-        <div class="kpi"><div class="n">${num(t.wallets)}</div><div class="l">Wallets</div></div>
-        <div class="kpi"><div class="n">${num(t.events)}</div><div class="l">Interactions</div></div>
-        <div class="kpi"><div class="n">${t.sessions ? (t.scrolls / t.sessions).toFixed(1) : '0'}</div><div class="l">Scrolls / session</div></div>
-        <div class="kpi"><div class="n">${duration(t.avgDurationMs)}</div><div class="l">Avg session</div></div>
+        ${stat('Sessions', num(t.sessions), '', spark(dailyOf('sessions')))}
+        ${stat('Active devices', num(t.devices), '', spark(dailyOf('devices'), '#34c759'))}
+        ${stat('Interactions', num(t.events), '', spark(dailyOf('events'), '#ff9500'))}
+        ${stat('Wallets connected', num(t.wallets), `${num(d.walletsAllTime)} unique all-time`)}
+        ${stat('Installs', num(devTotal), `${num(devActive)} active · ${num(devFresh)} new in range`)}
+        ${stat('Comments', num(cm.inRange), `${num(cm.total)} all-time · ${num(cm.commenters)} commenters`)}
+        ${stat('Avg entry', usd(buy.avgUsd || 0), `${num(buy.trades)} buys · ${usd(buy.totalUsd || 0)} total`)}
+        ${stat('Avg exit', usd(sell.avgUsd || 0), `${num(sell.trades)} sells · ${usd(sell.totalUsd || 0)} total`)}
+        ${stat('Avg session', duration(t.avgDurationMs), `${t.sessions ? (t.scrolls / t.sessions).toFixed(1) : '0'} scrolls / session`)}
       </div>
 
       <div class="charts">
@@ -467,10 +497,62 @@ async function loadAnalytics() {
           <h3>Daily activity</h3>
           <div class="hint">Sessions, unique devices and total interactions per day.</div>
           ${lineChart(d.daily, [
-            { key: 'sessions', label: 'Sessions', color: '#58a6ff' },
-            { key: 'devices', label: 'Devices', color: '#3fb950' },
-            { key: 'events', label: 'Interactions', color: '#d29922' },
+            { key: 'sessions', label: 'Sessions', color: '#0071e3' },
+            { key: 'devices', label: 'Devices', color: '#34c759' },
+            { key: 'events', label: 'Interactions', color: '#ff9500' },
           ])}
+        </div>
+
+        <div class="chart-box" style="grid-column:1/-1">
+          <h3>Comments by coin</h3>
+          <div class="hint">All-time — which coins people talk about. ${num(cm.likes)} likes given in total.</div>
+          ${cm.byCoin.length ? `<table>
+            <tr><th>Coin</th><th>Mint</th><th>Comments</th><th>Commenters</th><th>Likes</th><th>Last comment</th></tr>
+            ${cm.byCoin.map(c => `<tr>
+              <td><b>${esc(c.symbol || '—')}</b></td>
+              <td class="mono">${short(c.mint)}<span class="copy" onclick="copyText('${esc(c.mint)}')">copy</span></td>
+              <td>${num(c.count)}</td>
+              <td>${num(c.commenters)}</td>
+              <td>${num(c.likes)}</td>
+              <td class="muted">${timeAgo(c.lastAt)}</td>
+            </tr>`).join('')}
+          </table>` : '<span class="muted">No comments yet.</span>'}
+        </div>
+
+        <div class="chart-box">
+          <h3>Devices installed</h3>
+          <div class="hint">Push-registered devices per platform — installed total, active and new within the range.</div>
+          ${dev.length ? `<table>
+            <tr><th>Platform</th><th>Installed</th><th>Active</th><th>New</th></tr>
+            ${dev.map(p => `<tr>
+              <td><b>${esc(p.platform || 'unknown')}</b></td>
+              <td>${num(p.total)}</td>
+              <td class="green">${num(p.active)}</td>
+              <td>${num(p.fresh)}</td>
+            </tr>`).join('')}
+          </table>` : '<span class="muted">No registered devices yet.</span>'}
+        </div>
+
+        <div class="chart-box">
+          <h3>Entries vs exits</h3>
+          <div class="hint">On-chain-verified Moonfeed swaps in the selected range (fee ledger).</div>
+          <table>
+            <tr><th></th><th>Trades</th><th>Avg size</th><th>Total volume</th><th>Traders</th></tr>
+            <tr>
+              <td class="green">Entries (buys)</td>
+              <td>${num(buy.trades)}</td>
+              <td>${usd(buy.avgUsd || 0)}</td>
+              <td>${usd(buy.totalUsd || 0)}<br><span class="muted">${sol(buy.totalSol || 0)}</span></td>
+              <td>${num(buy.traders)}</td>
+            </tr>
+            <tr>
+              <td class="amber">Exits (sells)</td>
+              <td>${num(sell.trades)}</td>
+              <td>${usd(sell.avgUsd || 0)}</td>
+              <td>${usd(sell.totalUsd || 0)}<br><span class="muted">${sol(sell.totalSol || 0)}</span></td>
+              <td>${num(sell.traders)}</td>
+            </tr>
+          </table>
         </div>
 
         <div class="chart-box">

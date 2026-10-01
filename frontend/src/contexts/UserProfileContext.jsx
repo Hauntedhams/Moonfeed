@@ -1,25 +1,30 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useWallet } from '@jup-ag/wallet-adapter';
 import { getFullApiUrl } from '../config/api';
+import { useActiveAccount } from '../hooks/useWalletView';
+import { signMessageWithTradingWallet } from '../utils/instantTradeWallet';
 
 const UserProfileContext = createContext({});
 
 export const useUserProfile = () => useContext(UserProfileContext);
 
 export const UserProfileProvider = ({ children }) => {
-  const { publicKey, connected, signMessage } = useWallet();
+  const { signMessage } = useWallet();
+  // Account identity — the ⚡ trading wallet counts as a signed-in account and
+  // keeps its own public profile (name/bio/photo), just like a connected wallet.
+  const { address: accountAddress, isInstant } = useActiveAccount();
   const [profile, setProfile] = useState({ displayName: '', bio: '', profilePicture: null });
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Fetch profile from backend whenever wallet connects
+  // Fetch profile from backend whenever the active account changes
   useEffect(() => {
-    if (connected && publicKey) {
-      fetchProfile(publicKey.toString());
+    if (accountAddress) {
+      fetchProfile(accountAddress);
     } else {
       setProfile({ displayName: '', bio: '', profilePicture: null });
     }
-  }, [connected, publicKey]);
+  }, [accountAddress]);
 
   const fetchProfile = async (walletAddress) => {
     setLoading(true);
@@ -49,7 +54,7 @@ export const UserProfileProvider = ({ children }) => {
 
   // Save profile to backend — signs a message to prove wallet ownership
   const saveProfile = useCallback(async (updates, overrideWallet) => {
-    const walletAddr = overrideWallet || publicKey?.toString();
+    const walletAddr = overrideWallet || accountAddress;
     if (!walletAddr) return { success: false, error: 'No wallet connected' };
 
     setSaving(true);
@@ -57,7 +62,13 @@ export const UserProfileProvider = ({ children }) => {
       let signature = null;
 
       // Only sign if we have an active wallet connection (not during migration)
-      if (!overrideWallet && signMessage) {
+      if (!overrideWallet && isInstant) {
+        // Trading wallet: sign locally with its own key
+        const message = new TextEncoder().encode('Moonfeed profile update');
+        const sigBytes = await signMessageWithTradingWallet(message);
+        if (!sigBytes) return { success: false, error: 'Trading wallet unavailable' };
+        signature = btoa(String.fromCharCode(...sigBytes));
+      } else if (!overrideWallet && signMessage) {
         const message = new TextEncoder().encode('Moonfeed profile update');
         const sigBytes = await signMessage(message);
         // Convert Uint8Array to base64
@@ -93,7 +104,7 @@ export const UserProfileProvider = ({ children }) => {
     } finally {
       setSaving(false);
     }
-  }, [publicKey, signMessage]);
+  }, [accountAddress, isInstant, signMessage]);
 
   return (
     <UserProfileContext.Provider value={{ profile, loading, saving, saveProfile, fetchProfile }}>

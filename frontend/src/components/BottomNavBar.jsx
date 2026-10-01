@@ -1,10 +1,7 @@
 import React, { useState } from 'react';
 import './BottomNavBar.css';
-import { useAlerts } from '../contexts/AlertsContext';
 
-function BottomNavBar({ activeTab, setActiveTab, onSearchClick, onOrdersClick, notificationCount, tradesBadgeCount }) {
-  const { unreadCount } = useAlerts();
-  const badgeCount = notificationCount ?? unreadCount ?? 0;
+function BottomNavBar({ activeTab, setActiveTab, onSearchClick, onOrdersClick, tradesBadgeCount, onXTrackerClick, xNewsUnread }) {
   const tradesBadge = tradesBadgeCount ?? 0;
 
   return (
@@ -41,15 +38,12 @@ function BottomNavBar({ activeTab, setActiveTab, onSearchClick, onOrdersClick, n
         </span>
         <span className="nav-label">Trade</span>
       </button>
-      <button className={`nav-btn${activeTab === 'tracked' ? ' active' : ''}`} onClick={() => setActiveTab('tracked')}>
+      <button className={`nav-btn${activeTab === 'x-tracker' ? ' active' : ''}`} onClick={onXTrackerClick} title="Open X Tracker">
         <span className="nav-icon">
-          {/* Radar/Track icon */}
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="10" cy="10" r="7" stroke="currentColor" strokeWidth="1.5"/><circle cx="10" cy="10" r="3" stroke="currentColor" strokeWidth="1.5"/><path d="M10 1.5V4M10 16V18.5M1.5 10H4M16 10H18.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-          {badgeCount > 0 && (
-            <span className="nav-badge">{badgeCount > 99 ? '99+' : badgeCount}</span>
-          )}
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" /></svg>
+          {xNewsUnread > 0 && <span className="nav-badge" aria-label="New X news">{xNewsUnread > 9 ? '9+' : xNewsUnread}</span>}
         </span>
-        <span className="nav-label">Tracked</span>
+        <span className="nav-label">X Tracker</span>
       </button>
       <button className={`nav-btn${activeTab === 'profile' ? ' active' : ''}`} onClick={() => setActiveTab('profile')}>
         <span className="nav-icon">

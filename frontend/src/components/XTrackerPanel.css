@@ -645,6 +645,19 @@
   font-weight: 700;
 }
 
+/* Clickable highlighted term — same look as the mark, button semantics */
+button.xfeed-hl--btn {
+  border: none;
+  margin: 0;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 2px;
+  -webkit-tap-highlight-color: transparent;
+}
+
 .xfeed-media {
   display: block;
   margin-top: 9px;

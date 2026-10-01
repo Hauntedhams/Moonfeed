@@ -102,7 +102,9 @@ async function sendTokenToBackend(token, walletAddress) {
 // (iOS gives one shot at the prompt; a launch-time prompt that's dismissed
 // silences the app permanently AND blocks FCM token registration.)
 export async function initRemotePush(walletAddress = null, { requestPermission = false } = {}) {
-  lastWallet = walletAddress;
+  // Never downgrade a known account association to null (e.g. a permission
+  // prompt fired without a wallet arg) — the backend keys monitors on it.
+  lastWallet = walletAddress || lastWallet;
 
   if (!Capacitor.isNativePlatform()) return;
   await loadPlugin();

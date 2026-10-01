@@ -23,15 +23,14 @@ export async function fetchTokenDecimals(mint) {
       if (typeof meta.decimals === 'number') return meta.decimals;
     }
   } catch (_) { /* fall through */ }
+  // Backend (Helius) — the public mainnet RPC 403s from devices, which made this
+  // silently fall back to 6 and corrupt amounts 1000x on 9-decimal mints.
   try {
-    const res = await fetch('https://api.mainnet-beta.solana.com', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getTokenSupply', params: [mint] }),
-    });
-    const json = await res.json();
-    const decimals = json?.result?.value?.decimals;
-    if (typeof decimals === 'number') return decimals;
+    const res = await fetch(getFullApiUrl(`/api/wallet/token-decimals/${mint}`));
+    if (res.ok) {
+      const json = await res.json();
+      if (typeof json.decimals === 'number') return json.decimals;
+    }
   } catch (_) { /* fall through */ }
   return 6;
 }

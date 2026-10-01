@@ -858,6 +858,107 @@ html:not(.dark-mode) .coin-buy-order-reset-btn {
   gap: 10px;
 }
 
+.coin-buy-drawer-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #4ade80;
+}
+
+/* Which order line the vertical drag edits: Sell + (take-profit),
+   Sell − (stop-loss), Entry (limit buy). */
+.coin-order-line-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.coin-order-line-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 34px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.coin-order-line-btn-pct {
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: none;
+  opacity: 0.9;
+}
+
+.coin-order-line-btn--tp.active {
+  background: rgba(34, 211, 238, 0.16);
+  border-color: rgba(34, 211, 238, 0.65);
+  color: #22d3ee;
+  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.35);
+}
+
+.coin-order-line-btn--sl.active {
+  background: rgba(248, 113, 113, 0.14);
+  border-color: rgba(248, 113, 113, 0.65);
+  color: #f87171;
+  box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.32);
+}
+
+.coin-order-line-btn--entry.active {
+  background: rgba(96, 165, 250, 0.14);
+  border-color: rgba(96, 165, 250, 0.65);
+  color: #60a5fa;
+  box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.32);
+}
+
+.coin-order-line-hint {
+  font-size: 0.64rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.5);
+  line-height: 1.35;
+}
+
+/* Persist the dragged Sell +/− targets as the ⚡ instant-buy TP/SL presets. */
+.coin-buy-save-presets {
+  width: 100%;
+  min-height: 38px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(251, 191, 36, 0.5);
+  background: rgba(251, 191, 36, 0.12);
+  color: #fbbf24;
+  font-size: 0.74rem;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+}
+
+.coin-buy-save-presets.saved {
+  border-color: rgba(74, 222, 128, 0.6);
+  background: rgba(34, 197, 94, 0.16);
+  color: #4ade80;
+}
+
+.coin-buy-save-note {
+  font-size: 0.64rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.52);
+}
+
 .coin-buy-mode-tabs {
   display: inline-flex;
   align-items: center;
@@ -2344,6 +2445,76 @@ body.dark-mode .graduation-progress-caption {
 
 .dark-mode .instant-options-btn {
   color: #fbbf24;
+}
+
+/* Standalone instant Buy (green) / Sell (red) bubbles beside the preset pill.
+   !important: index.css `#root * { color: inherit }` (ID specificity) kills
+   class text colors — the standard workaround in this file; spans need it too. */
+.instant-buy-bubble,
+.instant-sell-bubble {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 30px;
+  padding: 0 11px;
+  border-radius: 15px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: pointer;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.instant-buy-bubble {
+  border: 1.5px solid rgba(34, 197, 94, 0.55);
+  background: rgba(34, 197, 94, 0.12);
+}
+
+.instant-buy-bubble,
+.instant-buy-bubble span {
+  color: #16a34a !important;
+}
+
+.dark-mode .instant-buy-bubble,
+.dark-mode .instant-buy-bubble span {
+  color: #4ade80 !important;
+}
+
+.instant-buy-bubble.armed {
+  border-color: #34d399;
+  background: linear-gradient(135deg, #34d399, #16a34a);
+}
+
+.instant-buy-bubble.armed,
+.instant-buy-bubble.armed span,
+.dark-mode .instant-buy-bubble.armed,
+.dark-mode .instant-buy-bubble.armed span {
+  color: #06240f !important;
+}
+
+.instant-sell-bubble {
+  border: 1.5px solid rgba(239, 68, 68, 0.55);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.instant-sell-bubble,
+.instant-sell-bubble span {
+  color: #ef4444 !important;
+}
+
+.dark-mode .instant-sell-bubble,
+.dark-mode .instant-sell-bubble span {
+  color: #f87171 !important;
+}
+
+.instant-buy-bubble.busy,
+.instant-sell-bubble.busy {
+  opacity: 0.55;
+  animation: instantBusyPulse 0.9s ease-in-out infinite;
 }
 
 /* Follow button docked on the avatar's bottom edge (TikTok-style "+").

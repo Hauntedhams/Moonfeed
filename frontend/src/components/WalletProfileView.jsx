@@ -188,6 +188,23 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
   const [showRenameModal, setShowRenameModal] = useState(false);
   const [renameInput, setRenameInput] = useState('');
   const [toastMsg, setToastMsg] = useState(null);
+  // Hosted Moonfeed profile (photo/name/bio) if this wallet set one up — shown
+  // publicly so active Moonfeed users (incl. trading wallets) look like accounts.
+  const [hostedProfile, setHostedProfile] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setHostedProfile(null);
+    if (!walletAddress) return undefined;
+    fetch(getFullApiUrl(`/api/users/${walletAddress}`))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (cancelled || !d) return;
+        if (d.displayName || d.bio || d.profilePicture) setHostedProfile(d);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [walletAddress]);
 
   const showToast = (msg) => {
     setToastMsg(msg);
@@ -298,7 +315,7 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
   const pnl = stats?.pnl || {};
   const identity = stats?.identity || null;
   const anonAnimal = getAnonAnimal(walletAddress);
-  const displayName = identity?.name || profileHint?.displayName || profileHint?.name || buildWalletName(walletAddress);
+  const displayName = hostedProfile?.displayName || identity?.name || profileHint?.displayName || profileHint?.name || buildWalletName(walletAddress);
   const walletName = resolveWalletDisplayName(walletAddress, trackedWallet?.label, displayName);
   const latestCoin = coins[0] || null;
 
@@ -374,9 +391,13 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
       <div className="pv-ig-header wpv-ig-header">
         <div className="pv-ig-top-row">
           <div className="pv-ig-avatar-wrap">
-            <div className="pv-ig-avatar-ph" style={{ background: gradientFor(walletAddress) }}>
-              <AnimalSilhouetteAvatar address={walletAddress} />
-            </div>
+            {hostedProfile?.profilePicture ? (
+              <img src={hostedProfile.profilePicture} alt="" className="pv-ig-avatar" />
+            ) : (
+              <div className="pv-ig-avatar-ph" style={{ background: gradientFor(walletAddress) }}>
+                <AnimalSilhouetteAvatar address={walletAddress} />
+              </div>
+            )}
           </div>
           <button
             className="pv-ig-stats pv-ig-stats--clickable"
@@ -423,6 +444,11 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
             {shortAddr(walletAddress)} ↗
           </a>
         </div>
+
+        {/* The wallet's own Moonfeed bio, when they've written one */}
+        {hostedProfile?.bio && (
+          <p className="pv-ig-bio wpv-hosted-bio">{hostedProfile.bio}</p>
+        )}
 
         {/* Bio line — mirrors ProfileView's bio slot with a stats summary */}
         <p className="pv-ig-bio">

@@ -39,6 +39,7 @@ const VERIFICATION_LABEL = {
 const FILTERS = [
   { id: 'all', label: 'All' },
   { id: 'coins', label: 'Coins' },
+  { id: 'meme', label: 'Memes' },
   { id: 'founder', label: 'Founders' },
   { id: 'kol', label: 'KOLs' },
   { id: 'celebrity', label: 'Celebs' },
@@ -49,7 +50,7 @@ const MAX_TWEETS = 200;
 
 const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-const HighlightedText = ({ text, terms }) => {
+const HighlightedText = ({ text, terms, onTermClick }) => {
   const parts = useMemo(() => {
     const words = [...new Set(terms.filter((t) => t && t.length >= 2))].sort((a, b) => b.length - a.length);
     if (!words.length) return [text];
@@ -57,7 +58,9 @@ const HighlightedText = ({ text, terms }) => {
     return text.split(re);
   }, [text, terms]);
   return parts.map((part, i) => (i % 2 === 1
-    ? <mark key={i} className="xfeed-hl">{part}</mark>
+    ? (onTermClick
+      ? <button key={i} type="button" className="xfeed-hl xfeed-hl--btn" onClick={() => onTermClick(part)}>{part}</button>
+      : <mark key={i} className="xfeed-hl">{part}</mark>)
     : <React.Fragment key={i}>{part}</React.Fragment>));
 };
 
@@ -78,11 +81,21 @@ const CoinAvatar = ({ coin }) => {
   );
 };
 
-const TweetCard = ({ tweet, isNew, onOpenCoin }) => {
+const TweetCard = ({ tweet, isNew, onOpenCoin, onOpenCashtag }) => {
   const highlightTerms = useMemo(() => [
     ...(tweet.signals?.cashtags || []),
     ...tweet.coins.map((c) => c.matchedTerm).filter((t) => t && t !== 'ca'),
   ], [tweet]);
+
+  // Tapping a highlighted term opens its matched coin, else resolves it by search.
+  const handleTermClick = useCallback((part) => {
+    const term = part.replace(/^\$/, '').toLowerCase();
+    const matched = tweet.coins.find(
+      (c) => String(c.symbol || '').toLowerCase() === term || String(c.matchedTerm || '').toLowerCase() === term,
+    );
+    if (matched) onOpenCoin(matched);
+    else onOpenCashtag?.(term);
+  }, [tweet, onOpenCoin, onOpenCashtag]);
 
   return (
     <article className={`xfeed-card ${isNew ? 'xfeed-card--new' : ''} ${tweet.coins.some((c) => c.verification) ? 'xfeed-card--verified' : ''}`}>
@@ -106,7 +119,7 @@ const TweetCard = ({ tweet, isNew, onOpenCoin }) => {
 
       {tweet.replyTo && <p className="xfeed-reply-to">Replying to @{tweet.replyTo}</p>}
       {tweet.text && (
-        <p className="xfeed-text"><HighlightedText text={tweet.text} terms={highlightTerms} /></p>
+        <p className="xfeed-text"><HighlightedText text={tweet.text} terms={highlightTerms} onTermClick={handleTermClick} /></p>
       )}
 
       {tweet.media?.[0] && (
@@ -118,7 +131,7 @@ const TweetCard = ({ tweet, isNew, onOpenCoin }) => {
       {tweet.quoted && (
         <div className="xfeed-quote">
           <span className="xfeed-quote-author">{tweet.quoted.author?.name} <span>@{tweet.quoted.author?.handle}</span></span>
-          <p className="xfeed-quote-text"><HighlightedText text={tweet.quoted.text || ''} terms={highlightTerms} /></p>
+          <p className="xfeed-quote-text"><HighlightedText text={tweet.quoted.text || ''} terms={highlightTerms} onTermClick={handleTermClick} /></p>
         </div>
       )}
 
@@ -153,7 +166,7 @@ const TweetCard = ({ tweet, isNew, onOpenCoin }) => {
   );
 };
 
-const LiveFeed = ({ onOpenCoin, onTrendsAvailable }) => {
+const LiveFeed = ({ onOpenCoin, onOpenCashtag, onTrendsAvailable }) => {
   const [tweets, setTweets] = useState([]);
   const [status, setStatus] = useState({ loading: true, error: null, enabled: true, live: false });
   const [filter, setFilter] = useState('all');
@@ -268,7 +281,7 @@ const LiveFeed = ({ onOpenCoin, onTrendsAvailable }) => {
       )}
 
       {visible.map((tweet) => (
-        <TweetCard key={tweet.id} tweet={tweet} isNew={newIds.has(tweet.id)} onOpenCoin={onOpenCoin} />
+        <TweetCard key={tweet.id} tweet={tweet} isNew={newIds.has(tweet.id)} onOpenCoin={onOpenCoin} onOpenCashtag={onOpenCashtag} />
       ))}
     </>
   );
@@ -397,6 +410,30 @@ const XTrackerPanel = ({ onClose }) => {
     }));
   }, [onClose]);
 
+  // Cashtag with no matched coin: resolve the symbol through token search
+  // (deepest-liquidity match) and open that coin card.
+  const openCashtag = useCallback(async (term) => {
+    try {
+      const params = new URLSearchParams({ query: term, sort: 'liquidity' });
+      const res = await fetch(getFullApiUrl(`/api/search?${params}`));
+      const json = await res.json();
+      const hit = (json?.results || []).find(
+        (r) => String(r.symbol || '').toLowerCase() === term.toLowerCase(),
+      ) || json?.results?.[0];
+      if (!hit) return;
+      openCoin({
+        mintAddress: hit.mintAddress || hit.mint || hit.tokenAddress,
+        symbol: hit.symbol,
+        name: hit.name,
+        image: hit.image || hit.profileImage || hit.logo || null,
+        banner: hit.banner || hit.header || null,
+        pairAddress: hit.pairAddress || null,
+        price_usd: hit.priceUsd || hit.price || null,
+        market_cap_usd: hit.marketCap || null,
+      });
+    } catch { /* search is best-effort */ }
+  }, [openCoin]);
+
   return createPortal(
     <div className="menu-panel-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div
@@ -428,7 +465,7 @@ const XTrackerPanel = ({ onClose }) => {
 
         <div ref={bodyRef} className="menu-panel-body xtracker-body">
           {tab === 'live'
-            ? <LiveFeed onOpenCoin={openCoin} onTrendsAvailable={setTrendsAvailable} />
+            ? <LiveFeed onOpenCoin={openCoin} onOpenCashtag={openCashtag} onTrendsAvailable={setTrendsAvailable} />
             : <TrendsFeed onOpenCoin={openCoin} />}
         </div>
       </div>

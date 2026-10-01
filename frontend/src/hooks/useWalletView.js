@@ -1,6 +1,7 @@
 // Shared "which wallet am I viewing" state for Trades/Profile — main connected
 // wallet vs the in-app ⚡ trading wallet, switchable like Instagram accounts.
 import { useState, useEffect, useCallback } from 'react';
+import { useWallet } from '@jup-ag/wallet-adapter';
 import { loadTradingWallet } from '../utils/instantTradeWallet';
 
 const STORAGE = 'moonfeed_wallet_view'; // 'main' | 'instant'
@@ -31,4 +32,25 @@ export function useWalletView() {
   }, []);
 
   return { mode, setMode, instantWallet };
+}
+
+// The single "who is signed in" answer for account features (follow/track,
+// synced lists, holdings). The ⚡ trading wallet is a full Moonfeed account:
+// it is the active identity when selected in the wallet switcher, and the
+// automatic fallback whenever no main wallet is connected.
+export function useActiveAccount() {
+  const { mode, setMode, instantWallet } = useWalletView();
+  const { publicKey, connected: mainConnected } = useWallet();
+  const mainAddress = mainConnected ? (publicKey?.toString() || null) : null;
+  const instantAddress = instantWallet?.publicKey || null;
+  const isInstant = Boolean(instantAddress) && (mode === 'instant' || !mainAddress);
+  const address = isInstant ? instantAddress : mainAddress;
+  return {
+    address,
+    connected: Boolean(address),
+    isInstant: Boolean(address) && isInstant,
+    mode,
+    setMode,
+    instantWallet,
+  };
 }

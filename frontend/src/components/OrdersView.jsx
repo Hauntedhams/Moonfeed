@@ -2,11 +2,11 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useWallet as useJupiterWallet } from '@jup-ag/wallet-adapter';
 import { UnifiedWalletButton } from '@jup-ag/wallet-adapter';
 import { PublicKey } from '@solana/web3.js';
-import WalletConnectOnboarding from './WalletConnectOnboarding';
+import WalletConnectOnboarding, { useWalletConnectOnboarding } from './WalletConnectOnboarding';
 import WalletSwitcher from './WalletSwitcher';
 import { useWalletView } from '../hooks/useWalletView';
 import { getFullApiUrl } from '../config/api';
-import { calculateOpenPosition, getTransactions, deleteTransaction, storeTransaction, clearTransactions } from '../utils/transactionStorage';
+import { calculateOpenPosition, getTransactions, deleteTransaction, storeTransaction, clearTransactions, rescaleTokenTransactions } from '../utils/transactionStorage';
 import { useDemoMode } from '../contexts/DemoModeContext';
 import { computeFillStats, getSolUsdPrice } from '../utils/orderFillTracking';
 import { fetchTriggerOrdersV2, cancelTriggerOrderV2, ensureTriggerAuth } from '../utils/triggerOrdersV2';
@@ -301,9 +301,12 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
   // Use Jupiter Wallet Kit adapter for universal wallet connection
   const jupiterWallet = useJupiterWallet();
   const { isDemoMode, demoPublicKey, disableDemoMode } = useDemoMode();
-  // Wallet view switcher: main connected wallet vs the ⚡ trading wallet
+  // Wallet view switcher: main connected wallet vs the ⚡ trading wallet.
+  // The trading wallet is the active identity when selected — and the automatic
+  // fallback whenever no main wallet is connected, so the app "stays signed in".
   const { mode: walletViewMode, setMode: setWalletViewMode, instantWallet } = useWalletView();
-  const viewingInstant = walletViewMode === 'instant' && Boolean(instantWallet);
+  const viewingInstant = Boolean(instantWallet)
+    && (walletViewMode === 'instant' || (!jupiterWallet.connected && !isDemoMode));
 
   // Override wallet state when demo mode is active
   const basePublicKey = isDemoMode ? demoPublicKey : jupiterWallet.publicKey;
@@ -313,6 +316,14 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
   );
   const connected = viewingInstant ? true : (isDemoMode ? true : (jupiterWallet.connected || false));
   const signTransaction = jupiterWallet.signTransaction;
+  const { openWalletConnect } = useWalletConnectOnboarding();
+
+  // Switching to "main" while no wallet is connected should ask to connect
+  // instead of silently staying on the trading wallet.
+  const handleWalletViewChange = (next) => {
+    setWalletViewMode(next);
+    if (next === 'main' && !jupiterWallet.connected && !isDemoMode) openWalletConnect();
+  };
   const [orders, setOrders] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
@@ -530,10 +541,12 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
     };
     window.addEventListener('focus', refresh);
     window.addEventListener('moonfeed:swap-success', refresh);
+    window.addEventListener('moonfeed:instant-trade', refresh);
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => {
       window.removeEventListener('focus', refresh);
       window.removeEventListener('moonfeed:swap-success', refresh);
+      window.removeEventListener('moonfeed:instant-trade', refresh);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, [connected, publicKey, statusFilter]);
@@ -689,6 +702,11 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
     if (meta.wallet === walletAddress) {
       if (meta.inFlight) return;
       if (force !== true && Date.now() - meta.lastAt < HOLDINGS_REFRESH_MS) return;
+    } else if (meta.wallet) {
+      // Wallet switched — never leave the previous wallet's rows on screen
+      // while this wallet's balances load.
+      setHoldings([]);
+      setHoldingsError(null);
     }
     holdingsFetchRef.current = { inFlight: true, lastAt: meta.lastAt, wallet: walletAddress };
 
@@ -759,10 +777,23 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
         const priceUsd = parseFloat(pair?.priceUsd || latestTx?.pricePerTokenUsd || cached?.priceUsd || 0);
 
         const position = calculateOpenPosition(storedTxs, item.mint, solUsdPrice);
-        const costBasisUsd = position.averagePriceUsd;
-        const costBasisSol = position.averageCostSol || 0;
+        let costBasisUsd = position.averagePriceUsd;
+        let costBasisSol = position.averageCostSol || 0;
+        // Decimals-corrupted local buys (token qty recorded 10^k off vs the
+        // on-chain amount) poison Entry/Invested/PnL and hide the sell-target
+        // bar. The chain amount is truth: detect the near-exact power-of-10
+        // mismatch, correct this render, and repair the stored records.
+        if (position.quantity > 0 && item.amount > 0) {
+          const ratio = position.quantity / item.amount;
+          const k = Math.round(Math.log10(ratio));
+          if (k !== 0 && Math.abs(k) <= 12 && Math.abs(ratio / 10 ** k - 1) < 0.02) {
+            costBasisUsd *= 10 ** k;
+            costBasisSol *= 10 ** k;
+            rescaleTokenTransactions(walletAddress, item.mint, 10 ** k);
+          }
+        }
         const effectiveTotalBoughtUsd = costBasisUsd > 0 ? item.amount * costBasisUsd : 0;
-        const totalCostSol = position.averageCostSol > 0 ? item.amount * position.averageCostSol : 0;
+        const totalCostSol = costBasisSol > 0 ? item.amount * costBasisSol : 0;
         const currentValueUsd = item.amount * priceUsd;
         const pnlUsd = effectiveTotalBoughtUsd > 0 ? currentValueUsd - effectiveTotalBoughtUsd : null;
         const pnlPct = effectiveTotalBoughtUsd > 0 ? ((currentValueUsd - effectiveTotalBoughtUsd) / effectiveTotalBoughtUsd) * 100 : null;
@@ -1386,7 +1417,7 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
         <div className="orders-section">
           <WalletSwitcher
             mode={viewingInstant ? 'instant' : 'main'}
-            onChange={setWalletViewMode}
+            onChange={handleWalletViewChange}
             mainAddress={basePublicKey?.toString() || null}
             instantAddress={instantWallet?.publicKey || null}
           />
@@ -1604,7 +1635,9 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
                 const timeDiff = now - createdDate;
                 const hours = Math.floor(timeDiff / (1000 * 60 * 60));
                 const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
-                const timeAgo = hours > 0 ? `${hours}h ${minutes}m ago` : `${minutes}m ago`;
+                // ⚠️ must NOT be named `timeAgo` — that shadows the imported timeAgo()
+                // used further down this map and crashes with "not a function".
+                const createdAgo = hours > 0 ? `${hours}h ${minutes}m ago` : `${minutes}m ago`;
                 
                 // Calculate expiration time
                 let expiresAtDate = null;
@@ -2208,7 +2241,7 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
                             <div className="detail-icon">⏱️</div>
                             <div className="detail-content">
                               <div className="detail-label">Created</div>
-                              <div className="detail-value-large">{timeAgo}</div>
+                              <div className="detail-value-large">{createdAgo}</div>
                             </div>
                           </div>
                           

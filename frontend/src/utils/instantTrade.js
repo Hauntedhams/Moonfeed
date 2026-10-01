@@ -89,12 +89,19 @@ function reportAffiliateTrade({ signature, wallet, solAmount, side, coin }) {
 
 export async function getTradingWalletBalances(mint = null) {
   const wallet = await loadTradingWallet();
-  if (!wallet) return { sol: 0, tokens: 0 };
+  if (!wallet) return { sol: 0, tokens: 0, tokensRaw: 0n, decimals: null };
   const [solRes, tokenRes] = await Promise.all([
     api(`/api/wallet/${wallet.publicKey}/balance`).catch(() => ({ sol: 0 })),
     mint ? api(`/api/wallet/${wallet.publicKey}/balance?mint=${mint}`).catch(() => ({ amount: 0 })) : Promise.resolve({ amount: 0 }),
   ]);
-  return { sol: Number(solRes.sol) || 0, tokens: Number(tokenRes.amount) || 0 };
+  let tokensRaw = 0n;
+  try { tokensRaw = BigInt(tokenRes.amountRaw ?? 0); } catch (_) { /* older backend */ }
+  return {
+    sol: Number(solRes.sol) || 0,
+    tokens: Number(tokenRes.amount) || 0,
+    tokensRaw,
+    decimals: typeof tokenRes.decimals === 'number' ? tokenRes.decimals : null,
+  };
 }
 
 /**
@@ -197,13 +204,18 @@ export async function executeInstantSell(coin, pct) {
   const wallet = await loadTradingWallet();
   if (!wallet) throw new Error('No trading wallet set up');
 
-  const { tokens } = await getTradingWalletBalances(mint);
+  const { tokens, tokensRaw, decimals: chainDecimals } = await getTradingWalletBalances(mint);
   if (!(tokens > 0)) throw new Error(`No ${coin.symbol || 'token'} in the trading wallet`);
   const share = Math.min(100, Math.max(1, Number(pct) || 100)) / 100;
-  const decimals = await fetchTokenDecimals(mint).catch(() => 6);
+  const decimals = typeof chainDecimals === 'number'
+    ? chainDecimals
+    : await fetchTokenDecimals(mint).catch(() => 6);
+  // The on-chain raw amount is authoritative — rebuilding it from the UI amount
+  // with guessed decimals sells 10^k too little/much whenever the guess is wrong.
+  const fullRaw = tokensRaw > 0n ? tokensRaw : BigInt(Math.floor(tokens * 10 ** decimals));
   const amountRaw = share >= 1
-    ? BigInt(Math.floor(tokens * 10 ** decimals)) // full balance, floored so we never oversell
-    : BigInt(Math.floor(tokens * share * 10 ** decimals));
+    ? fullRaw // full balance so we never oversell
+    : (fullRaw * BigInt(Math.round(share * 10000))) / 10000n;
   if (amountRaw <= 0n) throw new Error('Amount too small to sell');
 
   const presets = getPresets();
@@ -269,4 +281,38 @@ export async function withdrawSol(destination) {
   });
   if (sent.error) throw new Error(`Withdraw failed on-chain: ${sent.error}`);
   return { ...sent, solWithdrawn: lamports / 1e9 };
+}
+
+/** Every token the trading wallet holds: [{ mint, amount, amountRaw, decimals }]. */
+export async function listTradingWalletTokens() {
+  const wallet = await loadTradingWallet();
+  if (!wallet) return [];
+  const data = await api(`/api/instant-trade/tokens/${wallet.publicKey}`);
+  return Array.isArray(data.tokens) ? data.tokens : [];
+}
+
+/** Withdraw the trading wallet's FULL balance of one token to a destination address. */
+export async function withdrawToken(mint, destination) {
+  const keypair = await getTradingKeypair();
+  if (!keypair) throw new Error('No trading wallet set up');
+  const destKey = new PublicKey(String(destination).trim()); // throws on invalid address
+
+  // Backend builds the transfer (dest ATA created idempotently, on-chain raw
+  // amount + token program resolved server-side); we only sign locally.
+  const built = await api('/api/instant-trade/build-withdraw-token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ wallet: keypair.publicKey.toBase58(), mint, destination: destKey.toBase58() }),
+  });
+
+  const tx = Transaction.from(b64ToBytes(built.transaction));
+  tx.sign(keypair);
+
+  const sent = await api('/api/instant-trade/send', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ signedTransaction: bytesToB64(new Uint8Array(tx.serialize())) }),
+  });
+  if (sent.error) throw new Error(`Withdraw failed on-chain: ${sent.error}`);
+  return { ...sent, amount: built.amount, decimals: built.decimals };
 }

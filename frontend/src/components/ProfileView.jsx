@@ -11,6 +11,7 @@ import { useWalletView } from '../hooks/useWalletView';
 import WalletSwitcher from './WalletSwitcher';
 import WalletPopup from './WalletPopup';
 import JupiterWalletButton from './JupiterWalletButton';
+import { useWalletConnectOnboarding } from './WalletConnectOnboarding';
 import NativeChart from './NativeChart';
 import TwelveDataChart from './TwelveDataChart';
 import './ProfileView.css';
@@ -29,9 +30,12 @@ const ProfileView = ({ onTradeClick, onOpenPosition }) => {
 
   // When demo mode is active, override wallet state so all screens are accessible
   const basePublicKey = isDemoMode ? demoPublicKey : jupiterWallet.publicKey;
-  // Wallet view switcher: main connected wallet vs the ⚡ trading wallet
+  // Wallet view switcher: main connected wallet vs the ⚡ trading wallet.
+  // The trading wallet is the active identity when selected — and the automatic
+  // fallback whenever no main wallet is connected, so the app "stays signed in".
   const { mode: walletViewMode, setMode: setWalletViewMode, instantWallet } = useWalletView();
-  const viewingInstant = walletViewMode === 'instant' && Boolean(instantWallet);
+  const viewingInstant = Boolean(instantWallet)
+    && (walletViewMode === 'instant' || (!jupiterWallet.connected && !isDemoMode));
   const publicKey = useMemo(
     () => (viewingInstant ? new PublicKey(instantWallet.publicKey) : basePublicKey),
     [viewingInstant, instantWallet, basePublicKey]
@@ -39,6 +43,14 @@ const ProfileView = ({ onTradeClick, onOpenPosition }) => {
   const connected = viewingInstant ? true : (isDemoMode ? true : (jupiterWallet.connected || false));
   const disconnect = jupiterWallet.disconnect;
   const signTransaction = jupiterWallet.signTransaction;
+  const { openWalletConnect } = useWalletConnectOnboarding();
+
+  // Switching to "main" while no wallet is connected should ask to connect
+  // instead of silently staying on the trading wallet.
+  const handleWalletViewChange = (next) => {
+    setWalletViewMode(next);
+    if (next === 'main' && !jupiterWallet.connected && !isDemoMode) openWalletConnect();
+  };
 
   // Universal profile sync from MongoDB
   const { profile, saving, saveProfile } = useUserProfile();
@@ -918,7 +930,7 @@ const ProfileView = ({ onTradeClick, onOpenPosition }) => {
 
         <WalletSwitcher
           mode={viewingInstant ? 'instant' : 'main'}
-          onChange={setWalletViewMode}
+          onChange={handleWalletViewChange}
           mainAddress={basePublicKey?.toString() || null}
           instantAddress={instantWallet?.publicKey || null}
         />

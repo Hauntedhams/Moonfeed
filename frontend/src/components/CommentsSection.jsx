@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useWallet } from '../contexts/WalletContext';
 import { UnifiedWalletButton } from '@jup-ag/wallet-adapter';
 import WalletConnectOnboarding from './WalletConnectOnboarding';
+import { useActiveAccount } from '../hooks/useWalletView';
 import './CommentsSection.css';
 
 // Wallet icon SVG
@@ -21,7 +21,8 @@ const CommentsSection = ({ coinAddress, coinSymbol, onWalletClick }) => {
   const [newComment, setNewComment] = useState('');
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState(null);
-  const { walletAddress, connected } = useWallet();
+  // The ⚡ trading wallet counts as a signed-in account for commenting.
+  const { address: walletAddress, connected } = useActiveAccount();
   const containerRef = useRef(null);
   const textareaRef = useRef(null);
 

@@ -1,4 +1,5 @@
 const SEEN_KEY = 'moonfeed_x_news_seen_v1';
+const SEEN_TWEETS_KEY = 'moonfeed_x_tweets_seen_v1';
 const OPEN_KEY = 'moonfeed_open_x_tracker';
 
 const readSeen = () => {
@@ -25,6 +26,31 @@ export const markXNewsRead = (trends = []) => {
   try {
     localStorage.setItem(SEEN_KEY, JSON.stringify([...seen].slice(-100)));
   } catch { /* storage unavailable */ }
+};
+
+const noteworthyTweets = (tweets = []) => tweets.filter((tweet) =>
+  !tweet.lowSignal && Date.now() - tweet.createdAtMs < 24 * 60 * 60 * 1000 &&
+  (tweet.coins?.some((coin) => coin.verification) ||
+    tweet.coins?.filter((coin) => coin.source === 'launch').length >= 2)
+);
+
+const readSeenTweets = () => {
+  try {
+    const ids = JSON.parse(localStorage.getItem(SEEN_TWEETS_KEY) || '[]');
+    return new Set(Array.isArray(ids) ? ids : []);
+  } catch { return new Set(); }
+};
+
+export const unreadXTweetCount = (tweets = []) => {
+  const seen = readSeenTweets();
+  return noteworthyTweets(tweets).filter((tweet) => !seen.has(tweet.id)).length;
+};
+
+export const markXTweetsRead = (tweets = []) => {
+  const seen = readSeenTweets();
+  noteworthyTweets(tweets).forEach((tweet) => seen.add(tweet.id));
+  try { localStorage.setItem(SEEN_TWEETS_KEY, JSON.stringify([...seen].slice(-200))); }
+  catch { /* storage unavailable */ }
 };
 
 export const markXNewsPushUnread = (alertKey, { open = false } = {}) => {

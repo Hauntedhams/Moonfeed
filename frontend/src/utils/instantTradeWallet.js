@@ -5,6 +5,7 @@
 // pressure while Directory.Data survives.
 import { Keypair } from '@solana/web3.js';
 import bs58 from 'bs58';
+import nacl from 'tweetnacl';
 
 const KEY_STORAGE = 'moonfeed_instant_wallet_v1';
 const PRESETS_STORAGE = 'moonfeed_instant_presets_v1';
@@ -16,6 +17,7 @@ export const DEFAULT_PRESETS = {
   slippagePct: 3,     // max slippage per swap
   autoSellPct: 0,     // 0 = off; otherwise sets a take-profit target at +X% per buy
   stopLossPct: 0,     // 0 = off; otherwise sets a stop-loss target at -X% per buy
+  sellPct: 100,       // how much of the position the coin-card Sell button sells
   autoExecute: true,  // app-open: triggered targets auto-sell/buy; off = alert only
 };
 
@@ -67,10 +69,19 @@ export async function loadTradingWallet() {
   return record;
 }
 
+/** Ed25519-sign an arbitrary message with the trading wallet key (profile
+ * updates etc. — the deeplink wallets can't sign for this account). Returns
+ * a 64-byte Uint8Array signature, or null when no trading wallet exists. */
+export async function signMessageWithTradingWallet(messageBytes) {
+  const record = await loadTradingWallet();
+  if (!record) return null;
+  const kp = Keypair.fromSecretKey(bs58.decode(record.secretKey));
+  return nacl.sign.detached(messageBytes, kp.secretKey);
+}
+
 export async function createTradingWallet() {
   const existing = await loadTradingWallet();
-  if (existing) return existing;
-  const kp = Keypair.generate();
+  if (existing) return existing;  const kp = Keypair.generate();
   const record = {
     publicKey: kp.publicKey.toBase58(),
     secretKey: bs58.encode(kp.secretKey),

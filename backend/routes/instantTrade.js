@@ -240,4 +240,116 @@ router.get('/blockhash', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/instant-trade/tokens/:owner
+ * Every positive SPL / Token-2022 balance the trading wallet holds, with the
+ * on-chain raw amount + decimals (so clients never have to guess decimals).
+ */
+router.get('/tokens/:owner', async (req, res) => {
+  try {
+    const { owner } = req.params;
+    if (!isBase58Key(owner)) {
+      return res.status(400).json({ success: false, error: 'Invalid wallet address' });
+    }
+    const { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } = require('@solana/spl-token');
+    const conn = getConnection();
+    const ownerKey = new PublicKey(owner);
+    const [classic, t22] = await Promise.all([
+      conn.getParsedTokenAccountsByOwner(ownerKey, { programId: TOKEN_PROGRAM_ID }),
+      conn.getParsedTokenAccountsByOwner(ownerKey, { programId: TOKEN_2022_PROGRAM_ID }),
+    ]);
+    const byMint = new Map();
+    for (const { account } of [...classic.value, ...t22.value]) {
+      const info = account.data.parsed?.info;
+      const tokenAmount = info?.tokenAmount;
+      if (!info?.mint || !tokenAmount || !(Number(tokenAmount.uiAmount) > 0)) continue;
+      const existing = byMint.get(info.mint) || {
+        mint: info.mint,
+        amount: 0,
+        amountRaw: 0n,
+        decimals: tokenAmount.decimals,
+        tokenProgram: account.owner.toBase58(),
+      };
+      existing.amount += Number(tokenAmount.uiAmountString ?? tokenAmount.uiAmount) || 0;
+      try { existing.amountRaw += BigInt(tokenAmount.amount || '0'); } catch (_) { /* non-numeric */ }
+      byMint.set(info.mint, existing);
+    }
+    res.json({
+      success: true,
+      owner,
+      tokens: Array.from(byMint.values()).map((t) => ({ ...t, amountRaw: t.amountRaw.toString() })),
+    });
+  } catch (error) {
+    console.error('[instant-trade] tokens error:', error.message);
+    res.status(500).json({ success: false, error: 'Failed to fetch token balances' });
+  }
+});
+
+/**
+ * POST /api/instant-trade/build-withdraw-token
+ * { wallet, mint, destination } — unsigned transfer of the wallet's FULL
+ * balance of one token to the destination (dest ATA created idempotently).
+ * Client signs locally; keys never touch the server.
+ */
+router.post('/build-withdraw-token', async (req, res) => {
+  try {
+    const { wallet, mint, destination } = req.body || {};
+    if (!isBase58Key(wallet) || !isBase58Key(mint) || !isBase58Key(destination)) {
+      return res.status(400).json({ success: false, error: 'Invalid wallet, mint or destination address' });
+    }
+    const {
+      TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID,
+      getAssociatedTokenAddressSync, createAssociatedTokenAccountIdempotentInstruction,
+      createTransferCheckedInstruction,
+    } = require('@solana/spl-token');
+    const { Transaction } = require('@solana/web3.js');
+
+    const conn = getConnection();
+    const walletKey = new PublicKey(wallet);
+    const mintKey = new PublicKey(mint);
+    const destKey = new PublicKey(destination);
+
+    const accounts = await conn.getParsedTokenAccountsByOwner(walletKey, { mint: mintKey });
+    const sources = accounts.value
+      .map(({ pubkey, account }) => {
+        const tokenAmount = account.data.parsed?.info?.tokenAmount;
+        let raw = 0n;
+        try { raw = BigInt(tokenAmount?.amount || '0'); } catch (_) { /* non-numeric */ }
+        return { pubkey, raw, decimals: tokenAmount?.decimals ?? 0, programId: account.owner };
+      })
+      .filter((s) => s.raw > 0n);
+    if (!sources.length) {
+      return res.status(400).json({ success: false, error: 'No balance of this token to withdraw' });
+    }
+
+    const programId = sources[0].programId;
+    const tokenProgramId = programId.equals(TOKEN_2022_PROGRAM_ID) ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID;
+    const decimals = sources[0].decimals;
+    const destAta = getAssociatedTokenAddressSync(mintKey, destKey, false, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
+
+    const tx = new Transaction();
+    tx.add(createAssociatedTokenAccountIdempotentInstruction(walletKey, destAta, destKey, mintKey, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID));
+    let totalRaw = 0n;
+    for (const source of sources) {
+      tx.add(createTransferCheckedInstruction(source.pubkey, mintKey, destAta, walletKey, source.raw, decimals, [], tokenProgramId));
+      totalRaw += source.raw;
+    }
+    const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash('confirmed');
+    tx.recentBlockhash = blockhash;
+    tx.feePayer = walletKey;
+
+    res.json({
+      success: true,
+      transaction: tx.serialize({ requireAllSignatures: false, verifySignatures: false }).toString('base64'),
+      lastValidBlockHeight,
+      amountRaw: totalRaw.toString(),
+      decimals,
+      amount: Number(totalRaw) / 10 ** decimals,
+    });
+  } catch (error) {
+    console.error('[instant-trade] build-withdraw-token error:', error.message);
+    res.status(500).json({ success: false, error: 'Failed to build token withdrawal' });
+  }
+});
+
 module.exports = router;

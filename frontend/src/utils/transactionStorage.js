@@ -140,6 +140,52 @@ export function calculateOpenPosition(transactions, tokenMint, solUsdPrice = 0) 
 }
 
 /**
+ * Repair decimals-corrupted records for one token: divide token quantities by
+ * `factor` and scale per-token prices up to match. SOL/USD totals are already
+ * correct (they came from the swap itself), only the token-count side was
+ * recorded with wrong mint decimals. Returns true when anything changed.
+ */
+export function rescaleTokenTransactions(walletAddress, tokenMint, factor) {
+  try {
+    if (!walletAddress || !tokenMint || !(factor > 0) || factor === 1) return false;
+    const storageKey = `${STORAGE_KEY}_${walletAddress}_${STORAGE_VERSION}`;
+    const stored = localStorage.getItem(storageKey);
+    if (!stored) return false;
+    const data = JSON.parse(stored);
+    const transactions = data.transactions || [];
+    let changed = false;
+    for (const tx of transactions) {
+      if (tx.tokenMint !== tokenMint) continue;
+      if (!tx.type || tx.type === 'buy') {
+        tx.outputAmount = (Number(tx.outputAmount) || 0) / factor; // tokens received
+      } else if (tx.type === 'sell') {
+        tx.inputAmount = (Number(tx.inputAmount) || 0) / factor; // tokens sold
+      } else {
+        continue;
+      }
+      tx.pricePerToken = (Number(tx.pricePerToken) || 0) * factor;
+      tx.pricePerTokenUsd = (Number(tx.pricePerTokenUsd) || 0) * factor;
+      changed = true;
+    }
+    if (!changed) return false;
+    data.lastUpdated = Date.now();
+    localStorage.setItem(storageKey, JSON.stringify(data));
+    console.log(`[TransactionStorage] 🔧 Rescaled ${tokenMint.slice(0, 6)}… records by 1/${factor} (decimals repair)`);
+    // Push the repaired list so a later sync can't resurrect corrupt amounts.
+    fetch(getFullApiUrl(`/api/users/${walletAddress}/transactions`), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ transactions }),
+      keepalive: true,
+    }).catch(() => {});
+    return true;
+  } catch (error) {
+    console.error('[TransactionStorage] Error rescaling transactions:', error);
+    return false;
+  }
+}
+
+/**
  * Store a new transaction
  * @param {Object} transactionData - Transaction data to store
  */

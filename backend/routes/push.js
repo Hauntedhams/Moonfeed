@@ -12,10 +12,15 @@ router.post('/register', async (req, res) => {
     }
 
     const update = {
-      walletAddress: walletAddress || null,
       platform: ['ios', 'android', 'web'].includes(platform) ? platform : 'ios',
       lastSeenAt: new Date(),
     };
+    // Only (re)associate when a wallet is provided — a launch-time register
+    // without a connected wallet must NOT wipe the existing association, or the
+    // server monitors lose this device until the next connected session.
+    if (walletAddress && typeof walletAddress === 'string') {
+      update.walletAddress = walletAddress;
+    }
     if (prefs && typeof prefs === 'object') {
       for (const k of ['trackedGain', 'holdingCrash', 'walletTrade', 'orderFill', 'trenchesGain', 'xNews', 'whaleGain']) {
         if (typeof prefs[k] === 'boolean') update[`prefs.${k}`] = prefs[k];

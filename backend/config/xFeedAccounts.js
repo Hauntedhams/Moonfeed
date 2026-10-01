@@ -16,6 +16,7 @@ const ACCOUNTS = [
   { handle: 'brian_armstrong', tier: 1, category: 'founder', label: 'Coinbase CEO' },
   { handle: 'jessepollak', tier: 2, category: 'founder', label: 'Base lead' },
   { handle: 'VitalikButerin', tier: 2, category: 'founder', label: 'Ethereum co-founder' },
+  { handle: 'justinsuntron', tier: 2, category: 'founder', label: 'Tron founder' },
 
   // Platforms whose posts start metas
   { handle: 'pumpdotfun', tier: 1, category: 'platform', label: 'Pump.fun' },
@@ -48,6 +49,17 @@ const ACCOUNTS = [
   { handle: 'kanyewest', tier: 2, category: 'celebrity', label: 'Ye' },
   { handle: 'stoolpresidente', tier: 2, category: 'celebrity', label: 'Dave Portnoy' },
   { handle: 'saylor', tier: 2, category: 'celebrity', label: 'Michael Saylor' },
+  { handle: 'cobratate', tier: 2, category: 'celebrity', label: 'Andrew Tate' },
+  { handle: 'IGGYAZALEA', tier: 2, category: 'celebrity', label: 'Iggy Azalea' },
+  { handle: 'nayibbukele', tier: 2, category: 'celebrity', label: 'Nayib Bukele' },
+  { handle: 'kabosumama', tier: 2, category: 'celebrity', label: 'Kabosu\u2019s owner (Doge)' },
+
+  // Meme / pop-culture wave starters — the viral formats meme coins get made from
+  { handle: 'PopBase', tier: 1, category: 'meme', label: 'Pop Base' },
+  { handle: 'historyinmemes', tier: 1, category: 'meme', label: 'History in Memes' },
+  { handle: 'PopCrave', tier: 2, category: 'meme', label: 'Pop Crave' },
+  { handle: 'DramaAlert', tier: 2, category: 'meme', label: 'DramaAlert' },
+  { handle: 'greg16676935420', tier: 2, category: 'meme', label: 'greg (parody)' },
 
   // Fast crypto news
   { handle: 'tier10k', tier: 1, category: 'news', label: 'DB News' },
