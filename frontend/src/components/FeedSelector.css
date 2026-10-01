@@ -854,6 +854,24 @@
   background: rgba(255, 255, 255, 0.08);
 }
 
+.feed-selector-result--wallet {
+  justify-content: space-between;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.feed-selector-result--wallet .wallet-chip {
+  min-width: 0;
+}
+
+.feed-selector-result-wallet-cta {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #8b9bff;
+  white-space: nowrap;
+}
+
 .feed-selector-result-img {
   width: 36px;
   height: 36px;

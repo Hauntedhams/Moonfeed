@@ -196,6 +196,7 @@ function getCacheStatus() {
 // near-duplicate coins, and appendNextFeed's mint-dedup would drop most of
 // Trenches when continuous-scrolling straight from Graduating).
 const GRADUATING_MIN_PROGRESS = 80;
+const GRADUATING_MIN_LIQUIDITY_USD = 10000;
 
 // "The trenches" — earlier bonding-curve stage than Graduating, gated on real
 // liquidity/market cap so it's not pure zero-activity noise.
@@ -207,7 +208,10 @@ const TRENCHES_GATE = {
 
 async function getGraduatingOnlyTokens() {
   const allTokens = await getGraduatingTokens();
-  return allTokens.filter(t => t.bondingCurveProgress >= GRADUATING_MIN_PROGRESS);
+  return allTokens.filter(t =>
+    t.bondingCurveProgress >= GRADUATING_MIN_PROGRESS &&
+    t.liquidity >= GRADUATING_MIN_LIQUIDITY_USD
+  );
 }
 
 async function getTrenchesTokens() {

@@ -337,6 +337,23 @@
   transform: translateX(2px);
 }
 
+.search-result-card--wallet {
+  align-items: center;
+  justify-content: space-between;
+}
+
+.search-result-card--wallet .wallet-chip {
+  min-width: 0;
+}
+
+.search-result-wallet-cta {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #8b9bff;
+  white-space: nowrap;
+}
+
 .search-result-image {
   width: 44px;
   height: 44px;

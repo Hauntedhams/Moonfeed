@@ -2348,14 +2348,19 @@ const CoinCard = memo(({
   const changePct = chartHoveredData && chartFirstPrice 
     ? ((chartHoveredPrice - chartFirstPrice) / chartFirstPrice) * 100
     : (liveData?.change24h ?? coin.change_24h ?? coin.priceChange24h ?? coin.change24h ?? 0);
-  const baseMarketCap = liveData?.marketCap ?? coin.market_cap_usd ?? coin.market_cap ?? coin.marketCap ?? 0;
+  const onBondingCurve = coin.bondingCurveProgress > 0 && coin.bondingCurveProgress < 100;
+  const baseMarketCap = onBondingCurve
+    ? (coin.market_cap_usd ?? coin.marketCap ?? 0)
+    : (liveData?.marketCap ?? coin.market_cap_usd ?? coin.market_cap ?? coin.marketCap ?? 0);
   const freshestLivePrice = rpcLivePrice || livePrice;
-  const marketCap = liveData?.marketCap
+  const marketCap = onBondingCurve ? baseMarketCap : (liveData?.marketCap
     ?? (freshestLivePrice && fallbackPrice > 0
       ? baseMarketCap * (freshestLivePrice / fallbackPrice)
-      : baseMarketCap);
+      : baseMarketCap));
   const volume24h = liveData?.volume24h ?? coin.volume_24h_usd ?? coin.volume_24h ?? coin.volume24h ?? 0;
-  const liquidity = liveData?.liquidity ?? coin.liquidity_usd ?? coin.liquidity ?? coin.liquidityUsd ?? 0;
+  const liquidity = onBondingCurve
+    ? (coin.liquidity ?? coin.liquidityUsd ?? coin.liquidity_usd ?? 0)
+    : (liveData?.liquidity ?? coin.liquidity_usd ?? coin.liquidity ?? coin.liquidityUsd ?? 0);
   const holders = liveData?.holders ?? coin.holders ?? coin.holderCount ?? coin.holder_count ?? coin.dexscreener?.holders ?? 0;
   
   // 🔍 DEBUG: Specific coin debugging (disabled in production)
@@ -3103,11 +3108,13 @@ const CoinCard = memo(({
                 onMouseLeave={() => setHoveredMetric(null)}
                 onClick={(e) => showMetricBreakdown(e, 'liquidity', liquidity, 'liquidity')}
               >
-                <div className="header-metric-label">Liquidity</div>
+                <div className="header-metric-label" title={onBondingCurve ? 'Bonding-curve liquidity, not DEX pool liquidity' : undefined}>
+                  {onBondingCurve ? 'Curve liq.' : 'Liquidity'}
+                </div>
                 <div className="header-metric-value-with-icon">
                   <span>${formatCompact(liquidity)}</span>
                   {/* Show red flag if rugcheck verified and liquidity is unlocked */}
-                  {coin.rugcheckVerified && !coin.liquidityLocked ? (
+                  {!onBondingCurve && (coin.rugcheckVerified && !coin.liquidityLocked ? (
                     <span style={{ 
                       marginLeft: '4px', 
                       fontSize: '14px',
@@ -3116,7 +3123,7 @@ const CoinCard = memo(({
                     }}>🚩</span>
                   ) : (
                     <LiquidityLockIndicator coin={coin} size="small" />
-                  )}
+                  ))}
                 </div>
               </div>
               <div 

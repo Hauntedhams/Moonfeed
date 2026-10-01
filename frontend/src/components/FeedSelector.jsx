@@ -3,7 +3,11 @@ import { API_CONFIG } from '../config/api';
 import { getArtworkCandidates, getBannerImage, getProfileImage } from '../utils/coinArtwork';
 import { useTrackedTrades } from '../contexts/TrackedTradesContext';
 import { FOLLOW_WALLETS_FEED, FOLLOW_COINS_FEED, buildFollowWalletsFeed, buildFollowCoinsFeed } from '../utils/followingFeeds';
+import { WalletChip } from '../utils/walletIdentity';
 import './FeedSelector.css';
+
+// Base58 Solana address (wallet OR mint — a pasted mint still searches as a token).
+const SOLANA_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 // Feed definitions (kept in sync with the old TopTabs base tabs).
 // 'trending' is no longer a separate selectable feed — its coins are folded
@@ -383,7 +387,7 @@ function FeedSelector({
 
       if (data.success && data.results) {
         setSearchResults(data.results);
-        if (data.results.length === 0) {
+        if (data.results.length === 0 && !SOLANA_ADDRESS_RE.test(cleanQuery)) {
           setError('No tokens found. Try a different search term.');
         }
       } else {
@@ -518,7 +522,7 @@ function FeedSelector({
             <input
               type="text"
               className="feed-selector-search-input"
-              placeholder="Search any token..."
+              placeholder="Search any token or wallet..."
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
@@ -594,6 +598,19 @@ function FeedSelector({
             )}
             {searchQuery.trim().length >= 2 ? (
             <div className="feed-selector-results">
+              {SOLANA_ADDRESS_RE.test(searchQuery.trim()) && (
+                <button
+                  className="feed-selector-result feed-selector-result--wallet"
+                  onClick={() => {
+                    const address = searchQuery.trim();
+                    setOpen(false);
+                    window.dispatchEvent(new CustomEvent('moonfeed:open-wallet-profile', { detail: { address } }));
+                  }}
+                >
+                  <WalletChip address={searchQuery.trim()} />
+                  <span className="feed-selector-result-wallet-cta">View wallet profile ›</span>
+                </button>
+              )}
               {searchResults.map((token, index) => (
                 <button
                   key={token.mint || token.mintAddress || index}

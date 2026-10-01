@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { API_CONFIG } from '../config/api';
+import { WalletChip } from '../utils/walletIdentity';
 import './CoinSearchModal.css';
+
+// Base58 Solana address (wallet OR mint — a pasted mint still searches as a token).
+const SOLANA_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 function resolveApiBase() {
   return API_CONFIG.BASE_URL;
@@ -67,7 +71,7 @@ function CoinSearchModal({ visible, onClose, onCoinSelect, onAdvancedFilterClick
         console.log(`✅ Found ${data.results.length} tokens${data.source ? ` (${data.source})` : ''}`);
         setSearchResults(data.results);
         
-        if (data.results.length === 0) {
+        if (data.results.length === 0 && !SOLANA_ADDRESS_RE.test(cleanQuery)) {
           setError('No tokens found. Try a different search term.');
         }
       } else {
@@ -242,7 +246,7 @@ function CoinSearchModal({ visible, onClose, onCoinSelect, onAdvancedFilterClick
           <div className="search-input-container">
             <input
               type="text"
-              placeholder="Search tokens (e.g., SOL, BONK, or token address)"
+              placeholder="Search tokens, or paste a token/wallet address"
               value={searchQuery}
               onChange={handleInputChange}
               onKeyPress={handleKeyPress}
@@ -316,6 +320,23 @@ function CoinSearchModal({ visible, onClose, onCoinSelect, onAdvancedFilterClick
                 <line x1="9" y1="9" x2="15" y2="15"/>
               </svg>
               {error}
+            </div>
+          )}
+
+          {/* Wallet match — any pasted base58 address can be opened as a wallet profile */}
+          {SOLANA_ADDRESS_RE.test(searchQuery.trim()) && (
+            <div className="search-results">
+              <div
+                className="search-result-card search-result-card--wallet"
+                onClick={() => {
+                  const address = searchQuery.trim();
+                  onClose?.();
+                  window.dispatchEvent(new CustomEvent('moonfeed:open-wallet-profile', { detail: { address } }));
+                }}
+              >
+                <WalletChip address={searchQuery.trim()} />
+                <span className="search-result-wallet-cta">View wallet profile ›</span>
+              </div>
             </div>
           )}
 
