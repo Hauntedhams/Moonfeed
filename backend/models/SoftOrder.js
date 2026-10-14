@@ -24,6 +24,15 @@ const softOrderSchema = new mongoose.Schema({
   },
   triggeredAt: { type: Date, default: null },
   triggeredPriceUsd: { type: Number, default: null },
+  // Set when something actually traded on this trigger (cloud executor or the
+  // device while the app was open). Null = alert-only trigger.
+  executionStatus: { type: String, enum: [null, 'executing', 'executed', 'failed'], default: null },
+  executedBy: { type: String, enum: [null, 'cloud', 'device'], default: null },
+  executionSignature: { type: String, default: null },
+  executionError: { type: String, default: null },
+  executedAt: { type: Date, default: null },
+  executionSolAmount: { type: Number, default: null },   // SOL received (sell) / spent (buy)
+  executionTokenAmount: { type: Number, default: null },  // tokens sold (sell) / received (buy)
   createdAt: { type: Date, default: Date.now },
   expiresAt: { type: Date, default: null },
 });

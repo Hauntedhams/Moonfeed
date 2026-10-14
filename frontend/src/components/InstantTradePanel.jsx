@@ -9,9 +9,11 @@ import {
   getPresets, savePresets,
 } from '../utils/instantTradeWallet';
 import {
-  executeInstantBuy, executeInstantSell, getTradingWalletBalances, withdrawSol, withdrawToken, listTradingWalletTokens, SWAP_FEE_OVERHEAD_SOL,
+  executeInstantBuy, executeInstantSell, getTradingWalletBalances, getTradingLimits, withdrawSol, withdrawToken, listTradingWalletTokens, SWAP_FEE_OVERHEAD_SOL,
 } from '../utils/instantTrade';
 import { getSolUsdPrice } from '../utils/orderFillTracking';
+import { getCloudExecStatus, enrollCloudExecution, disenrollCloudExecution, syncCloudExecSettings } from '../utils/cloudExecution';
+import InfoTip from './InfoTip';
 import './InstantTradePanel.css';
 
 const BUY_CHIPS = [0.01, 0.05, 0.1, 0.25, 0.5, 1];
@@ -36,22 +38,28 @@ const InstantTradePanel = ({ coin, onClose, connectedWallet, embedded = false })
   const [presets, setPresets] = useState(() => getPresets());
   const [buySolInput, setBuySolInput] = useState(() => String(getPresets().buySol));
   const [balances, setBalances] = useState({ sol: 0, tokens: 0 });
+  const [limits, setLimits] = useState(null); // { buyOverheadSol, sellOverheadSol, maxBuySol, exact }
   const [busy, setBusy] = useState(null); // 'buy' | 'sell25' | ... | 'withdraw' | 'create'
   const [result, setResult] = useState(null); // { ok, text, signature }
   const [view, setView] = useState('main'); // 'main' | 'import' | 'export' | 'withdraw'
   const [importValue, setImportValue] = useState('');
   const [withdrawDest, setWithdrawDest] = useState(connectedWallet || '');
+  const [withdrawAmount, setWithdrawAmount] = useState(''); // '' = sweep everything
   const [walletTokens, setWalletTokens] = useState(null); // null = loading, [] = none
   const [copied, setCopied] = useState(false);
   const [solUsd, setSolUsd] = useState(0);
   const [secretVisible, setSecretVisible] = useState(false);
   const [confirmReveal, setConfirmReveal] = useState(false);
+  const [cloud, setCloud] = useState(null); // null = loading; { configured, enrolled, ... }
+  const [confirmCloud, setConfirmCloud] = useState(false);
 
   const mint = coin?.mintAddress || coin?.address;
 
   useEffect(() => { getSolUsdPrice().then(setSolUsd).catch(() => {}); }, []);
 
   useEffect(() => {
+    // A failed withdraw must not linger under the Buy button (and vice versa).
+    setResult(null);
     if (view !== 'export') {
       setSecretVisible(false);
       setConfirmReveal(false);
@@ -71,7 +79,9 @@ const InstantTradePanel = ({ coin, onClose, connectedWallet, embedded = false })
 
   const refreshBalances = useCallback(async () => {
     try {
-      setBalances(await getTradingWalletBalances(mint));
+      const [b, l] = await Promise.all([getTradingWalletBalances(mint), getTradingLimits(mint)]);
+      setBalances(b);
+      setLimits(l);
     } catch { /* transient */ }
   }, [mint]);
 
@@ -88,6 +98,15 @@ const InstantTradePanel = ({ coin, onClose, connectedWallet, embedded = false })
   useEffect(() => {
     if (wallet) refreshBalances();
   }, [wallet, refreshBalances]);
+
+  useEffect(() => {
+    if (!wallet) return undefined;
+    let alive = true;
+    getCloudExecStatus().then((s) => { if (alive) setCloud(s); }).catch(() => { if (alive) setCloud({ configured: false, enrolled: false }); });
+    const onChange = (e) => { if (alive && e.detail) setCloud(e.detail); };
+    window.addEventListener('moonfeed:cloud-exec-changed', onChange);
+    return () => { alive = false; window.removeEventListener('moonfeed:cloud-exec-changed', onChange); };
+  }, [wallet]);
 
   // The withdraw view lists every coin in the wallet (not just the open card's).
   const loadWalletTokens = useCallback(async () => {
@@ -119,7 +138,27 @@ const InstantTradePanel = ({ coin, onClose, connectedWallet, embedded = false })
     if (view === 'withdraw' && wallet) loadWalletTokens();
   }, [view, wallet, loadWalletTokens]);
 
-  const updatePresets = (partial) => setPresets(savePresets(partial));
+  const updatePresets = (partial) => {
+    const next = savePresets(partial);
+    setPresets(next);
+    // Keep the server-side executor on the same slippage the user trades with.
+    if (partial.slippagePct != null && cloud?.enrolled) {
+      syncCloudExecSettings({ slippagePct: next.slippagePct }).catch(() => {});
+    }
+  };
+
+  const handleCloudEnable = () => runAction('cloud', async () => {
+    const s = await enrollCloudExecution({ slippagePct: presets.slippagePct });
+    setCloud(s);
+    setConfirmCloud(false);
+    return s;
+  }, () => 'Cloud execution on — targets now execute even when the app is closed');
+
+  const handleCloudDisable = () => runAction('cloud', async () => {
+    const s = await disenrollCloudExecution();
+    setCloud(s);
+    return s;
+  }, () => 'Cloud execution off — the server no longer holds a copy of this key');
 
   const commitBuySol = () => {
     const v = parseFloat(buySolInput);
@@ -157,6 +196,9 @@ const InstantTradePanel = ({ coin, onClose, connectedWallet, embedded = false })
   }, (w) => `Imported ${shortAddr(w.publicKey)}`);
 
   const handleBuy = () => runAction('buy', () => executeInstantBuy(coin), (out) => {
+    if (!out.confirmed) {
+      return `Buy submitted — network is slow, confirming… Check the tx link; the wallet balance will update once it lands.`;
+    }
     const alerts = [
       out.autoSellOrder && `+${presets.autoSellPct}%`,
       out.stopLossOrder && `−${presets.stopLossPct}%`,
@@ -165,17 +207,21 @@ const InstantTradePanel = ({ coin, onClose, connectedWallet, embedded = false })
   });
 
   const handleSell = (pct) => runAction(`sell${pct}`, () => executeInstantSell(coin, pct),
-    (out) => `Sold ${fmtTokens(out.tokensSold)} ${coin?.symbol} for ${fmtSol(out.solReceived)} SOL`);
+    (out) => (out.confirmed
+      ? `Sold ${fmtTokens(out.tokensSold)} ${coin?.symbol} for ${fmtSol(out.solReceived)} SOL`
+      : 'Sell submitted — network is slow, confirming… Check the tx link.'));
 
-  const handleWithdraw = () => runAction('withdraw', () => withdrawSol(withdrawDest),
-    (out) => `Withdrew ${fmtSol(out.solWithdrawn)} SOL`);
+  const handleWithdraw = () => runAction('withdraw', () => withdrawSol(withdrawDest, withdrawAmount.trim() || null),
+    (out) => (out.confirmed
+      ? `Withdrew ${fmtSol(out.solWithdrawn)} SOL`
+      : `Withdraw of ${fmtSol(out.solWithdrawn)} SOL submitted — confirming…`));
 
   const handleWithdrawToken = (token) => runAction(`wtoken-${token.mint}`, async () => {
     const out = await withdrawToken(token.mint, withdrawDest);
     loadWalletTokens();
     refreshBalances();
     return out;
-  }, (out) => `Sent ${fmtTokens(out.amount)} ${token.symbol || 'tokens'}`);
+  }, (out) => (out.confirmed ? `Sent ${fmtTokens(out.amount)} ${token.symbol || 'tokens'}` : `Transfer of ${fmtTokens(out.amount)} ${token.symbol || 'tokens'} submitted — confirming…`));
 
   const copyAddress = async () => {
     try {
@@ -185,7 +231,10 @@ const InstantTradePanel = ({ coin, onClose, connectedWallet, embedded = false })
     } catch { /* clipboard blocked */ }
   };
 
-  const canBuy = wallet && balances.sol >= Number(presets.buySol) + SWAP_FEE_OVERHEAD_SOL && !busy;
+  const buyOverheadSol = limits?.buyOverheadSol ?? SWAP_FEE_OVERHEAD_SOL;
+  const maxBuySol = limits?.maxBuySol ?? Math.max(0, Math.floor((balances.sol - SWAP_FEE_OVERHEAD_SOL) * 1e4) / 1e4);
+  const canBuy = wallet && balances.sol >= Number(presets.buySol) + buyOverheadSol && !busy;
+  const buyShortfall = wallet && !busy && Number(presets.buySol) > 0 && balances.sol < Number(presets.buySol) + buyOverheadSol;
 
   const content = (
     <div className={embedded ? 'itp-embedded-host' : 'itp-backdrop'} onClick={embedded ? undefined : onClose}>
@@ -197,9 +246,36 @@ const InstantTradePanel = ({ coin, onClose, connectedWallet, embedded = false })
               <path d="M13 2 4.5 13.5H11L9.5 22 19 10h-6.5L13 2z" />
             </svg>
             Instant Trade
+            <InfoTip title="Your trading wallet">
+              <p>This wallet is created on your device. Its private key is stored locally and is not held by Moonfeed's server; trades are signed on this device.</p>
+              <p>Back up the key with Export. Anyone with it can control the funds, and losing both the device and backup can mean permanent loss. You can withdraw SOL and tokens to another wallet at any time.</p>
+            </InfoTip>
           </span>
+          {wallet && (
+            <button
+              type="button"
+              className={`itp-mode-switch${presets.enabled ? ' on' : ''}`}
+              role="switch"
+              aria-checked={Boolean(presets.enabled)}
+              onClick={() => updatePresets({ enabled: !presets.enabled })}
+              title={presets.enabled
+                ? 'Instant buy mode is ON — Buy / Sell buttons sit above the nav bar on every coin'
+                : 'Turn on instant buy mode — one-tap Buy / Sell buttons above the nav bar'}
+            >
+              <span className="itp-mode-switch-text">
+                <span className="itp-mode-switch-label">Instant buy mode</span>
+                <span className="itp-mode-switch-state">{presets.enabled ? 'ON' : 'OFF'}</span>
+              </span>
+              <span className="itp-toggle itp-toggle--lg" aria-hidden="true"><span className="itp-toggle-knob" /></span>
+            </button>
+          )}
           {!embedded && <button type="button" className="itp-close" onClick={onClose} aria-label="Close">×</button>}
         </header>
+        {wallet && presets.enabled && (
+          <p className="itp-mode-banner">
+            <strong>Instant buy mode is on.</strong> Big Buy {presets.buySol} SOL / Sell buttons appear above the nav bar on every coin — one tap trades immediately, no confirmation.
+          </p>
+        )}
 
         {walletLoading ? (
           <div className="itp-empty">Loading…</div>
@@ -270,8 +346,26 @@ const InstantTradePanel = ({ coin, onClose, connectedWallet, embedded = false })
               placeholder="Destination wallet address"
               autoCorrect="off" autoCapitalize="off" spellCheck={false}
             />
-            <button type="button" className="itp-btn itp-btn--primary" disabled={!withdrawDest.trim() || busy} onClick={handleWithdraw}>
-              {busy === 'withdraw' ? 'Withdrawing…' : `Withdraw ${fmtSol(balances.sol)} SOL`}
+            <div className="itp-preset-row">
+              <span className="itp-preset-label">Amount (SOL)</span>
+              <input
+                className="itp-preset-input"
+                inputMode="decimal"
+                value={withdrawAmount}
+                onChange={(e) => setWithdrawAmount(e.target.value)}
+                placeholder={`All (${fmtSol(balances.sol)})`}
+              />
+            </div>
+            <p className="itp-copy itp-withdraw-tokens-hint">
+              Leave blank to send everything (network fee ~0.000005 SOL comes out of the balance).
+              A partial withdraw must leave at least ~{fmtSol(limits?.rentMinSol || 0.001)} SOL behind for rent.
+            </p>
+            <button type="button" className="itp-btn itp-btn--primary" disabled={!withdrawDest.trim() || busy || !(balances.sol > 0)} onClick={handleWithdraw}>
+              {busy === 'withdraw'
+                ? 'Withdrawing…'
+                : withdrawAmount.trim()
+                  ? `Withdraw ${withdrawAmount.trim()} SOL`
+                  : `Withdraw all ${fmtSol(balances.sol)} SOL`}
             </button>
             {walletTokens === null ? (
               <p className="itp-copy itp-withdraw-tokens-hint">Checking for coins in this wallet…</p>
@@ -323,6 +417,21 @@ const InstantTradePanel = ({ coin, onClose, connectedWallet, embedded = false })
                 ? 'Buying…'
                 : `Buy ${presets.buySol} SOL of ${coin?.symbol || 'this coin'}`}
             </button>
+            {buyShortfall && (
+              <p className="itp-fund-hint">
+                {maxBuySol >= 0.001
+                  ? `Not enough SOL for ${presets.buySol} — fees and rent need ~${buyOverheadSol.toFixed(4)} SOL on top. Max buy: ${maxBuySol} SOL.`
+                  : 'Not enough SOL to cover a buy plus fees — deposit more to trade.'}
+              </p>
+            )}
+
+            <div className="itp-execution-info">
+              <span>Buys and sells execute immediately</span>
+              <InfoTip title="Instant buys and sells">
+                <p>A buy spends the selected SOL amount from this trading wallet. A sell swaps the selected percentage of your token balance. Both submit a blockchain swap immediately rather than placing a limit order.</p>
+                <p>Price impact, slippage, network fees, and the swap route affect the final result. Check the amount and wallet balance before trading; confirmed swaps generally cannot be reversed.</p>
+              </InfoTip>
+            </div>
 
             <div className="itp-sell-row">
               <span className="itp-sell-label">
@@ -382,6 +491,15 @@ const InstantTradePanel = ({ coin, onClose, connectedWallet, embedded = false })
                     {v}
                   </button>
                 ))}
+                <button
+                  type="button"
+                  className={`itp-chip ${maxBuySol > 0 && Number(presets.buySol) === maxBuySol ? 'active' : ''}`}
+                  disabled={!(maxBuySol >= 0.001)}
+                  title="Spend everything except fees and rent"
+                  onClick={() => { updatePresets({ buySol: maxBuySol }); setBuySolInput(String(maxBuySol)); }}
+                >
+                  Max
+                </button>
               </div>
 
               <div className="itp-preset-row">
@@ -461,8 +579,18 @@ const InstantTradePanel = ({ coin, onClose, connectedWallet, embedded = false })
 
               <div className="itp-preset-row itp-toggle-row">
                 <span className="itp-preset-label">
-                  Auto-execute targets
-                  <span className="itp-preset-sub">While the app is open, a hit target sells the position automatically; closed app sends an alert instead</span>
+                  <span className="itp-preset-label-title">
+                    Auto-execute targets
+                    <InfoTip title="Auto-execute targets">
+                      <p>When enabled, Moonfeed checks your trading wallet's targets while the app is open and attempts a swap after a target is crossed.</p>
+                      <p>With Cloud execution off, a target that hits while the app is closed is only an alert. Turn on Cloud execution below for 24/7 execution. Swap failure is possible because price and liquidity can move.</p>
+                    </InfoTip>
+                  </span>
+                  <span className="itp-preset-sub">
+                    {cloud?.enrolled
+                      ? 'Targets execute on the server around the clock — the app does not need to be open'
+                      : 'While the app is open, a hit target sells the position automatically; closed app sends an alert instead'}
+                  </span>
                 </span>
                 <button
                   type="button"
@@ -474,25 +602,57 @@ const InstantTradePanel = ({ coin, onClose, connectedWallet, embedded = false })
                 </button>
               </div>
 
-              <div className="itp-preset-row itp-toggle-row">
-                <span className="itp-preset-label">
-                  One-tap mode
-                  <span className="itp-preset-sub">Bolt button on a coin buys instantly, no panel</span>
-                </span>
-                <button
-                  type="button"
-                  className={`itp-toggle ${presets.enabled ? 'on' : ''}`}
-                  onClick={() => updatePresets({ enabled: !presets.enabled })}
-                  aria-pressed={presets.enabled}
-                >
-                  <span className="itp-toggle-knob" />
-                </button>
-              </div>
+              {cloud?.configured !== false && (
+                <div className="itp-preset-row itp-toggle-row">
+                  <span className="itp-preset-label">
+                    <span className="itp-preset-label-title">
+                      Cloud execution (24/7)
+                      <InfoTip title="Cloud execution">
+                        <p>Turning this on uploads a copy of this trading wallet's private key to Moonfeed's server, encrypted at rest, so the server can sell at your take-profit / stop-loss (or buy at a buy target) even when the app is closed or your phone is off.</p>
+                        <p>This makes the trading wallet custodial while enabled: Moonfeed could technically move its funds. Keep only what you actively trade in it. Turn it off at any time — the server deletes its copy immediately. Your manual buys and sells still sign on this device.</p>
+                        <p>Execution sells the whole position at your saved slippage, retries once if the price moves, and sends you a notification with the result. Execution can still fail if liquidity vanishes.</p>
+                      </InfoTip>
+                    </span>
+                    <span className="itp-preset-sub">
+                      {cloud === null
+                        ? 'Checking…'
+                        : cloud.enrolled
+                          ? `On${cloud.executionCount ? ` · ${cloud.executionCount} executed` : ''}${cloud.failureStreak >= 5 ? ' · paused after repeated failures — toggle off and on to resume' : ''}`
+                          : 'Server-side TP/SL even when the app is closed. Makes this wallet custodial while on.'}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    className={`itp-toggle ${cloud?.enrolled ? 'on' : ''}`}
+                    disabled={cloud === null || busy === 'cloud'}
+                    onClick={() => (cloud?.enrolled ? handleCloudDisable() : setConfirmCloud(true))}
+                    aria-pressed={Boolean(cloud?.enrolled)}
+                    aria-label="Cloud execution"
+                  >
+                    <span className="itp-toggle-knob" />
+                  </button>
+                </div>
+              )}
+              {confirmCloud && !cloud?.enrolled && (
+                <div className="itp-reveal-confirm">
+                  <p className="itp-copy itp-copy--warn">
+                    Your trading wallet's private key will be sent to and stored (encrypted) on Moonfeed's server so it can trade for you while the app is closed.
+                    While this is on, Moonfeed holds a copy of the key. Only keep funds you actively trade in this wallet.
+                  </p>
+                  <div className="itp-reveal-actions">
+                    <button type="button" className="itp-btn itp-btn--ghost" onClick={() => setConfirmCloud(false)}>Cancel</button>
+                    <button type="button" className="itp-btn itp-btn--primary" disabled={busy === 'cloud'} onClick={handleCloudEnable}>
+                      {busy === 'cloud' ? 'Enabling…' : 'I understand — enable'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
             </div>
 
             <div className="itp-footer-actions">
               <button type="button" className="itp-link" onClick={() => setView('export')}>Export key</button>
-              <button type="button" className="itp-link" onClick={() => { setWithdrawDest(connectedWallet || ''); setView('withdraw'); }}>Withdraw</button>
+              <button type="button" className="itp-link" onClick={() => { setWithdrawDest(connectedWallet || ''); setWithdrawAmount(''); setView('withdraw'); }}>Withdraw</button>
               <button type="button" className="itp-link" onClick={refreshBalances}>Refresh</button>
             </div>
           </>

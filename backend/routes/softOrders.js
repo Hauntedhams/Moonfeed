@@ -77,6 +77,13 @@ function normalizeOrder(o, pair, solUsd) {
     expiredAt: expiresAtISO,
     triggeredAt: o.triggeredAt ? new Date(o.triggeredAt).toISOString() : null,
     triggeredPriceUsd: o.triggeredPriceUsd || null,
+    executionStatus: o.executionStatus || null,
+    executedBy: o.executedBy || null,
+    executionSignature: o.executionSignature || null,
+    executionError: o.executionError || null,
+    executedAt: o.executedAt ? new Date(o.executedAt).toISOString() : null,
+    executionSolAmount: o.executionSolAmount ?? null,
+    executionTokenAmount: o.executionTokenAmount ?? null,
   };
 }
 

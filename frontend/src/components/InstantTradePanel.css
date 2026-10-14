@@ -61,6 +61,9 @@
 }
 
 .itp-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 1.02rem;
   font-weight: 700;
   letter-spacing: 0.2px;
@@ -211,6 +214,16 @@
 
 .itp-buy-btn:disabled { opacity: 0.45; cursor: default; box-shadow: none; }
 
+.itp-execution-info {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin: -5px 0 10px;
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 0.7rem;
+}
+
 .itp-sell-row { margin-bottom: 12px; }
 
 .itp-sell-label {
@@ -292,6 +305,12 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.itp-preset-label-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .itp-preset-sub {
@@ -405,3 +424,68 @@
   padding: 7px 14px;
   margin: 0;
 }
+
+/* ── Instant buy mode switch (header, right of the title) ─────────────── */
+.itp-header { gap: 8px; flex-wrap: nowrap; }
+.itp-header .itp-title { flex: 0 1 auto; min-width: 0; white-space: nowrap; }
+
+.itp-mode-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px 5px 10px;
+  margin-left: auto;
+  border-radius: 999px;
+  border: 1.5px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.itp-mode-switch.on {
+  border-color: rgba(34, 197, 94, 0.7);
+  background: rgba(34, 197, 94, 0.14);
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.12), 0 0 18px rgba(34, 197, 94, 0.25);
+  color: #fff;
+}
+.itp-mode-switch:active { transform: scale(0.98); }
+
+.itp-mode-switch-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.05;
+}
+.itp-mode-switch-label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+.itp-mode-switch-state {
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+.itp-mode-switch.on .itp-mode-switch-state { color: #4ade80; }
+
+/* The pill's inner toggle mirrors the switch state */
+.itp-mode-switch .itp-toggle--lg { width: 40px; height: 24px; }
+.itp-mode-switch .itp-toggle--lg .itp-toggle-knob { width: 18px; height: 18px; }
+.itp-mode-switch.on .itp-toggle--lg { background: #22c55e; }
+.itp-mode-switch.on .itp-toggle--lg .itp-toggle-knob { left: 19px; }
+
+.itp-mode-banner {
+  margin: -4px 0 12px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: #d1fae5;
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+.itp-mode-banner strong { color: #4ade80; }

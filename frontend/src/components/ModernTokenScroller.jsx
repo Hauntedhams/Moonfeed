@@ -27,14 +27,33 @@ const LIVE_ZOOM_HINT_SEEN_KEY = 'moonfeed_live_zoom_hint_seen';
 const FEED_POS_KEY = 'moonfeed_feed_pos';
 const FEED_POS_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
-// The 'mixed' feed has no backend endpoint of its own — it blends together
-// whatever the user has already loaded from Trending/Whale/Graduating this
-// session. Module-level (not component state) so it survives feed switches
-// and even ModernTokenScroller remounts, and is populated passively whenever
-// any of these three feeds is fetched normally.
-const MIXED_SOURCE_FEEDS = ['dextrending', 'whalefeed', 'graduating'];
+// Feed lists seen this session, keyed by feed id (populated whenever a feed is
+// fetched). Used as an offline fallback for Moonfeed.
 const feedCoinsCache = { dextrending: [], whalefeed: [], graduating: [] };
 const MIN_VISIBLE_MARKET_CAP_USD = 1;
+
+// Moonfeed "fresh lead" rotation: remember which top coins the user was
+// dropped on recently and lead with a different one from the top tier each
+// time, keeping the rest in ranked order. Session-scoped so it resets on a
+// cold start.
+const MOONFEED_LEADS_KEY = 'moonfeed_recent_leads';
+const MOONFEED_LEAD_TIER = 8;      // how many of the top coins can be the opener
+const MOONFEED_LEAD_MEMORY = 6;    // how many recent openers to avoid repeating
+function rotateMoonfeedLead(list) {
+  if (!Array.isArray(list) || list.length < 2) return list || [];
+  const mintOf = (c) => c.mintAddress || c.tokenAddress || c.address;
+  let recent = [];
+  try { recent = JSON.parse(sessionStorage.getItem(MOONFEED_LEADS_KEY) || '[]'); } catch (_) { /* fresh */ }
+  const tier = list.slice(0, Math.min(MOONFEED_LEAD_TIER, list.length));
+  const candidates = tier.filter((c) => !recent.includes(mintOf(c)));
+  const pool = candidates.length ? candidates : tier;
+  const lead = pool[Math.floor(Math.random() * pool.length)];
+  const leadMint = mintOf(lead);
+  try {
+    sessionStorage.setItem(MOONFEED_LEADS_KEY, JSON.stringify([leadMint, ...recent.filter((m) => m !== leadMint)].slice(0, MOONFEED_LEAD_MEMORY)));
+  } catch (_) { /* quota */ }
+  return [lead, ...list.filter((c) => mintOf(c) !== leadMint)];
+}
 
 const getMarketCapUsd = (coin) => Number(
   coin?.market_cap_usd ?? coin?.marketCapUsd ?? coin?.marketCap
@@ -1283,43 +1302,26 @@ const ModernTokenScroller = ({
       
       const currentFeedType = filters.type || 'trending';
 
-      // 'Mixed' has no endpoint of its own — blend Trending/Whale/Graduating
-      // coins that have already been loaded this session (fetching whichever
-      // of the three hasn't been visited yet, so Mixed always has content).
+      // Moonfeed (id 'mixed' for stored-preference compatibility): the
+      // backend's ranked list of rising, real-volume coins. Each load leads
+      // with a top-tier coin the user hasn't been dropped on recently, so
+      // pressing Home always opens on something new — like a fresh FYP.
       if (currentFeedType === 'mixed') {
-        console.log('🔀 Building MIXED feed from Trending + Whale + Graduating');
-        const perFeedLists = await Promise.all(MIXED_SOURCE_FEEDS.map(async (feedType) => {
-          if (feedCoinsCache[feedType]?.length) return feedCoinsCache[feedType];
-          try {
-            const res = await fetch(getFeedEndpoint(feedType), { method: 'GET', headers: { 'Content-Type': 'application/json' } });
-            if (!res.ok) return [];
+        console.log('🌙 Loading MOONFEED (ranked rising coins)');
+        let list = [];
+        try {
+          const res = await fetch(`${API_BASE}/moonfeed?limit=60`, { method: 'GET', headers: { 'Content-Type': 'application/json' } });
+          if (res.ok) {
             const json = await res.json();
-            const list = Array.isArray(json.coins) ? json.coins : [];
-            if (list.length) feedCoinsCache[feedType] = list;
-            return list;
-          } catch (_) {
-            return [];
+            list = Array.isArray(json.coins) ? json.coins : [];
           }
-        }));
+        } catch (_) { /* fall through to the empty state */ }
+        if (!list.length && feedCoinsCache.dextrending?.length) list = feedCoinsCache.dextrending; // offline fallback
 
-        const coinKey = (c) => c.mintAddress || c.tokenAddress || c.address;
-        const seenMints = new Set();
-        const interleaved = [];
-        const maxLen = Math.max(0, ...perFeedLists.map((l) => l.length));
-        for (let i = 0; i < maxLen; i++) {
-          for (const list of perFeedLists) {
-            const coin = list[i];
-            if (!coin) continue;
-            const key = coinKey(coin);
-            if (key && seenMints.has(key)) continue;
-            if (key) seenMints.add(key);
-            interleaved.push(coin);
-          }
-        }
-
-        const sortedMixed = normalizeFeedCoins(interleaved, 'mixed');
-        setCoins(sortedMixed);
-        onTotalCoinsChange?.(sortedMixed.length);
+        const ordered = rotateMoonfeedLead(list);
+        const moonfeed = normalizeFeedCoins(ordered, 'mixed');
+        setCoins(moonfeed);
+        onTotalCoinsChange?.(moonfeed.length);
         setRetryCount(0);
         setIsBackendLoading(false);
         setLoading(false);
@@ -1428,7 +1430,7 @@ const ModernTokenScroller = ({
       
       console.log(`✅ TRENDING LOAD: Successfully loaded ${data.coins.length} trending coins`);
       
-      if (MIXED_SOURCE_FEEDS.includes(currentFeedType) && data.coins.length) {
+      if (Object.prototype.hasOwnProperty.call(feedCoinsCache, currentFeedType) && data.coins.length) {
         feedCoinsCache[currentFeedType] = data.coins;
       }
 
@@ -1492,7 +1494,7 @@ const ModernTokenScroller = ({
         return;
       }
 
-      if (MIXED_SOURCE_FEEDS.includes(nextFeedType)) {
+      if (Object.prototype.hasOwnProperty.call(feedCoinsCache, nextFeedType)) {
         feedCoinsCache[nextFeedType] = data.coins;
       }
 
@@ -1644,8 +1646,9 @@ const ModernTokenScroller = ({
     loadedFeedTypesRef.current = (filters.type === 'custom' || filters.type === 'mixed' || FOLLOWING_FEEDS.includes(filters.type)) ? [] : [filters.type || feedOrder[0] || 'trending'];
     setExpandedCoin(null); // Close any expanded cards
 
-    // Once the new feed's coins arrive, jump back to where the user last was in it
-    pendingFeedRestoreRef.current = !onlyFavorites && !singleCoin && !advancedFilters && filters.type !== 'custom';
+    // Once the new feed's coins arrive, jump back to where the user last was in it.
+    // Moonfeed always opens fresh at the top (that's the point of the Home tap).
+    pendingFeedRestoreRef.current = !onlyFavorites && !singleCoin && !advancedFilters && filters.type !== 'custom' && filters.type !== 'mixed';
     
     // Force garbage collection hint (not guaranteed, but helps)
     if (window.gc) {
@@ -1659,6 +1662,23 @@ const ModernTokenScroller = ({
     // a different coin from a wallet profile's feed while already in
     // single-coin mode) reloads it instead of silently keeping the old one.
   }, [filters.type, onlyFavorites, JSON.stringify(advancedFilters), singleCoin?.mintAddress || singleCoin?.address]); // Use specific dependencies instead of fetchCoins
+
+  // Home tap while already on Moonfeed: re-pull the ranked list and land on a
+  // fresh opener at the top (TikTok/Reels "tap home = new content" behaviour).
+  useEffect(() => {
+    const onHomeRefresh = () => {
+      if ((filters.type || 'trending') !== 'mixed' || onlyFavorites || singleCoin) return;
+      pendingFeedRestoreRef.current = false;
+      currentIndexRef.current = 0;
+      setCurrentIndex(0);
+      setSettledIndex(0);
+      setExpandedCoin(null);
+      if (scrollerRef.current) scrollerRef.current.scrollTop = 0;
+      fetchCoins();
+    };
+    window.addEventListener('moonfeed:home-refresh', onHomeRefresh);
+    return () => window.removeEventListener('moonfeed:home-refresh', onHomeRefresh);
+  }, [filters.type, onlyFavorites, singleCoin, fetchCoins]);
 
   // ── Feed position persistence ────────────────────────────────────────────
   // Save the coin the user is on (per feed) so we can return them to the exact
@@ -1935,6 +1955,33 @@ const ModernTokenScroller = ({
         });
       }
     }
+  }, []);
+
+  // ── Keyboard navigation (desktop): ↓ / ↑ (also J / K, PageDown / PageUp)
+  // move to the next / previous coin. Ignored while typing, while a card is
+  // expanded or the chart is fullscreen, and while any overlay is open.
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
+      const down = e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === 'j' || e.key === 'J';
+      const up = e.key === 'ArrowUp' || e.key === 'PageUp' || e.key === 'k' || e.key === 'K';
+      if (!down && !up) return;
+      const t = e.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+      const container = scrollerRef.current;
+      if (!container || !container.offsetParent) return; // not on screen
+      if (isScrollLocked.current || expandedCoinRef.current || isChartFullscreen.current) return;
+      if (document.querySelector('.jupiter-modal-overlay, .itp-backdrop, .wpv-root, .pdv-root, .wallet-onboarding-overlay, .feed-selector-dropdown, .coin-buy-drawer')) return;
+      const total = coinsRef.current.length;
+      if (!total) return;
+      e.preventDefault();
+      const slideHeight = container.querySelector('.modern-coin-slide')?.offsetHeight || container.clientHeight || window.innerHeight;
+      const next = Math.max(0, Math.min(total - 1, currentIndexRef.current + (down ? 1 : -1)));
+      if (next === currentIndexRef.current) return;
+      container.scrollTo({ top: next * slideHeight, behavior: 'smooth' });
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
   useEffect(() => {

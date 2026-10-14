@@ -560,6 +560,119 @@ router.get('/:owner/position/:mint', async (req, res) => {
 });
 
 /**
+ * GET /api/wallet/:owner/positions?limit=
+ * Every token this wallet has traded, newest first, each with realized +
+ * unrealized PnL, cost basis, current value and token meta — ONE upstream
+ * call. Powers the profile coin grids (PnL on every tile) so the client never
+ * has to fan out per-mint /position/:mint requests. Fresh for 60s, and a
+ * stale copy (≤24h) is served instantly while a refresh runs in the background.
+ */
+const POSITIONS_CACHE_TTL = 60 * 1000;
+const pendingPositions = new Map();
+const normalizePosition = (p) => {
+  const pnl = p.pnl || {};
+  const current = p.current || {};
+  const meta = p.meta || {};
+  const timing = p.timing || {};
+  const holding = Number(current.balance) > 0;
+  return {
+    mint: p.token,
+    symbol: meta.symbol || 'Unknown',
+    name: meta.name || meta.symbol || 'Unknown',
+    image: meta.image || null,
+    marketCap: meta.marketCap ?? null,
+    price: current.price ?? meta.price ?? null,
+    holding,
+    balance: Number(current.balance) || 0,
+    currentValue: Number(current.value) || 0,
+    // Average cost per token (USD) — lets the client show Entry/PnL for coins
+    // bought outside Moonfeed where no local buy record exists.
+    avgCostUsd: Number(current.avgCost) > 0
+      ? Number(current.avgCost)
+      : (Number(p.volume?.tokensBought) > 0 ? Number(p.volume.buyUsd) / Number(p.volume.tokensBought) : null),
+    invested: Number(p.invested) || 0,
+    proceeds: Number(p.proceeds) || 0,
+    roi: Number(p.roi) || 0,
+    pnl: {
+      realized: Number(pnl.realized) || 0,
+      unrealized: Number(pnl.unrealized) || 0,
+      total: Number(pnl.total) || 0,
+    },
+    counts: p.counts || { buys: 0, sells: 0, total: 0 },
+    firstTrade: timing.firstTrade ?? null,
+    lastTrade: timing.lastTrade ?? null,
+    lastBuy: timing.lastBuy ?? null,
+    lastSell: timing.lastSell ?? null,
+  };
+};
+
+const fetchWalletPositions = async (owner, limit) => {
+  const cacheKey = `wallet-positions-${owner}-${limit}`;
+  const fresh = getFreshWalletCache(cacheKey, POSITIONS_CACHE_TTL);
+  if (fresh) return fresh.data;
+
+  const refresh = async () => {
+    const SOLANA_TRACKER_API_KEY = process.env.SOLANA_TRACKER_API_KEY;
+    if (!SOLANA_TRACKER_API_KEY) {
+      const error = new Error('SOLANA_TRACKER_API_KEY not configured');
+      error.status = 502;
+      throw error;
+    }
+    const response = await fetchWithTimeout(
+      `https://data.solanatracker.io/v2/pnl/wallets/${owner}/positions?limit=${limit}&sortBy=lastTrade`,
+      { headers: { 'x-api-key': SOLANA_TRACKER_API_KEY, 'Content-Type': 'application/json' } },
+      8000
+    );
+    if (!response.ok) {
+      const error = new Error(response.status === 404 ? 'No positions found' : 'Failed to fetch positions');
+      error.status = response.status === 404 ? 404 : 502;
+      throw error;
+    }
+    const d = await response.json();
+    const positions = (d.positions || []).map(normalizePosition)
+      .sort((a, b) => (b.lastTrade || 0) - (a.lastTrade || 0));
+    const data = {
+      success: true,
+      wallet: owner,
+      positions,
+      stats: d.stats || null,
+      total: d.pagination?.total ?? positions.length,
+      hasMore: Boolean(d.pagination?.hasMore),
+      complete: d.complete !== false,
+      timestamp: new Date().toISOString(),
+    };
+    setWalletCache(cacheKey, { data, timestamp: Date.now() });
+    return data;
+  };
+
+  const stale = getUsableWalletCache(cacheKey);
+  if (stale) {
+    if (!pendingPositions.has(cacheKey)) {
+      const p = refresh().catch(() => {}).finally(() => pendingPositions.delete(cacheKey));
+      pendingPositions.set(cacheKey, p);
+    }
+    return { ...stale.data, cached: true, stale: true };
+  }
+  if (pendingPositions.has(cacheKey)) return pendingPositions.get(cacheKey);
+  const promise = refresh().finally(() => pendingPositions.delete(cacheKey));
+  pendingPositions.set(cacheKey, promise);
+  return promise;
+};
+
+router.get('/:owner/positions', async (req, res) => {
+  try {
+    const { owner } = req.params;
+    if (!owner) return res.status(400).json({ success: false, error: 'Wallet address is required' });
+    const limit = Math.min(200, Math.max(20, parseInt(req.query.limit) || 100));
+    res.json(await fetchWalletPositions(owner, limit));
+  } catch (error) {
+    if (error.status === 404) return res.json({ success: true, positions: [], stats: null, total: 0, hasMore: false });
+    console.error('❌ Error fetching wallet positions:', error.message);
+    res.status(error.status || 500).json({ success: false, error: error.message || 'Failed to fetch wallet positions' });
+  }
+});
+
+/**
  * GET /api/wallet/:owner
  * Fetch wallet analytics using Solana Tracker PnL V2 API (single HTTP call, all-time accurate data)
  */

@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useWallet as useJupiterWallet } from '@jup-ag/wallet-adapter';
 import { UnifiedWalletButton } from '@jup-ag/wallet-adapter';
-import { PublicKey } from '@solana/web3.js';
 import WalletConnectOnboarding, { useWalletConnectOnboarding } from './WalletConnectOnboarding';
 import WalletSwitcher from './WalletSwitcher';
-import { useWalletView } from '../hooks/useWalletView';
+import TradePnlBar, { formatPct } from './TradePnlBar';
+import { fetchWalletPositions } from '../utils/walletPositions';
+import { useActiveWalletIdentity } from '../hooks/useWalletView';
 import { getFullApiUrl } from '../config/api';
 import { calculateOpenPosition, getTransactions, deleteTransaction, storeTransaction, clearTransactions, rescaleTokenTransactions } from '../utils/transactionStorage';
 import { useDemoMode } from '../contexts/DemoModeContext';
@@ -23,6 +24,12 @@ import './OrdersView.css';
 // localStorage (not sessionStorage) so it also survives app cold starts.
 const HOLDINGS_CACHE_PREFIX = 'ordersView.holdings.v4.';
 const HOLDINGS_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const toTimestampMs = (value) => {
+  const numeric = Number(value);
+  if (Number.isFinite(numeric) && numeric > 0) return numeric < 1e12 ? numeric * 1000 : numeric;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
 const readHoldingsCache = (walletAddress) => {
   try {
     const raw = localStorage.getItem(HOLDINGS_CACHE_PREFIX + walletAddress);
@@ -132,10 +139,83 @@ const holdingFormatSol = (num) => {
   return v >= 1 ? v.toFixed(3) : Number(v.toPrecision(3)).toString();
 };
 
+// Per-transaction PnL for the history list. Walks each mint's swaps in time
+// order keeping a running average cost (SOL per token):
+//   • sell → realized % = proceeds vs the average cost of the tokens sold
+//   • buy  → still holding: unrealized % vs the live price of that holding;
+//            position closed: the mint's overall realized % (status 'closed')
+// Returns Map<signature, { pct, usd, status }>.
+const computeHistoryPnl = (transactions, holdings, solUsdPrice) => {
+  const out = new Map();
+  const byMint = new Map();
+  for (const tx of transactions || []) {
+    const mint = tx.tokenMint || tx.outputMint;
+    if (!mint) continue;
+    if (!byMint.has(mint)) byMint.set(mint, []);
+    byMint.get(mint).push(tx);
+  }
+  const holdingByMint = new Map((holdings || []).map((h) => [h.mint, h]));
+  const sortTs = (tx) => Number(tx.timestamp < 1e12 ? tx.timestamp * 1000 : tx.timestamp) || 0;
+
+  for (const [mint, list] of byMint) {
+    const ordered = [...list].sort((a, b) => sortTs(a) - sortTs(b));
+    let qty = 0;
+    let costSol = 0;
+    let totalCostSol = 0;
+    let totalProceedsSol = 0;
+    const buys = [];
+    for (const tx of ordered) {
+      const key = tx.signature || tx.id;
+      if (tx.type === 'sell') {
+        const sold = Number(tx.inputAmount) || 0;
+        const proceeds = Number(tx.outputAmount) || 0;
+        totalProceedsSol += proceeds;
+        const avg = qty > 0 ? costSol / qty : 0;
+        const costOfSold = avg > 0 ? Math.min(sold, qty) * avg : 0;
+        if (costOfSold > 0) {
+          out.set(key, { pct: ((proceeds - costOfSold) / costOfSold) * 100, usd: (proceeds - costOfSold) * solUsdPrice, status: 'closed' });
+        } else {
+          out.set(key, { pct: null, usd: null, status: 'closed' });
+        }
+        qty = Math.max(0, qty - sold);
+        costSol = Math.max(0, costSol - costOfSold);
+      } else {
+        const got = Number(tx.outputAmount) || 0;
+        const paid = Number(tx.inputAmount) || 0;
+        qty += got;
+        costSol += paid;
+        totalCostSol += paid;
+        buys.push(tx);
+      }
+    }
+    const holding = holdingByMint.get(mint);
+    const stillHolding = holding && Number(holding.amount) > 0 && Number(holding.currentValueUsd) >= 1;
+    for (const tx of buys) {
+      const key = tx.signature || tx.id;
+      const got = Number(tx.outputAmount) || 0;
+      const paid = Number(tx.inputAmount) || 0;
+      if (stillHolding) {
+        const entryUsd = Number(tx.pricePerTokenUsd) > 0 ? Number(tx.pricePerTokenUsd) : (got > 0 ? (paid / got) * solUsdPrice : 0);
+        const now = Number(holding.priceUsd) || 0;
+        if (entryUsd > 0 && now > 0) {
+          out.set(key, { pct: ((now - entryUsd) / entryUsd) * 100, usd: (now - entryUsd) * got, status: 'open' });
+        } else {
+          out.set(key, { pct: null, usd: null, status: 'open' });
+        }
+      } else if (totalCostSol > 0 && totalProceedsSol > 0) {
+        out.set(key, { pct: ((totalProceedsSol - totalCostSol) / totalCostSol) * 100, usd: (totalProceedsSol - totalCostSol) * solUsdPrice, status: 'closed' });
+      } else {
+        out.set(key, { pct: null, usd: null, status: totalProceedsSol > 0 ? 'closed' : 'open' });
+      }
+    }
+  }
+  return out;
+};
+
 // One holding row. Split out so each row can run the same live price reader the
 // collapsed coin card uses (server-pushed 'price' mode, no Helius credits) —
 // value, PnL and the sell-target progress bar all tick in real time.
-const HoldingCard = ({ item, live, stopOrder, takeProfitOrder, viewingInstant, cashingOut, cashoutError, solUsdPrice, onOpen, onCashout }) => {
+const HoldingCard = ({ item, live, stopOrder, takeProfitOrder, viewingInstant, cashingOut, cashoutError, solUsdPrice, onOpen, onCashout, isDust = false, hidden = false, onToggleHidden }) => {
   const { livePrice } = useSolanaTransactions(item.mint, live, 'price');
   const priceNow = Number(livePrice) > 0 ? Number(livePrice) : (Number(item.priceUsd) || 0);
 
@@ -153,33 +233,18 @@ const HoldingCard = ({ item, live, stopOrder, takeProfitOrder, viewingInstant, c
       ? { pct: item.priceChangeH1, window: '1h' }
       : null;
 
-  // Entry sits at the CENTER of the bar: stop-loss fills the left half, take-
-  // profit the right. A missing side mirrors the other around entry so the
-  // geometry stays symmetric (labeled "No stop"/"No target").
+  // Universal PnL bar: entry at the centre, gains fill right, losses left.
+  // Stop / take-profit orders (when set) appear as ticks at their % from entry.
   const stopPrice = Number(stopOrder?.triggerPriceUsd) || 0;
   const takeProfitPrice = Number(takeProfitOrder?.triggerPriceUsd) || 0;
-  const lowBound = stopPrice > 0 ? stopPrice
-    : (takeProfitPrice > 0 && entryPrice > 0 ? Math.max(entryPrice * 0.02, entryPrice - (takeProfitPrice - entryPrice)) : 0);
-  const highBound = takeProfitPrice > 0 ? takeProfitPrice
-    : (stopPrice > 0 && entryPrice > 0 ? entryPrice + (entryPrice - stopPrice) : 0);
-  const hasSellProgress = Boolean(
-    (stopOrder || takeProfitOrder) && entryPrice > 0 && priceNow > 0
-    && lowBound < entryPrice && highBound > entryPrice
-  );
-  let progressPct = 50;
-  if (hasSellProgress) {
-    progressPct = priceNow <= entryPrice
-      ? 50 * ((priceNow - lowBound) / (entryPrice - lowBound))
-      : 50 + 50 * ((priceNow - entryPrice) / (highBound - entryPrice));
-    progressPct = Math.max(1, Math.min(99, progressPct));
-  }
-  const pctVsEntry = (price) => (entryPrice > 0
-    ? `${price >= entryPrice ? '+' : ''}${(((price - entryPrice) / entryPrice) * 100).toFixed(0)}%`
-    : '');
+  const pctFromEntry = (price) => (entryPrice > 0 && price > 0 ? ((price - entryPrice) / entryPrice) * 100 : null);
+  const stopPct = stopPrice > 0 ? pctFromEntry(stopPrice) : null;
+  const takeProfitPct = takeProfitPrice > 0 ? pctFromEntry(takeProfitPrice) : null;
+  const maxed = Number.isFinite(pnlPct) && pnlPct >= Math.max(100, takeProfitPct || 0);
 
   return (
     <div
-      className={`holding-card${crashDrop ? ' crashing' : ''}${item.banner ? ' has-banner' : ''}`}
+      className={`holding-card${crashDrop ? ' crashing' : ''}${item.banner ? ' has-banner' : ''}${isDust ? ' is-dust' : ''}`}
       onClick={onOpen}
     >
       {item.banner && (
@@ -221,7 +286,7 @@ const HoldingCard = ({ item, live, stopOrder, takeProfitOrder, viewingInstant, c
 
         <div className="holding-detail-grid">
           <div className="holding-detail-cell">
-            <span className="holding-detail-label">Entry</span>
+            <span className="holding-detail-label" title={item.entrySource === 'chain' ? 'Average cost from this wallet\'s on-chain buys' : undefined}>Entry{item.entrySource === 'chain' ? ' · avg' : ''}</span>
             <span className="holding-detail-val">
               {entryPrice > 0 ? holdingFormatUsd(entryPrice) : '—'}
               {entrySol && <span className="holding-detail-paren">({entrySol} SOL)</span>}
@@ -250,45 +315,56 @@ const HoldingCard = ({ item, live, stopOrder, takeProfitOrder, viewingInstant, c
           </div>
         </div>
 
-        {hasSellProgress && (
-          <div className="holding-sell-progress" aria-label="Current price between your sell orders">
-            <div className="holding-sell-progress-labels">
-              <span className="holding-sell-target holding-sell-target--stop">
-                <strong>{stopOrder ? pctVsEntry(stopPrice) : 'No stop'}</strong>
-                <span>{stopOrder ? holdingFormatUsd(stopPrice) : '—'}</span>
-              </span>
-              <span className="holding-sell-target holding-sell-target--entry">
-                <strong>ENTRY</strong>
-                <span>{holdingFormatUsd(entryPrice)}</span>
-              </span>
-              <span className="holding-sell-target holding-sell-target--take">
-                <strong>{takeProfitOrder ? pctVsEntry(takeProfitPrice) : 'No target'}</strong>
-                <span>{takeProfitOrder ? holdingFormatUsd(takeProfitPrice) : '—'}</span>
-              </span>
-            </div>
-            <div className="holding-sell-progress-track">
-              <div className="holding-sell-progress-gradient" />
-              <span className="holding-sell-progress-mid" />
-              <span className="holding-sell-progress-marker" style={{ left: `${progressPct}%` }} />
-            </div>
+        <div className="holding-pnl-block">
+          <div className="holding-pnl-headline-row">
+            <span className={`tpb-headline tpb-headline--${pnlPct === null ? 'flat' : pnlPct > 0 ? 'up' : pnlPct < 0 ? 'down' : 'flat'}`}>
+              <span className="tpb-headline-pct">{pnlPct === null ? '—' : formatPct(pnlPct)}</span>
+              {pnlUsd !== null && <span className="tpb-headline-usd">{pnlUsd >= 0 ? '+' : '−'}{holdingFormatUsd(Math.abs(pnlUsd))}</span>}
+              {maxed && <span className="tpb-headline-tag maxed">🚀 Maxed</span>}
+            </span>
+            <span className="holding-pnl-targets">
+              {stopOrder && <span className="holding-pnl-target stop">Stop {formatPct(stopPct)} · {holdingFormatUsd(stopPrice)}</span>}
+              {takeProfitOrder && <span className="holding-pnl-target tp">Target {formatPct(takeProfitPct)} · {holdingFormatUsd(takeProfitPrice)}</span>}
+            </span>
           </div>
-        )}
+          <TradePnlBar pnlPct={pnlPct} stopPct={stopPct} takeProfitPct={takeProfitPct} status="open" />
+        </div>
 
-        <button
-          type="button"
-          className="holding-cashout-btn"
-          disabled={cashingOut === item.mint || !(currentValueUsd > 0)}
-          onClick={(e) => {
-            e.stopPropagation();
-            onCashout();
-          }}
-        >
-          {cashingOut === item.mint
-            ? 'Selling…'
-            : viewingInstant
-              ? `Cash out ${holdingFormatUsd(currentValueUsd)}`
-              : `Sell ${item.symbol}`}
-        </button>
+        <div className="holding-actions-row">
+          <button
+            type="button"
+            className="holding-cashout-btn"
+            disabled={cashingOut === item.mint || !(currentValueUsd > 0) || isDust}
+            onClick={(e) => {
+              e.stopPropagation();
+              onCashout();
+            }}
+            title={isDust ? 'Too small to sell — the swap would cost more than it returns' : undefined}
+          >
+            {cashingOut === item.mint
+              ? 'Selling…'
+              : isDust
+                ? 'Dust — nothing to cash out'
+                : viewingInstant
+                  ? `Cash out ${holdingFormatUsd(currentValueUsd)}`
+                  : `Sell ${item.symbol}`}
+          </button>
+          {onToggleHidden && (
+            <button
+              type="button"
+              className={`holding-hide-btn${hidden ? ' holding-hide-btn--on' : ''}`}
+              onClick={(e) => { e.stopPropagation(); onToggleHidden(); }}
+              title={hidden ? 'Show this coin again' : 'Hide this coin from Holdings'}
+              aria-label={hidden ? 'Unhide holding' : 'Hide holding'}
+            >
+              {hidden ? (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+              ) : (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" /><line x1="1" y1="1" x2="23" y2="23" /></svg>
+              )}
+            </button>
+          )}
+        </div>
         {cashoutError?.mint === item.mint && (
           <div className="holding-cashout-error">{cashoutError.message}</div>
         )}
@@ -301,28 +377,21 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
   // Use Jupiter Wallet Kit adapter for universal wallet connection
   const jupiterWallet = useJupiterWallet();
   const { isDemoMode, demoPublicKey, disableDemoMode } = useDemoMode();
-  // Wallet view switcher: main connected wallet vs the ⚡ trading wallet.
-  // The trading wallet is the active identity when selected — and the automatic
-  // fallback whenever no main wallet is connected, so the app "stays signed in".
-  const { mode: walletViewMode, setMode: setWalletViewMode, instantWallet } = useWalletView();
-  const viewingInstant = Boolean(instantWallet)
-    && (walletViewMode === 'instant' || (!jupiterWallet.connected && !isDemoMode));
-
-  // Override wallet state when demo mode is active
+  // Wallet identity (main connected wallet vs the ⚡ trading wallet) comes from
+  // the single shared resolver so this page, Profile and the feed never
+  // disagree about who is signed in. `identityReady === false` while the
+  // adapter auto-reconnects or the trading wallet is still loading.
+  const identity = useActiveWalletIdentity({ demoPublicKey: isDemoMode ? demoPublicKey : null });
+  const { viewingInstant, publicKey, connected, ready: identityReady, instantWallet, mainAddress, mainConnecting, setMode: setWalletViewMode } = identity;
   const basePublicKey = isDemoMode ? demoPublicKey : jupiterWallet.publicKey;
-  const publicKey = useMemo(
-    () => (viewingInstant ? new PublicKey(instantWallet.publicKey) : basePublicKey),
-    [viewingInstant, instantWallet, basePublicKey]
-  );
-  const connected = viewingInstant ? true : (isDemoMode ? true : (jupiterWallet.connected || false));
   const signTransaction = jupiterWallet.signTransaction;
   const { openWalletConnect } = useWalletConnectOnboarding();
 
-  // Switching to "main" while no wallet is connected should ask to connect
-  // instead of silently staying on the trading wallet.
+  // Switching to "main": reconnect the remembered adapter silently; only open
+  // onboarding when there is genuinely nothing to reconnect.
   const handleWalletViewChange = (next) => {
-    setWalletViewMode(next);
-    if (next === 'main' && !jupiterWallet.connected && !isDemoMode) openWalletConnect();
+    if (isDemoMode) { setWalletViewMode(next); return; }
+    identity.switchTo(next, { onNeedsConnect: openWalletConnect });
   };
   const [orders, setOrders] = useState([]);
   const [transactions, setTransactions] = useState([]);
@@ -336,6 +405,11 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
   const statusFilterRef = React.useRef(statusFilter);
   statusFilterRef.current = statusFilter;
   const [holdings, setHoldings] = useState([]);
+  // Dust (< $1 or unpriced) is folded away by default; users can also hide
+  // individual coins — persisted per wallet so liquidated positions stay gone.
+  const [showDust, setShowDust] = useState(false);
+  const [showHidden, setShowHidden] = useState(false);
+  const [hiddenMints, setHiddenMints] = useState(() => new Set());
   const [loadingHoldings, setLoadingHoldings] = useState(false);
   const [holdingsError, setHoldingsError] = useState(null);
   const [activeSoftOrders, setActiveSoftOrders] = useState([]);
@@ -360,6 +434,8 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
   useEffect(() => {
     getSolUsdPrice().then(setSolUsdPrice);
   }, []);
+
+  const historyPnl = useMemo(() => computeHistoryPnl(transactions, holdings, solUsdPrice), [transactions, holdings, solUsdPrice]);
 
 
   // Horizontal swipe moves between the Holdings / Orders / History tabs, with the
@@ -531,10 +607,10 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
   }, [connected, publicKey, statusFilter]);
 
   useEffect(() => {
-    if (!connected || !publicKey || statusFilter !== 'holdings') return undefined;
+    if (!connected || !publicKey || !['holdings', 'history'].includes(statusFilter)) return undefined;
     const refresh = async () => {
       await fetchTransactions();
-      await fetchHoldings(true);
+      if (statusFilter === 'holdings') await fetchHoldings(true);
     };
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') refresh();
@@ -689,6 +765,42 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
     }
   };
 
+  const handleOpenSwapHistoryCoin = (transaction) => {
+    const mint = transaction.tokenMint || transaction.outputMint;
+    if (!mint) return;
+    const tokenTransactions = transactions
+      .filter((item) => (item.tokenMint || item.outputMint) === mint)
+      .map((item, index) => {
+        const timeMs = toTimestampMs(item.timestamp);
+        if (!timeMs) return null;
+        const side = item.type === 'sell' ? 'sell' : 'buy';
+        const price = Number(item.pricePerTokenUsd)
+          || ((Number(item.pricePerToken) || 0) * solUsdPrice);
+        return {
+          id: String(item.signature || `trade-${timeMs}-${index}`),
+          timeMs,
+          price,
+          kind: side === 'sell' ? 'exit' : 'entry',
+          label: side === 'sell' ? 'Sell' : 'Buy',
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.timeMs - b.timeMs);
+    const focusTimeMs = toTimestampMs(transaction.timestamp);
+    onCoinClick?.({
+      mintAddress: mint,
+      address: mint,
+      symbol: transaction.tokenSymbol || 'TOKEN',
+      name: transaction.tokenName || transaction.tokenSymbol || 'Token',
+      image: transaction.tokenImage || null,
+      pairAddress: coinBanners.get(mint)?.pairAddress || null,
+      banner: coinBanners.get(mint)?.banner || null,
+      userTradePins: tokenTransactions,
+      historyFocusTimeMs: focusTimeMs || null,
+      historyFocusPinId: transaction.signature || null,
+    });
+  };
+
   // Fetch token holdings (on-chain balances) for connected wallet
   const holdingsFetchRef = React.useRef({ inFlight: false, lastAt: 0, wallet: null });
   const HOLDINGS_REFRESH_MS = 20000;
@@ -721,6 +833,9 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
     try {
       const storedTxs = getTransactions(walletAddress);
       const mintsMap = new Map(); // mint -> { mint, amount, decimals, symbol, name, image }
+      // On-chain average cost per mint (Solana Tracker) — fallback Entry for
+      // coins bought outside Moonfeed. Kicked off now, awaited before the final paint.
+      const positionsPromise = fetchWalletPositions(walletAddress).then((r) => r.byMint).catch(() => new Map());
 
       // 1. Fetch on-chain balances (batched JSON-RPC, hedged across endpoints)
       const accounts = await loadTokenAccounts(walletAddress);
@@ -762,10 +877,11 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
         return result;
       };
 
-      const buildList = (dexPairs) => {
+      const buildList = (dexPairs, positionsByMint = new Map()) => {
         const pairByMint = deepestPairByMint(dexPairs);
         return mintsToFetch.map(item => {
         const cached = cachedByMint.get(item.mint);
+        const chainPos = positionsByMint.get(item.mint);
         const pair = pairByMint.get(item.mint);
         const buys = storedTxs.filter(tx => tx.tokenMint === item.mint && (!tx.type || tx.type === 'buy'));
         const latestTx = buys[buys.length - 1] || storedTxs.find(tx => tx.tokenMint === item.mint);
@@ -792,6 +908,18 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
             rescaleTokenTransactions(walletAddress, item.mint, 10 ** k);
           }
         }
+        // No local buy record → use the on-chain average cost so Entry / PnL
+        // still render instead of "—".
+        let entrySource = costBasisUsd > 0 ? 'local' : null;
+        if (!(costBasisUsd > 0) && Number(chainPos?.avgCostUsd) > 0) {
+          costBasisUsd = Number(chainPos.avgCostUsd);
+          costBasisSol = solUsdPrice > 0 ? costBasisUsd / solUsdPrice : 0;
+          entrySource = 'chain';
+        } else if (!(costBasisUsd > 0) && Number(cached?.costBasisUsd) > 0 && cached?.entrySource === 'chain') {
+          costBasisUsd = Number(cached.costBasisUsd);
+          costBasisSol = Number(cached.costBasisSol) || 0;
+          entrySource = 'chain';
+        }
         const effectiveTotalBoughtUsd = costBasisUsd > 0 ? item.amount * costBasisUsd : 0;
         const totalCostSol = costBasisSol > 0 ? item.amount * costBasisSol : 0;
         const currentValueUsd = item.amount * priceUsd;
@@ -810,6 +938,7 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
           priceChangeM5: Number(pair?.priceChange?.m5),
           priceChangeH1: Number(pair?.priceChange?.h1),
           costBasisUsd,
+          entrySource,
           totalBoughtUsd: effectiveTotalBoughtUsd,
           totalCostSol,
           currentValueUsd,
@@ -839,7 +968,8 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
         console.warn('Dexscreener holdings fetch warning:', e);
       }
 
-      const list = sortByValue(buildList(dexPairs));
+      const positionsByMint = await positionsPromise;
+      const list = sortByValue(buildList(dexPairs, positionsByMint));
       setHoldings(list);
       writeHoldingsCache(walletAddress, list);
     } catch (err) {
@@ -853,6 +983,28 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
       setLoadingHoldings(false);
     }
   };
+  const HOLDING_DUST_USD = 1;
+  const isDustHolding = (h) => !(Number(h.currentValueUsd) > 0) || Number(h.currentValueUsd) < HOLDING_DUST_USD;
+  const hiddenHoldingsKey = (wallet) => `moonfeed_hidden_holdings_${wallet}`;
+  useEffect(() => {
+    if (!publicKey) { setHiddenMints(new Set()); return; }
+    try {
+      const stored = JSON.parse(localStorage.getItem(hiddenHoldingsKey(publicKey.toString())) || '[]');
+      setHiddenMints(new Set(Array.isArray(stored) ? stored : []));
+    } catch (_) { setHiddenMints(new Set()); }
+    setShowDust(false);
+    setShowHidden(false);
+  }, [publicKey]);
+  const toggleHiddenHolding = (mint) => {
+    if (!publicKey) return;
+    setHiddenMints((prev) => {
+      const next = new Set(prev);
+      if (next.has(mint)) next.delete(mint); else next.add(mint);
+      try { localStorage.setItem(hiddenHoldingsKey(publicKey.toString()), JSON.stringify([...next])); } catch (_) { /* quota */ }
+      return next;
+    });
+  };
+
   const isOrderExpired = (order) => {
     if (!order.expiresAt) return false;
     
@@ -1337,6 +1489,26 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
     }
   };
 
+  if (!connected && !identityReady) {
+    // Adapter auto-reconnecting / trading wallet loading: hold a neutral state
+    // instead of flashing the connect screen or the other wallet's data.
+    return (
+      <div className="orders-view">
+        <div className="orders-container">
+          <div className="orders-loading orders-loading--identity">
+            <div className="loading-spinner"></div>
+            <p>{mainConnecting ? 'Reconnecting your wallet…' : 'Loading wallet…'}</p>
+            {instantWallet && mainConnecting && (
+              <button type="button" className="orders-view-instant-link" onClick={() => setWalletViewMode('instant')}>
+                Use trading wallet instead
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!connected) {
     return (
       <div className="orders-view">
@@ -1344,7 +1516,7 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
           {/* Wallet Connection Section */}
           <div className="wallet-connection-section">
             <div className="connection-card">
-              <h3>Connect Wallet</h3>
+              <h3>{mainAddress ? 'Reconnect wallet' : 'Connect Wallet'}</h3>
               <p>Connect your Solana wallet to view limit orders and your recent meme coin purchases.</p>
               <div className="wallet-button-container">
                 <WalletConnectOnboarding>
@@ -1475,6 +1647,74 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
               opacity: 1 - Math.min(0.4, Math.abs(dragX) / 420),
             }}
           >
+          {statusFilter === 'history' && (
+            <section className="swap-history">
+              <div className="swap-history-heading">
+                <h3>Swap history</h3>
+                {transactions.length > 0 && <span>{transactions.length}</span>}
+              </div>
+              {loadingTransactions && transactions.length === 0 ? (
+                <div className="swap-history-empty">Loading buys and sells…</div>
+              ) : transactions.length === 0 ? (
+                <div className="swap-history-empty">No buys or sells recorded for this wallet yet.</div>
+              ) : (
+                <div className="swap-history-list">
+                  {transactions.map((transaction) => {
+                    const mint = transaction.tokenMint || transaction.outputMint;
+                    const isSell = transaction.type === 'sell';
+                    const symbol = transaction.tokenSymbol || 'TOKEN';
+                    const image = transaction.tokenImage || coinBanners.get(mint)?.image;
+                    const tokenAmount = Number(isSell ? transaction.inputAmount : transaction.outputAmount) || 0;
+                    const solAmount = Number(isSell ? transaction.outputAmount : transaction.inputAmount) || 0;
+                    const timestampMs = toTimestampMs(transaction.timestamp);
+                    const pnl = historyPnl.get(transaction.signature || transaction.id) || { pct: null, usd: null, status: isSell ? 'closed' : 'open' };
+                    const dir = !Number.isFinite(pnl.pct) ? 'flat' : pnl.pct > 0 ? 'up' : pnl.pct < 0 ? 'down' : 'flat';
+                    const maxed = Number.isFinite(pnl.pct) && pnl.pct >= 100;
+                    return (
+                      <button
+                        key={transaction.signature || transaction.id}
+                        type="button"
+                        className={`swap-history-row swap-history-card${isSell ? ' swap-history-row--sell' : ' swap-history-row--buy'} swap-history-card--${dir}`}
+                        onClick={() => handleOpenSwapHistoryCoin(transaction)}
+                        disabled={!mint}
+                        aria-label={`${isSell ? 'Open sell' : 'Open buy'} of ${symbol} on chart`}
+                      >
+                        <span className="swap-history-card-top">
+                          {image ? (
+                            <img className="swap-history-avatar" src={image} alt="" onError={(event) => { event.currentTarget.style.visibility = 'hidden'; }} />
+                          ) : (
+                            <span className="swap-history-avatar swap-history-avatar--placeholder">{symbol.slice(0, 2)}</span>
+                          )}
+                          <span className="swap-history-main">
+                            <span className="swap-history-title"><strong>{isSell ? 'Sold' : 'Bought'} {symbol}</strong><span>{formatTokenAmount(tokenAmount)} tokens</span></span>
+                            <span className="swap-history-time">{timestampMs ? formatDate(timestampMs) : 'Time unavailable'}</span>
+                          </span>
+                          <span className="swap-history-value">
+                            <strong>{formatUsdPrice(solAmount * solUsdPrice)}</strong>
+                            <span>{solAmount.toFixed(4)} SOL</span>
+                          </span>
+                        </span>
+                        <span className="swap-history-card-pnl">
+                          <span className={`tpb-headline tpb-headline--${dir}`}>
+                            <span className="tpb-headline-pct">{Number.isFinite(pnl.pct) ? formatPct(pnl.pct) : '—'}</span>
+                            {Number.isFinite(pnl.usd) && <span className="tpb-headline-usd">{pnl.usd >= 0 ? '+' : '−'}{holdingFormatUsd(Math.abs(pnl.usd))}</span>}
+                            <span className={`tpb-headline-tag${maxed ? ' maxed' : ''}`}>
+                              {maxed ? '🚀 Maxed' : pnl.status === 'closed' ? (isSell ? 'Realized' : 'Closed') : 'Open'}
+                            </span>
+                          </span>
+                          <span className="swap-history-chart">Chart ›</span>
+                        </span>
+                        <TradePnlBar pnlPct={pnl.pct} status={pnl.status} size="sm" showLabels={false} />
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          )}
+          {statusFilter === 'history' && orders.length > 0 && (
+            <div className="swap-history-heading swap-history-order-heading"><h3>Price alert history</h3></div>
+          )}
           {statusFilter === 'holdings' ? (
             loadingHoldings ? (
               <div className="orders-loading">
@@ -1493,42 +1733,80 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
               </div>
             ) : (
               <div className="holdings-list">
-                {holdings.map((item, index) => {
-                  const coinSellOrders = activeSoftOrders.filter((order) =>
-                    order.source === 'soft'
-                    && order.tokenMint === item.mint
-                    && order.type === 'sell'
-                    && Number(order.triggerPriceUsd) > 0
-                  );
-                  const stopOrder = coinSellOrders
-                    .filter((order) => order.triggerCondition === 'below')
-                    .sort((a, b) => Number(b.triggerPriceUsd) - Number(a.triggerPriceUsd))[0];
-                  const takeProfitOrder = coinSellOrders
-                    .filter((order) => order.triggerCondition === 'above')
-                    .sort((a, b) => Number(a.triggerPriceUsd) - Number(b.triggerPriceUsd))[0];
-
+                {(() => {
+                  const visible = holdings.filter((h) => !hiddenMints.has(h.mint) && !isDustHolding(h));
+                  const dust = holdings.filter((h) => !hiddenMints.has(h.mint) && isDustHolding(h));
+                  const hiddenRows = holdings.filter((h) => hiddenMints.has(h.mint));
+                  const renderCard = (item, index, flags = {}) => {
+                    const coinSellOrders = activeSoftOrders.filter((order) =>
+                      order.source === 'soft'
+                      && order.tokenMint === item.mint
+                      && order.type === 'sell'
+                      && Number(order.triggerPriceUsd) > 0
+                    );
+                    const stopOrder = coinSellOrders
+                      .filter((order) => order.triggerCondition === 'below')
+                      .sort((a, b) => Number(b.triggerPriceUsd) - Number(a.triggerPriceUsd))[0];
+                    const takeProfitOrder = coinSellOrders
+                      .filter((order) => order.triggerCondition === 'above')
+                      .sort((a, b) => Number(a.triggerPriceUsd) - Number(b.triggerPriceUsd))[0];
+                    return (
+                      <HoldingCard
+                        key={item.mint}
+                        item={item}
+                        live={!flags.isDust && !flags.hidden && index < 8}
+                        stopOrder={stopOrder}
+                        takeProfitOrder={takeProfitOrder}
+                        viewingInstant={viewingInstant}
+                        cashingOut={cashingOut}
+                        cashoutError={cashoutError}
+                        solUsdPrice={solUsdPrice}
+                        isDust={Boolean(flags.isDust)}
+                        hidden={Boolean(flags.hidden)}
+                        onToggleHidden={() => toggleHiddenHolding(item.mint)}
+                        onOpen={() => onCoinClick?.({
+                          mintAddress: item.mint,
+                          symbol: item.symbol,
+                          name: item.name,
+                          image: item.image,
+                          banner: item.banner,
+                        })}
+                        onCashout={() => handleCashout(item)}
+                      />
+                    );
+                  };
                   return (
-                    <HoldingCard
-                      key={item.mint}
-                      item={item}
-                      live={index < 8}
-                      stopOrder={stopOrder}
-                      takeProfitOrder={takeProfitOrder}
-                      viewingInstant={viewingInstant}
-                      cashingOut={cashingOut}
-                      cashoutError={cashoutError}
-                      solUsdPrice={solUsdPrice}
-                      onOpen={() => onCoinClick?.({
-                        mintAddress: item.mint,
-                        symbol: item.symbol,
-                        name: item.name,
-                        image: item.image,
-                        banner: item.banner,
-                      })}
-                      onCashout={() => handleCashout(item)}
-                    />
+                    <>
+                      {visible.map((item, index) => renderCard(item, index))}
+                      {visible.length === 0 && (dust.length > 0 || hiddenRows.length > 0) && (
+                        <div className="orders-empty holdings-empty--inline">
+                          <p>No active positions</p>
+                          <span className="empty-hint">Everything left in this wallet is dust or hidden — see below.</span>
+                        </div>
+                      )}
+                      {dust.length > 0 && (
+                        <button type="button" className="holdings-group-toggle" onClick={() => setShowDust((v) => !v)} aria-expanded={showDust}>
+                          <span>
+                            <strong>{dust.length} dust position{dust.length === 1 ? '' : 's'}</strong>
+                            <small>Under $1 or unpriced — liquidated or worthless remnants</small>
+                          </span>
+                          <span className="holdings-group-chevron">{showDust ? 'Hide' : 'Show'}</span>
+                        </button>
+                      )}
+                      {showDust && dust.map((item, index) => renderCard(item, index, { isDust: true }))}
+                      {hiddenRows.length > 0 && (
+                        <button type="button" className="holdings-group-toggle" onClick={() => setShowHidden((v) => !v)} aria-expanded={showHidden}>
+                          <span>
+                            <strong>{hiddenRows.length} hidden</strong>
+                            <small>Coins you chose to hide from Holdings</small>
+                          </span>
+                          <span className="holdings-group-chevron">{showHidden ? 'Hide' : 'Show'}</span>
+                        </button>
+                      )}
+                      {showHidden && hiddenRows.map((item, index) => renderCard(item, index, { hidden: true, isDust: isDustHolding(item) }))}
+                    </>
                   );
-                })}
+                })()}
               </div>
             )
           ) : loadingOrders ? (
@@ -1542,6 +1820,7 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
               <button onClick={fetchOrders} className="retry-btn">Retry</button>
             </div>
           ) : orders.length === 0 ? (
+            statusFilter === 'history' ? null : (
             <div className="orders-empty">
               <p>No {statusFilter} orders</p>
               <span className="empty-hint">
@@ -1550,6 +1829,7 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
                   : 'Your order history will appear here'}
               </span>
             </div>
+            )
           ) : (
             <div className="orders-list">
               {orders.map((order) => {
@@ -1933,8 +2213,21 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
                 const histDexBanner = coinBanners.get(order.tokenMint);
                 const histBannerSrc = histDexBanner?.banner || order.tokenBannerImage || order.tokenImage || null;
                 const histTxLink = order.cancelTxSignature || order.createTxSignature || null;
-                const orderSwap = orderSwapLog[orderId];
+                // Server-recorded execution (cloud executor, or device run that the
+                // backend saw) stands in when this device has no local swap log entry.
+                const serverSwap = order.executionStatus === 'executed' || order.executionStatus === 'failed'
+                  ? {
+                    side: orderType,
+                    solAmount: Number(order.executionSolAmount) || 0,
+                    signature: order.executionSignature || null,
+                    ts: Date.parse(order.executedAt || order.triggeredAt || '') || Date.now(),
+                    error: order.executionStatus === 'failed' ? (order.executionError || 'Swap failed') : null,
+                    cloud: order.executedBy === 'cloud',
+                  }
+                  : null;
+                const orderSwap = orderSwapLog[orderId] || serverSwap;
                 const swapped = !!orderSwap && !orderSwap.error;
+                const swapFailed = !!orderSwap?.error;
                 const swapIsNew = swapped && orderSwap.ts > historySeenAtOpen;
                 const swapSide = orderSwap?.side || orderType;
 
@@ -2014,8 +2307,29 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
                       <div className="order-hist-swap-row">
                         {swapIsNew && <span className="order-hist-swap-new">NEW</span>}
                         <span className="order-hist-swap-text">
-                          Swap executed · {swapSide === 'buy' ? 'spent' : 'received'} {Number(orderSwap.solAmount || 0).toFixed(4)} SOL
+                          {orderSwap.cloud ? 'Auto-executed (cloud)' : 'Swap executed'} · {swapSide === 'buy' ? 'spent' : 'received'} {Number(orderSwap.solAmount || 0).toFixed(4)} SOL
                           {solUsdPrice > 0 && orderSwap.solAmount > 0 ? ` ($${(orderSwap.solAmount * solUsdPrice).toFixed(2)})` : ''}
+                        </span>
+                        {orderSwap.signature ? (
+                          <a
+                            className="order-hist-swap-time"
+                            href={`https://solscan.io/tx/${orderSwap.signature}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {timeAgo(orderSwap.ts)} ↗
+                          </a>
+                        ) : (
+                          <span className="order-hist-swap-time">{timeAgo(orderSwap.ts)}</span>
+                        )}
+                      </div>
+                    )}
+
+                    {swapFailed && (
+                      <div className="order-hist-swap-row order-hist-swap-row--failed">
+                        <span className="order-hist-swap-text">
+                          Auto-{swapSide} failed · {String(orderSwap.error).slice(0, 110)}
                         </span>
                         {orderSwap.signature ? (
                           <a

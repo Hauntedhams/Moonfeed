@@ -83,6 +83,67 @@ function formatDotTime(sec) {
   return sameDay ? time : `${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}, ${time}`;
 }
 
+// Nearest loaded bar index to a unix-second timestamp (binary search over the
+// series' own data) — used to zoom the chart around a tracked trade.
+function nearestBarIndex(series, timeSec) {
+  try {
+    const count = series.data().length;
+    if (!count) return -1;
+    let low = 0;
+    let high = count - 1;
+    while (low < high) {
+      const middle = (low + high) >> 1;
+      const bar = series.dataByIndex(middle);
+      if (!bar) return -1;
+      if (bar.time < timeSec) low = middle + 1;
+      else high = middle;
+    }
+    const bar = series.dataByIndex(low);
+    const previous = low > 0 ? series.dataByIndex(low - 1) : null;
+    if (previous && bar && Math.abs(previous.time - timeSec) < Math.abs(bar.time - timeSec)) return low - 1;
+    return low;
+  } catch (_) {
+    return -1;
+  }
+}
+
+// Default framing: fit everything, then slide the window right so the live
+// candle sits a little right of centre instead of hugging the right edge
+// (room for the price to move, and the eye lands on "now").
+const LIVE_CENTER_SHIFT = 0.42; // fraction of the visible span moved to the right of the last bar
+function frameDefaultView(chart) {
+  const ts = chart.timeScale();
+  ts.fitContent();
+  try {
+    const r = ts.getVisibleLogicalRange();
+    if (!r) return;
+    const span = r.to - r.from;
+    if (!(span > 0)) return;
+    const shift = span * LIVE_CENTER_SHIFT;
+    ts.setVisibleLogicalRange({ from: r.from + shift, to: r.to + shift });
+  } catch (_) { /* chart disposed */ }
+}
+
+const fmtUsd = (n) => {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return '—';
+  const abs = Math.abs(v);
+  const sign = v < 0 ? '−' : '';
+  if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(2)}M`;
+  if (abs >= 1e3) return `${sign}$${(abs / 1e3).toFixed(1)}K`;
+  return `${sign}$${abs.toFixed(2)}`;
+};
+const fmtSignedUsd = (n) => (Number(n) > 0 ? `+${fmtUsd(n)}` : fmtUsd(n));
+const fmtMc = (n) => {
+  const v = Number(n);
+  if (!(v > 0)) return '—';
+  if (v >= 1e9) return `$${(v / 1e9).toFixed(2)}B`;
+  if (v >= 1e6) return `$${(v / 1e6).toFixed(2)}M`;
+  if (v >= 1e3) return `$${(v / 1e3).toFixed(0)}K`;
+  return `$${v.toFixed(0)}`;
+};
+const sameDot = (a, b) => Boolean(a && b) && ((a.signature && a.signature === b.signature) || (a.wallet === b.wallet && a.time === b.time && a.type === b.type));
+
 function themeOptions(isDarkMode) {
   return {
     layout: {
@@ -95,6 +156,55 @@ function themeOptions(isDarkMode) {
       horzLines: { color: isDarkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.05)' },
     },
   };
+}
+
+// Small popover anchored to a trade marker inside the chart box. Flips to
+// whichever side has room and stays inside both the chart and the viewport
+// (desktop charts can extend below the fold).
+function TradePopover({ anchor, containerRef, onClose, highlight, children }) {
+  const ref = useRef(null);
+  const [pos, setPos] = useState({ left: 0, top: 0, below: false });
+  useEffect(() => {
+    const el = ref.current;
+    const box = containerRef.current;
+    if (!el || !box) return;
+    const W = box.clientWidth;
+    const H = box.clientHeight;
+    const rect = box.getBoundingClientRect();
+    const visibleBottom = Math.min(H, window.innerHeight - rect.top - 8);
+    const w = el.offsetWidth || 280;
+    const h = el.offsetHeight || 200;
+    const gap = 14;
+    let left = anchor.x - w / 2;
+    left = Math.max(8, Math.min(W - w - 8, left));
+    let top = anchor.y - h - gap;
+    let below = false;
+    if (top < 8) { top = anchor.y + gap; below = true; }
+    if (top + h > visibleBottom - 8) top = Math.max(8, visibleBottom - h - 8);
+    setPos({ left, top, below });
+  }, [anchor.x, anchor.y, containerRef, children]);
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose?.(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return (
+    <>
+      <div className="native-chart-pop-backdrop" onClick={(e) => { e.stopPropagation(); onClose?.(); }} />
+      <div
+        ref={ref}
+        className={`native-chart-pop${pos.below ? ' native-chart-pop--below' : ''}${highlight ? ` native-chart-pop--${highlight}` : ''}`}
+        style={{ left: pos.left, top: pos.top }}
+        onClick={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onWheel={(e) => e.stopPropagation()}
+        role="dialog"
+      >
+        <span className="native-chart-pop-arrow" style={{ left: Math.max(14, Math.min((anchor.x - pos.left), 999)) }} />
+        {children}
+      </div>
+    </>
+  );
 }
 
 const NativeChart = ({
@@ -111,6 +221,9 @@ const NativeChart = ({
   onCrosshairMove = null,
   initialTfIndex = null,
   focusOneMinute = false,
+  liveZoomSignal = 0,          // parent-driven toggle of the live 1m zoom (counter)
+  onLiveZoomChange = null,     // (bool) => void — reports zoom state to the parent
+  hideLiveZoomButton = false,  // parent renders its own zoom control
   focusTimelineFrom = null,
   focusTimelineTo = null,
   focusTimelineAt = null,
@@ -185,6 +298,11 @@ const NativeChart = ({
   // separate arrows/labels when several trades land close together in time).
   const [dotClusters, setDotClusters] = useState([]);
   const [openCluster, setOpenCluster] = useState(null);
+  // Focused tracked trade: the chart zooms to the trade's bars and a lite
+  // detail popover anchors to its marker; closing restores the prior view.
+  const [focusedTrade, setFocusedTrade] = useState(null); // { item, prevRange, x, y }
+  const [focusStats, setFocusStats] = useState(null);     // position summary for wallet+mint
+  const focusRestoreRef = useRef(null);
   const [pinPositions, setPinPositions] = useState([]);
   const [trackedBubble, setTrackedBubble] = useState(null);
   // One-tap "watch live" zoom: 1m timeframe framed tight on the newest candles.
@@ -949,7 +1067,7 @@ const NativeChart = ({
           fittedMintTfRef.current = fitKey;
           // Soft reload: skip the instant refit — the order-focus zoom effect
           // animates to the new framing instead of jumping to it.
-          if (!soft) chartRef.current?.timeScale().fitContent();
+          if (!soft && chartRef.current) frameDefaultView(chartRef.current);
         }
       } catch (e) {
         // Chart/series disposed mid-fetch (e.g. card scrolled away and unmounted) — nothing to draw into anymore.
@@ -1029,7 +1147,7 @@ const NativeChart = ({
         const fitKey = `${mint}-${tf.label}-${pool}`;
         if (fittedMintTfRef.current !== fitKey) {
           fittedMintTfRef.current = fitKey;
-          chartRef.current?.timeScale().fitContent();
+          if (chartRef.current) frameDefaultView(chartRef.current);
         }
       } catch (e) {
         // Chart/series disposed mid-fetch — nothing to draw into anymore.
@@ -1114,7 +1232,7 @@ const NativeChart = ({
       if (series) {
         series.applyOptions({ autoscaleInfoProvider: undefined });
       }
-      chart.timeScale().fitContent();
+      frameDefaultView(chart);
     } catch (_) { /* chart disposed */ }
   }, [resetViewSignal, clearUserNav]);
 
@@ -1399,8 +1517,8 @@ const NativeChart = ({
     clearUserNav();
     try { series.applyOptions({ autoscaleInfoProvider: undefined }); } catch (_) {}
     const interval = tfSeconds(TIMEFRAMES[0]);
-    const from = Math.max(0, last.time - interval * 28);
-    const to = last.time + interval * 4;
+    const from = Math.max(0, last.time - interval * 16);
+    const to = last.time + interval * 16;
     try {
       chart.timeScale().setVisibleRange({ from, to });
     } catch (_) {
@@ -1429,10 +1547,19 @@ const NativeChart = ({
       } else {
         clearUserNav();
         try { seriesRef.current?.applyOptions({ autoscaleInfoProvider: undefined }); } catch (_) {}
-        try { chartRef.current?.timeScale().fitContent(); } catch (_) {}
+        try { if (chartRef.current) frameDefaultView(chartRef.current); } catch (_) {}
       }
     }
   }, [liveZoom, tfIndex, performLiveZoom, clearUserNav]);
+
+  // Parent-controlled zoom (the coin card's right-side Zoom button).
+  const liveZoomSignalRef = useRef(liveZoomSignal);
+  useEffect(() => {
+    if (liveZoomSignalRef.current === liveZoomSignal) return;
+    liveZoomSignalRef.current = liveZoomSignal;
+    if (status === 'ready') toggleLiveZoom();
+  }, [liveZoomSignal]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { onLiveZoomChange?.(liveZoom); }, [liveZoom]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Run the deferred live zoom once the 1m data lands. Keyed off status/dataRev
   // (NOT tfIndex) so it doesn't fire in the same render as the tf switch, while
@@ -1745,8 +1872,58 @@ const NativeChart = ({
     };
   }, [tradeDots, status, tfIndex]);
 
-  // A fresh coin/dataset invalidates any open cluster popup.
-  useEffect(() => { setOpenCluster(null); }, [mint]);
+  // A fresh coin/dataset invalidates any open cluster popup / focused trade.
+  useEffect(() => { setOpenCluster(null); setFocusedTrade(null); setFocusStats(null); focusRestoreRef.current = null; }, [mint]);
+
+  const FOCUS_BARS_EACH_SIDE = 28;
+  const focusTrade = useCallback((item, anchor) => {
+    const chart = chartRef.current;
+    const series = seriesRef.current;
+    if (!chart || !series || !item) return;
+    let prevRange = focusRestoreRef.current;
+    try {
+      if (!prevRange) prevRange = chart.timeScale().getVisibleLogicalRange();
+      const idx = nearestBarIndex(series, item.time);
+      if (idx >= 0) {
+        chart.timeScale().setVisibleLogicalRange({ from: idx - FOCUS_BARS_EACH_SIDE, to: idx + FOCUS_BARS_EACH_SIDE });
+      }
+    } catch (_) { /* chart disposed */ }
+    focusRestoreRef.current = prevRange || null;
+    setOpenCluster(null);
+    setFocusStats(null);
+    setFocusedTrade({ item, x: anchor?.x ?? 0, y: anchor?.y ?? 0 });
+  }, []);
+
+  const closeFocusedTrade = useCallback(() => {
+    const chart = chartRef.current;
+    const prev = focusRestoreRef.current;
+    focusRestoreRef.current = null;
+    setFocusedTrade(null);
+    setFocusStats(null);
+    if (chart && prev) {
+      try { chart.timeScale().setVisibleLogicalRange(prev); } catch (_) { /* disposed */ }
+    }
+  }, []);
+
+  // Lite position summary for the focused trade's wallet on this coin.
+  useEffect(() => {
+    const item = focusedTrade?.item;
+    if (!item?.wallet || !mint) return undefined;
+    let alive = true;
+    setFocusStats({ loading: true });
+    fetchWithTimeout(`${API_CONFIG.BASE_URL}/api/wallet/${item.wallet}/position/${mint}`, 9000)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!alive) return;
+        if (!d?.success) { setFocusStats({ error: true }); return; }
+        const sells = Number(d.counts?.sells) || 0;
+        const unrealized = Number(d.pnl?.unrealized) || 0;
+        const status = sells === 0 ? 'holding' : Math.abs(unrealized) < 0.01 ? 'sold' : 'partial';
+        setFocusStats({ ...d, status });
+      })
+      .catch(() => { if (alive) setFocusStats({ error: true }); });
+    return () => { alive = false; };
+  }, [focusedTrade?.item?.wallet, focusedTrade?.item?.signature, mint]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Entry/exit ⊕ pins: clickable chips glued to the trade's candle. Snapped to
   // the nearest bar (an exact trade timestamp rarely equals a bar time) and
@@ -2143,7 +2320,7 @@ const NativeChart = ({
         )}
       </div>
       <div className="native-chart-canvas" ref={containerRef} />
-      {!isExpanded && !focusOneMinute && status === 'ready' && (
+      {!focusOneMinute && !hideLiveZoomButton && status === 'ready' && (
         <button
           type="button"
           className={`native-chart-live-zoom-btn ${liveZoom ? 'active' : ''}`}
@@ -2228,7 +2405,11 @@ const NativeChart = ({
               type="button"
               className={`native-chart-dot-cluster${c.clamped ? ' native-chart-dot-cluster--clamped' : ''}`}
               style={{ left: c.x, top: c.y }}
-              onClick={(e) => { e.stopPropagation(); setOpenCluster(c); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (c.items.length === 1) focusTrade(c.items[0], c);
+                else setOpenCluster(c);
+              }}
               title={c.clamped ? 'Trade off-screen — tap to view' : `${c.items.length} trade${c.items.length > 1 ? 's' : ''}`}
             >
               {c.items.slice(0, 3).map((d, j) => (
@@ -2247,12 +2428,13 @@ const NativeChart = ({
           ))}
         </div>
       )}
-      {openCluster && (
-        <div className="native-chart-dot-modal-backdrop" onClick={(e) => { e.stopPropagation(); setOpenCluster(null); }}>
-          <div className="native-chart-dot-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="native-chart-dot-modal-header">
-              <span>{openCluster.items.length} trade{openCluster.items.length > 1 ? 's' : ''}</span>
-              <button type="button" className="native-chart-dot-modal-close" onClick={() => setOpenCluster(null)} aria-label="Close">×</button>
+      {openCluster && (() => {
+        const live = dotClusters.find((c) => c.items.some((it) => openCluster.items.some((o) => sameDot(o, it)))) || openCluster;
+        return (
+          <TradePopover anchor={live} containerRef={containerRef} onClose={() => setOpenCluster(null)}>
+            <div className="native-chart-pop-header">
+              <span>{openCluster.items.length} trades here</span>
+              <button type="button" className="native-chart-pop-close" onClick={() => setOpenCluster(null)} aria-label="Close">×</button>
             </div>
             <div className="native-chart-dot-modal-list">
               {[...openCluster.items].sort((a, b) => b.time - a.time).map((d, i) => (
@@ -2260,10 +2442,7 @@ const NativeChart = ({
                   key={d.signature || `${d.wallet}-${d.time}-${i}`}
                   type="button"
                   className="native-chart-dot-modal-row"
-                  onClick={() => {
-                    setOpenCluster(null);
-                    onTradeDotClick?.(d);
-                  }}
+                  onClick={() => focusTrade(d, live)}
                 >
                   <span className="native-chart-dot-modal-avatar" style={{ background: gradientForWallet(d.wallet) }}>
                     <AnimalSilhouetteAvatar address={d.wallet} />
@@ -2274,13 +2453,79 @@ const NativeChart = ({
                   </span>
                   <span className="native-chart-dot-modal-price">{formatPrice(d.price)}</span>
                   <span className="native-chart-dot-modal-time">{formatDotTime(d.time)}</span>
-                  {onTradeDotClick && <span className="native-chart-dot-modal-chevron">›</span>}
+                  <span className="native-chart-dot-modal-chevron">›</span>
                 </button>
               ))}
             </div>
-          </div>
-        </div>
-      )}
+          </TradePopover>
+        );
+      })()}
+      {focusedTrade && (() => {
+        const item = focusedTrade.item;
+        const live = dotClusters.find((c) => c.items.some((it) => sameDot(it, item)));
+        const anchor = live || { x: focusedTrade.x, y: focusedTrade.y };
+        const st = focusStats;
+        const usd = Number(item.usdAmount) || 0;
+        return (
+          <TradePopover anchor={anchor} containerRef={containerRef} onClose={closeFocusedTrade} highlight={item.type}>
+            <div className="native-chart-pop-header native-chart-pop-header--trade">
+              <span className="native-chart-dot-modal-avatar" style={{ background: gradientForWallet(item.wallet) }}>
+                <AnimalSilhouetteAvatar address={item.wallet} />
+              </span>
+              <span className="native-chart-pop-title">
+                <strong>{item.label || `${item.wallet.slice(0, 4)}…${item.wallet.slice(-4)}`}</strong>
+                <span>{formatDotTime(item.time)}</span>
+              </span>
+              <span className={`native-chart-dot-modal-type native-chart-dot-modal-type--${item.type}`}>{item.type === 'buy' ? 'Bought' : 'Sold'}</span>
+              <button type="button" className="native-chart-pop-close" onClick={closeFocusedTrade} aria-label="Close and restore chart">×</button>
+            </div>
+            <div className="native-chart-pop-trade">
+              <strong>{usd > 0 ? fmtUsd(usd) : (Number(item.solAmount) > 0 ? `${Number(item.solAmount).toFixed(3)} SOL` : '—')}</strong>
+              <span>{usd > 0 && Number(item.solAmount) > 0 ? `${Number(item.solAmount).toFixed(3)} SOL · ` : ''}@ {formatPrice(item.price)}</span>
+            </div>
+            <div className="native-chart-pop-grid">
+              {st?.loading ? (
+                <div className="native-chart-pop-loading">Loading position…</div>
+              ) : st && !st.error ? (
+                <>
+                  <div className="native-chart-pop-cell">
+                    <span>Status</span>
+                    <strong className={`native-chart-pop-status native-chart-pop-status--${st.status}`}>
+                      {st.status === 'holding' ? 'Holding' : st.status === 'sold' ? 'Sold' : 'Partially sold'}
+                    </strong>
+                  </div>
+                  <div className="native-chart-pop-cell">
+                    <span>Invested</span>
+                    <strong>{fmtUsd(st.invested)}</strong>
+                  </div>
+                  <div className="native-chart-pop-cell">
+                    <span>{st.status === 'holding' ? 'Unrealized' : 'Realized'}</span>
+                    <strong className={Number(st.status === 'holding' ? st.pnl?.unrealized : st.pnl?.realized) >= 0 ? 'up' : 'down'}>
+                      {fmtSignedUsd(st.status === 'holding' ? st.pnl?.unrealized : st.pnl?.realized)}
+                      {Number.isFinite(Number(st.roi)) && st.roi !== 0 ? <small>{st.roi > 0 ? '+' : ''}{Number(st.roi).toFixed(0)}%</small> : null}
+                    </strong>
+                  </div>
+                  <div className="native-chart-pop-cell">
+                    <span>Entry → Exit MC</span>
+                    <strong>{fmtMc(st.avgEntryMarketCap)} → {st.status === 'holding' ? 'open' : fmtMc(st.avgExitMarketCap)}</strong>
+                  </div>
+                  <div className="native-chart-pop-cell">
+                    <span>Trades</span>
+                    <strong>{Number(st.counts?.buys) || 0} buy · {Number(st.counts?.sells) || 0} sell</strong>
+                  </div>
+                </>
+              ) : (
+                <div className="native-chart-pop-loading">Position details unavailable</div>
+              )}
+            </div>
+            {onTradeDotClick && (
+              <button type="button" className="native-chart-pop-more" onClick={() => { const it = item; closeFocusedTrade(); onTradeDotClick(it); }}>
+                Full trade details ›
+              </button>
+            )}
+          </TradePopover>
+        );
+      })()}
       {status === 'loading' && (
         <div className="native-chart-overlay">
           <div className="native-chart-spinner" />

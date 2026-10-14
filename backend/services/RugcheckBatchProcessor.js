@@ -38,6 +38,7 @@ class RugcheckBatchProcessor {
     
     // Separate queues per feed (ordered - top coins first)
     this.feedQueues = {
+      moonfeed: [],   // default feed — its top coins get lock status first
       new: [],
       trending: [],
       dextrending: [],
@@ -173,7 +174,7 @@ class RugcheckBatchProcessor {
     console.log(`\n🔍 Starting ROUND-ROBIN rugcheck processing...`);
     console.log(`   Queues: ${Object.entries(this.feedQueues).map(([k, v]) => `${k}: ${v.length}`).join(', ')}`);
     
-    const feedOrder = ['new', 'trending', 'dextrending', 'graduating'];
+    const feedOrder = ['moonfeed', 'new', 'trending', 'dextrending', 'graduating'];
     
     // Continue until all queues are empty or aborted
     while (!this.processingAborted) {
@@ -487,6 +488,7 @@ class RugcheckBatchProcessor {
       'new-remaining': 'new',
       'dextrending': 'dextrending',
       'graduating': 'graduating',
+      'moonfeed': 'moonfeed',
       'api-request': 'new' // Map API requests to new feed
     };
     

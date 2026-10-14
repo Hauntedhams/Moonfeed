@@ -1,5 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import InstantTradePanel from './InstantTradePanel';
+import CoinOrdersPanel from './CoinOrdersPanel';
+import { useWalletView } from '../hooks/useWalletView';
+import { UnifiedWalletButton } from '@jup-ag/wallet-adapter';
 import { useWallet } from '../contexts/WalletContext';
 import { useWallet as useJupiterWallet } from '@jup-ag/wallet-adapter';
 import { useWalletConnectOnboarding } from './WalletConnectOnboarding';
@@ -10,7 +13,7 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
   const jupiterInitialized = useRef(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [activeTab, setActiveTab] = useState('swap'); // 'swap' or 'limit'
+  const [activeTab, setActiveTab] = useState('limit'); // 'limit' (Instant Trade) | 'orders' | 'swap'
   const [swapSuccessInfo, setSwapSuccessInfo] = useState(null);
   // Live status of the sell order queued by the slide-out "Sell at" flow
   // (CoinCard places it automatically after this swap — no manual setup needed).
@@ -21,6 +24,9 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
   // Get the full Jupiter wallet adapter for passthrough to Terminal
   const jupiterWallet = useJupiterWallet();
   const { openWalletConnect } = useWalletConnectOnboarding();
+  // The window works with just the ⚡ trading wallet (Instant Trade + Orders);
+  // only the Jupiter Swap tab needs the main wallet connected.
+  const { instantWallet, instantReady } = useWalletView();
 
   // Selecting a wallet only sets it as active; we must call connect() once the
   // adapter is selected (autoConnect is off on desktop) to trigger the wallet
@@ -50,9 +56,10 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
     }
   }, [pendingWallet, jupiterWallet.wallet, jupiterWallet.connected, jupiterWallet.connecting]);
 
+  // No wallet of any kind → onboarding. A trading wallet alone is enough to use the window.
   useEffect(() => {
-    if (isOpen && !jupiterWallet.connected) openWalletConnect({ onDismiss: onClose });
-  }, [isOpen, jupiterWallet.connected, openWalletConnect]);
+    if (isOpen && instantReady && !jupiterWallet.connected && !instantWallet) openWalletConnect({ onDismiss: onClose });
+  }, [isOpen, instantReady, instantWallet, jupiterWallet.connected, openWalletConnect]);
 
   // Track trade with affiliate system
   const trackTradeWithAffiliate = async (txid, swapResult) => {
@@ -250,7 +257,7 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
     jupiterInitialized.current = false;
     setIsLoading(true);
     setError(null);
-    setActiveTab('swap');
+    setActiveTab('limit');
     setSwapSuccessInfo(null);
     setAutoOrderStatus(null);
     onClose();
@@ -264,11 +271,10 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
     return () => window.removeEventListener('moonfeed:auto-sell-order', handleAutoOrder);
   }, [isOpen]);
 
-  // When opened with initialTab='limit', jump straight to the limit page
+  // Honour an explicit initial tab (e.g. Swap from the card's buy flow, Orders from an alert)
   useEffect(() => {
-    if (isOpen && initialTab === 'limit') {
-      setActiveTab('limit');
-    }
+    if (!isOpen) return;
+    if (initialTab === 'swap' || initialTab === 'orders' || initialTab === 'limit') setActiveTab(initialTab);
   }, [isOpen, initialTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleTabChange = (tab) => {
@@ -289,19 +295,22 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
     // Require a clearly horizontal gesture so it doesn't fight vertical scrolls
     // or the Jupiter Terminal's own touch interactions.
     if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
-      setActiveTab(dx < 0 ? 'limit' : 'swap');
+      const order = ['limit', 'orders', 'swap'];
+      const idx = order.indexOf(activeTab);
+      const next = order[Math.min(order.length - 1, Math.max(0, idx + (dx < 0 ? 1 : -1)))];
+      setActiveTab(next);
     }
     swipeStart.current = null;
   };
 
-  if (!isOpen || !jupiterWallet.connected) return null;
+  if (!isOpen) return null;
+  if (!jupiterWallet.connected && !instantWallet) return null; // onboarding overlay is showing
 
   return (
     <>
       <div className="jupiter-modal-overlay" onClick={handleClose}>
         <div className="jupiter-modal-content" onClick={(e) => e.stopPropagation()}>
-          {/* Header + tabs are hidden on the wallet-gate onboarding screen */}
-          {jupiterWallet.connected && (
+          {(
             <>
               <div className="jupiter-modal-header">
                 <div className="coin-info">
@@ -321,22 +330,30 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
                 </button>
               </div>
 
-              {/* Tab Navigation */}
-              <div className="jupiter-tab-nav">
-                <button 
-                  className={`tab-btn ${activeTab === 'swap' ? 'active' : ''}`}
-                  onClick={() => handleTabChange('swap')}
-                >
-                  <span className="tab-icon">⚡</span>
-                  Instant Swap
-                </button>
-                <button 
+              {/* Tab Navigation — Instant Trade is the default; Orders sets price
+                  alerts / auto-orders; Swap is the Jupiter terminal (main wallet). */}
+              <div className="jupiter-tab-nav jupiter-tab-nav--3">
+                <button
                   className={`tab-btn ${activeTab === 'limit' ? 'active' : ''}`}
                   onClick={() => handleTabChange('limit')}
                 >
                   <span className="tab-icon">⚡</span>
                   Instant Trade
-                  <span className="caution-tape-badge">AUTO TP/SL</span>
+                </button>
+                <button
+                  className={`tab-btn ${activeTab === 'orders' ? 'active' : ''}`}
+                  onClick={() => handleTabChange('orders')}
+                >
+                  <span className="tab-icon">🎯</span>
+                  Orders
+                  <span className="caution-tape-badge">TP/SL</span>
+                </button>
+                <button
+                  className={`tab-btn ${activeTab === 'swap' ? 'active' : ''}`}
+                  onClick={() => handleTabChange('swap')}
+                >
+                  <span className="tab-icon">🪐</span>
+                  Swap
                 </button>
               </div>
             </>
@@ -445,10 +462,17 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
               onTouchStart={handleSwipeStart}
               onTouchEnd={handleSwipeEnd}
             >
-              <div className={`jt-swipe-track ${activeTab === 'limit' ? 'at-limit' : ''}`}>
-                {/* Page 1 — Instant Swap (Jupiter Terminal) */}
+              <div className={`jt-swipe-track at-${activeTab}`}>
+                {/* Swap (Jupiter Terminal) — needs the main wallet */}
                 <div className="jt-swipe-page jt-swipe-page--swap">
-                  <div className="jupiter-widget-wrapper">
+                  {!jupiterWallet.connected && (
+                    <div className="jt-connect-card">
+                      <h4>Connect a wallet for Jupiter Swap</h4>
+                      <p>Swap routes through Jupiter with your own wallet. Instant Trade and Orders work with your trading wallet without connecting.</p>
+                      <UnifiedWalletButton />
+                    </div>
+                  )}
+                  <div className="jupiter-widget-wrapper" style={!jupiterWallet.connected ? { display: 'none' } : undefined}>
                     {/* Loading state while the Terminal boots */}
                     {isLoading && !error && (
                       <div className="loading-state">
@@ -501,8 +525,12 @@ const JupiterTradeModal = ({ isOpen, onClose, coin, onSwapSuccess, onSwapError, 
                   </div>
                 </div>
 
-                {/* Page 2 — Instant Trade (swipe left to reach): device-local
-                    trading wallet with auto take-profit / stop-loss execution. */}
+                {/* Orders — price alerts / auto-orders for this coin */}
+                <div className="jt-swipe-page jt-swipe-page--orders">
+                  <CoinOrdersPanel coin={coin} currentPriceUsd={coin?.price_usd || coin?.priceUsd} onClose={handleClose} />
+                </div>
+
+                {/* Instant Trade — device-local trading wallet with auto TP/SL. */}
                 <div className="jt-swipe-page jt-swipe-page--limit">
                   <InstantTradePanel
                     embedded

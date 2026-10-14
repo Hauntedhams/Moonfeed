@@ -636,3 +636,114 @@ html:not(.dark-mode) .native-chart-dot-modal-row {
     flex: 1 1 auto;
   }
 }
+
+/* ── Anchored trade popover (replaces the bottom sheet) ──────────────── */
+.native-chart-pop-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.native-chart-pop {
+  position: absolute;
+  z-index: 41;
+  width: min(300px, calc(100% - 16px));
+  max-height: 72%;
+  overflow-y: auto;
+  background: rgba(13, 19, 36, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  color: #fff;
+  animation: native-chart-pop-in 0.16s ease-out;
+}
+.native-chart-pop--buy { border-color: rgba(34, 197, 94, 0.45); }
+.native-chart-pop--sell { border-color: rgba(239, 68, 68, 0.45); }
+@keyframes native-chart-pop-in {
+  from { opacity: 0; transform: translateY(4px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Pointer toward the marker: bottom edge by default, top edge when flipped below */
+.native-chart-pop-arrow {
+  position: absolute;
+  bottom: -7px;
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  background: inherit;
+  border-right: 1px solid rgba(255, 255, 255, 0.12);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  transform: rotate(45deg);
+}
+.native-chart-pop--below .native-chart-pop-arrow { bottom: auto; top: -7px; transform: rotate(225deg); }
+.native-chart-pop--buy .native-chart-pop-arrow { border-color: rgba(34, 197, 94, 0.45); }
+.native-chart-pop--sell .native-chart-pop-arrow { border-color: rgba(239, 68, 68, 0.45); }
+
+.native-chart-pop-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 10px 8px 12px;
+  font-size: 12.5px;
+  font-weight: 700;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.native-chart-pop-header > span:first-child { flex: 1; }
+.native-chart-pop-header--trade > span:first-child { flex: 0 0 auto; }
+.native-chart-pop-header--trade .native-chart-dot-modal-avatar { width: 28px; height: 28px; }
+.native-chart-pop-title { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.15; }
+.native-chart-pop-title strong { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.native-chart-pop-title span { font-size: 11px; font-weight: 500; color: rgba(255, 255, 255, 0.6); }
+.native-chart-pop-close {
+  width: 26px; height: 26px; border-radius: 50%; border: none;
+  background: rgba(255, 255, 255, 0.1); color: #fff; font-size: 16px; line-height: 1; cursor: pointer; flex-shrink: 0;
+}
+
+.native-chart-pop-trade {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 12px 6px;
+}
+.native-chart-pop-trade strong { font-size: 20px; font-weight: 800; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.native-chart-pop-trade span { font-size: 11.5px; color: rgba(255, 255, 255, 0.65); }
+
+.native-chart-pop-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 10px;
+  padding: 6px 12px 10px;
+}
+.native-chart-pop-cell { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.native-chart-pop-cell:nth-child(4) { grid-column: 1 / -1; }
+.native-chart-pop-cell span { font-size: 10px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: rgba(255, 255, 255, 0.5); }
+.native-chart-pop-cell strong { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.native-chart-pop-cell strong small { margin-left: 5px; font-size: 11px; font-weight: 700; opacity: 0.85; }
+.native-chart-pop-cell strong.up { color: #4ade80; }
+.native-chart-pop-cell strong.down { color: #f87171; }
+.native-chart-pop-status--holding { color: #fbbf24; }
+.native-chart-pop-status--sold { color: #a3a3a3; }
+.native-chart-pop-status--partial { color: #60a5fa; }
+.native-chart-pop-loading { grid-column: 1 / -1; font-size: 12px; color: rgba(255, 255, 255, 0.55); padding: 4px 0; }
+
+.native-chart-pop-more {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: #a5b4fc;
+  font-size: 12.5px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 0 0 14px 14px;
+}
+
+.native-chart-pop .native-chart-dot-modal-list { max-height: 220px; overflow-y: auto; }
+.native-chart-pop .native-chart-dot-modal-row { padding-left: 12px; padding-right: 12px; }

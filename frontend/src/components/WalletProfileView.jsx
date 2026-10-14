@@ -6,6 +6,8 @@ import { maybeEnableNotifications, openNotificationSettings } from '../utils/not
 import { resolveWalletDisplayName } from '../utils/walletIdentity';
 import useSwipeBack from '../hooks/useSwipeBack';
 import usePullToRefresh from '../hooks/usePullToRefresh';
+import ProfileCoinTile, { ProfileCoinTileSkeleton } from './ProfileCoinTile';
+import { fetchWalletPositions, shortAgo } from '../utils/walletPositions';
 import './ProfileView.css';
 import './WalletProfileView.css';
 
@@ -134,19 +136,6 @@ const formatHold = (secs) => {
   return `${Math.round(secs / 86400)}d`;
 };
 
-const timeAgo = (ts) => {
-  if (!ts) return '';
-  const ms = ts < 1e12 ? ts * 1000 : ts; // seconds vs ms
-  const diff = Date.now() - ms;
-  const s = Math.floor(diff / 1000);
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h`;
-  return `${Math.floor(h / 24)}d`;
-};
-
 // Normalize a Solana Tracker trade into a coin tile
 const parseTrade = (t) => {
   if (!t) return null;
@@ -236,26 +225,35 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
       .finally(() => setStatsLoading(false));
   }, [walletAddress]);
 
-  // Fetch traded-coins feed — also callable directly (pull-to-refresh)
+  // Traded-coins grid — one positions call gives every coin with PnL. Falls
+  // back to the raw trades feed only if positions are unavailable.
+  const [positionsMeta, setPositionsMeta] = useState({ total: 0, holding: 0 });
   const loadCoins = useCallback((silent = false) => {
     if (!walletAddress) return Promise.resolve();
     if (!silent) { setCoinsLoading(true); setCoins([]); }
-    return fetchJsonWithTimeout(getFullApiUrl(`/api/wallet/${walletAddress}/trades`))
-      .then((d) => {
-        const raw = d?.data?.trades || d?.trades || d?.data || [];
-        const list = Array.isArray(raw) ? raw : [];
-        const parsed = list.map(parseTrade).filter(Boolean);
-        // De-duplicate by mint so the feed shows distinct coins (most recent first)
-        const seen = new Set();
-        const distinct = [];
-        for (const c of parsed) {
-          if (seen.has(c.mint)) continue;
-          seen.add(c.mint);
-          distinct.push(c);
-        }
-        setCoins(distinct);
+    return fetchWalletPositions(walletAddress, { force: silent })
+      .then(({ positions, stats, total }) => {
+        setPositionsMeta({ total: total || positions.length, holding: stats?.holding || positions.filter((p) => p.holding).length });
+        setCoins(positions.map((p) => ({
+          tx: p.mint,
+          type: p.lastSell && p.lastSell >= (p.lastBuy || 0) ? 'sell' : 'buy',
+          mint: p.mint,
+          symbol: p.symbol,
+          name: p.name,
+          image: p.image,
+          time: p.lastTrade,
+          pnl: p.pnl?.total ?? null,
+          holding: p.holding,
+        })));
       })
-      .catch(() => setCoins([]))
+      .catch(() => fetchJsonWithTimeout(getFullApiUrl(`/api/wallet/${walletAddress}/trades`))
+        .then((d) => {
+          const raw = d?.data?.trades || d?.trades || d?.data || [];
+          const parsed = (Array.isArray(raw) ? raw : []).map(parseTrade).filter(Boolean);
+          const seen = new Set();
+          setCoins(parsed.filter((c) => (seen.has(c.mint) ? false : (seen.add(c.mint), true))));
+        })
+        .catch(() => setCoins([])))
       .finally(() => setCoinsLoading(false));
   }, [walletAddress]);
 
@@ -405,22 +403,24 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
             title="View full wallet analytics"
           >
             <div className="pv-ig-stat">
-              <span className="pv-ig-stat-num">{statsLoading ? '—' : formatNumber(trading.totalTrades)}</span>
+              <span className="pv-ig-stat-num">{statsLoading ? <span className="pv-ig-stat-skel" /> : formatNumber(trading.totalTrades)}</span>
               <span className="pv-ig-stat-label">Trades</span>
             </div>
             <div className="pv-ig-stat">
-              <span className="pv-ig-stat-num">{statsLoading ? '—' : formatNumber(trading.uniqueTokens)}</span>
-              <span className="pv-ig-stat-label">Tokens</span>
+              <span className="pv-ig-stat-num">{statsLoading ? <span className="pv-ig-stat-skel" /> : formatNumber(trading.uniqueTokens)}</span>
+              <span className="pv-ig-stat-label">Coins</span>
             </div>
             <div className="pv-ig-stat">
-              <span className="pv-ig-stat-num">{statsLoading ? '—' : formatPercent(stats?.winRate)}</span>
-              <span className="pv-ig-stat-label">Win Rate</span>
+              <span className={`pv-ig-stat-num${!statsLoading && Number.isFinite(Number(stats?.winRate)) ? (Number(stats.winRate) >= 50 ? ' up' : '') : ''}`}>
+                {statsLoading ? <span className="pv-ig-stat-skel" /> : (Number.isFinite(Number(stats?.winRate)) ? `${Number(stats.winRate).toFixed(0)}%` : '—')}
+              </span>
+              <span className="pv-ig-stat-label">Win rate</span>
             </div>
           </button>
         </div>
 
         <div className="wpv-name-title-row">
-          <h2 className="wpv-name-heading">{walletName}</h2>
+          <h2 className="wpv-name-heading pv-ig-display-name pv-ig-display-name--lg">{walletName}</h2>
           <button
             type="button"
             className={`wpv-pencil-btn ${notificationsEnabled ? 'active' : 'locked'}`}
@@ -441,8 +441,11 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
             rel="noopener noreferrer"
             title="View on Solscan"
           >
-            {shortAddr(walletAddress)} ↗
+            @{shortAddr(walletAddress)}
           </a>
+          {latestCoin && (
+            <span className="pv-ig-meta-dot">· last trade {shortAgo(latestCoin.time)} ago</span>
+          )}
         </div>
 
         {/* The wallet's own Moonfeed bio, when they've written one */}
@@ -450,29 +453,43 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
           <p className="pv-ig-bio wpv-hosted-bio">{hostedProfile.bio}</p>
         )}
 
-        {/* Bio line — mirrors ProfileView's bio slot with a stats summary */}
-        <p className="pv-ig-bio">
-          {latestCoin
-            ? `Last traded ${latestCoin.symbol} ${timeAgo(latestCoin.time)} ago`
-            : statsLoading ? '…' : 'No recent trades'}
-          {!statsLoading && Number.isFinite(Number(pnl.realized)) ? ` · Realized PnL ${formatCurrency(pnl.realized)}` : ''}
-        </p>
+        {/* All-time PnL strip — realized vs theoretical (open positions) */}
+        <div className="pv-ig-pnl-strip">
+          {statsLoading ? (
+            <span className="pv-ig-pnl-chip pv-ig-pnl-chip--loading" />
+          ) : Number.isFinite(Number(pnl.total)) || Number.isFinite(Number(pnl.realized)) ? (
+            <>
+              <span className={`pv-ig-pnl-chip ${Number(pnl.total ?? pnl.realized) >= 0 ? 'up' : 'down'}`}>
+                {formatCurrency(pnl.total ?? pnl.realized)}
+                <small>all-time</small>
+              </span>
+              <span className="pv-ig-pnl-detail">
+                <b className={Number(pnl.realized) >= 0 ? 'up' : 'down'}>{formatCurrency(pnl.realized)}</b> realized
+                {Number.isFinite(Number(pnl.unrealized)) && Number(pnl.unrealized) !== 0 && (
+                  <> · <b className={Number(pnl.unrealized) >= 0 ? 'up' : 'down'}>{formatCurrency(pnl.unrealized)}</b> open</>
+                )}
+              </span>
+            </>
+          ) : (
+            <span className="pv-ig-pnl-detail">{statsError ? 'Analytics unavailable' : 'No PnL history yet'}</span>
+          )}
+        </div>
 
-        {/* Actions row — mirrors ProfileView's Edit Profile / Disconnect / icon row */}
+        {/* Actions row */}
         <div className="pv-ig-actions">
           <button
-            className={`pv-ig-btn pv-ig-btn--edit wpv-track-action ${tracked ? 'wpv-track-action--on' : ''}`}
+            className={`pv-ig-btn ${tracked ? 'pv-ig-btn--edit' : 'pv-ig-btn--primary'} wpv-track-action ${tracked ? 'wpv-track-action--on' : ''}`}
             onClick={handleTrackToggle}
           >
-            {tracked ? '✓ Following' : 'Follow'}
+            {tracked ? 'Following' : 'Follow'}
           </button>
           <button
-            className="pv-ig-btn pv-ig-btn--out"
+            className="pv-ig-btn pv-ig-btn--edit"
             onClick={() => latestCoin && onOpenPosition?.(walletAddress, latestCoin.mint, { displayName: walletName })}
             disabled={!latestCoin}
             title={latestCoin ? `View their latest ${latestCoin.symbol} position on the chart` : 'No recent trades'}
           >
-            Most Recent Trade
+            Latest trade
           </button>
           <button
             type="button"
@@ -507,13 +524,15 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
         )}
       </div>
 
-      {/* Coins feed */}
-      <div className="wpv-feed-title">Coins Traded</div>
+      {/* Coins feed — IG-style grid, PnL on every tile */}
+      <div className="pct-section-label">
+        <span><b>Coins traded</b>{positionsMeta.total ? ` · ${formatNumber(positionsMeta.total)}` : ''}</span>
+        {positionsMeta.holding > 0 && <small>{positionsMeta.holding} open</small>}
+      </div>
       <div className="wpv-feed">
         {coinsLoading ? (
-          <div className="wpv-feed-loading">
-            <div className="wpv-spinner" />
-            <span>Loading coins…</span>
+          <div className="pct-grid">
+            {Array.from({ length: 9 }, (_, i) => <ProfileCoinTileSkeleton key={i} />)}
           </div>
         ) : coins.length === 0 ? (
           <div className="wpv-empty">
@@ -521,11 +540,17 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
             <p>No traded coins found</p>
           </div>
         ) : (
-          <div className="wpv-grid">
+          <div className="pct-grid">
             {coins.map((c) => (
-              <div
+              <ProfileCoinTile
                 key={c.tx}
-                className={`wpv-card wpv-card--${c.type}`}
+                mint={c.mint}
+                symbol={c.symbol}
+                image={c.image}
+                pnlUsd={Number.isFinite(c.pnl) ? c.pnl : null}
+                holding={Boolean(c.holding)}
+                badge={c.type}
+                meta={c.time ? shortAgo(c.time) : null}
                 onClick={() => onCoinClick?.({
                   mintAddress: c.mint,
                   address: c.mint,
@@ -533,30 +558,7 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
                   name: c.name || c.symbol,
                   image: c.image,
                 })}
-                role="button"
-                tabIndex={0}
-              >
-                {c.image ? (
-                  <img src={c.image} alt={c.symbol} className="wpv-card-bg" onError={(e) => { e.target.style.display = 'none'; }} />
-                ) : (
-                  <div className="wpv-card-bg wpv-card-bg--ph" style={{ background: gradientFor(c.mint) }} />
-                )}
-                <div className="wpv-card-overlay" />
-                <div className="wpv-card-body">
-                  <div className="wpv-card-top">
-                    {c.image ? (
-                      <img src={c.image} alt={c.symbol} className="wpv-card-avatar" onError={(e) => { e.target.style.display = 'none'; }} />
-                    ) : (
-                      <div className="wpv-card-avatar wpv-card-avatar--ph">{(c.symbol || '?').slice(0, 2)}</div>
-                    )}
-                    <span className={`wpv-card-badge wpv-card-badge--${c.type}`}>{c.type === 'sell' ? 'SELL' : 'BUY'}</span>
-                  </div>
-                  <div className="wpv-card-info">
-                    <span className="wpv-card-symbol">{c.symbol}</span>
-                    {c.time && <span className="wpv-card-time">{timeAgo(c.time)}</span>}
-                  </div>
-                </div>
-              </div>
+              />
             ))}
           </div>
         )}

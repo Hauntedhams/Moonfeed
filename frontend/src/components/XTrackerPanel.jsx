@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom';
 import { getFullApiUrl } from '../config/api';
 import { getArtworkCandidates } from '../utils/coinArtwork';
+import InfoTip from './InfoTip';
 import './XTrackerPanel.css';
 
 const timeAgo = (ts) => {
@@ -459,6 +460,10 @@ const XTrackerPanel = ({ onClose }) => {
                 <button type="button" className={tab === 'trends' ? 'active' : ''} onClick={() => setTab('trends')}>Trends</button>
               </div>
             )}
+            <InfoTip title="About X Tracker">
+              <p>Live shows recent posts from selected crypto-related X accounts. Trends shows AI-assisted summaries of fast-moving topics and possible coin matches.</p>
+              <p>Posts and matches can be delayed, incomplete, or wrong. A momentum score measures attention, not credibility, price direction, or a recommendation. Check the original source and token details before trading.</p>
+            </InfoTip>
             <button className="menu-panel-close" onClick={onClose} aria-label="Close">✕</button>
           </div>
         </div>

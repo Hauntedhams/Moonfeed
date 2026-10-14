@@ -10,6 +10,7 @@ import { useEffect, useRef } from 'react';
 import { loadTradingWallet, getPresets } from '../utils/instantTradeWallet';
 import { fetchSoftOrders, cancelSoftOrder } from '../utils/softOrders';
 import { executeInstantBuy, executeInstantSell } from '../utils/instantTrade';
+import { isCloudExecEnrolled } from '../utils/cloudExecution';
 import { initTradeNotifications, notifyAutoTradeExecuted } from '../utils/tradeNotifications';
 import { addNotification } from '../utils/alertStorage';
 import { recordOrderSwap } from '../utils/orderSwapLog';
@@ -72,6 +73,9 @@ export default function useInstantAutoExecutor() {
         const wallet = await loadTradingWallet();
         if (!wallet) return;
         if (getPresets().autoExecute === false) return;
+        // Cloud execution enrolled → the server owns execution (and already
+        // claims orders atomically); the device must not race it.
+        if (await isCloudExecEnrolled()) return;
 
         const [actives, past] = await Promise.all([
           fetchSoftOrders(wallet.publicKey, 'active').catch(() => []),
@@ -95,6 +99,10 @@ export default function useInstantAutoExecutor() {
           if (handled[o.orderId] || !priceCrossed(o)) continue;
           candidates.push(o);
         }
+        // Skip anything the server already traded (cloud execution ran, or ran before disenrol).
+        const pending = candidates.filter((o) => !o.executionStatus);
+        candidates.length = 0;
+        candidates.push(...pending);
         if (!candidates.length) return;
 
         for (const order of candidates) {

@@ -43,6 +43,7 @@ const CoinListModal = lazy(() => import('./components/CoinListModal'))
 const ProfileView = lazy(() => import('./components/ProfileView'))
 const OrdersView = lazy(() => import('./components/OrdersView'))
 const JupiterTradeModal = lazy(() => import('./components/JupiterTradeModal'))
+const InstantTradeBar = lazy(() => import('./components/InstantTradeBar'));
 const AdvancedFilter = lazy(() => import('./components/AdvancedFilter'))
 const WalletProfileView = lazy(() => import('./components/WalletProfileView'))
 const PositionDetailView = lazy(() => import('./components/PositionDetailView'))
@@ -66,7 +67,7 @@ const getInitialFilters = () => {
     const saved = localStorage.getItem(LAST_FEED_KEY);
     if (saved && KNOWN_FEEDS.includes(saved)) return { type: saved };
   } catch (_) {}
-  return { type: 'dextrending' }; // "Trending" (id: dextrending) is the fastest-loading default
+  return { type: 'mixed' }; // Moonfeed (id: mixed) — ranked rising coins — is the default
 };
 
 // If the page silently reloads while a coin-detail view is open (WKWebView
@@ -933,13 +934,21 @@ function App() {
     return () => window.removeEventListener('moonfeed:open-coin', onOpenCoin);
   }, []);
 
+  useEffect(() => {
+    const mint = new URLSearchParams(window.location.search).get('coin');
+    if (!mint || !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint)) return;
+    window.dispatchEvent(new CustomEvent('moonfeed:open-coin', {
+      detail: { mintAddress: mint, address: mint, symbol: '', name: '' },
+    }));
+  }, []);
+
   // Push-notification taps (dispatched from pushNotifications.js). A triggered
   // or auto-executed soft order opens the coin card with the position drawn on
   // the chart (entry line + the order's target line).
   useEffect(() => {
     const onPushAction = (e) => {
       const d = e.detail || {};
-      if ((d.type === 'softOrderTriggered' || d.type === 'autoTradeExecuted') && d.mint) {
+      if ((d.type === 'softOrderTriggered' || d.type === 'autoTradeExecuted' || d.type === 'softOrderExecuted') && d.mint) {
         const trigger = parseFloat(d.triggerPriceUsd);
         handleCoinFound({
           mintAddress: d.mint,
@@ -1155,6 +1164,13 @@ function App() {
       )}
       </div>
       
+      <Suspense fallback={null}>
+        <InstantTradeBar
+          coin={currentViewedCoin}
+          visible={activeTab === 'home' && !tradeModalOpen && !walletProfile && !positionDetail && !xTrackerOpen}
+          onOpenTrade={handleGlobalTradeClick}
+        />
+      </Suspense>
       <BottomNavBar 
         activeTab={xTrackerOpen ? 'x-tracker' : activeTab}
         setActiveTab={(tab) => {
@@ -1162,6 +1178,15 @@ function App() {
             handleGlobalTradeClick();
           } else if (IS_EXTENSION && (tab === 'profile' || tab === 'orders')) {
             openFullSite();
+          } else if (tab === 'home') {
+            // Home = Moonfeed, always fresh: switch to it (no toast) and ask the
+            // scroller to re-pull the ranked list and open on a new top coin.
+            clearNavStack();
+            setPositionDetail(null);
+            setWalletProfile(null);
+            if (filtersRef.current?.type !== 'mixed') switchFeed('mixed', { toast: false });
+            else setActiveTab('home');
+            requestAnimationFrame(() => window.dispatchEvent(new CustomEvent('moonfeed:home-refresh')));
           } else {
             clearNavStack(); // bottom-nav tabs are root screens, not drill-ins
             setActiveTab(tab);

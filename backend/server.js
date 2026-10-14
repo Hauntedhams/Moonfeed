@@ -170,6 +170,7 @@ app.use('/api/soft-orders', softOrderRoutes);
 
 // Instant-trade swap builder/broadcaster for the in-app trading wallet
 app.use('/api/instant-trade', require('./routes/instantTrade'));
+app.use('/api/cloud-exec', require('./routes/cloudExec'));
 
 // First-party product analytics (ingest is public, dashboard aggregations need ADMIN_API_KEY)
 app.use('/api/analytics', require('./routes/analytics'));
@@ -2021,9 +2022,17 @@ function formatDexscreenerPair(pair, meta = {}) {
     pairCreatedAt: pair.pairCreatedAt,
     volume_6h_usd: parseFloat(pair.volume?.h6) || 0,
     volume_1h_usd: parseFloat(pair.volume?.h1) || 0,
+    volume_5m_usd: parseFloat(pair.volume?.m5) || 0,
+    price_change_1h: parseFloat(pair.priceChange?.h1) || 0,
+    price_change_6h: parseFloat(pair.priceChange?.h6) || 0,
+    price_change_5m: parseFloat(pair.priceChange?.m5) || 0,
     txns_24h: (pair.txns?.h24?.buys || 0) + (pair.txns?.h24?.sells || 0),
     buys_24h: pair.txns?.h24?.buys || 0,
     sells_24h: pair.txns?.h24?.sells || 0,
+    txns_6h: (pair.txns?.h6?.buys || 0) + (pair.txns?.h6?.sells || 0),
+    txns_1h: (pair.txns?.h1?.buys || 0) + (pair.txns?.h1?.sells || 0),
+    buys_1h: pair.txns?.h1?.buys || 0,
+    sells_1h: pair.txns?.h1?.sells || 0,
 
     source: 'dexscreener-trending'
   };
@@ -2065,11 +2074,16 @@ function formatCoinGeckoPool(pool, includedTokens = new Map(), source = 'coingec
     change24h: parseFloat(priceChange.h24 || priceChange['24h'] || 0) || 0,
     priceChange24h: parseFloat(priceChange.h24 || priceChange['24h'] || 0) || 0,
     price_change_1h: parseFloat(priceChange.h1 || 0) || 0,
+    price_change_6h: parseFloat(priceChange.h6 || 0) || 0,
+    price_change_5m: parseFloat(priceChange.m5 || 0) || 0,
     volume_1h_usd: parseFloat(volume.h1 || 0) || 0,
     volume_6h_usd: parseFloat(volume.h6 || 0) || 0,
     txns_24h: (h24Txns.buys || 0) + (h24Txns.sells || 0),
     buys_24h: h24Txns.buys || 0,
     sells_24h: h24Txns.sells || 0,
+    txns_1h: ((txns.h1 || {}).buys || 0) + ((txns.h1 || {}).sells || 0),
+    buys_1h: (txns.h1 || {}).buys || 0,
+    sells_1h: (txns.h1 || {}).sells || 0,
     pairAddress: poolAddress,
     poolAddress,
     pairCreatedAt: createdAt,
@@ -2583,6 +2597,67 @@ app.get('/api/coins/new', async (req, res) => {
 });
 
 // DEXTRENDING endpoint - Returns trending coins from Dexscreener
+// MOONFEED endpoint — the default feed. Real-volume, rising coins from the
+// whole multi-source pool, gated (≥$50k mcap, ≥$10k liquidity, ≥$10k verified
+// lock when known) and ranked by momentum × volume quality × depth. See
+// services/moonfeedRanker.js for the heuristics. Cached 90s, rebuilt in the
+// background so a Home-button press is always instant.
+const { rankMoonfeedCoins } = require('./services/moonfeedRanker');
+const MOONFEED_CACHE_TTL = 90 * 1000;
+let moonfeedCoins = [];
+let moonfeedLastBuild = 0;
+let moonfeedBuildPromise = null;
+let moonfeedLastDropped = {};
+
+async function buildMoonfeedCoins() {
+  // Make sure the shared candidate pool exists (shares the in-flight build if any)
+  await fetchDexscreenerTrendingBatch();
+  const pool = [...dextrendingCoins, ...whalefeedCoins, ...currentCoins];
+  const withPrices = applyLivePrices(pool);
+  rugcheckBatchProcessor.enrichCoinsWithCache(withPrices);
+  const { coins, dropped } = rankMoonfeedCoins(withPrices);
+  moonfeedCoins = coins;
+  moonfeedLastDropped = dropped;
+  moonfeedLastBuild = Date.now();
+  // Fill in lock status for the coins people will actually see first.
+  try { rugcheckBatchProcessor.queueFeedCoins(coins.slice(0, 40), 'moonfeed'); } catch (_) { /* optional */ }
+  console.log(`🌙 Moonfeed ranked: ${coins.length} coins from ${pool.length} candidates — dropped ${JSON.stringify(dropped)}`);
+  return coins;
+}
+
+function getMoonfeedCoins() {
+  const fresh = moonfeedCoins.length > 0 && Date.now() - moonfeedLastBuild < MOONFEED_CACHE_TTL;
+  if (fresh) return Promise.resolve(moonfeedCoins);
+  if (!moonfeedBuildPromise) {
+    moonfeedBuildPromise = buildMoonfeedCoins()
+      .catch((err) => { console.error('❌ Moonfeed build failed:', err.message); return moonfeedCoins; })
+      .finally(() => { moonfeedBuildPromise = null; });
+  }
+  if (moonfeedCoins.length > 0) return Promise.resolve(moonfeedCoins); // stale-while-revalidate
+  return moonfeedBuildPromise;
+}
+
+app.get('/api/coins/moonfeed', async (req, res) => {
+  try {
+    const limit = req.query.limit ? Math.min(parseInt(req.query.limit) || 40, 100) : 40;
+    const offset = Math.max(0, parseInt(req.query.offset) || 0);
+    const ranked = await getMoonfeedCoins();
+    const page = ranked.slice(offset, offset + limit);
+    res.json({
+      success: true,
+      coins: page,
+      count: page.length,
+      total: ranked.length,
+      dropped: moonfeedLastDropped,
+      builtAt: moonfeedLastBuild ? new Date(moonfeedLastBuild).toISOString() : null,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('❌ Error in /api/coins/moonfeed endpoint:', error.message);
+    res.status(500).json({ success: false, error: 'Failed to build Moonfeed', details: error.message });
+  }
+});
+
 app.get('/api/coins/dextrending', async (req, res) => {
   try {
     console.log('🔥 /api/coins/dextrending endpoint called');

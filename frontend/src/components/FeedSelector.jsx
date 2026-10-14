@@ -13,7 +13,7 @@ const SOLANA_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 // 'trending' is no longer a separate selectable feed — its coins are folded
 // into the tail of 'dextrending' (see CONTINUOUS_FEED_ORDER below).
 export const BASE_FEEDS = [
-  { id: 'mixed', label: 'Mixed', detail: 'Blend of Trending + Whale + Graduating', icon: 'shuffle' },
+  { id: 'mixed', label: 'Moonfeed', detail: 'Rising coins on real volume — the default', icon: 'shuffle' },
   { id: 'dextrending', label: 'Trending', detail: 'Hot pools + momentum leaders', icon: 'trending-up' },
   { id: 'whalefeed', label: 'Whale', detail: 'Large, liquid multi-source picks', icon: 'whale' },
   { id: 'graduating', label: 'Graduating', detail: 'Pump.fun bonding-curve launches', icon: 'graduation-cap' },
@@ -35,9 +35,9 @@ const CUSTOM_FEED = { id: 'custom', label: 'Custom', detail: 'Your saved market 
 // Per-feed explainer shown in the expandable info drawer.
 const FEED_INFO = {
   mixed: {
-    purpose: 'A blended feed combining coins from Trending, Whale and Graduating — the fastest way to sample everything at once.',
-    sources: 'Whichever of Trending, Whale and Graduating you\u2019ve already loaded this session (fetched fresh the first time you open Mixed).',
-    reason: 'Coins are interleaved from all three feeds and deduped by mint, so no single feed dominates the scroll.'
+    purpose: 'The default feed: coins that are actively going up on real volume, big enough to trade. Tap Home any time to reload it and land on a fresh top coin.',
+    sources: 'The whole multi-source pool \u2014 Dexscreener, CoinGecko Onchain and Solana Tracker \u2014 re-ranked every 90 seconds, with Rugcheck lock data as it arrives.',
+    reason: 'Hard floors of $50k market cap, $10k liquidity (and $10k verified locked LP once known), $20k daily volume and 120+ trades; coins must be green on the last hour or six hours. Wash-trading signatures (volume with no price impact, 50/50 mirror trades, pool-sized ping-pong, dust spam) are scored and dropped. Survivors rank by 1h/6h/24h momentum, volume quality, depth, verified lock and participation.'
   },
   dextrending: {
     purpose: 'Hot Solana coins selected from a broader multi-source pool, with new and rising DEX activity prioritized. Once you scroll past the hottest pools it keeps going straight into the broader momentum leaders — no need to switch feeds.',
@@ -304,7 +304,7 @@ function FeedSelector({
       return () => { cancelled = true; };
     }
     const endpointByFeed = {
-      mixed: '/api/coins/dextrending',
+      mixed: '/api/coins/moonfeed',
       dextrending: '/api/coins/dextrending',
       whalefeed: '/api/coins/whalefeed',
       graduating: '/api/coins/graduating',
@@ -332,14 +332,10 @@ function FeedSelector({
 
     // 'dextrending' is a combined feed (see CONTINUOUS_FEED_ORDER) — preview
     // its trending tail too, so this list matches what scrolling the real
-    // feed does once the dextrending coins run out. 'mixed' previews all
-    // three of its blended source feeds.
+    // feed does once the dextrending coins run out.
     const requests = [fetchList(`${API_ROOT}${endpoint}?limit=40&offset=0`)];
     if (browseFeed === 'dextrending') {
       requests.push(fetchList(`${API_ROOT}/api/coins/trending?limit=40&offset=0`));
-    } else if (browseFeed === 'mixed') {
-      requests.push(fetchList(`${API_ROOT}/api/coins/whalefeed?limit=40&offset=0`));
-      requests.push(fetchList(`${API_ROOT}/api/coins/graduating?limit=40&offset=0`));
     }
 
     Promise.all(requests)

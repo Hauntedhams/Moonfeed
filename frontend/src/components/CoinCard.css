@@ -24,9 +24,9 @@
      BUT exempt TikTok action bar, expand-handle & info layer so they animate in BOTH directions.
      The full-screen sheets (pdv/wpv/odv) are exempt too — their drag-dismiss
      spring-back and slide-out rely on the transform transition. */
-  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content):not(.coin-buy-drawer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track):not(.feed-swipe-container):not(.feed-filter-strip):not(.feed-filter-track):not(.feed-filter-item):not(.feed-filter-hint):not(.orders-page):not(.swipe-back-page):not(.pdv-root):not(.wpv-root):not(.odv-root):not(.crs-root):not(.crs-top):not(.crs-sheet),
-  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content):not(.coin-buy-drawer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track):not(.feed-swipe-container):not(.feed-filter-strip):not(.feed-filter-track):not(.feed-filter-item):not(.feed-filter-hint):not(.orders-page):not(.swipe-back-page):not(.pdv-root):not(.wpv-root):not(.odv-root):not(.crs-root):not(.crs-top):not(.crs-sheet)::before,
-  *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.coin-info-layer):not(.info-layer-content):not(.coin-buy-drawer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track):not(.feed-swipe-container):not(.feed-filter-strip):not(.feed-filter-track):not(.feed-filter-item):not(.feed-filter-hint):not(.orders-page):not(.swipe-back-page):not(.pdv-root):not(.wpv-root):not(.odv-root):not(.crs-root):not(.crs-top):not(.crs-sheet)::after {
+    *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.native-chart-share-group):not(.coin-info-layer):not(.info-layer-content):not(.coin-buy-drawer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track):not(.feed-swipe-container):not(.feed-filter-strip):not(.feed-filter-track):not(.feed-filter-item):not(.feed-filter-hint):not(.orders-page):not(.swipe-back-page):not(.pdv-root):not(.wpv-root):not(.odv-root):not(.crs-root):not(.crs-top):not(.crs-sheet),
+    *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.native-chart-share-group):not(.coin-info-layer):not(.info-layer-content):not(.coin-buy-drawer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track):not(.feed-swipe-container):not(.feed-filter-strip):not(.feed-filter-track):not(.feed-filter-item):not(.feed-filter-hint):not(.orders-page):not(.swipe-back-page):not(.pdv-root):not(.wpv-root):not(.odv-root):not(.crs-root):not(.crs-top):not(.crs-sheet)::before,
+    *:not(.tiktok-action-btn):not(.expand-handle):not(.tiktok-action-icon):not(.tiktok-action-label):not(.tiktok-action-buttons):not(.native-chart-share-group):not(.coin-info-layer):not(.info-layer-content):not(.coin-buy-drawer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track):not(.feed-swipe-container):not(.feed-filter-strip):not(.feed-filter-track):not(.feed-filter-item):not(.feed-filter-hint):not(.orders-page):not(.swipe-back-page):not(.pdv-root):not(.wpv-root):not(.odv-root):not(.crs-root):not(.crs-top):not(.crs-sheet)::after {
     transition: none !important;
     transition-duration: 0s !important;
   }
@@ -41,7 +41,7 @@
   .info-layer-profile-image:hover,
   .header-metric:hover,
   .header-social-icon:hover,
-  *:not(.tiktok-action-btn):not(.tiktok-action-buttons):not(.expand-handle):not(.coin-info-layer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track):not(.feed-swipe-container):not(.feed-filter-strip):not(.feed-filter-track):not(.feed-filter-item):not(.feed-filter-hint):not(.orders-page):not(.swipe-back-page):not(.pdv-root):not(.wpv-root):not(.odv-root):not(.crs-root):not(.crs-top):not(.crs-sheet):hover {
+  *:not(.tiktok-action-btn):not(.tiktok-action-buttons):not(.native-chart-share-group):not(.expand-handle):not(.coin-info-layer):not(.coin-info-popup-feed):not(.coin-info-popup-feed-track):not(.feed-swipe-container):not(.feed-filter-strip):not(.feed-filter-track):not(.feed-filter-item):not(.feed-filter-hint):not(.orders-page):not(.swipe-back-page):not(.pdv-root):not(.wpv-root):not(.odv-root):not(.crs-root):not(.crs-top):not(.crs-sheet):hover {
     transform: none !important;
     opacity: 1 !important;
   }
@@ -461,6 +461,25 @@ html.dark-mode .coin-expand-swipe-arrow-icon {
   gap: 12px;
 }
 
+.native-chart-share-group {
+  position: relative;
+  flex: 0 0 80px;
+  width: 80px;
+  height: 44px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(26px) scale(0.72);
+  transition: opacity 0.2s ease, transform 0.28s cubic-bezier(0.2, 0.85, 0.3, 1);
+}
+
+.native-chart-share-group.visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+
+.native-chart-share-group.visible:nth-child(4) { transition-delay: 0.04s, 0.04s; }
+
 .native-chart-action-btn {
   width: 44px;
   height: 44px;
@@ -500,6 +519,47 @@ html.dark-mode .coin-expand-swipe-arrow-icon {
   border-color: #22c55e;
   color: #ffffff;
   box-shadow: 0 0 14px rgba(34, 197, 94, 0.5);
+}
+
+.native-chart-share-btn {
+  position: absolute;
+  top: 0;
+  right: 0;
+  transition-delay: 0s;
+}
+
+.native-chart-share-address-btn {
+  position: absolute;
+  top: 5px;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1.5px solid rgba(255, 255, 255, 0.45);
+  border-radius: 50%;
+  background: rgba(10, 10, 20, 0.88);
+  color: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 2px 9px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(30px) scale(0.72);
+  transition: opacity 0.18s ease, transform 0.24s cubic-bezier(0.2, 0.85, 0.3, 1), background 0.18s ease, border-color 0.18s ease;
+}
+
+.native-chart-share-group.visible .native-chart-share-address-btn {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+  transition-delay: 0s;
+}
+
+.native-chart-share-address-btn.copied {
+  background: rgba(34, 197, 94, 0.4);
+  border-color: #22c55e;
 }
 
 .native-chart-action-badge {
@@ -6126,3 +6186,32 @@ html.dark-mode .description-modal-body,
   background: linear-gradient(135deg, rgba(52, 211, 153, 0.16) 0%, rgba(16, 185, 129, 0.07) 100%);
   color: #6ee7b7;
 }
+
+/* Trades moved into the bottom controls row: small count badge + active ring */
+.native-chart-action-btn { position: relative; }
+.native-chart-action-count {
+  position: absolute;
+  top: -6px;
+  right: -8px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: #4f8cff;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 18px;
+  text-align: center;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+.native-chart-action-btn.active { border-color: #4f8cff; color: #4f8cff; }
+
+/* Zoom button in the right-side cluster: blue ring while zoomed to 1m (the
+   generic .active purple is for open sheets) */
+.tiktok-action-buttons .tiktok-action-btn--zoom.active {
+  border-color: #4f8cff !important;
+  background: rgba(79, 140, 255, 0.28) !important;
+}
+.tiktok-action-btn--zoom.active .tiktok-action-icon svg { stroke: #fff; filter: drop-shadow(0 0 6px rgba(79, 140, 255, 0.9)); }
+.tiktok-action-btn--zoom.active .tiktok-action-count { color: #93c5fd; }

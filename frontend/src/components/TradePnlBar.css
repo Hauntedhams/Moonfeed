@@ -1,0 +1,138 @@
+/* Universal trade PnL bar (holdings + history). Matches the holding-card
+   sell-progress aesthetic: thin rounded track, white entry tick, glowing
+   marker; adds a solid directional fill from the centre. */
+
+.tpb {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 0 2px;
+  --tpb-up: #22c55e;
+  --tpb-down: #ef4444;
+  --tpb-track: rgba(255, 255, 255, 0.1);
+}
+html:not(.dark-mode) .tpb { --tpb-track: rgba(0, 0, 0, 0.08); }
+
+.tpb-labels {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: end;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: 0.02em;
+}
+.tpb-edge { color: var(--text-secondary); }
+.tpb-edge--left { color: rgba(252, 165, 165, 0.9); }
+.tpb-edge--right { text-align: right; color: rgba(134, 239, 172, 0.9); }
+.tpb-center { color: var(--text-secondary); letter-spacing: 0.6px; font-size: 9.5px; }
+
+.tpb-track {
+  position: relative;
+  height: 9px;
+  border-radius: 5px;
+  background: var(--tpb-track);
+  overflow: visible;
+}
+.tpb--sm .tpb-track { height: 7px; }
+.tpb--sm .tpb-labels { font-size: 9px; }
+
+.tpb-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 5px;
+  background: var(--tpb-up);
+  transition: width 0.35s ease;
+}
+.tpb--up .tpb-fill { background: linear-gradient(90deg, rgba(34, 197, 94, 0.55), var(--tpb-up)); }
+.tpb--down .tpb-fill { background: linear-gradient(270deg, rgba(239, 68, 68, 0.55), var(--tpb-down)); }
+
+/* Maxed-out win: full right half lit with a glow and a shimmer sweep */
+.tpb--maxed .tpb-fill {
+  background: linear-gradient(90deg, #22c55e, #4ade80, #a7f3d0, #4ade80);
+  background-size: 200% 100%;
+  animation: tpb-shimmer 1.6s linear infinite;
+  box-shadow: 0 0 10px rgba(74, 222, 128, 0.6);
+}
+.tpb--floored .tpb-fill { box-shadow: 0 0 10px rgba(239, 68, 68, 0.55); }
+@keyframes tpb-shimmer {
+  0% { background-position: 0% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Entry tick at the bar's midpoint */
+.tpb-mid {
+  position: absolute;
+  left: 50%;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  margin-left: -1px;
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 1px;
+  z-index: 2;
+}
+html:not(.dark-mode) .tpb-mid { background: rgba(17, 24, 39, 0.7); }
+
+.tpb-tick {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  z-index: 2;
+}
+.tpb-tick--stop { background: #f87171; }
+.tpb-tick--tp { background: #4ade80; }
+
+.tpb-marker {
+  position: absolute;
+  top: -2px;
+  width: 13px;
+  height: 13px;
+  margin-left: -6.5px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  background: #111827;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35), 0 0 8px rgba(255, 255, 255, 0.45);
+  box-sizing: border-box;
+  z-index: 3;
+  transition: left 0.35s ease;
+}
+.tpb--sm .tpb-marker { width: 11px; height: 11px; margin-left: -5.5px; top: -2px; }
+.tpb--up .tpb-marker { background: var(--tpb-up); }
+.tpb--down .tpb-marker { background: var(--tpb-down); }
+.tpb--maxed .tpb-marker { box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35), 0 0 12px rgba(74, 222, 128, 0.9); }
+
+/* Realized (history) bars are slightly muted so open positions pop more */
+.tpb--closed .tpb-track { opacity: 0.95; }
+
+/* Big PnL headline used next to the bar on cards */
+.tpb-headline {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.tpb-headline--up { color: var(--tpb-up, #22c55e); }
+.tpb-headline--down { color: var(--tpb-down, #ef4444); }
+.tpb-headline--flat { color: var(--text-secondary); }
+.tpb-headline-pct { font-size: 20px; }
+.tpb-headline-usd { font-size: 12px; font-weight: 600; opacity: 0.85; }
+.tpb-headline-tag {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-secondary);
+}
+.tpb-headline--up .tpb-headline-tag.maxed { background: rgba(34, 197, 94, 0.18); color: #4ade80; }

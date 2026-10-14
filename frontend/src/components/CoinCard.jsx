@@ -23,9 +23,7 @@ import { getSolUsdPrice } from '../utils/orderFillTracking';
 import { WalletChip } from '../utils/walletIdentity';
 import { track, coinProps } from '../utils/analytics';
 import { useTrackedTrades } from '../contexts/TrackedTradesContext';
-import InstantTradePanel from './InstantTradePanel';
-import { getPresets as getInstantPresets, savePresets, loadTradingWallet } from '../utils/instantTradeWallet';
-import { executeInstantBuy, executeInstantSell } from '../utils/instantTrade';
+import { savePresets, loadTradingWallet } from '../utils/instantTradeWallet';
 import { API_CONFIG } from '../config/api.js';
 import { 
   calculateGraduationPercentage, 
@@ -122,7 +120,7 @@ function formatFeedLabel(feedType) {
     trenches: 'Trenches',
     dextrending: 'Trending',
     whalefeed: 'Whale',
-    mixed: 'Mixed',
+    mixed: 'Moonfeed',
     followwallets: 'Wallets',
     followcoins: 'My Coins',
     custom: 'Custom',
@@ -177,6 +175,8 @@ const CoinCard = memo(({
   const [reelTxSort, setReelTxSort] = useState('recent');
   const [topTradersCount, setTopTradersCount] = useState(0);
   const [comments, setComments] = useState([]); // Cached comments for count badge
+  const [addressCopied, setAddressCopied] = useState(false);
+  const [shareLinkCopied, setShareLinkCopied] = useState(false);
   const [showActionButtons, setShowActionButtons] = useState(false); // Hidden in collapsed/preview state; shown only when card is expanded
   const [hasToggledActions, setHasToggledActions] = useState(false); // Track if user has toggled (avoids mount animation)
   const expandSwipeRef = useRef(null); // touch tracking for the slide-up-to-expand arrow
@@ -187,17 +187,11 @@ const CoinCard = memo(({
   const [trackedPrice, setTrackedPrice] = useState(null);
   const [trackedTimeState, setTrackedTimeState] = useState(null);
   const [focusTrackedSignal, setFocusTrackedSignal] = useState(0);
-  // Instant trade (in-app trading wallet): ⚡ button next to Track
-  const [showInstantPanel, setShowInstantPanel] = useState(false);
-  const [instantArmed, setInstantArmed] = useState(() => getInstantPresets().enabled);
-  const [instantBuySol, setInstantBuySol] = useState(() => getInstantPresets().buySol);
-  const [instantSellPct, setInstantSellPct] = useState(() => Number(getInstantPresets().sellPct) || 100);
+  const [historyPinFocusTime, setHistoryPinFocusTime] = useState(coin.historyFocusTimeMs || null);
+  const [activeHistoryPinId, setActiveHistoryPinId] = useState(coin.historyFocusPinId || null);
+  const [historyPinFocusNonce, setHistoryPinFocusNonce] = useState(0);
   const [trackConfirm, setTrackConfirm] = useState(false); // briefly shows "Tracked" before the price
   const trackConfirmTimerRef = useRef(null);
-  const [instantBusy, setInstantBusy] = useState(false);
-  const [instantSellBusy, setInstantSellBusy] = useState(false);
-  const [instantFlash, setInstantFlash] = useState(null); // { ok, text }
-  const instantPressRef = useRef(null); // long-press opens settings while one-tap mode is armed
   // Auto-translates non-English coin names/descriptions (e.g. Chinese meme coins) to English.
   const nameTranslation = useAutoTranslate(coin.name || coin.symbol || coin.ticker || '');
   const descriptionTranslation = useAutoTranslate(coin.description || '');
@@ -223,6 +217,8 @@ const CoinCard = memo(({
   const [useAdvancedGeckoChart, setUseAdvancedGeckoChart] = useState(false);
   const [advancedChartFullscreenSignal, setAdvancedChartFullscreenSignal] = useState(0); // Bumped to open the advanced chart's own fullscreen mode
   const [chartResetSignal, setChartResetSignal] = useState(0); // Bumped to snap the chart's pan/zoom back to default
+  const [chartLiveZoomSignal, setChartLiveZoomSignal] = useState(0); // right-side Zoom button → NativeChart
+  const [chartLiveZoom, setChartLiveZoom] = useState(false);
   const [buyDrawerOpen, setBuyDrawerOpen] = useState(false);
   // While the open-swipe is in progress: { mode, progress } with progress 0..1.
   const [buyDrawerDrag, setBuyDrawerDrag] = useState(null);
@@ -331,6 +327,14 @@ const CoinCard = memo(({
   
   // Solana RPC live transactions - backend handles the heavy lifting now (works on mobile too)
   const mintAddress = coin.mintAddress || coin.mint || coin.address || coin.contract_address || coin.contractAddress || coin.tokenAddress;
+  const userTradePins = coin.userTradePins || null;
+  const handleHistoryPinClick = (id) => {
+    const pin = userTradePins?.find((item) => item.id === id);
+    if (!pin) return;
+    setActiveHistoryPinId(id);
+    setHistoryPinFocusTime(pin.timeMs);
+    setHistoryPinFocusNonce((value) => value + 1);
+  };
 
   // Route a wallet click to the full profile overlay when available, else the popup
   const handleWalletClick = React.useCallback((address, profileHint = {}) => {
@@ -980,6 +984,20 @@ const CoinCard = memo(({
     setBuyDrawerOpen(true);
   };
 
+  // The Trade window's Orders tab hands off to this drawer for drag-on-chart targets.
+  const openBuyDrawerRef = useRef(openBuyDrawer);
+  openBuyDrawerRef.current = openBuyDrawer;
+  useEffect(() => {
+    if (!isActiveCard) return undefined;
+    const onOpen = (e) => {
+      const target = e.detail?.mint;
+      if (target && target !== mintAddress) return;
+      openBuyDrawerRef.current?.();
+    };
+    window.addEventListener('moonfeed:open-order-drawer', onOpen);
+    return () => window.removeEventListener('moonfeed:open-order-drawer', onOpen);
+  }, [isActiveCard, mintAddress]);
+
   // Puts the limit-order picker (target price, step multiplier, expiry, wager
   // amount) back to its defaults without closing the drawer.
   const resetOrderDrawer = () => {
@@ -1055,97 +1073,7 @@ const CoinCard = memo(({
     if (layer && layer.scrollTop > 0) layer.scrollTo({ top: 0, behavior: 'smooth' });
   }, [orderChartFocused, isDesktopMode]);
 
-  // ── Instant trade (⚡ button) ──────────────────────────────────────────────
-  useEffect(() => {
-    const onPresetsChange = (e) => {
-      setInstantArmed(Boolean(e.detail?.enabled));
-      if (e.detail?.buySol) setInstantBuySol(e.detail.buySol);
-      if (e.detail?.sellPct != null) setInstantSellPct(Number(e.detail.sellPct) || 100);
-    };
-    window.addEventListener('moonfeed:instant-presets-changed', onPresetsChange);
-    return () => {
-      window.removeEventListener('moonfeed:instant-presets-changed', onPresetsChange);
-      clearTimeout(trackConfirmTimerRef.current);
-    };
-  }, []);
-
-  const handleInstantPressStart = () => {
-    clearTimeout(instantPressRef.current?.timer);
-    instantPressRef.current = {
-      longFired: false,
-      // Long-press opens settings even in one-tap mode (which otherwise buys on tap)
-      timer: setTimeout(() => {
-        if (instantPressRef.current) instantPressRef.current.longFired = true;
-        setShowInstantPanel(true);
-      }, 550),
-    };
-  };
-
-  const handleInstantPressEnd = () => {
-    clearTimeout(instantPressRef.current?.timer);
-  };
-
-  const handleInstantToggle = async (e) => {
-    e.stopPropagation();
-    const next = !instantArmed;
-    if (next && !(await loadTradingWallet())) {
-      setShowInstantPanel(true); // needs a trading wallet first
-      return;
-    }
-    savePresets({ enabled: next });
-    setInstantArmed(next);
-  };
-
-  const handleInstantTap = async (e) => {
-    e.stopPropagation();
-    if (instantPressRef.current?.longFired) {
-      instantPressRef.current = null;
-      return;
-    }
-    const presets = getInstantPresets();
-    const tradingWallet = await loadTradingWallet();
-    if (!(presets.enabled && tradingWallet)) {
-      setShowInstantPanel(true);
-      return;
-    }
-    if (instantBusy) return;
-    setInstantBusy(true);
-    setInstantFlash(null);
-    try {
-      const out = await executeInstantBuy(coin);
-      setInstantFlash({ ok: true, text: `✓ Bought ${presets.buySol} SOL` });
-      console.log(`⚡ Instant buy ${coin.symbol}: ${out.signature}`);
-    } catch (err) {
-      setInstantFlash({ ok: false, text: (err?.message || 'Buy failed').slice(0, 90) });
-    } finally {
-      setInstantBusy(false);
-      setTimeout(() => setInstantFlash(null), 5000);
-    }
-  };
-
-  // Sells the trading wallet's position at the saved sell-amount preset.
-  const handleInstantSellTap = async (e) => {
-    e.stopPropagation();
-    const tradingWallet = await loadTradingWallet();
-    if (!tradingWallet) {
-      setShowInstantPanel(true);
-      return;
-    }
-    if (instantSellBusy || instantBusy) return;
-    const pct = Math.min(100, Math.max(1, Number(getInstantPresets().sellPct) || 100));
-    setInstantSellBusy(true);
-    setInstantFlash(null);
-    try {
-      const out = await executeInstantSell(coin, pct);
-      setInstantFlash({ ok: true, text: pct === 100 ? '✓ Sold position' : `✓ Sold ${pct}%` });
-      console.log(`⚡ Instant sell ${coin.symbol}: ${out.signature}`);
-    } catch (err) {
-      setInstantFlash({ ok: false, text: (err?.message || 'Sell failed').slice(0, 90) });
-    } finally {
-      setInstantSellBusy(false);
-      setTimeout(() => setInstantFlash(null), 5000);
-    }
-  };
+  useEffect(() => () => clearTimeout(trackConfirmTimerRef.current), []);
 
   // Holder mode: the wallet already owns this coin (beyond dust), so "Sell at"
   // places a sell order on the existing tokens — no buy-in step.
@@ -2386,8 +2314,8 @@ const CoinCard = memo(({
 
     try {
       await navigator.clipboard.writeText(address);
-      // Optional: Show a brief success indicator
-      // You could add a toast notification here if you have one
+      setAddressCopied(true);
+      window.setTimeout(() => setAddressCopied(false), 1400);
     } catch (err) {
       // Fallback method for older browsers
       try {
@@ -2399,11 +2327,48 @@ const CoinCard = memo(({
         document.body.appendChild(textArea);
         textArea.focus();
         textArea.select();
-        document.execCommand('copy');
+        const copied = document.execCommand('copy');
         textArea.remove();
+        if (copied) {
+          setAddressCopied(true);
+          window.setTimeout(() => setAddressCopied(false), 1400);
+        }
       } catch (fallbackErr) {
         console.error('Fallback copy failed:', fallbackErr);
       }
+    }
+  };
+
+  const handleShareCoin = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const address = coin.mintAddress || coin.mint || coin.address || coin.contract_address || coin.contractAddress || coin.tokenAddress;
+    if (!address) return;
+
+    const shareUrl = new URL('https://moonfeed.app/');
+    shareUrl.searchParams.set('coin', address);
+    const symbol = coin.symbol || coin.ticker || 'coin';
+    const shareData = {
+      title: `${symbol} on Moonfeed`,
+      text: `Check out ${symbol} on Moonfeed`,
+      url: shareUrl.toString(),
+    };
+
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+      } catch (error) {
+        if (error?.name !== 'AbortError') console.warn('Could not share coin:', error?.message);
+      }
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(shareUrl.toString());
+      setShareLinkCopied(true);
+      window.setTimeout(() => setShareLinkCopied(false), 1400);
+    } catch (error) {
+      console.warn('Could not copy coin link:', error?.message);
     }
   };
 
@@ -3076,64 +3041,6 @@ const CoinCard = memo(({
                         <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
                       </svg>
                     </a>
-                  )}
-                  <div className="follow-alert-wrap">
-                    <div className={`instant-trade-control${instantArmed ? ' armed' : ''}`}>
-                      <button
-                        type="button"
-                        className="instant-toggle"
-                        role="switch"
-                        aria-checked={instantArmed}
-                        aria-label="One-tap instant buy"
-                        title={instantArmed ? 'One-tap buy is ON — tap to turn off' : 'Turn on one-tap buy'}
-                        onClick={handleInstantToggle}
-                      >
-                        <span className="instant-toggle-knob" />
-                      </button>
-                      <button
-                        type="button"
-                        className="instant-options-btn"
-                        onClick={(e) => { e.stopPropagation(); setShowInstantPanel(true); }}
-                        title="Instant trade options"
-                        aria-label="Instant trade options"
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
-                          <path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0" />
-                          <circle cx="16" cy="6" r="2" />
-                          <circle cx="10" cy="12" r="2" />
-                          <circle cx="18" cy="18" r="2" />
-                        </svg>
-                      </button>
-                    </div>
-                    <button
-                      className={`instant-buy-bubble${instantArmed ? ' armed' : ''}${instantBusy ? ' busy' : ''}`}
-                      onClick={handleInstantTap}
-                      onPointerDown={handleInstantPressStart}
-                      onPointerUp={handleInstantPressEnd}
-                      onPointerLeave={handleInstantPressEnd}
-                      title={instantArmed ? 'Instant buy at your preset — hold to open settings' : 'Instant trade'}
-                      aria-label={instantArmed ? `Instant buy ${instantBuySol} SOL` : 'Instant trade'}
-                    >
-                      <span>{instantBusy ? 'Buying…' : instantArmed ? `Buy ${instantBuySol}` : 'Buy'}</span>
-                    </button>
-                    <button
-                      className={`instant-sell-bubble${instantSellBusy ? ' busy' : ''}`}
-                      onClick={handleInstantSellTap}
-                      title={instantSellPct < 100 ? `Instant sell ${instantSellPct}% of your position` : 'Instant sell your whole position'}
-                      aria-label={instantSellPct < 100 ? `Instant sell ${instantSellPct}% of your position` : 'Instant sell your whole position'}
-                    >
-                      <span>{instantSellBusy ? 'Selling…' : instantSellPct < 100 ? `Sell ${instantSellPct}%` : 'Sell'}</span>
-                    </button>
-                    {instantFlash && (
-                      <span className={`instant-trade-flash ${instantFlash.ok ? 'ok' : 'err'}`}>{instantFlash.text}</span>
-                    )}
-                  </div>
-                  {showInstantPanel && (
-                    <InstantTradePanel
-                      coin={coin}
-                      connectedWallet={walletAddress}
-                      onClose={() => setShowInstantPanel(false)}
-                    />
                   )}
                 </div>
               </div>
@@ -4235,24 +4142,24 @@ const CoinCard = memo(({
         </button>
 
         <button
-          className={`tiktok-action-btn ${showLiveTransactions || reelSheet === 'transactions' ? 'active' : ''}`}
+          className={`tiktok-action-btn tiktok-action-btn--zoom ${chartLiveZoom ? 'active' : ''}`}
           onClick={(e) => {
             e.stopPropagation();
-            openReelSheet('transactions');
+            setChartLiveZoomSignal((n) => n + 1);
           }}
-          title="Live transactions"
-          aria-label="Open live transactions"
+          title={chartLiveZoom ? 'Back to full chart' : 'Zoom in to live 1m price'}
+          aria-label={chartLiveZoom ? 'Back to full chart' : 'Zoom in to live 1m price'}
+          aria-pressed={chartLiveZoom}
         >
           <span className="tiktok-action-icon">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M17 3l4 4-4 4" />
-              <path d="M3 7h18" />
-              <path d="M7 21l-4-4 4-4" />
-              <path d="M21 17H3" />
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="7" />
+              <line x1="16.5" y1="16.5" x2="21" y2="21" />
+              {!chartLiveZoom && <line x1="11" y1="8" x2="11" y2="14" />}
+              <line x1="8" y1="11" x2="14" y2="11" />
             </svg>
           </span>
-          <span className="tiktok-action-label">Trades</span>
-          <span className="tiktok-action-count">{formatReelCount(reelCounts.transactions)}</span>
+          <span className="tiktok-action-count">{chartLiveZoom ? '1m' : 'Zoom'}</span>
         </button>
 
         {/* Top PnL traders window — shares the same vertical line as Trades, over the arrow. */}
@@ -4279,6 +4186,20 @@ const CoinCard = memo(({
       </div>
       {USE_NATIVE_CHART && _mobilePortal && (
         <div ref={nativeActionsRef} className="native-chart-mobile-right-actions">
+          <button
+            className={`native-chart-action-btn native-chart-action-btn--trades ${nativeChartControlsVisible ? 'visible' : ''}${showLiveTransactions || reelSheet === 'transactions' ? ' active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); openReelSheet('transactions'); }}
+            title="Live transactions"
+            aria-label="Open live transactions"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17 3l4 4-4 4" />
+              <path d="M3 7h18" />
+              <path d="M7 21l-4-4 4-4" />
+              <path d="M21 17H3" />
+            </svg>
+            {Number(reelCounts.transactions) > 0 && <span className="native-chart-action-count">{formatReelCount(reelCounts.transactions)}</span>}
+          </button>
           <button
             className={`native-chart-action-btn ${nativeChartControlsVisible ? 'visible' : ''}`}
             onClick={openMobileTradeDrawer}
@@ -4314,26 +4235,34 @@ const CoinCard = memo(({
               <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
             </svg>
           </button>
-          {/* Share / Copy Address */}
-          <button
-            className={`native-chart-action-btn ${nativeChartControlsVisible ? 'visible' : ''}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              const addr = coin.mintAddress || coin.mint || coin.address || '';
-              if (addr) {
-                navigator.clipboard.writeText(addr);
-                e.currentTarget.classList.add('copied');
-                setTimeout(() => e.currentTarget.classList.remove('copied'), 1200);
-              }
-            }}
-            title="Copy token address"
-            aria-label="Copy token address"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-            </svg>
-          </button>
+          <div className={`native-chart-share-group${nativeChartControlsVisible ? ' visible' : ''}`}>
+            <button
+              type="button"
+              className={`native-chart-action-btn visible native-chart-share-btn${shareLinkCopied ? ' copied' : ''}`}
+              onClick={handleShareCoin}
+              title={shareLinkCopied ? 'Coin link copied' : 'Share this coin on Moonfeed'}
+              aria-label={shareLinkCopied ? 'Coin link copied' : 'Share this coin on Moonfeed'}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="18" cy="5" r="3" />
+                <circle cx="6" cy="12" r="3" />
+                <circle cx="18" cy="19" r="3" />
+                <path d="m8.6 10.7 6.8-4.4M8.6 13.3l6.8 4.4" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              className={`native-chart-share-address-btn${addressCopied ? ' copied' : ''}`}
+              onClick={handleCopyAddress}
+              title={addressCopied ? 'Token address copied' : 'Copy token address'}
+              aria-label={addressCopied ? 'Token address copied' : 'Copy token address'}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="8" y="8" width="13" height="13" rx="2" />
+                <path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" />
+              </svg>
+            </button>
+          </div>
         </div>
       )}
       {_mobilePortal && (
@@ -4452,7 +4381,7 @@ const CoinCard = memo(({
               <span>{coin.symbol || coin.name || 'Chart'}</span>
               <button onClick={closeNativeChartFullscreen} aria-label="Close full chart">×</button>
             </div>
-            <NativeChart coin={coin} isActive={true} isExpanded={true} livePrice={displayPrice} entryPrice={entryPrice} trackedPrice={effectiveTrackedPrice} trackedTime={effectiveTrackedTime} focusTrackedSignal={focusTrackedSignal} tradeDots={tradeDots} onTradeDotClick={handleTradeDotClick} resetViewSignal={chartResetSignal} orderLinePrice={coin.activeOrder?.triggerPriceUsd} orderLineLabel={coin.activeOrder?.side === 'buy' ? 'Buy target' : 'Sell target'} orderLines={orderLines} />
+            <NativeChart coin={coin} isActive={true} isExpanded={true} livePrice={displayPrice} entryPrice={entryPrice} trackedPrice={effectiveTrackedPrice} trackedTime={effectiveTrackedTime} focusTrackedSignal={focusTrackedSignal} tradeDots={tradeDots} onTradeDotClick={handleTradeDotClick} tradePins={userTradePins} onTradePinClick={handleHistoryPinClick} activeTradePinId={activeHistoryPinId} focusTimelineFrom={userTradePins?.[0]?.timeMs || historyPinFocusTime} focusTimelineTo={userTradePins?.[userTradePins.length - 1]?.timeMs || null} focusTimelineAt={historyPinFocusTime} refocusSignal={historyPinFocusNonce} resetViewSignal={chartResetSignal} orderLinePrice={coin.activeOrder?.triggerPriceUsd} orderLineLabel={coin.activeOrder?.side === 'buy' ? 'Buy target' : 'Sell target'} orderLines={orderLines} />
           </div>
         </div>
       )}
@@ -4489,6 +4418,9 @@ const CoinCard = memo(({
               livePrice={displayPrice}
               onCrosshairMove={handleChartCrosshairMove}
               focusOneMinute={orderChartFocused}
+              liveZoomSignal={chartLiveZoomSignal}
+              onLiveZoomChange={setChartLiveZoom}
+              hideLiveZoomButton
               targetPrice={orderChartFocused ? buyOrderPrice : null}
               onOrderTargetChange={orderChartFocused ? handleOrderTargetChange : null}
               onOrderTargetNudge={orderChartFocused ? adjustBuyOrderPrice : null}
@@ -4503,6 +4435,13 @@ const CoinCard = memo(({
               focusTrackedSignal={focusTrackedSignal}
               tradeDots={tradeDots}
               onTradeDotClick={handleTradeDotClick}
+              tradePins={userTradePins}
+              onTradePinClick={handleHistoryPinClick}
+              activeTradePinId={activeHistoryPinId}
+              focusTimelineFrom={userTradePins?.[0]?.timeMs || historyPinFocusTime}
+              focusTimelineTo={userTradePins?.[userTradePins.length - 1]?.timeMs || null}
+              focusTimelineAt={historyPinFocusTime}
+              refocusSignal={historyPinFocusNonce}
               resetViewSignal={chartResetSignal}
               onToggleAdvancedChart={() => setUseAdvancedGeckoChart(true)}
             />,
@@ -4860,6 +4799,9 @@ const CoinCard = memo(({
               coin={coin}
               isActive={true}
               isExpanded={true}
+              liveZoomSignal={chartLiveZoomSignal}
+              onLiveZoomChange={setChartLiveZoom}
+              hideLiveZoomButton
               livePrice={displayPrice}
               entryPrice={entryPrice}
               trackedPrice={effectiveTrackedPrice}

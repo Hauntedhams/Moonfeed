@@ -9,6 +9,7 @@ const PushAlertState = require('../models/PushAlertState');
 const PushWalletCursor = require('../models/PushWalletCursor');
 const SoftOrder = require('../models/SoftOrder');
 const pushService = require('./pushService');
+const cloudExecutor = require('./cloudExecutor');
 
 const PUBLIC_API_BASE_URL = (process.env.PUBLIC_API_BASE_URL || process.env.BACKEND_PUBLIC_URL || 'https://api.moonfeed.app').replace(/\/$/, '');
 
@@ -619,6 +620,7 @@ async function runSoftOrdersOnce() {
     { status: 'active', expiresAt: { $ne: null, $lt: new Date() } },
     { $set: { status: 'expired' } }
   );
+  cloudExecutor.reconcilePending(sendToWallet).catch((e) => console.error('[cloud-exec] reconcile error:', e.message));
 
   const orders = await SoftOrder.find({ status: 'active' }).lean();
   if (!orders.length) return;
@@ -638,9 +640,18 @@ async function runSoftOrdersOnce() {
     // Atomic flip guards against double-notify if two polls overlap.
     const updated = await SoftOrder.findOneAndUpdate(
       { _id: o._id, status: 'active' },
-      { $set: { status: 'triggered', triggeredAt: new Date(), triggeredPriceUsd: live.price } }
-    );
+      { $set: { status: 'triggered', triggeredAt: new Date(), triggeredPriceUsd: live.price } },
+      { new: true }
+    ).lean();
     if (!updated) continue;
+
+    // Opt-in cloud execution: the server trades for enrolled wallets and
+    // sends its own result push, so skip the generic "tap to sell" alert.
+    if (await cloudExecutor.isEnrolled(o.walletAddress).catch(() => false)) {
+      cloudExecutor.execute(updated, sendToWallet)
+        .catch((e) => console.error('[cloud-exec] execute error:', e.message));
+      continue;
+    }
 
     if (!pushService.isEnabled()) continue;
     const symbol = o.tokenSymbol || live.symbol || o.mint.slice(0, 6);

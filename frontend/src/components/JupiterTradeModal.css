@@ -252,16 +252,33 @@
   position: relative;
 }
 
-.jt-swipe-track.at-limit .jt-swipe-page--swap,
-.jt-swipe-track:not(.at-limit) .jt-swipe-page--limit {
-  display: none;
-  pointer-events: none;
+/* Only the active page is laid out (three pages: limit = Instant Trade, orders, swap) */
+.jt-swipe-page { display: none; pointer-events: none; }
+.jt-swipe-track.at-limit .jt-swipe-page--limit,
+.jt-swipe-track.at-orders .jt-swipe-page--orders,
+.jt-swipe-track.at-swap .jt-swipe-page--swap {
+  display: flex;
+  pointer-events: auto;
 }
 
-.jt-swipe-track.at-limit .jt-swipe-page--limit,
-.jt-swipe-track:not(.at-limit) .jt-swipe-page--swap {
+.jt-swipe-page--orders { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
+.jt-connect-card {
+  margin: 20px 16px;
+  padding: 20px 18px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+  color: #fff;
 }
+.jt-connect-card h4 { margin: 0; font-size: 15px; font-weight: 800; }
+.jt-connect-card p { margin: 0 0 4px; font-size: 13px; line-height: 1.45; color: rgba(255, 255, 255, 0.7); }
+
+.jupiter-tab-nav--3 .tab-btn { padding-left: 6px; padding-right: 6px; font-size: 13px; }
 
 .jt-swipe-page--swap {
   overflow-y: auto;
@@ -271,7 +288,7 @@
   z-index: 1;
 }
 
-.jt-swipe-track.at-limit .jt-swipe-page--swap .jupiter-widget-wrapper {
+.jt-swipe-track:not(.at-swap) .jt-swipe-page--swap .jupiter-widget-wrapper {
   visibility: hidden;
   pointer-events: none;
 }

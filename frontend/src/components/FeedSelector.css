@@ -10,11 +10,13 @@
   align-items: flex-end;
 }
 
-/* Desktop: align above the left panel like the old tabs */
+/* Desktop: sit beside the ☰ menu above the left panel (menu is 40px at
+   left:20px / top:20px — offset so the two never overlap). */
 @media (min-width: 1200px) {
   .feed-selector {
+    top: 19px;
     right: auto;
-    left: 16px;
+    left: 72px;
     align-items: flex-start;
   }
 }

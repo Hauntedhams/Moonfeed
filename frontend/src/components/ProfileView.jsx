@@ -1,13 +1,13 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useWallet as useJupiterWallet } from '@jup-ag/wallet-adapter';
-import { Connection, PublicKey } from '@solana/web3.js';
+import { Connection } from '@solana/web3.js';
 import { getFullApiUrl } from '../config/api';
 import { useTrackedWallets } from '../contexts/TrackedWalletsContext';
 import { useTrackedTrades } from '../contexts/TrackedTradesContext';
 import { useDarkMode } from '../contexts/DarkModeContext';
 import { useUserProfile } from '../contexts/UserProfileContext';
 import { useDemoMode } from '../contexts/DemoModeContext';
-import { useWalletView } from '../hooks/useWalletView';
+import { useActiveWalletIdentity } from '../hooks/useWalletView';
 import WalletSwitcher from './WalletSwitcher';
 import WalletPopup from './WalletPopup';
 import JupiterWalletButton from './JupiterWalletButton';
@@ -21,6 +21,9 @@ import { computeFillStats, getSolUsdPrice } from '../utils/orderFillTracking';
 import { fetchTriggerOrdersV2, cancelTriggerOrderV2 } from '../utils/triggerOrdersV2';
 import CautionTapeBanner from './CautionTapeBanner';
 import { resolveWalletDisplayName, WalletChip } from '../utils/walletIdentity';
+import ProfileCoinTile, { ProfileCoinTileSkeleton } from './ProfileCoinTile';
+import { fetchWalletPositions, shortAgo } from '../utils/walletPositions';
+import { fetchJsonWithTimeout } from '../config/api';
 
 const ProfileView = ({ onTradeClick, onOpenPosition }) => {
   // Use Jupiter Wallet Kit adapter
@@ -33,14 +36,9 @@ const ProfileView = ({ onTradeClick, onOpenPosition }) => {
   // Wallet view switcher: main connected wallet vs the ⚡ trading wallet.
   // The trading wallet is the active identity when selected — and the automatic
   // fallback whenever no main wallet is connected, so the app "stays signed in".
-  const { mode: walletViewMode, setMode: setWalletViewMode, instantWallet } = useWalletView();
-  const viewingInstant = Boolean(instantWallet)
-    && (walletViewMode === 'instant' || (!jupiterWallet.connected && !isDemoMode));
-  const publicKey = useMemo(
-    () => (viewingInstant ? new PublicKey(instantWallet.publicKey) : basePublicKey),
-    [viewingInstant, instantWallet, basePublicKey]
-  );
-  const connected = viewingInstant ? true : (isDemoMode ? true : (jupiterWallet.connected || false));
+  // Shared identity resolver — same answer as the Trades page and the feed.
+  const identity = useActiveWalletIdentity({ demoPublicKey: isDemoMode ? demoPublicKey : null });
+  const { viewingInstant, publicKey, connected, instantWallet, setMode: setWalletViewMode } = identity;
   const disconnect = jupiterWallet.disconnect;
   const signTransaction = jupiterWallet.signTransaction;
   const { openWalletConnect } = useWalletConnectOnboarding();
@@ -48,8 +46,18 @@ const ProfileView = ({ onTradeClick, onOpenPosition }) => {
   // Switching to "main" while no wallet is connected should ask to connect
   // instead of silently staying on the trading wallet.
   const handleWalletViewChange = (next) => {
-    setWalletViewMode(next);
-    if (next === 'main' && !jupiterWallet.connected && !isDemoMode) openWalletConnect();
+    if (isDemoMode) { setWalletViewMode(next); return; }
+    identity.switchTo(next, { onNeedsConnect: openWalletConnect });
+  };
+
+  const handleDisconnect = () => {
+    setWalletViewMode('disconnected');
+    if (viewingInstant) return;
+    if (isDemoMode) {
+      disableDemoMode();
+      return;
+    }
+    disconnect();
   };
 
   // Universal profile sync from MongoDB
@@ -68,7 +76,9 @@ const ProfileView = ({ onTradeClick, onOpenPosition }) => {
   const [statusFilter, setStatusFilter] = useState('active');
   const [cancellingOrder, setCancellingOrder] = useState(null);
   const [coinBanners, setCoinBanners] = useState(new Map());
-  const [positionPnl, setPositionPnl] = useState(new Map()); // mint -> { pnlTotal } aggregate position P/L in USD
+  const [positionPnl, setPositionPnl] = useState(new Map()); // mint -> { pnlTotal, holding, image } aggregate position P/L in USD
+  const [positionsLoading, setPositionsLoading] = useState(false);
+  const [walletPnl, setWalletPnl] = useState(null); // { realized, unrealized, total } all-time, from /api/wallet/:owner
   const fileInputRef = useRef(null);
   const contentRef = useRef(null); // scrolled into view when a header stat is tapped
   const { trackedWallets, untrackWallet } = useTrackedWallets();
@@ -172,29 +182,62 @@ const ProfileView = ({ onTradeClick, onOpenPosition }) => {
     }
   }, [publicKey]);
 
-  // Fetch the same aggregate per-position P/L (in USD) used by the full
-  // position detail view, so each history card's headline number matches
-  // exactly what you see after tapping into it.
+  // Per-position P/L (USD) for every history tile from ONE positions call,
+  // instead of a /position/:mint request per coin. Same aggregate number the
+  // full detail view shows. Mints beyond the positions page fall back to the
+  // per-mint endpoint so nothing is left blank.
   useEffect(() => {
-    if (!publicKey || !transactions.length) return;
+    if (!publicKey) { setPositionPnl(new Map()); setWalletPnl(null); return; }
     const addr = publicKey.toString();
-    const uniqueMints = [...new Set(transactions.map(t => t.tokenMint).filter(Boolean))];
-    const missingMints = uniqueMints.filter(m => !positionPnl.has(m));
+    let cancelled = false;
+    setPositionsLoading(true);
+    setPositionPnl(new Map());
+    fetchWalletPositions(addr)
+      .then(({ positions }) => {
+        if (cancelled) return;
+        setPositionPnl(new Map(positions.map((p) => [p.mint, {
+          pnlTotal: Number(p.pnl?.total) || 0,
+          realized: Number(p.pnl?.realized) || 0,
+          unrealized: Number(p.pnl?.unrealized) || 0,
+          holding: Boolean(p.holding),
+          image: p.image || null,
+        }])));
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setPositionsLoading(false); });
+    fetchJsonWithTimeout(getFullApiUrl(`/api/wallet/${addr}`), { timeoutMs: 10000 })
+      .then((d) => { if (!cancelled && d?.success && d.pnl) setWalletPnl(d.pnl); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [publicKey]);
+
+  useEffect(() => {
+    if (!publicKey || !transactions.length || positionsLoading) return;
+    const addr = publicKey.toString();
+    const missingMints = [...new Set(transactions.map(t => t.tokenMint).filter(Boolean))].filter(m => !positionPnl.has(m));
     if (!missingMints.length) return;
     let cancelled = false;
     (async () => {
       const updates = new Map();
-      await Promise.all(missingMints.map(async (mint) => {
+      await Promise.all(missingMints.slice(0, 20).map(async (mint) => {
         try {
           const res = await fetch(getFullApiUrl(`/api/wallet/${addr}/position/${mint}`));
           const data = await res.json();
-          if (data?.success) updates.set(mint, { pnlTotal: Number(data?.pnl?.total) || 0 });
+          if (data?.success) {
+            updates.set(mint, {
+              pnlTotal: Number(data?.pnl?.total) || 0,
+              realized: Number(data?.pnl?.realized) || 0,
+              unrealized: Number(data?.pnl?.unrealized) || 0,
+              holding: Number(data?.pnl?.unrealized) !== 0,
+              image: data.image || null,
+            });
+          }
         } catch (_) { /* silent */ }
       }));
       if (!cancelled && updates.size) setPositionPnl(prev => new Map([...prev, ...updates]));
     })();
     return () => { cancelled = true; };
-  }, [publicKey, transactions]);
+  }, [publicKey, transactions, positionsLoading]);
 
   const formatUsdPnl = (n) => {
     const abs = Math.abs(n);
@@ -251,17 +294,27 @@ const ProfileView = ({ onTradeClick, onOpenPosition }) => {
   };
 
   // Fetch active orders
-  // Fetch banner images from Dexscreener for order cards
+  // Fetch banner images from Dexscreener for order cards — batched 30 mints
+  // per request (Dexscreener accepts a comma list) instead of one call per coin.
   const fetchCoinBanners = async (orderList) => {
     const uniqueMints = [...new Set(orderList.map(o => o.tokenMint).filter(Boolean))];
     if (!uniqueMints.length) return;
     const updates = new Map();
-    await Promise.all(uniqueMints.map(async (mint) => {
+    const chunks = [];
+    for (let i = 0; i < uniqueMints.length; i += 30) chunks.push(uniqueMints.slice(i, i + 30));
+    await Promise.all(chunks.map(async (chunk) => {
       try {
-        const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
+        const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${chunk.join(',')}`);
         const data = await res.json();
-        const pair = data?.pairs?.[0];
-        if (pair) {
+        // Deepest-liquidity pair per mint wins.
+        const best = new Map();
+        for (const pair of data?.pairs || []) {
+          const mint = pair.baseToken?.address;
+          if (!mint) continue;
+          const liq = Number(pair.liquidity?.usd) || 0;
+          if (!best.has(mint) || liq > best.get(mint).liq) best.set(mint, { pair, liq });
+        }
+        for (const [mint, { pair }] of best) {
           const banner = pair.info?.header || pair.info?.imageUrl || null;
           const pairAddress = pair.pairAddress || null;
           const priceNative = pair.priceNative ? parseFloat(pair.priceNative) : null;
@@ -665,17 +718,6 @@ const ProfileView = ({ onTradeClick, onOpenPosition }) => {
     }
   };
 
-  const formatTimeAgo = (timestamp) => {
-    if (!timestamp) return '';
-    const diff = Date.now() - new Date(timestamp).getTime();
-    const mins = Math.floor(diff / 60000);
-    const hrs = Math.floor(diff / 3600000);
-    const days = Math.floor(diff / 86400000);
-    if (days > 0) return `${days}d ago`;
-    if (hrs > 0) return `${hrs}h ago`;
-    if (mins > 0) return `${mins}m ago`;
-    return 'just now';
-  };
 
   const formatPrice = (price) => {
     if (!price) return '0';
@@ -936,7 +978,7 @@ const ProfileView = ({ onTradeClick, onOpenPosition }) => {
         />
 
         <button className="pv-ig-addr-chip" onClick={() => copyToClipboard(publicKey?.toString())} title="Copy full address">
-          {formatAddress(publicKey)}
+          @{formatAddress(publicKey)}
         </button>
 
         {editingName ? (
@@ -967,9 +1009,25 @@ const ProfileView = ({ onTradeClick, onOpenPosition }) => {
 
         {profileSaveError && <p className="pv-ig-save-error">{profileSaveError}</p>}
 
+        {/* All-time PnL strip — realized vs theoretical (open positions) */}
+        {walletPnl && (Number.isFinite(Number(walletPnl.total)) || Number.isFinite(Number(walletPnl.realized))) && (
+          <div className="pv-ig-pnl-strip">
+            <span className={`pv-ig-pnl-chip ${Number(walletPnl.total ?? walletPnl.realized) >= 0 ? 'up' : 'down'}`}>
+              {formatUsdPnl(Number(walletPnl.total ?? walletPnl.realized))}
+              <small>all-time</small>
+            </span>
+            <span className="pv-ig-pnl-detail">
+              <b className={Number(walletPnl.realized) >= 0 ? 'up' : 'down'}>{formatUsdPnl(Number(walletPnl.realized) || 0)}</b> realized
+              {Number(walletPnl.unrealized) !== 0 && Number.isFinite(Number(walletPnl.unrealized)) && (
+                <> · <b className={Number(walletPnl.unrealized) >= 0 ? 'up' : 'down'}>{formatUsdPnl(Number(walletPnl.unrealized))}</b> open</>
+              )}
+            </span>
+          </div>
+        )}
+
         <div className="pv-ig-actions">
-          <button className="pv-ig-btn pv-ig-btn--edit" onClick={() => setEditingName(true)}>Edit Profile</button>
-          <button className="pv-ig-btn pv-ig-btn--out" onClick={disconnect}>Disconnect</button>
+          <button className="pv-ig-btn pv-ig-btn--edit" onClick={() => setEditingName(true)}>Edit profile</button>
+          <button className="pv-ig-btn pv-ig-btn--edit" onClick={handleDisconnect}>Disconnect</button>
           <button className="pv-ig-btn pv-ig-btn--icon" onClick={toggleDarkMode} title={isDarkMode ? 'Light mode' : 'Dark mode'}>
             {isDarkMode ? (
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1033,60 +1091,39 @@ const ProfileView = ({ onTradeClick, onOpenPosition }) => {
         {profileTab === 'history' && (
           <div className="pv-ig-history">
             {transactions.length === 0 ? (
-              <div className="pv-ig-empty">
-                <p>No trade history yet</p>
-                <span>Coins you buy through Moonfeed will appear here</span>
-              </div>
+              positionsLoading ? (
+                <div className="pct-grid">
+                  {Array.from({ length: 6 }, (_, i) => <ProfileCoinTileSkeleton key={i} />)}
+                </div>
+              ) : (
+                <div className="pv-ig-empty">
+                  <p>No trade history yet</p>
+                  <span>Coins you buy through Moonfeed will appear here</span>
+                </div>
+              )
             ) : (
-              <div className="pv-ig-hist-grid">
+              <div className="pct-grid">
                 {transactions.map((tx) => {
                   // Aggregate position P/L in USD — same number shown on the full detail view.
-                  const pnlTotal = positionPnl.get(tx.tokenMint)?.pnlTotal;
+                  const pos = positionPnl.get(tx.tokenMint);
+                  const pnlTotal = pos?.pnlTotal;
                   const hasPnl = typeof pnlTotal === 'number' && isFinite(pnlTotal);
-                  const isProfit = hasPnl && pnlTotal >= 0;
+                  const solAmt = tx.type === 'sell' ? Number(tx.outputAmount || 0) : Number(tx.inputAmount || 0);
+                  const sub = `${tx.type === 'sell' ? '+' : '−'}${solAmt >= 0.01 || solAmt === 0 ? solAmt.toFixed(2) : solAmt.toFixed(3)} SOL`;
                   return (
-                  <div
-                    key={tx.signature}
-                    className={`pv-ig-hist-card pv-ig-hist-card--${tx.type || 'buy'}${hasPnl ? ` pv-ig-hist-card--${isProfit ? 'profit' : 'loss'}` : ''}`}
-                    onClick={() => handleHistoryCardClick(tx)}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    {(coinBanners.get(tx.tokenMint)?.banner || tx.tokenImage) && (
-                      <img
-                        src={coinBanners.get(tx.tokenMint)?.banner || tx.tokenImage}
-                        alt=""
-                        className="pv-ig-hist-bg"
-                        onError={(e) => { e.target.style.display = 'none'; }}
-                      />
-                    )}
-                    <div className={`pv-ig-hist-overlay${hasPnl ? ` pv-ig-hist-overlay--${isProfit ? 'profit' : 'loss'}` : ''}`} />
-                    {hasPnl && (
-                      <span className={`pv-ig-hist-pnl ${isProfit ? 'pv-ig-hist-pnl--up' : 'pv-ig-hist-pnl--down'}`}>
-                        {formatUsdPnl(pnlTotal)}
-                      </span>
-                    )}
-                    <div className="pv-ig-hist-body">
-                      <div className="pv-ig-hist-top">
-                        {tx.tokenImage ? (
-                          <img src={tx.tokenImage} alt={tx.tokenSymbol} className="pv-ig-hist-avatar" onError={(e) => { e.target.style.display = 'none'; }} />
-                        ) : (
-                          <div className="pv-ig-hist-avatar pv-ig-hist-avatar--ph">{(tx.tokenSymbol || '?').slice(0, 2)}</div>
-                        )}
-                        <span className={`pv-ig-hist-badge pv-ig-hist-badge--${tx.type || 'buy'}`}>
-                          {tx.type === 'sell' ? 'SELL' : 'BUY'}
-                        </span>
-                      </div>
-                      <div className="pv-ig-hist-info">
-                        <span className="pv-ig-hist-symbol">{tx.tokenSymbol || 'Unknown'}</span>
-                        <span className="pv-ig-hist-amount">
-                          {tx.type === 'sell'
-                            ? `+${Number(tx.outputAmount || 0).toFixed(3)} SOL`
-                            : `-${Number(tx.inputAmount || 0).toFixed(3)} SOL`}
-                        </span>
-                        <span className="pv-ig-hist-time">{formatTimeAgo(tx.timestamp)}</span>
-                      </div>
-                    </div>
-                  </div>
+                    <ProfileCoinTile
+                      key={tx.signature}
+                      mint={tx.tokenMint}
+                      symbol={tx.tokenSymbol || 'Unknown'}
+                      image={coinBanners.get(tx.tokenMint)?.banner || tx.tokenImage || pos?.image || null}
+                      pnlUsd={hasPnl ? pnlTotal : null}
+                      pnlLoading={!hasPnl && positionsLoading}
+                      holding={Boolean(pos?.holding)}
+                      badge={tx.type === 'sell' ? 'sell' : 'buy'}
+                      sub={sub}
+                      meta={shortAgo(tx.timestamp)}
+                      onClick={() => handleHistoryCardClick(tx)}
+                    />
                   );
                 })}
               </div>
