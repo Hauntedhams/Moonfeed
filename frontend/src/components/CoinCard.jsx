@@ -345,10 +345,12 @@ const CoinCard = memo(({
       tokenSymbol: coin.symbol || coin.name || null,
       tokenName: coin.name || coin.symbol || null,
       tokenImage: coin.image || coin.profileImage || coin.logo || null,
+      tokenBanner: coin.banner || coin.header || null,
+      pairAddress: coin.pairAddress || coin.poolAddress || null,
       currentMarketCap: coin.market_cap_usd || coin.marketCap || coin.marketCapUsd || coin.mcap || null,
     });
     else setSelectedWallet(address);
-  }, [coin.image, coin.logo, coin.marketCap, coin.marketCapUsd, coin.market_cap_usd, coin.mcap, coin.name, coin.profileImage, coin.symbol, mintAddress, onWalletClick]);
+  }, [coin.image, coin.logo, coin.banner, coin.header, coin.pairAddress, coin.poolAddress, coin.marketCap, coin.marketCapUsd, coin.market_cap_usd, coin.mcap, coin.name, coin.profileImage, coin.symbol, mintAddress, onWalletClick]);
   
   // 🔥 NEW: On-demand price fetching from Solana blockchain
   // Fetches price ONLY when coin is visible - no batch fetching!
@@ -474,20 +476,22 @@ const CoinCard = memo(({
   useEffect(() => {
     if (!mintAddress) { setOrderLines([]); return undefined; }
     let cancelled = false;
+    let revision = 0;
 
     const compute = async () => {
+      const currentRevision = ++revision;
       const tradingWallet = await loadTradingWallet().catch(() => null);
       const wallets = [walletAddress, tradingWallet?.publicKey].filter(Boolean);
-      if (!wallets.length) { if (!cancelled) setOrderLines([]); return; }
+      if (!wallets.length) { if (!cancelled && currentRevision === revision) setOrderLines([]); return; }
       const orders = await fetchActiveSoftOrdersCached(wallets).catch(() => []);
       const lines = orders
         .filter((o) => o.tokenMint === mintAddress && Number(o.triggerPriceUsd) > 0)
         .map((o) => ({
           price: Number(o.triggerPriceUsd),
           kind: o.type === 'buy' ? 'buy' : o.triggerCondition === 'below' ? 'stopLoss' : 'takeProfit',
-          label: o.type === 'buy' ? 'Buy at' : o.triggerCondition === 'below' ? 'Stop loss' : 'Sell at',
+          label: o.type === 'buy' ? 'Buy at' : o.triggerCondition === 'below' ? 'Stop loss' : 'Take profit',
         }));
-      if (!cancelled) {
+      if (!cancelled && currentRevision === revision) {
         // Keep the reference stable when nothing changed so the chart effect doesn't churn.
         setOrderLines((prev) => (JSON.stringify(prev) === JSON.stringify(lines) ? prev : lines));
       }
@@ -498,11 +502,15 @@ const CoinCard = memo(({
     window.addEventListener('moonfeed:instant-trade', onOrdersChanged);
     window.addEventListener('moonfeed:auto-trade-executed', onOrdersChanged);
     window.addEventListener('moonfeed:swap-success', onOrdersChanged);
+    window.addEventListener('moonfeed:soft-orders-changed', onOrdersChanged);
+    window.addEventListener('moonfeed:instant-wallet-changed', onOrdersChanged);
     return () => {
       cancelled = true;
       window.removeEventListener('moonfeed:instant-trade', onOrdersChanged);
       window.removeEventListener('moonfeed:auto-trade-executed', onOrdersChanged);
       window.removeEventListener('moonfeed:swap-success', onOrdersChanged);
+      window.removeEventListener('moonfeed:soft-orders-changed', onOrdersChanged);
+      window.removeEventListener('moonfeed:instant-wallet-changed', onOrdersChanged);
     };
   }, [walletAddress, mintAddress]);
 

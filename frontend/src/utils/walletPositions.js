@@ -61,3 +61,5 @@ export function formatUsdPnl(n) {
   if (abs >= 100) return `${sign}$${abs.toFixed(0)}`;
   return `${sign}$${abs.toFixed(2)}`;
 }
+
+export { buildHistoryItems } from './walletHistory';

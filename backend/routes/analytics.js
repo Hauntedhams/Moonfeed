@@ -1,8 +1,10 @@
 /**
  * First-party product analytics.
- *  POST /api/analytics/events       — batched ingest from the app (public)
- *  GET  /api/analytics/preferences  — this device/wallet's taste profile (public)
- *  GET  /api/analytics/summary      — dashboard aggregations (admin only)
+ *  POST /api/analytics/events         — batched ingest from the app (public)
+ *  GET  /api/analytics/preferences    — this device/wallet's taste profile (public)
+ *  GET  /api/analytics/summary        — dashboard aggregations (admin only)
+ *  POST /api/analytics/client-errors  — crash reports from the app (public)
+ *  GET  /api/analytics/client-errors  — recent crash reports (admin only)
  */
 
 const express = require('express');
@@ -127,6 +129,60 @@ router.post('/events', async (req, res) => {
     console.warn('[analytics] ingest failed:', error.message);
     res.status(202).json({ success: false, error: 'ingest_failed' });
   }
+});
+
+// ==================== CLIENT CRASH REPORTS ====================
+// The native app has no visible console, so render crashes / unhandled errors
+// are posted here. Kept in memory (last 200) and echoed to the server log so
+// they show up in Render without needing a DB round trip.
+//  POST /api/analytics/client-errors  — from ErrorBoundary / window.onerror (public, rate-limited)
+//  GET  /api/analytics/client-errors  — most recent reports (admin only)
+const CLIENT_ERROR_BUFFER = [];
+const CLIENT_ERROR_BUFFER_MAX = 200;
+const clientErrorRate = new Map(); // ip -> { count, windowStart }
+const CLIENT_ERROR_RATE_MAX = 30; // per IP per 10 minutes
+
+router.post('/client-errors', (req, res) => {
+  try {
+    const ip = req.ip || req.socket?.remoteAddress || 'unknown';
+    const now = Date.now();
+    const rate = clientErrorRate.get(ip) || { count: 0, windowStart: now };
+    if (now - rate.windowStart > 10 * 60 * 1000) { rate.count = 0; rate.windowStart = now; }
+    rate.count += 1;
+    clientErrorRate.set(ip, rate);
+    if (rate.count > CLIENT_ERROR_RATE_MAX) return res.status(429).json({ success: false, error: 'rate_limited' });
+    if (clientErrorRate.size > 5000) clientErrorRate.clear();
+
+    const report = {
+      at: new Date().toISOString(),
+      kind: str(req.body?.kind, 32) || 'render',
+      message: str(req.body?.message, 400),
+      stack: str(req.body?.stack, 1500),
+      componentStack: str(req.body?.componentStack, 1500),
+      boundary: str(req.body?.boundary, 64),
+      route: str(req.body?.route, 120),
+      platform: str(req.body?.platform, 24) || 'web',
+      appVersion: str(req.body?.appVersion, 24),
+      walletAddress: str(req.body?.walletAddress, 64),
+      sessionId: str(req.body?.sessionId, 64),
+      userAgent: str(req.headers['user-agent'], 200),
+    };
+    if (!report.message) return res.status(400).json({ success: false, error: 'message is required' });
+
+    CLIENT_ERROR_BUFFER.unshift(report);
+    if (CLIENT_ERROR_BUFFER.length > CLIENT_ERROR_BUFFER_MAX) CLIENT_ERROR_BUFFER.length = CLIENT_ERROR_BUFFER_MAX;
+    console.error(`💥 [client-crash] ${report.platform} ${report.appVersion || ''} ${report.boundary || report.kind}: ${report.message}` +
+      (report.componentStack ? `\n   in ${report.componentStack.split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 4).join(' < ')}` : '') +
+      (report.stack ? `\n   ${report.stack.split('\n').slice(0, 3).join(' | ')}` : ''));
+    res.status(202).json({ success: true });
+  } catch (error) {
+    res.status(202).json({ success: false });
+  }
+});
+
+router.get('/client-errors', adminAuth, (req, res) => {
+  const limit = Math.min(CLIENT_ERROR_BUFFER_MAX, Math.max(1, parseInt(req.query.limit) || 50));
+  res.json({ success: true, count: CLIENT_ERROR_BUFFER.length, errors: CLIENT_ERROR_BUFFER.slice(0, limit) });
 });
 
 // ==================== PERSONALIZATION ====================

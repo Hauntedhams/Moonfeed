@@ -37,7 +37,7 @@ export const TrackedWalletsProvider = ({ children }) => {
   useEffect(() => {
     if (!connected || !walletAddress) {
       setTrackedWallets([]);
-      localStorage.removeItem('moonfeed_tracked_wallets');
+      try { localStorage.removeItem('moonfeed_tracked_wallets'); } catch (_) { /* best effort */ }
     }
   }, [connected, walletAddress]);
 
@@ -82,7 +82,8 @@ export const TrackedWalletsProvider = ({ children }) => {
   // Cache only the active account's list for a faster connected reload.
   useEffect(() => {
     if (connected && walletAddress) {
-      localStorage.setItem(cacheKey(walletAddress), JSON.stringify(trackedWallets));
+      // A throw here (quota / private mode) would unmount the whole app.
+      try { localStorage.setItem(cacheKey(walletAddress), JSON.stringify(trackedWallets)); } catch (_) { /* best effort */ }
     }
   }, [trackedWallets, connected, walletAddress]);
 

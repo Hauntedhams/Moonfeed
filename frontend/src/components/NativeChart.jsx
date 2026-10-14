@@ -2,23 +2,14 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { createChart, CandlestickSeries, AreaSeries, createSeriesMarkers } from 'lightweight-charts';
 import { useDarkMode } from '../contexts/DarkModeContext';
 import { API_CONFIG } from '../config/api';
+import { includeTradeLevels } from '../utils/chartPriceRange';
+import { TIMEFRAMES, DEFAULT_TF_INDEX, tfSeconds, tfIndexForEntryTime } from '../utils/chartTimeframes';
 import { AnimalSilhouetteAvatar, gradientForWallet } from '../utils/walletIdentity';
 import './NativeChart.css';
 
 // Phase 1 native candlestick chart. Renders lightweight-charts fed by the
 // backend GeckoTerminal OHLCV proxy (real OHLC, ~0.5s, backend-cached).
 // Replaces the GeckoTerminal iframe when the useNativeChart flag is on.
-
-const TIMEFRAMES = [
-  { label: '1m', interval: 'minute', aggregate: 1 },
-  { label: '5m', interval: 'minute', aggregate: 5 },
-  { label: '15m', interval: 'minute', aggregate: 15 },
-  { label: '1h', interval: 'hour', aggregate: 1 },
-  { label: '4h', interval: 'hour', aggregate: 4 },
-  { label: '1d', interval: 'day', aggregate: 1 },
-];
-
-const DEFAULT_TF_INDEX = 2; // 15m — matches the old iframe's resolution
 
 // How many "what it'd take to get there" candles are drawn ahead of the live price
 // while an order target is being chosen.
@@ -55,12 +46,6 @@ function fetchWithTimeout(url, timeoutMs = 10000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   return fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timer));
-}
-
-// Interval length in seconds for a timeframe (used to bucket the live price).
-function tfSeconds(tf) {
-  const base = tf.interval === 'hour' ? 3600 : tf.interval === 'day' ? 86400 : 60;
-  return base * tf.aggregate;
 }
 
 // Gentle accelerate-then-decelerate curve — reads as a calm drift rather than a snap.
@@ -111,6 +96,11 @@ function nearestBarIndex(series, timeSec) {
 // candle sits a little right of centre instead of hugging the right edge
 // (room for the price to move, and the eye lands on "now").
 const LIVE_CENTER_SHIFT = 0.42; // fraction of the visible span moved to the right of the last bar
+// Below this the chart hasn't really been laid out yet (createChart falls back
+// to 1px when the container is still hidden/unmeasured). Framing at that size
+// squeezes every bar into a sliver on the left and, because lightweight-charts
+// keeps bar spacing across resizes, it STAYS that way once the real width lands.
+const MIN_FRAMEABLE_WIDTH_PX = 80;
 function frameDefaultView(chart) {
   const ts = chart.timeScale();
   ts.fitContent();
@@ -322,6 +312,20 @@ const NativeChart = ({
   const onOrderTargetNudgeRef = useRef(onOrderTargetNudge);
   onOrderTargetNudgeRef.current = onOrderTargetNudge;
 
+  // Default framing that remembers the width it was done at. If the container
+  // was still unmeasured (hidden card, mid-mount portal) we mark it pending and
+  // the ResizeObserver re-frames once the real width arrives.
+  const framedWidthRef = useRef(0);
+  const framePendingRef = useRef(false);
+  const frameDefault = useCallback(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    const width = containerRef.current?.clientWidth || 0;
+    framedWidthRef.current = width;
+    framePendingRef.current = width < MIN_FRAMEABLE_WIDTH_PX;
+    frameDefaultView(chart);
+  }, []);
+
   // Pin the price axis to exactly the candles currently in view. Called on each
   // user navigation step so zoom/pan still re-fits vertically like autoscale —
   // but between navigations the pinned range holds, so a live tick (or a price
@@ -465,14 +469,34 @@ const NativeChart = ({
     });
     chartRef.current = chart;
     chartDisposedRef.current = false;
+    let reframeRaf = 0;
     const resizeObserver = new ResizeObserver(() => {
       try {
-        chart.resize(container.clientWidth || 1, container.clientHeight || 1);
+        const width = container.clientWidth || 1;
+        chart.resize(width, container.clientHeight || 1);
+        // The default view was computed at a bogus width (or the pane grew by a
+        // lot, e.g. collapsed → expanded card): re-frame so the candles aren't
+        // left squeezed against the left edge. Never override a user's own pan/zoom.
+        if (!dataLengthRef.current || userNavRef.current || focusOneMinuteRef.current) return;
+        const framedAt = framedWidthRef.current;
+        const grewALot = framedAt > 0 && width > framedAt * 1.6;
+        if ((framePendingRef.current || grewALot) && width >= MIN_FRAMEABLE_WIDTH_PX) {
+          framedWidthRef.current = width;
+          framePendingRef.current = false;
+          // resize() is applied lazily — frame on the next paint so fitContent
+          // sees the new width rather than the old one.
+          cancelAnimationFrame(reframeRaf);
+          reframeRaf = requestAnimationFrame(() => {
+            if (chartDisposedRef.current || userNavRef.current) return;
+            try { frameDefaultView(chart); } catch (_) { /* disposed */ }
+          });
+        }
       } catch (_) { /* chart disposed */ }
     });
     resizeObserver.observe(container);
     return () => {
       resizeObserver.disconnect();
+      cancelAnimationFrame(reframeRaf);
       chartDisposedRef.current = true;
       // Null the refs BEFORE disposing so any in-flight async work (fetch
       // resolutions, rAF loops, later effect cleanups) sees a disposed chart
@@ -986,10 +1010,7 @@ const NativeChart = ({
     }
     const holdSecs = (Date.now() - Number(focusTimelineFrom)) / 1000;
     if (!(holdSecs > 0)) return undefined;
-    let desired = TIMEFRAMES.length - 1;
-    for (let i = 0; i < TIMEFRAMES.length; i++) {
-      if (holdSecs / tfSeconds(TIMEFRAMES[i]) <= 700) { desired = i; break; }
-    }
+    const desired = tfIndexForEntryTime(focusTimelineFrom, tfIndex);
     if (desired !== tfIndex) setTfIndex(desired);
   }, [focusTimelineFrom, tfIndex]);
 
@@ -1067,7 +1088,7 @@ const NativeChart = ({
           fittedMintTfRef.current = fitKey;
           // Soft reload: skip the instant refit — the order-focus zoom effect
           // animates to the new framing instead of jumping to it.
-          if (!soft && chartRef.current) frameDefaultView(chartRef.current);
+          if (!soft && chartRef.current) frameDefault();
         }
       } catch (e) {
         // Chart/series disposed mid-fetch (e.g. card scrolled away and unmounted) — nothing to draw into anymore.
@@ -1147,7 +1168,7 @@ const NativeChart = ({
         const fitKey = `${mint}-${tf.label}-${pool}`;
         if (fittedMintTfRef.current !== fitKey) {
           fittedMintTfRef.current = fitKey;
-          if (chartRef.current) frameDefaultView(chartRef.current);
+          if (chartRef.current) frameDefault();
         }
       } catch (e) {
         // Chart/series disposed mid-fetch — nothing to draw into anymore.
@@ -1232,9 +1253,14 @@ const NativeChart = ({
       if (series) {
         series.applyOptions({ autoscaleInfoProvider: undefined });
       }
-      frameDefaultView(chart);
+      frameDefault();
     } catch (_) { /* chart disposed */ }
-  }, [resetViewSignal, clearUserNav]);
+  }, [resetViewSignal, clearUserNav, frameDefault]);
+
+  const autoscaleTradeLevels = useCallback((original) => includeTradeLevels(
+    original?.(),
+    [entryPrice, targetPrice, orderLinePrice, ...(orderLines || []).map((line) => line.price)]
+  ), [entryPrice, targetPrice, orderLinePrice, orderLines]);
 
   // Keep the price axis wide enough to always include the entry/target lines
   // (e.g. a placed order's buy-in and trigger price), not just the candles
@@ -1245,36 +1271,13 @@ const NativeChart = ({
     if (!series || focusOneMinute || status !== 'ready') return undefined;
     // The user has manually framed the chart — don't force lines into range.
     if (userNavRef.current) return undefined;
-    const entry = Number(entryPrice);
-    const target = Number(targetPrice);
-    if (!(entry > 0) && !(target > 0)) return undefined;
-
-    const autoscaleInfoProvider = (original) => {
-      const baseInfo = original ? original() : { priceRange: { minValue: 0, maxValue: 1 } };
-      const baseRange = baseInfo?.priceRange;
-      if (!baseRange) return baseInfo;
-      let min = baseRange.minValue;
-      let max = baseRange.maxValue;
-      // Only include entry/target in price range scaling if within 3x of candle range
-      // to avoid squishing candles into a flat line when entry is an extreme outlier
-      if (entry > 0 && entry <= max * 3 && entry >= min * 0.2) {
-        min = Math.min(min, entry);
-        max = Math.max(max, entry);
-      }
-      if (target > 0 && target <= max * 3 && target >= min * 0.2) {
-        min = Math.min(min, target);
-        max = Math.max(max, target);
-      }
-      const pad = (max - min) * 0.12 || max * 0.05;
-      return { ...baseInfo, priceRange: { minValue: Math.max(0, min - pad), maxValue: max + pad } };
-    };
-    try { series.applyOptions({ autoscaleInfoProvider }); } catch (_) { /* chart disposed */ }
+    try { series.applyOptions({ autoscaleInfoProvider: autoscaleTradeLevels }); } catch (_) { /* chart disposed */ }
     return () => {
       // Leave a user-pinned range alone — clearUserNav()/reset handles it.
       if (userNavRef.current || chartDisposedRef.current) return;
       try { series.applyOptions({ autoscaleInfoProvider: undefined }); } catch (_) { /* chart disposed */ }
     };
-  }, [focusOneMinute, status, entryPrice, targetPrice, refocusSignal, resetViewSignal]);
+  }, [focusOneMinute, status, autoscaleTradeLevels, tfIndex, refocusSignal, resetViewSignal]);
 
   // Overlay caller-supplied markers (e.g. buy/sell points) once real candles are in.
   // v5 moved markers off the series onto a plugin, so keep the primitive around.
@@ -1385,7 +1388,7 @@ const NativeChart = ({
         orderLinesRef.current.push(series.createPriceLine({
           price: l.price,
           color: l.color,
-          lineWidth: 1,
+          lineWidth: 2,
           lineStyle: 2,
           axisLabelVisible: true,
           title: l.label,
@@ -1515,7 +1518,7 @@ const NativeChart = ({
     const last = lastCandleRef.current;
     if (!last) return;
     clearUserNav();
-    try { series.applyOptions({ autoscaleInfoProvider: undefined }); } catch (_) {}
+    try { series.applyOptions({ autoscaleInfoProvider: autoscaleTradeLevels }); } catch (_) {}
     const interval = tfSeconds(TIMEFRAMES[0]);
     const from = Math.max(0, last.time - interval * 16);
     const to = last.time + interval * 16;
@@ -1524,7 +1527,7 @@ const NativeChart = ({
     } catch (_) {
       try { chart.timeScale().fitContent(); } catch (_) {}
     }
-  }, [status, clearUserNav]);
+  }, [status, clearUserNav, autoscaleTradeLevels]);
 
   // Middle-right chart button: one tap in to the live 1m view, one tap back out.
   const toggleLiveZoom = useCallback(() => {
@@ -1546,11 +1549,11 @@ const NativeChart = ({
         setTfIndex(prev); // load() refits the full view on the timeframe switch
       } else {
         clearUserNav();
-        try { seriesRef.current?.applyOptions({ autoscaleInfoProvider: undefined }); } catch (_) {}
-        try { if (chartRef.current) frameDefaultView(chartRef.current); } catch (_) {}
+        try { seriesRef.current?.applyOptions({ autoscaleInfoProvider: autoscaleTradeLevels }); } catch (_) {}
+        try { if (chartRef.current) frameDefault(); } catch (_) {}
       }
     }
-  }, [liveZoom, tfIndex, performLiveZoom, clearUserNav]);
+  }, [liveZoom, tfIndex, performLiveZoom, clearUserNav, autoscaleTradeLevels, frameDefault]);
 
   // Parent-controlled zoom (the coin card's right-side Zoom button).
   const liveZoomSignalRef = useRef(liveZoomSignal);

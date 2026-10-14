@@ -1,0 +1,61 @@
+.ocf-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(5, 8, 16, 0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.ocf-sheet {
+  width: 100%;
+  max-width: 480px;
+  margin: 0 12px calc(env(safe-area-inset-bottom, 0px) + 16px);
+  padding: 22px 20px 18px;
+  border-radius: 20px;
+  background: #121826;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #e8ecf5;
+  text-align: center;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+}
+
+html:not(.dark-mode) .ocf-sheet {
+  background: #ffffff;
+  color: #111827;
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+.ocf-icon { font-size: 28px; line-height: 1; margin-bottom: 8px; }
+.ocf-title { margin: 0 0 6px; font-size: 17px; font-weight: 700; }
+.ocf-sub { margin: 0 0 10px; font-size: 13px; opacity: 0.7; }
+
+.ocf-detail {
+  display: block;
+  margin: 0 0 14px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 11px;
+  text-align: left;
+  word-break: break-word;
+  background: rgba(255, 255, 255, 0.06);
+  opacity: 0.8;
+}
+html:not(.dark-mode) .ocf-detail { background: rgba(0, 0, 0, 0.05); }
+
+.ocf-actions { display: flex; gap: 10px; }
+.ocf-btn {
+  flex: 1;
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+}
+.ocf-btn--primary { background: #4f8cff; color: #fff; }
+.ocf-btn--ghost { background: transparent; color: inherit; border: 1px solid rgba(255, 255, 255, 0.18); }
+html:not(.dark-mode) .ocf-btn--ghost { border-color: rgba(0, 0, 0, 0.15); }

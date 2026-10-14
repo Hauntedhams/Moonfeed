@@ -10,6 +10,7 @@ import FeedSelector, { FEED_ORDER, CONTINUOUS_FEED_ORDER, BASE_FEEDS } from './c
 import FeedSwipeContainer from './components/FeedSwipeContainer'
 import FeedFilterStrip from './components/FeedFilterStrip'
 import ErrorBoundary from './components/ErrorBoundary'
+import OverlayCrashFallback from './components/OverlayCrashFallback'
 import { WalletProvider } from './contexts/WalletContext'
 import { TrackedWalletsProvider } from './contexts/TrackedWalletsContext'
 import { TrackedTradesProvider } from './contexts/TrackedTradesContext'
@@ -1055,10 +1056,13 @@ function App() {
           onCurrentCoinChange={handleCurrentCoinChange}
         />
       ) : activeTab === 'profile' ? (
+        <ErrorBoundary resetKey="profile" title="Profile hit a snag">
         <Suspense fallback={<div style={{ padding: '20px', textAlign: 'center' }}>Loading...</div>}>
           <ProfileView onTradeClick={handleTradeClick} onOpenPosition={handleOpenPosition} />
         </Suspense>
+        </ErrorBoundary>
       ) : activeTab === 'orders' ? (
+        <ErrorBoundary resetKey="orders" title="Trades hit a snag">
         <Suspense fallback={<div style={{ padding: '20px', textAlign: 'center' }}>Loading...</div>}>
           <OrdersView
             onCoinClick={(coinData) => {
@@ -1081,6 +1085,7 @@ function App() {
             }}
           />
         </Suspense>
+        </ErrorBoundary>
       ) : activeTab === 'coin-detail' && selectedCoin ? (
         <ErrorBoundary>
         <div
@@ -1210,6 +1215,13 @@ function App() {
 
       {/* Wallet Profile overlay — shows a full profile page for any wallet */}
       {walletProfile?.address && (
+        <ErrorBoundary
+          title="Wallet profile hit a snag"
+          resetKey={walletProfile.address}
+          fallback={(error, reset) => (
+            <OverlayCrashFallback title="Couldn't show this wallet" error={error} onRetry={reset} onClose={() => navigateBack('wpv')} />
+          )}
+        >
         <Suspense fallback={null}>
           <WalletProfileView
             walletAddress={walletProfile.address}
@@ -1227,10 +1239,18 @@ function App() {
             }}
           />
         </Suspense>
+        </ErrorBoundary>
       )}
 
       {/* Position Detail overlay — FOMO-style entry/exit chart for one wallet+token trade */}
       {positionDetail && (
+        <ErrorBoundary
+          title="Trade detail hit a snag"
+          resetKey={`${positionDetail.wallet}:${positionDetail.mint}`}
+          fallback={(error, reset) => (
+            <OverlayCrashFallback title="Couldn't show this trade" error={error} onRetry={reset} onClose={() => navigateBack('pdv')} />
+          )}
+        >
         <Suspense fallback={null}>
           <PositionDetailView
             walletAddress={positionDetail.wallet}
@@ -1254,6 +1274,7 @@ function App() {
             }}
           />
         </Suspense>
+        </ErrorBoundary>
       )}
       
       {/* Coin List Modal */}

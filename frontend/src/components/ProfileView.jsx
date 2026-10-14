@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useWallet as useJupiterWallet } from '@jup-ag/wallet-adapter';
 import { Connection } from '@solana/web3.js';
 import { getFullApiUrl } from '../config/api';
@@ -22,7 +22,8 @@ import { fetchTriggerOrdersV2, cancelTriggerOrderV2 } from '../utils/triggerOrde
 import CautionTapeBanner from './CautionTapeBanner';
 import { resolveWalletDisplayName, WalletChip } from '../utils/walletIdentity';
 import ProfileCoinTile, { ProfileCoinTileSkeleton } from './ProfileCoinTile';
-import { fetchWalletPositions, shortAgo } from '../utils/walletPositions';
+import { fetchWalletPositions, shortAgo, buildHistoryItems } from '../utils/walletPositions';
+import { fetchTokenPairInfoBatch } from '../utils/tokenPairInfo';
 import { fetchJsonWithTimeout } from '../config/api';
 
 const ProfileView = ({ onTradeClick, onOpenPosition }) => {
@@ -77,6 +78,7 @@ const ProfileView = ({ onTradeClick, onOpenPosition }) => {
   const [cancellingOrder, setCancellingOrder] = useState(null);
   const [coinBanners, setCoinBanners] = useState(new Map());
   const [positionPnl, setPositionPnl] = useState(new Map()); // mint -> { pnlTotal, holding, image } aggregate position P/L in USD
+  const [positions, setPositions] = useState([]); // every coin this wallet ever traded (on-chain), newest first
   const [positionsLoading, setPositionsLoading] = useState(false);
   const [walletPnl, setWalletPnl] = useState(null); // { realized, unrealized, total } all-time, from /api/wallet/:owner
   const fileInputRef = useRef(null);
@@ -182,34 +184,45 @@ const ProfileView = ({ onTradeClick, onOpenPosition }) => {
     }
   }, [publicKey]);
 
-  // Per-position P/L (USD) for every history tile from ONE positions call,
-  // instead of a /position/:mint request per coin. Same aggregate number the
-  // full detail view shows. Mints beyond the positions page fall back to the
-  // per-mint endpoint so nothing is left blank.
+  // Full trade history for the history grid: ONE positions call returns every
+  // coin this wallet has ever traded on-chain (not just swaps made inside
+  // Moonfeed), each with realized + unrealized PnL. Fresh data replaces the
+  // previous wallet's grid only once it arrives, so switching never flashes empty.
   useEffect(() => {
-    if (!publicKey) { setPositionPnl(new Map()); setWalletPnl(null); return; }
+    if (!publicKey) { setPositionPnl(new Map()); setPositions([]); setWalletPnl(null); return; }
     const addr = publicKey.toString();
     let cancelled = false;
     setPositionsLoading(true);
-    setPositionPnl(new Map());
-    fetchWalletPositions(addr)
-      .then(({ positions }) => {
+    fetchWalletPositions(addr, { limit: 200 })
+      .then(({ positions: list }) => {
         if (cancelled) return;
-        setPositionPnl(new Map(positions.map((p) => [p.mint, {
+        setPositions(list);
+        setPositionPnl(new Map(list.map((p) => [p.mint, {
           pnlTotal: Number(p.pnl?.total) || 0,
           realized: Number(p.pnl?.realized) || 0,
           unrealized: Number(p.pnl?.unrealized) || 0,
           holding: Boolean(p.holding),
           image: p.image || null,
         }])));
+        // Banner art for the coins the user sees first.
+        if (list.length) fetchCoinBanners(list.slice(0, 60).map((p) => ({ tokenMint: p.mint })));
       })
-      .catch(() => {})
+      .catch(() => { if (!cancelled) { setPositions([]); setPositionPnl(new Map()); } })
       .finally(() => { if (!cancelled) setPositionsLoading(false); });
     fetchJsonWithTimeout(getFullApiUrl(`/api/wallet/${addr}`), { timeoutMs: 10000 })
       .then((d) => { if (!cancelled && d?.success && d.pnl) setWalletPnl(d.pnl); })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [publicKey]);
+
+  // Warm the OTHER wallet's history in the background so flipping the switcher
+  // is instant instead of waiting on a cold upstream call.
+  const otherWalletAddress = viewingInstant ? identity.mainAddress : (instantWallet?.publicKey || null);
+  useEffect(() => {
+    if (!publicKey || !otherWalletAddress || otherWalletAddress === publicKey.toString()) return undefined;
+    const t = setTimeout(() => { fetchWalletPositions(otherWalletAddress, { limit: 200 }).catch(() => {}); }, 1500);
+    return () => clearTimeout(t);
+  }, [publicKey, otherWalletAddress]);
 
   useEffect(() => {
     if (!publicKey || !transactions.length || positionsLoading) return;
@@ -219,7 +232,7 @@ const ProfileView = ({ onTradeClick, onOpenPosition }) => {
     let cancelled = false;
     (async () => {
       const updates = new Map();
-      await Promise.all(missingMints.slice(0, 20).map(async (mint) => {
+      await Promise.all(missingMints.slice(0, 8).map(async (mint) => {
         try {
           const res = await fetch(getFullApiUrl(`/api/wallet/${addr}/position/${mint}`));
           const data = await res.json();
@@ -246,6 +259,18 @@ const ProfileView = ({ onTradeClick, onOpenPosition }) => {
     if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(2)}K`;
     return `${sign}$${abs.toFixed(2)}`;
   };
+
+  // One tile per coin: every on-chain position first, then any Moonfeed swap
+  // too new to be indexed upstream yet. Newest activity first.
+  const historyItems = useMemo(
+    () => buildHistoryItems(positions, transactions, positionPnl),
+    [positions, transactions, positionPnl]
+  );
+
+  const totalTradeCount = useMemo(() => {
+    const fromChain = historyItems.reduce((n, item) => n + (item.trades || 0), 0);
+    return fromChain || transactions.length;
+  }, [historyItems, transactions.length]);
 
   const fetchBalance = async () => {
     if (!publicKey || !connection) return;
@@ -296,32 +321,19 @@ const ProfileView = ({ onTradeClick, onOpenPosition }) => {
   // Fetch active orders
   // Fetch banner images from Dexscreener for order cards — batched 30 mints
   // per request (Dexscreener accepts a comma list) instead of one call per coin.
+  // Goes through the shared pair-info cache so the position sheet / chart can
+  // reuse the same lookup (pool address + banner) without another request.
   const fetchCoinBanners = async (orderList) => {
     const uniqueMints = [...new Set(orderList.map(o => o.tokenMint).filter(Boolean))];
     if (!uniqueMints.length) return;
+    const infos = await fetchTokenPairInfoBatch(uniqueMints);
     const updates = new Map();
-    const chunks = [];
-    for (let i = 0; i < uniqueMints.length; i += 30) chunks.push(uniqueMints.slice(i, i + 30));
-    await Promise.all(chunks.map(async (chunk) => {
-      try {
-        const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${chunk.join(',')}`);
-        const data = await res.json();
-        // Deepest-liquidity pair per mint wins.
-        const best = new Map();
-        for (const pair of data?.pairs || []) {
-          const mint = pair.baseToken?.address;
-          if (!mint) continue;
-          const liq = Number(pair.liquidity?.usd) || 0;
-          if (!best.has(mint) || liq > best.get(mint).liq) best.set(mint, { pair, liq });
-        }
-        for (const [mint, { pair }] of best) {
-          const banner = pair.info?.header || pair.info?.imageUrl || null;
-          const pairAddress = pair.pairAddress || null;
-          const priceNative = pair.priceNative ? parseFloat(pair.priceNative) : null;
-          if (banner || pairAddress || priceNative) updates.set(mint, { banner, pairAddress, priceNative });
-        }
-      } catch (_) { /* silent */ }
-    }));
+    for (const [mint, info] of infos) {
+      const banner = info.banner || info.image || null;
+      if (banner || info.pairAddress || info.priceNative) {
+        updates.set(mint, { banner, pairAddress: info.pairAddress || null, priceNative: info.priceNative || null });
+      }
+    }
     if (updates.size) setCoinBanners(prev => new Map([...prev, ...updates]));
   };
 
@@ -730,11 +742,18 @@ const ProfileView = ({ onTradeClick, onOpenPosition }) => {
   const handleHistoryCardClick = async (tx) => {
     // Preferred: the FOMO-style PositionDetailView (chart + entry/exit pins + PnL).
     if (onOpenPosition && publicKey && tx.tokenMint) {
+      // Hand over everything already on screen so the sheet renders its stats,
+      // banner and chart immediately instead of re-fetching them.
+      const pair = coinBanners.get(tx.tokenMint);
+      const row = positions.find((p) => p.mint === tx.tokenMint) || null;
       onOpenPosition(publicKey.toString(), tx.tokenMint, {
         displayName: profile.displayName || 'You',
         tokenSymbol: tx.tokenSymbol,
         tokenName: tx.tokenName,
-        tokenImage: tx.tokenImage,
+        tokenImage: tx.tokenImage || row?.image || null,
+        tokenBanner: pair?.banner || null,
+        pairAddress: pair?.pairAddress || null,
+        position: row,
         type: tx.type,
         solAmount: tx.type === 'sell' ? tx.outputAmount : tx.inputAmount,
         timestamp: tx.timestamp,
@@ -956,7 +975,7 @@ const ProfileView = ({ onTradeClick, onOpenPosition }) => {
           </div>
           <div className="pv-ig-stats">
             <button type="button" className="pv-ig-stat pv-ig-stat--clickable" onClick={() => handleStatClick('history')}>
-              <span className="pv-ig-stat-num">{transactions.length}</span>
+              <span className="pv-ig-stat-num">{totalTradeCount}</span>
               <span className="pv-ig-stat-label">Trades</span>
             </button>
             <button type="button" className="pv-ig-stat pv-ig-stat--clickable" onClick={() => handleStatClick('orders')}>
@@ -1090,7 +1109,7 @@ const ProfileView = ({ onTradeClick, onOpenPosition }) => {
         {/* ── HISTORY TAB ── */}
         {profileTab === 'history' && (
           <div className="pv-ig-history">
-            {transactions.length === 0 ? (
+            {historyItems.length === 0 ? (
               positionsLoading ? (
                 <div className="pct-grid">
                   {Array.from({ length: 6 }, (_, i) => <ProfileCoinTileSkeleton key={i} />)}
@@ -1098,34 +1117,26 @@ const ProfileView = ({ onTradeClick, onOpenPosition }) => {
               ) : (
                 <div className="pv-ig-empty">
                   <p>No trade history yet</p>
-                  <span>Coins you buy through Moonfeed will appear here</span>
+                  <span>Every coin this wallet trades will appear here</span>
                 </div>
               )
             ) : (
               <div className="pct-grid">
-                {transactions.map((tx) => {
-                  // Aggregate position P/L in USD — same number shown on the full detail view.
-                  const pos = positionPnl.get(tx.tokenMint);
-                  const pnlTotal = pos?.pnlTotal;
-                  const hasPnl = typeof pnlTotal === 'number' && isFinite(pnlTotal);
-                  const solAmt = tx.type === 'sell' ? Number(tx.outputAmount || 0) : Number(tx.inputAmount || 0);
-                  const sub = `${tx.type === 'sell' ? '+' : '−'}${solAmt >= 0.01 || solAmt === 0 ? solAmt.toFixed(2) : solAmt.toFixed(3)} SOL`;
-                  return (
-                    <ProfileCoinTile
-                      key={tx.signature}
-                      mint={tx.tokenMint}
-                      symbol={tx.tokenSymbol || 'Unknown'}
-                      image={coinBanners.get(tx.tokenMint)?.banner || tx.tokenImage || pos?.image || null}
-                      pnlUsd={hasPnl ? pnlTotal : null}
-                      pnlLoading={!hasPnl && positionsLoading}
-                      holding={Boolean(pos?.holding)}
-                      badge={tx.type === 'sell' ? 'sell' : 'buy'}
-                      sub={sub}
-                      meta={shortAgo(tx.timestamp)}
-                      onClick={() => handleHistoryCardClick(tx)}
-                    />
-                  );
-                })}
+                {historyItems.map((item) => (
+                  <ProfileCoinTile
+                    key={item.key}
+                    mint={item.tokenMint}
+                    symbol={item.tokenSymbol}
+                    image={coinBanners.get(item.tokenMint)?.banner || item.tokenImage || null}
+                    pnlUsd={item.pnlUsd}
+                    pnlLoading={item.pnlUsd === null && positionsLoading}
+                    holding={item.holding}
+                    badge={item.type}
+                    sub={item.sub}
+                    meta={shortAgo(item.timestamp)}
+                    onClick={() => handleHistoryCardClick(item)}
+                  />
+                ))}
               </div>
             )}
           </div>

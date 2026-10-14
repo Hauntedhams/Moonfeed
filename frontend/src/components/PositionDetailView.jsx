@@ -3,6 +3,8 @@ import { getFullApiUrl, fetchJsonWithTimeout } from '../config/api';
 import NativeChart from './NativeChart';
 import { useTrackedWallets } from '../contexts/TrackedWalletsContext';
 import { AnimalSilhouetteAvatar, buildWalletName, gradientForWallet, shortWalletAddress } from '../utils/walletIdentity';
+import { fetchTokenPairInfo } from '../utils/tokenPairInfo';
+import { tfIndexForEntryTime } from '../utils/chartTimeframes';
 import './PositionDetailView.css';
 
 const formatCurrency = (amount) => {
@@ -58,7 +60,15 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
   const [error, setError] = useState(null);
   const [chartPrice, setChartPrice] = useState(null);
   const [tokenBanner, setTokenBanner] = useState(profileHint?.tokenBanner || profileHint?.banner || profileHint?.tokenImage || null);
-  const [enrichedCoin, setEnrichedCoin] = useState(null);
+  // Best DEX pool + art for this mint. Seeded from whatever the opener already
+  // knew (the profile grid has it) so the chart can start loading candles on
+  // the very first render instead of waiting on a pool lookup.
+  const [pairInfo, setPairInfo] = useState(() => (
+    profileHint?.pairAddress
+      ? { pairAddress: profileHint.pairAddress, banner: profileHint.tokenBanner || null, image: profileHint.tokenImage || null }
+      : null
+  ));
+  const [pairLookupDone, setPairLookupDone] = useState(() => Boolean(profileHint?.pairAddress));
   const [chartFocusTime, setChartFocusTime] = useState(null);
   const [chartFocusNonce, setChartFocusNonce] = useState(0);
   // Which ⊕ pin the chart is currently zoomed into — tapping it again zooms back
@@ -117,30 +127,22 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
     return () => { cancelled = true; };
   }, [walletAddress, mint]);
 
+  // One cached Dexscreener call gives banner + logo + pool address in ~200ms,
+  // instead of the multi-second on-demand enrichment pipeline this used to call.
   useEffect(() => {
     if (!mint) return undefined;
     let cancelled = false;
-    fetchJsonWithTimeout(getFullApiUrl('/api/coins/enrich-single'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        mintAddress: mint,
-        coin: {
-          mintAddress: mint,
-          symbol: profileHint?.tokenSymbol,
-          name: profileHint?.tokenName,
-          image: profileHint?.tokenImage,
-        },
-      }),
-    }).then((result) => {
+    fetchTokenPairInfo(mint).then((info) => {
       if (cancelled) return;
-      const nextCoin = result?.coin || result?.data?.coin || null;
-      if (nextCoin) setEnrichedCoin(nextCoin);
-      const banner = nextCoin?.banner || nextCoin?.header || result?.banner || result?.data?.banner || nextCoin?.image || profileHint?.tokenImage;
-      if (banner) setTokenBanner(banner);
-    }).catch((e) => { if (!cancelled) console.warn('Banner fetch failed:', e.message); });
+      if (info) {
+        setPairInfo((prev) => (prev?.pairAddress && prev.pairAddress === info.pairAddress ? prev : { ...prev, ...info }));
+        const banner = info.banner || info.image;
+        if (banner) setTokenBanner((prev) => (prev && prev !== profileHint?.tokenImage ? prev : banner));
+      }
+      setPairLookupDone(true);
+    });
     return () => { cancelled = true; };
-  }, [mint, profileHint?.tokenSymbol, profileHint?.tokenName, profileHint?.tokenImage]);
+  }, [mint]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const markers = useMemo(() => {
     const list = [];
@@ -186,6 +188,43 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
   }, [zoomedPin, data]);
 
   const fastTraderPosition = useMemo(() => {
+    // Opened from the profile grid: the positions feed already has the full
+    // PnL / invested / proceeds / timing for this coin — render it instantly
+    // and let the detailed per-token call refine entry/exit market caps.
+    const row = profileHint?.position;
+    if (row && (row.mint === mint || !row.mint)) {
+      const firstBuy = row.firstTrade ? (row.firstTrade < 1e12 ? row.firstTrade * 1000 : row.firstTrade) : null;
+      const lastSell = row.lastSell ? (row.lastSell < 1e12 ? row.lastSell * 1000 : row.lastSell) : null;
+      const lastBuy = row.lastBuy ? (row.lastBuy < 1e12 ? row.lastBuy * 1000 : row.lastBuy) : null;
+      const avgEntryPrice = Number(row.avgCostUsd) > 0 ? Number(row.avgCostUsd) : null;
+      const avgExitPrice = Number(row.proceeds) > 0 && Number(row.counts?.sells) > 0 && Number(row.balance) === 0 && Number(row.invested) > 0 && avgEntryPrice
+        ? avgEntryPrice * (Number(row.proceeds) / Number(row.invested))
+        : null;
+      const supply = Number(row.price) > 0 && Number(row.marketCap) > 0 ? Number(row.marketCap) / Number(row.price) : null;
+      return {
+        success: true,
+        symbol: row.symbol || profileHint?.tokenSymbol || 'Token',
+        name: row.name || profileHint?.tokenName || row.symbol || 'Token',
+        image: row.image || profileHint?.tokenImage || null,
+        currentMarketCap: row.marketCap ?? profileHint?.currentMarketCap ?? null,
+        pnl: { total: Number(row.pnl?.total) || 0, realized: Number(row.pnl?.realized) || 0, unrealized: Number(row.pnl?.unrealized) || 0 },
+        invested: Number(row.invested) || 0,
+        proceeds: Number(row.proceeds) || 0,
+        roi: Number.isFinite(Number(row.roi)) ? Number(row.roi) : null,
+        counts: row.counts || { total: null },
+        avgEntryPrice,
+        avgExitPrice,
+        avgEntryMarketCap: supply && avgEntryPrice ? avgEntryPrice * supply : null,
+        avgExitMarketCap: supply && avgExitPrice ? avgExitPrice * supply : null,
+        timing: {
+          firstBuy,
+          lastBuy,
+          lastSell,
+          holdTimeSecs: firstBuy ? Math.max(0, ((lastSell || lastBuy || Date.now()) - firstBuy) / 1000) : null,
+        },
+        fast: true,
+      };
+    }
     const trader = profileHint?.traderData;
     if (trader) {
       return {
@@ -224,12 +263,12 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
       };
     }
     return null;
-  }, [profileHint]);
+  }, [profileHint, mint]);
 
   const position = data?.success ? data : fastTraderPosition;
-  const tokenSymbol = position?.symbol || profileHint?.tokenSymbol || 'Token';
-  const tokenName = position?.name || profileHint?.tokenName || tokenSymbol;
-  const tokenImage = position?.image || enrichedCoin?.image || profileHint?.tokenImage || null;
+  const tokenSymbol = position?.symbol || profileHint?.tokenSymbol || pairInfo?.symbol || 'Token';
+  const tokenName = position?.name || profileHint?.tokenName || pairInfo?.name || tokenSymbol;
+  const tokenImage = position?.image || pairInfo?.image || profileHint?.tokenImage || null;
   const reportedPnl = position?.pnl?.total ?? 0;
   const entryPrice = Number(position?.avgEntryPrice);
   const invested = Number(position?.invested);
@@ -240,7 +279,26 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
   const isProfit = pnlTotal >= 0;
   // Position still open (never sold) — the PnL shown is unrealized/theoretical.
   const isOpenPosition = !!position && !(Number(position?.counts?.sells) > 0 || position?.timing?.lastSell);
-  const chartCoin = mint ? { ...enrichedCoin, mintAddress: mint } : null;
+  // Stable identity: NativeChart re-runs its pool-resolution effect whenever
+  // `coin` changes, so a fresh object every render used to cancel + restart the
+  // lookup on each state update (PnL arriving, crosshair, ...). Carrying the
+  // pool address lets the chart skip /api/resolve-pool entirely.
+  const pairAddress = pairInfo?.pairAddress || null;
+  const chartCoin = useMemo(() => (mint ? {
+    mintAddress: mint,
+    symbol: tokenSymbol,
+    name: tokenName,
+    image: tokenImage,
+    pairAddress,
+  } : null), [mint, tokenSymbol, tokenName, tokenImage, pairAddress]);
+  // Pick the chart's starting timeframe exactly the way its auto-framing will,
+  // so it loads candles once instead of loading 4h and then switching to 1h.
+  const chartEntryTimeMs = position?.timing?.firstBuy
+    || (profileHint?.timestamp ? (profileHint.timestamp < 1e12 ? profileHint.timestamp * 1000 : profileHint.timestamp) : null);
+  const chartInitialTf = tfIndexForEntryTime(chartEntryTimeMs, tfIndexForHold(position?.timing?.holdTimeSecs));
+  // Mount the chart once we know the pool (or know there isn't one) — avoids a
+  // throwaway chart instance that starts its own lookup and then reloads.
+  const chartReady = Boolean(chartCoin) && (Boolean(pairAddress) || pairLookupDone);
   const displayName = profileHint?.displayName || profileHint?.name || buildWalletName(walletAddress);
 
   // Swipe right anywhere on the page (except the interactive chart, which owns
@@ -425,6 +483,7 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
       </div>
 
       <div className="pdv-chart-wrap">
+        {chartReady ? (
         <NativeChart
           coin={chartCoin}
           isActive={true}
@@ -433,13 +492,16 @@ function PositionDetailView({ walletAddress, mint, profileHint = {}, onBack, onO
           tradePins={tradePins}
           onTradePinClick={handleTradePinClick}
           activeTradePinId={zoomedPin}
-          initialTfIndex={tfIndexForHold(position?.timing?.holdTimeSecs)}
-          focusTimelineFrom={position?.timing?.firstBuy || (profileHint?.timestamp ? (profileHint.timestamp < 1e12 ? profileHint.timestamp * 1000 : profileHint.timestamp) : null)}
+          initialTfIndex={chartInitialTf}
+          focusTimelineFrom={chartEntryTimeMs}
           focusTimelineTo={position?.timing?.lastSell || null}
           focusTimelineAt={chartFocusTime}
           refocusSignal={chartFocusNonce}
           onCrosshairMove={handleChartCrosshairMove}
         />
+        ) : (
+          <div className="pdv-chart-placeholder" aria-busy="true"><span className="pdv-spinner" /></div>
+        )}
       </div>
 
       <div className="pdv-bottom-card">

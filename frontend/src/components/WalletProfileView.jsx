@@ -231,7 +231,7 @@ const WalletProfileView = ({ walletAddress, profileHint = {}, onBack, onCoinClic
   const loadCoins = useCallback((silent = false) => {
     if (!walletAddress) return Promise.resolve();
     if (!silent) { setCoinsLoading(true); setCoins([]); }
-    return fetchWalletPositions(walletAddress, { force: silent })
+    return fetchWalletPositions(walletAddress, { force: silent, limit: 200 })
       .then(({ positions, stats, total }) => {
         setPositionsMeta({ total: total || positions.length, holding: stats?.holding || positions.filter((p) => p.holding).length });
         setCoins(positions.map((p) => ({

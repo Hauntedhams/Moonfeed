@@ -159,6 +159,16 @@ html:not(.dark-mode) .pdv-loading, html:not(.dark-mode) .pdv-error {
   to { transform: rotate(360deg); }
 }
 
+/* Chart slot while the pool address is still being resolved (sub-second). */
+.pdv-chart-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-height: 180px;
+}
+
 .pdv-header {
   display: flex;
   align-items: center;

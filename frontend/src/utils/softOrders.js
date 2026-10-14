@@ -36,6 +36,8 @@ export async function createSoftOrder({
     }),
   });
   const data = await parseJson(res);
+  bustActiveSoftOrdersCache();
+  window.dispatchEvent(new CustomEvent('moonfeed:soft-orders-changed', { detail: { walletAddress, mint } }));
   track('order_created', { mint, symbol: tokenSymbol, label: side, value: triggerPriceUsd });
   return data.order;
 }
@@ -56,6 +58,8 @@ export async function cancelSoftOrder(orderId, walletAddress) {
     body: JSON.stringify({ walletAddress }),
   });
   await parseJson(res);
+  bustActiveSoftOrdersCache();
+  window.dispatchEvent(new CustomEvent('moonfeed:soft-orders-changed', { detail: { walletAddress, orderId } }));
   return true;
 }
 

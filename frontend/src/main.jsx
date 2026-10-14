@@ -2,6 +2,8 @@ import { useMemo } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
+import ErrorBoundary from './components/ErrorBoundary.jsx'
+import { installGlobalErrorReporting } from './utils/crashReporter.js'
 import { WalletConnectOnboardingProvider } from './components/WalletConnectOnboarding.jsx'
 
 // Jupiter Wallet Kit imports
@@ -111,7 +113,11 @@ function RootApp() {
     <WalletConnectOnboardingProvider>
       <LiveDataProvider>
         <UserProfileProvider>
-          <App />
+          {/* Last line of defence: a render crash anywhere shows a recoverable
+              panel instead of unmounting the whole app into a blank screen. */}
+          <ErrorBoundary title="Moonfeed hit a snag">
+            <App />
+          </ErrorBoundary>
         </UserProfileProvider>
       </LiveDataProvider>
     </WalletConnectOnboardingProvider>
@@ -157,6 +163,23 @@ function RootApp() {
     </DemoModeProvider>
   );
 }
+
+// Report uncaught errors / rejections from devices (no visible console in the native app).
+installGlobalErrorReporting();
+
+// After a deploy, a cached index.html can reference lazy chunks that no longer
+// exist; without this the failed import blanks the whole app. Reload once to
+// pick up the new build (sessionStorage guard prevents a reload loop).
+window.addEventListener('vite:preloadError', (event) => {
+  const RELOAD_FLAG = 'moonfeed_chunk_reload';
+  if (sessionStorage.getItem(RELOAD_FLAG)) return; // let the ErrorBoundary show the fallback
+  event.preventDefault();
+  sessionStorage.setItem(RELOAD_FLAG, String(Date.now()));
+  window.location.reload();
+});
+window.addEventListener('load', () => {
+  setTimeout(() => sessionStorage.removeItem('moonfeed_chunk_reload'), 15000);
+});
 
 // Register service worker for PWA and caching (skip in Chrome extension — sw.js doesn't exist there)
 if ('serviceWorker' in navigator && import.meta.env.PROD && !import.meta.env.VITE_IS_EXTENSION) {

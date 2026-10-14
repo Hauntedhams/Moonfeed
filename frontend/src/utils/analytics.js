@@ -137,7 +137,7 @@ export function setAnalyticsWallet(address) {
 }
 
 export function getAnalyticsIdentity() {
-  return { anonId: getAnonId(), walletAddress };
+  return { anonId: getAnonId(), walletAddress, sessionId: getSessionId() };
 }
 
 export function initAnalytics() {
