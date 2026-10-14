@@ -263,10 +263,6 @@ const CoinCard = memo(({
   const [isDesktopMode, setIsDesktopMode] = useState(() => window.innerWidth >= 1200);
   // Track when mobile chart portal target ref is available (refs are null on first render)
   const [mobileTargetMounted, setMobileTargetMounted] = useState(false);
-  // Hide portaled action buttons while the snap-scroll animation is in progress so
-  // they don't float over the incoming card.
-  const [isScrolling, setIsScrolling] = useState(false);
-  const scrollEndTimerRef = useRef(null);
   const actionButtonsRef = useRef(null); // Ref for wheel-forwarding on action buttons
   const actionWheelDebounceRef = useRef(null); // Debounce — one card advance per gesture
   const _btnSwipeStartY = useRef(0); // track swipe start Y for portaled buttons column
@@ -639,41 +635,6 @@ const CoinCard = memo(({
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, [isDesktopMode]);
-
-  // Hide portaled action buttons while the scroll snap animation is running so
-  // they don't appear to float over the incoming card.
-  // Only active when the buttons are actually portaled (mobile + isActiveCard).
-  // rAF-throttled: 'scroll' can fire faster than paint, so we coalesce to one
-  // state update per frame instead of one per event (avoids extra re-renders
-  // that compete with the browser's native scroll-snap animation).
-  useEffect(() => {
-    if (isDesktopMode || !isActiveCard) {
-      setIsScrolling(false);
-      return;
-    }
-    const scroller = document.querySelector('.modern-scroller-container');
-    if (!scroller) return;
-    let scrollRaf = null;
-    const handleScroll = () => {
-      // While the user is dragging the scroller via the action buttons, keep the
-      // buttons visible so the swipe visibly follows the finger over them.
-      if (_btnDraggingRef.current) return;
-      if (scrollRaf) return; // already scheduled for this frame
-      scrollRaf = requestAnimationFrame(() => {
-        scrollRaf = null;
-        setIsScrolling(true);
-        clearTimeout(scrollEndTimerRef.current);
-        scrollEndTimerRef.current = setTimeout(() => setIsScrolling(false), 250);
-      });
-    };
-    scroller.addEventListener('scroll', handleScroll, { passive: true });
-    return () => {
-      if (scrollRaf) cancelAnimationFrame(scrollRaf);
-      scroller.removeEventListener('scroll', handleScroll);
-      clearTimeout(scrollEndTimerRef.current);
-      setIsScrolling(false);
-    };
-  }, [isDesktopMode, isActiveCard]);
 
   // Close transaction panel when coin becomes invisible
   useEffect(() => {
@@ -4126,10 +4087,10 @@ const CoinCard = memo(({
           // Scale/reveal originates at the bottom (the Expand button) and rises up.
           transformOrigin: 'bottom center',
           zIndex: 9999,
-          // Fade out while the snap-scroll animation is running so the buttons
-          // don't appear to float over the incoming card.
-          opacity: isScrolling ? 0 : 1,
-          transition: isScrolling ? 'none' : 'opacity 0.15s ease',
+          // Quick fade-in on mount. (Previously hidden while ANY scroll event was
+          // recent — on iOS momentum + snap keep firing for 1–3s, which left the
+          // new card with no buttons for that long.)
+          animation: 'tiktokButtonsIn 0.18s ease-out',
         } : undefined}
       >
         <button
@@ -4277,10 +4238,7 @@ const CoinCard = memo(({
         <div
           ref={expandArrowRef}
           className="coin-expand-swipe-arrow"
-          style={{
-            opacity: isScrolling ? 0 : 1,
-            transition: isScrolling ? 'none' : 'opacity 0.15s ease',
-          }}
+          style={{ animation: 'tiktokButtonsIn 0.18s ease-out' }}
           role="button"
           tabIndex={0}
           title={isExpanded ? 'Collapse coin details' : 'Swipe up to expand'}

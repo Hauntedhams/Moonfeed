@@ -745,5 +745,47 @@ html:not(.dark-mode) .native-chart-dot-modal-row {
   border-radius: 0 0 14px 14px;
 }
 
-.native-chart-pop .native-chart-dot-modal-list { max-height: 220px; overflow-y: auto; }
+.native-chart-pop .native-chart-dot-modal-list { max-height: 260px; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
 .native-chart-pop .native-chart-dot-modal-row { padding-left: 12px; padding-right: 12px; }
+
+/* "N trades here" list: each row expands in place with the trade's details */
+.native-chart-dot-modal-hint {
+  padding: 6px 12px 2px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+}
+.native-chart-dot-modal-item { border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+.native-chart-dot-modal-item:last-child { border-bottom: none; }
+.native-chart-dot-modal-item .native-chart-dot-modal-row { width: 100%; touch-action: manipulation; }
+.native-chart-dot-modal-item--open { background: rgba(255, 255, 255, 0.04); }
+.native-chart-dot-modal-item--open > .native-chart-dot-modal-row { background: rgba(255, 255, 255, 0.05); }
+.native-chart-dot-modal-chevron { transition: transform 0.15s ease; display: inline-block; }
+.native-chart-dot-modal-chevron--open { transform: rotate(90deg); }
+.native-chart-dot-modal-detail { padding-bottom: 8px; animation: native-chart-pop-in 0.14s ease-out; }
+.native-chart-dot-modal-detail .native-chart-pop-trade { padding-top: 6px; }
+.native-chart-dot-modal-detail .native-chart-pop-trade strong { font-size: 17px; }
+.native-chart-dot-modal-actions {
+  display: flex;
+  gap: 8px;
+  padding: 2px 12px 4px;
+}
+.native-chart-dot-modal-actions button {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.native-chart-dot-modal-actions button.primary {
+  background: rgba(99, 102, 241, 0.28);
+  border-color: rgba(129, 140, 248, 0.5);
+  color: #c7d2fe;
+}

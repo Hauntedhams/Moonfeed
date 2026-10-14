@@ -112,6 +112,12 @@
     clip-path 0.45s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* Portaled (mobile) buttons appear the instant a card becomes active. */
+@keyframes tiktokButtonsIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 /* Buttons stay tappable even though the container passes scroll through */
 .tiktok-action-buttons:not(.collapsed) .tiktok-action-btn {
   pointer-events: auto;

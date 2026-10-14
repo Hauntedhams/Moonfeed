@@ -4,6 +4,7 @@ import { useDarkMode } from '../contexts/DarkModeContext';
 import { API_CONFIG } from '../config/api';
 import { includeTradeLevels } from '../utils/chartPriceRange';
 import { TIMEFRAMES, DEFAULT_TF_INDEX, tfSeconds, tfIndexForEntryTime } from '../utils/chartTimeframes';
+import { defaultLogicalRange, MIN_FRAMEABLE_WIDTH_PX } from '../utils/chartFraming';
 import { AnimalSilhouetteAvatar, gradientForWallet } from '../utils/walletIdentity';
 import './NativeChart.css';
 
@@ -92,26 +93,15 @@ function nearestBarIndex(series, timeSec) {
   }
 }
 
-// Default framing: fit everything, then slide the window right so the live
-// candle sits a little right of centre instead of hugging the right edge
-// (room for the price to move, and the eye lands on "now").
-const LIVE_CENTER_SHIFT = 0.42; // fraction of the visible span moved to the right of the last bar
-// Below this the chart hasn't really been laid out yet (createChart falls back
-// to 1px when the container is still hidden/unmeasured). Framing at that size
-// squeezes every bar into a sliver on the left and, because lightweight-charts
-// keeps bar spacing across resizes, it STAYS that way once the real width lands.
-const MIN_FRAMEABLE_WIDTH_PX = 80;
-function frameDefaultView(chart) {
+// Default framing — see utils/chartFraming.js for the maths and why it must not
+// read getVisibleLogicalRange() right after fitContent().
+function frameDefaultView(chart, dataLength) {
   const ts = chart.timeScale();
-  ts.fitContent();
-  try {
-    const r = ts.getVisibleLogicalRange();
-    if (!r) return;
-    const span = r.to - r.from;
-    if (!(span > 0)) return;
-    const shift = span * LIVE_CENTER_SHIFT;
-    ts.setVisibleLogicalRange({ from: r.from + shift, to: r.to + shift });
-  } catch (_) { /* chart disposed */ }
+  let width = 0;
+  try { width = ts.width(); } catch (_) { /* disposed */ }
+  const range = defaultLogicalRange(dataLength, width);
+  if (!range) { try { ts.fitContent(); } catch (_) { /* disposed */ } return; }
+  try { ts.setVisibleLogicalRange(range); } catch (_) { /* chart disposed */ }
 }
 
 const fmtUsd = (n) => {
@@ -133,6 +123,110 @@ const fmtMc = (n) => {
   return `$${v.toFixed(0)}`;
 };
 const sameDot = (a, b) => Boolean(a && b) && ((a.signature && a.signature === b.signature) || (a.wallet === b.wallet && a.time === b.time && a.type === b.type));
+
+// Lite position summary (status / invested / PnL / entry→exit MC / trade counts)
+// for one wallet on this coin. Shared by the focused-trade popover and the
+// expandable rows in the "N trades here" list.
+function useLitePosition(wallet, mint, enabled = true) {
+  const [stats, setStats] = useState(null);
+  useEffect(() => {
+    if (!enabled || !wallet || !mint) { setStats(null); return undefined; }
+    let alive = true;
+    setStats({ loading: true });
+    fetchWithTimeout(`${API_CONFIG.BASE_URL}/api/wallet/${wallet}/position/${mint}`, 9000)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!alive) return;
+        if (!d?.success) { setStats({ error: true }); return; }
+        const sells = Number(d.counts?.sells) || 0;
+        const unrealized = Number(d.pnl?.unrealized) || 0;
+        const status = sells === 0 ? 'holding' : Math.abs(unrealized) < 0.01 ? 'sold' : 'partial';
+        setStats({ ...d, status });
+      })
+      .catch(() => { if (alive) setStats({ error: true }); });
+    return () => { alive = false; };
+  }, [wallet, mint, enabled]);
+  return stats;
+}
+
+function TradePositionGrid({ st }) {
+  if (st?.loading) return <div className="native-chart-pop-grid"><div className="native-chart-pop-loading">Loading position…</div></div>;
+  if (!st || st.error) return <div className="native-chart-pop-grid"><div className="native-chart-pop-loading">Position details unavailable</div></div>;
+  const holding = st.status === 'holding';
+  const pnl = Number(holding ? st.pnl?.unrealized : st.pnl?.realized);
+  return (
+    <div className="native-chart-pop-grid">
+      <div className="native-chart-pop-cell">
+        <span>Status</span>
+        <strong className={`native-chart-pop-status native-chart-pop-status--${st.status}`}>
+          {holding ? 'Holding' : st.status === 'sold' ? 'Sold' : 'Partially sold'}
+        </strong>
+      </div>
+      <div className="native-chart-pop-cell">
+        <span>Invested</span>
+        <strong>{fmtUsd(st.invested)}</strong>
+      </div>
+      <div className="native-chart-pop-cell">
+        <span>{holding ? 'Unrealized' : 'Realized'}</span>
+        <strong className={pnl >= 0 ? 'up' : 'down'}>
+          {fmtSignedUsd(pnl)}
+          {Number.isFinite(Number(st.roi)) && st.roi !== 0 ? <small>{st.roi > 0 ? '+' : ''}{Number(st.roi).toFixed(0)}%</small> : null}
+        </strong>
+      </div>
+      <div className="native-chart-pop-cell">
+        <span>Entry → Exit MC</span>
+        <strong>{fmtMc(st.avgEntryMarketCap)} → {holding ? 'open' : fmtMc(st.avgExitMarketCap)}</strong>
+      </div>
+      <div className="native-chart-pop-cell">
+        <span>Trades</span>
+        <strong>{Number(st.counts?.buys) || 0} buy · {Number(st.counts?.sells) || 0} sell</strong>
+      </div>
+    </div>
+  );
+}
+
+// One row of the "N trades here" list. Tapping it expands the trade's details
+// in place (amount, price, the wallet's position on this coin) with actions to
+// zoom the chart to that trade or open the full trade view.
+function ClusterTradeRow({ trade, mint, expanded, onToggle, onZoom, onDetails }) {
+  const st = useLitePosition(trade.wallet, mint, expanded);
+  const usd = Number(trade.usdAmount) || 0;
+  const sol = Number(trade.solAmount) || 0;
+  return (
+    <div className={`native-chart-dot-modal-item${expanded ? ' native-chart-dot-modal-item--open' : ''}`}>
+      <button
+        type="button"
+        className="native-chart-dot-modal-row"
+        onClick={(e) => { e.stopPropagation(); onToggle(); }}
+        aria-expanded={expanded}
+      >
+        <span className="native-chart-dot-modal-avatar" style={{ background: gradientForWallet(trade.wallet) }}>
+          <AnimalSilhouetteAvatar address={trade.wallet} />
+        </span>
+        <span className="native-chart-dot-modal-label">{trade.label || `${trade.wallet.slice(0, 4)}…${trade.wallet.slice(-4)}`}</span>
+        <span className={`native-chart-dot-modal-type native-chart-dot-modal-type--${trade.type}`}>
+          {trade.type === 'buy' ? 'Bought' : 'Sold'}
+        </span>
+        <span className="native-chart-dot-modal-price">{formatPrice(trade.price)}</span>
+        <span className="native-chart-dot-modal-time">{formatDotTime(trade.time)}</span>
+        <span className={`native-chart-dot-modal-chevron${expanded ? ' native-chart-dot-modal-chevron--open' : ''}`}>›</span>
+      </button>
+      {expanded && (
+        <div className="native-chart-dot-modal-detail" onClick={(e) => e.stopPropagation()}>
+          <div className="native-chart-pop-trade">
+            <strong>{usd > 0 ? fmtUsd(usd) : (sol > 0 ? `${sol.toFixed(3)} SOL` : '—')}</strong>
+            <span>{usd > 0 && sol > 0 ? `${sol.toFixed(3)} SOL · ` : ''}@ {formatPrice(trade.price)}</span>
+          </div>
+          <TradePositionGrid st={st} />
+          <div className="native-chart-dot-modal-actions">
+            <button type="button" onClick={(e) => { e.stopPropagation(); onZoom(); }}>Zoom to trade</button>
+            {onDetails && <button type="button" className="primary" onClick={(e) => { e.stopPropagation(); onDetails(); }}>Full details ›</button>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function themeOptions(isDarkMode) {
   return {
@@ -288,10 +382,10 @@ const NativeChart = ({
   // separate arrows/labels when several trades land close together in time).
   const [dotClusters, setDotClusters] = useState([]);
   const [openCluster, setOpenCluster] = useState(null);
+  const [expandedClusterRow, setExpandedClusterRow] = useState(null); // key of the row expanded inside "N trades here"
   // Focused tracked trade: the chart zooms to the trade's bars and a lite
   // detail popover anchors to its marker; closing restores the prior view.
   const [focusedTrade, setFocusedTrade] = useState(null); // { item, prevRange, x, y }
-  const [focusStats, setFocusStats] = useState(null);     // position summary for wallet+mint
   const focusRestoreRef = useRef(null);
   const [pinPositions, setPinPositions] = useState([]);
   const [trackedBubble, setTrackedBubble] = useState(null);
@@ -303,6 +397,8 @@ const NativeChart = ({
   const fittedMintTfRef = useRef('');
 
   const mint = coin?.mintAddress || coin?.tokenAddress || coin?.address;
+  // Position summary for the focused trade's wallet on this coin.
+  const focusStats = useLitePosition(focusedTrade?.item?.wallet, mint, Boolean(focusedTrade));
 
   // Mirror focusOneMinute into a ref so stable callbacks can read it without re-binding.
   const focusOneMinuteRef = useRef(focusOneMinute);
@@ -323,7 +419,7 @@ const NativeChart = ({
     const width = containerRef.current?.clientWidth || 0;
     framedWidthRef.current = width;
     framePendingRef.current = width < MIN_FRAMEABLE_WIDTH_PX;
-    frameDefaultView(chart);
+    frameDefaultView(chart, dataLengthRef.current);
   }, []);
 
   // Pin the price axis to exactly the candles currently in view. Called on each
@@ -488,7 +584,7 @@ const NativeChart = ({
           cancelAnimationFrame(reframeRaf);
           reframeRaf = requestAnimationFrame(() => {
             if (chartDisposedRef.current || userNavRef.current) return;
-            try { frameDefaultView(chart); } catch (_) { /* disposed */ }
+            try { frameDefaultView(chart, dataLengthRef.current); } catch (_) { /* disposed */ }
           });
         }
       } catch (_) { /* chart disposed */ }
@@ -716,6 +812,9 @@ const NativeChart = ({
 
     const onTouchStartCapture = (e) => {
       if (focusOneMinuteRef.current) return; // order mode owns plot touches (target drag)
+      // Touches that start inside a trade popover belong to it (tapping rows,
+      // scrolling the list) — never treat them as a plot scrub/pan.
+      if (e.target?.closest?.('.native-chart-pop')) { mode = 'pass'; return; }
       if (e.touches.length > 1) {
         mode = 'multi';
         endScrub();
@@ -886,6 +985,7 @@ const NativeChart = ({
     };
     const onTouchStart = (e) => {
       if (e.touches.length !== 1) { drag = null; return; }
+      if (e.target?.closest?.('.native-chart-pop')) { drag = null; return; } // popover owns its touches
       drag = beginDrag(e.touches[0].clientY);
       if (drag) e.stopPropagation();
     };
@@ -1876,7 +1976,7 @@ const NativeChart = ({
   }, [tradeDots, status, tfIndex]);
 
   // A fresh coin/dataset invalidates any open cluster popup / focused trade.
-  useEffect(() => { setOpenCluster(null); setFocusedTrade(null); setFocusStats(null); focusRestoreRef.current = null; }, [mint]);
+  useEffect(() => { setOpenCluster(null); setExpandedClusterRow(null); setFocusedTrade(null); focusRestoreRef.current = null; }, [mint]);
 
   const FOCUS_BARS_EACH_SIDE = 28;
   const focusTrade = useCallback((item, anchor) => {
@@ -1893,7 +1993,7 @@ const NativeChart = ({
     } catch (_) { /* chart disposed */ }
     focusRestoreRef.current = prevRange || null;
     setOpenCluster(null);
-    setFocusStats(null);
+    setExpandedClusterRow(null);
     setFocusedTrade({ item, x: anchor?.x ?? 0, y: anchor?.y ?? 0 });
   }, []);
 
@@ -1902,31 +2002,13 @@ const NativeChart = ({
     const prev = focusRestoreRef.current;
     focusRestoreRef.current = null;
     setFocusedTrade(null);
-    setFocusStats(null);
     if (chart && prev) {
       try { chart.timeScale().setVisibleLogicalRange(prev); } catch (_) { /* disposed */ }
     }
   }, []);
 
-  // Lite position summary for the focused trade's wallet on this coin.
-  useEffect(() => {
-    const item = focusedTrade?.item;
-    if (!item?.wallet || !mint) return undefined;
-    let alive = true;
-    setFocusStats({ loading: true });
-    fetchWithTimeout(`${API_CONFIG.BASE_URL}/api/wallet/${item.wallet}/position/${mint}`, 9000)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (!alive) return;
-        if (!d?.success) { setFocusStats({ error: true }); return; }
-        const sells = Number(d.counts?.sells) || 0;
-        const unrealized = Number(d.pnl?.unrealized) || 0;
-        const status = sells === 0 ? 'holding' : Math.abs(unrealized) < 0.01 ? 'sold' : 'partial';
-        setFocusStats({ ...d, status });
-      })
-      .catch(() => { if (alive) setFocusStats({ error: true }); });
-    return () => { alive = false; };
-  }, [focusedTrade?.item?.wallet, focusedTrade?.item?.signature, mint]); // eslint-disable-line react-hooks/exhaustive-deps
+  const closeCluster = useCallback(() => { setOpenCluster(null); setExpandedClusterRow(null); }, []);
+  const clusterRowKey = (d, i) => d.signature || `${d.wallet}-${d.time}-${i}`;
 
   // Entry/exit ⊕ pins: clickable chips glued to the trade's candle. Snapped to
   // the nearest bar (an exact trade timestamp rarely equals a bar time) and
@@ -2433,32 +2515,29 @@ const NativeChart = ({
       )}
       {openCluster && (() => {
         const live = dotClusters.find((c) => c.items.some((it) => openCluster.items.some((o) => sameDot(o, it)))) || openCluster;
+        const rows = [...openCluster.items].sort((a, b) => b.time - a.time);
         return (
-          <TradePopover anchor={live} containerRef={containerRef} onClose={() => setOpenCluster(null)}>
+          <TradePopover anchor={live} containerRef={containerRef} onClose={closeCluster}>
             <div className="native-chart-pop-header">
               <span>{openCluster.items.length} trades here</span>
-              <button type="button" className="native-chart-pop-close" onClick={() => setOpenCluster(null)} aria-label="Close">×</button>
+              <button type="button" className="native-chart-pop-close" onClick={closeCluster} aria-label="Close">×</button>
             </div>
+            <div className="native-chart-dot-modal-hint">Tap a trade to see its details</div>
             <div className="native-chart-dot-modal-list">
-              {[...openCluster.items].sort((a, b) => b.time - a.time).map((d, i) => (
-                <button
-                  key={d.signature || `${d.wallet}-${d.time}-${i}`}
-                  type="button"
-                  className="native-chart-dot-modal-row"
-                  onClick={() => focusTrade(d, live)}
-                >
-                  <span className="native-chart-dot-modal-avatar" style={{ background: gradientForWallet(d.wallet) }}>
-                    <AnimalSilhouetteAvatar address={d.wallet} />
-                  </span>
-                  <span className="native-chart-dot-modal-label">{d.label}</span>
-                  <span className={`native-chart-dot-modal-type native-chart-dot-modal-type--${d.type}`}>
-                    {d.type === 'buy' ? 'Bought' : 'Sold'}
-                  </span>
-                  <span className="native-chart-dot-modal-price">{formatPrice(d.price)}</span>
-                  <span className="native-chart-dot-modal-time">{formatDotTime(d.time)}</span>
-                  <span className="native-chart-dot-modal-chevron">›</span>
-                </button>
-              ))}
+              {rows.map((d, i) => {
+                const key = clusterRowKey(d, i);
+                return (
+                  <ClusterTradeRow
+                    key={key}
+                    trade={d}
+                    mint={mint}
+                    expanded={expandedClusterRow === key}
+                    onToggle={() => setExpandedClusterRow((cur) => (cur === key ? null : key))}
+                    onZoom={() => focusTrade(d, live)}
+                    onDetails={onTradeDotClick ? () => { closeCluster(); onTradeDotClick(d); } : null}
+                  />
+                );
+              })}
             </div>
           </TradePopover>
         );
@@ -2486,41 +2565,7 @@ const NativeChart = ({
               <strong>{usd > 0 ? fmtUsd(usd) : (Number(item.solAmount) > 0 ? `${Number(item.solAmount).toFixed(3)} SOL` : '—')}</strong>
               <span>{usd > 0 && Number(item.solAmount) > 0 ? `${Number(item.solAmount).toFixed(3)} SOL · ` : ''}@ {formatPrice(item.price)}</span>
             </div>
-            <div className="native-chart-pop-grid">
-              {st?.loading ? (
-                <div className="native-chart-pop-loading">Loading position…</div>
-              ) : st && !st.error ? (
-                <>
-                  <div className="native-chart-pop-cell">
-                    <span>Status</span>
-                    <strong className={`native-chart-pop-status native-chart-pop-status--${st.status}`}>
-                      {st.status === 'holding' ? 'Holding' : st.status === 'sold' ? 'Sold' : 'Partially sold'}
-                    </strong>
-                  </div>
-                  <div className="native-chart-pop-cell">
-                    <span>Invested</span>
-                    <strong>{fmtUsd(st.invested)}</strong>
-                  </div>
-                  <div className="native-chart-pop-cell">
-                    <span>{st.status === 'holding' ? 'Unrealized' : 'Realized'}</span>
-                    <strong className={Number(st.status === 'holding' ? st.pnl?.unrealized : st.pnl?.realized) >= 0 ? 'up' : 'down'}>
-                      {fmtSignedUsd(st.status === 'holding' ? st.pnl?.unrealized : st.pnl?.realized)}
-                      {Number.isFinite(Number(st.roi)) && st.roi !== 0 ? <small>{st.roi > 0 ? '+' : ''}{Number(st.roi).toFixed(0)}%</small> : null}
-                    </strong>
-                  </div>
-                  <div className="native-chart-pop-cell">
-                    <span>Entry → Exit MC</span>
-                    <strong>{fmtMc(st.avgEntryMarketCap)} → {st.status === 'holding' ? 'open' : fmtMc(st.avgExitMarketCap)}</strong>
-                  </div>
-                  <div className="native-chart-pop-cell">
-                    <span>Trades</span>
-                    <strong>{Number(st.counts?.buys) || 0} buy · {Number(st.counts?.sells) || 0} sell</strong>
-                  </div>
-                </>
-              ) : (
-                <div className="native-chart-pop-loading">Position details unavailable</div>
-              )}
-            </div>
+            <TradePositionGrid st={st} />
             {onTradeDotClick && (
               <button type="button" className="native-chart-pop-more" onClick={() => { const it = item; closeFocusedTrade(); onTradeDotClick(it); }}>
                 Full trade details ›
