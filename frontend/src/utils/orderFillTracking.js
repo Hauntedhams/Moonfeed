@@ -11,7 +11,7 @@ const WSOL_MINT = 'So11111111111111111111111111111111111111112';
 // Cached SOL/USD price. Dexscreener first — keyless CoinGecko rate-limits so
 // often that the old CoinGecko-only version silently served the $150 default,
 // skewing every USD entry/invested figure derived from SOL amounts.
-export async function getSolUsdPrice() {
+export async function getSolUsdPrice({ requireLivePrice = false } = {}) {
   if (Date.now() - cachedAt < SOL_PRICE_TTL) return cachedSolUsd;
   try {
     const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${WSOL_MINT}`);
@@ -36,6 +36,9 @@ export async function getSolUsdPrice() {
     }
   } catch (_) {
     // keep last cached/default value
+  }
+  if (requireLivePrice && !(cachedAt > 0 && Date.now() - cachedAt < SOL_PRICE_TTL)) {
+    throw new Error('Live SOL price is unavailable; exit prices cannot be verified. Nothing was submitted.');
   }
   return cachedSolUsd;
 }

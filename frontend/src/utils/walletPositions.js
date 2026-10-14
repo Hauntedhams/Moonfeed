@@ -5,6 +5,20 @@ import { getFullApiUrl, fetchJsonWithTimeout } from '../config/api';
 
 const TTL_MS = 60 * 1000;
 const cache = new Map(); // wallet -> { ts, promise }
+const balanceCache = new Map();
+
+export function fetchWalletTokenBalances(wallet, { force = false } = {}) {
+  const hit = balanceCache.get(wallet);
+  if (!force && hit && Date.now() - hit.ts < 10000) return hit.promise;
+  const promise = fetchJsonWithTimeout(getFullApiUrl(`/api/instant-trade/tokens/${wallet}`), { timeoutMs: 12000 })
+    .then((data) => {
+      if (data.success === false || !Array.isArray(data.tokens)) throw new Error(data.error || 'Token balances unavailable');
+      return new Map(data.tokens.map((token) => [token.mint, token]));
+    })
+    .catch((error) => { balanceCache.delete(wallet); throw error; });
+  balanceCache.set(wallet, { ts: Date.now(), promise });
+  return promise;
+}
 
 /**
  * Resolves { positions: [...], byMint: Map, stats, total, hasMore }.
@@ -30,7 +44,13 @@ export function fetchWalletPositions(wallet, { force = false, limit = 100 } = {}
 }
 
 export function invalidateWalletPositions(wallet) {
-  if (wallet) cache.delete(wallet); else cache.clear();
+  if (wallet) {
+    cache.delete(wallet);
+    balanceCache.delete(wallet);
+  } else {
+    cache.clear();
+    balanceCache.clear();
+  }
 }
 
 /** Time-ago in TikTok/IG shorthand: 5m, 3h, 2d, 3w. */

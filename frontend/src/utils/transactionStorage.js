@@ -97,7 +97,7 @@ export function calculateOpenPosition(transactions, tokenMint, solUsdPrice = 0) 
   let costUsd = 0;
   let costSol = 0;
   const ordered = (transactions || [])
-    .filter(tx => tx.tokenMint === tokenMint)
+    .filter(tx => tx.tokenMint === tokenMint && (!tx.status || tx.status === 'confirmed'))
     .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
 
   for (const tx of ordered) {
@@ -206,6 +206,7 @@ export function storeTransaction(transactionData) {
       pricePerToken, // Price paid per token
       pricePerTokenUsd, // Same price in USD, for plotting against USD charts
       timestamp = Date.now(),
+      status = 'confirmed',
     } = transactionData;
 
     if (!walletAddress || !signature) {
@@ -237,6 +238,7 @@ export function storeTransaction(transactionData) {
     const newTransaction = {
       id: `${signature}_${timestamp}`,
       signature,
+      status,
       type,
       tokenMint: tokenMint || outputMint,
       tokenSymbol: tokenSymbol || 'Unknown',

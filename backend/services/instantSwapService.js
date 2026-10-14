@@ -5,9 +5,7 @@
 // identical fee handling, simulation, funding preflight and send/confirm logic.
 const { Connection, PublicKey, VersionedTransaction, Transaction, SystemProgram } = require('@solana/web3.js');
 const { HELIUS_RPC_URL } = require('../solanaRpcConfig');
-
-const QUOTE_URL = 'https://lite-api.jup.ag/swap/v1/quote';
-const SWAP_URL = 'https://lite-api.jup.ag/swap/v1/swap';
+const { requestJupiterSwap, JupiterRequestError } = require('./jupiterSwapClient');
 const REFERRAL_PROGRAM_ID = 'REFER4ZgmyYx9c6He5XfaTMiGfdLwRnkV4RPp9t9iF3';
 const REFERRAL_ACCOUNT = process.env.JUPITER_REFERRAL_ACCOUNT;
 const FEE_BPS = parseInt(process.env.JUPITER_REFERRAL_FEE_BPS) || 100;
@@ -146,10 +144,16 @@ async function buildOnce({ inputMint, outputMint, amount, slippageBps, wallet, f
   });
   if (feeAccount) params.set('platformFeeBps', String(FEE_BPS));
 
-  const quoteRes = await fetch(`${QUOTE_URL}?${params}`);
-  const quote = await quoteRes.json().catch(() => ({}));
-  if (!quoteRes.ok || quote.error) {
-    throw new SwapError(quote.error || `Quote failed (${quoteRes.status})`, { status: 502, code: 'QUOTE_FAILED' });
+  let quote;
+  try {
+    quote = await requestJupiterSwap(`quote?${params}`);
+  } catch (error) {
+    if (!(error instanceof JupiterRequestError)) throw error;
+    throw new SwapError(error.message, {
+      status: error.status === 429 ? 429 : 502,
+      code: error.status === 429 ? 'RATE_LIMITED' : 'QUOTE_FAILED',
+      extra: { retryAfterMs: error.retryAfterMs },
+    });
   }
 
   const swapBody = {
@@ -163,13 +167,20 @@ async function buildOnce({ inputMint, outputMint, amount, slippageBps, wallet, f
   };
   if (feeAccount) swapBody.feeAccount = feeAccount;
 
-  const swapRes = await fetch(SWAP_URL, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(swapBody),
-  });
-  const swap = await swapRes.json().catch(() => ({}));
-  if (!swapRes.ok || !swap.swapTransaction) {
-    throw new SwapError(swap.error || `Swap build failed (${swapRes.status})`, { status: 502, code: 'SWAP_BUILD_FAILED' });
+  let swap;
+  try {
+    swap = await requestJupiterSwap('swap', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(swapBody),
+    });
+  } catch (error) {
+    if (!(error instanceof JupiterRequestError)) throw error;
+    throw new SwapError(error.message, {
+      status: error.status === 429 ? 429 : 502,
+      code: error.status === 429 ? 'RATE_LIMITED' : 'SWAP_BUILD_FAILED',
+      extra: { retryAfterMs: error.retryAfterMs },
+    });
   }
+  if (!swap.swapTransaction) throw new SwapError('Trading provider returned no swap transaction', { status: 502, code: 'SWAP_BUILD_FAILED' });
   return { swap, quote };
 }
 
@@ -253,11 +264,15 @@ async function buildSwap({ inputMint, outputMint, amount, slippageBps = 300, wal
       : simError;
     throw new SwapError(friendly, { status: 422, code: 'SIMULATION_FAILED' });
   }
+  const outputDecimals = outputMint === SOL_MINT
+    ? 9
+    : (await getConnection().getTokenSupply(new PublicKey(outputMint))).value.decimals;
 
   return {
     swapTransaction: swap.swapTransaction,
     lastValidBlockHeight: swap.lastValidBlockHeight || null,
     feeApplied,
+    outputDecimals,
     quote: {
       inAmount: quote.inAmount,
       outAmount: quote.outAmount,
@@ -301,7 +316,10 @@ async function sendAndConfirm(raw, { lastValidBlockHeight = null, maxWaitMs = 75
         // One last look: the status RPC can lag the block height by a slot or two.
         const { value: late } = await conn.getSignatureStatuses([signature]);
         const s = late?.[0];
-        if (s && !s.err && s.confirmationStatus) return { signature, status: 'confirmed' };
+        if (s && !s.err && (s.confirmationStatus === 'confirmed' || s.confirmationStatus === 'finalized')) {
+          return { signature, status: 'confirmed' };
+        }
+        if (s && !s.err) return { signature, status: 'pending' };
         if (s?.err) return { signature, status: 'failed', error: friendlyRpcError(JSON.stringify(s.err)) };
         return { signature, status: 'expired', error: 'Transaction expired before it was confirmed — nothing was executed. Try again.' };
       }

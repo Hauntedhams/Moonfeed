@@ -92,7 +92,7 @@ router.post('/', async (req, res) => {
   try {
     const {
       walletAddress, mint, tokenSymbol, tokenName, tokenImage,
-      side, triggerPriceUsd, currentPriceUsd, amountSol, amountTokens, expiresAt,
+      side, triggerPriceUsd, currentPriceUsd, amountSol, amountTokens, expiresAt, clientOrderId,
     } = req.body || {};
 
     if (!walletAddress || typeof walletAddress !== 'string' || walletAddress.length < 32) {
@@ -116,6 +116,13 @@ router.post('/', async (req, res) => {
     if (side === 'sell' && !(tokens > 0)) {
       return res.status(400).json({ success: false, error: 'Sell orders need amountTokens' });
     }
+    if (clientOrderId != null && (typeof clientOrderId !== 'string' || !/^[1-9A-HJ-NP-Za-km-z]{64,90}:(tp|sl)$/.test(clientOrderId))) {
+      return res.status(400).json({ success: false, error: 'Invalid clientOrderId' });
+    }
+    if (clientOrderId) {
+      const existing = await SoftOrder.findOne({ walletAddress, clientOrderId });
+      if (existing) return res.json({ success: true, order: normalizeOrder(existing.toObject(), null, 0) });
+    }
 
     const activeCount = await SoftOrder.countDocuments({ walletAddress, status: 'active' });
     if (activeCount >= MAX_ACTIVE_PER_WALLET) {
@@ -125,7 +132,7 @@ router.post('/', async (req, res) => {
     const current = Number(currentPriceUsd) > 0 ? Number(currentPriceUsd) : null;
     const triggerCondition = current ? (trigger < current ? 'below' : 'above') : (side === 'buy' ? 'below' : 'above');
 
-    const order = await SoftOrder.create({
+    const fields = {
       walletAddress,
       mint,
       tokenSymbol: tokenSymbol || null,
@@ -138,7 +145,22 @@ router.post('/', async (req, res) => {
       amountSol: side === 'buy' ? sol : null,
       amountTokens: side === 'sell' ? tokens : null,
       expiresAt: Number(expiresAt) > Date.now() ? new Date(Number(expiresAt)) : null,
-    });
+      ...(clientOrderId ? { clientOrderId } : {}),
+    };
+    let order;
+    try {
+      order = clientOrderId
+        ? await SoftOrder.findOneAndUpdate(
+          { walletAddress, clientOrderId },
+          { $setOnInsert: fields },
+          { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true }
+        )
+        : await SoftOrder.create(fields);
+    } catch (error) {
+      if (error.code !== 11000 || !clientOrderId) throw error;
+      order = await SoftOrder.findOne({ walletAddress, clientOrderId });
+      if (!order) throw error;
+    }
 
     res.json({ success: true, order: normalizeOrder(order.toObject(), null, 0) });
   } catch (err) {

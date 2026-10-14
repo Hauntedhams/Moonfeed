@@ -26,13 +26,14 @@ export async function createSoftOrder({
   amountSol = null,     // buys: SOL to spend when triggered
   amountTokens = null,  // sells: tokens to sell when triggered
   expiresAt = null,     // ms timestamp
+  clientOrderId = null,
 }) {
   const res = await fetch(getFullApiUrl('/api/soft-orders'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       walletAddress, mint, tokenSymbol, tokenName, tokenImage,
-      side, triggerPriceUsd, currentPriceUsd, amountSol, amountTokens, expiresAt,
+      side, triggerPriceUsd, currentPriceUsd, amountSol, amountTokens, expiresAt, clientOrderId,
     }),
   });
   const data = await parseJson(res);

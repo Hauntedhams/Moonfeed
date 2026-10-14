@@ -17,6 +17,7 @@ const SolscanWalletService = require('../services/solscanWalletService');
 const HeliusWalletService = require('../services/heliusWalletService');
 const DexCheckWalletService = require('../services/dexcheckWalletService');
 const WalletCacheStore = require('../services/walletCacheStore');
+const { normalizeIndexedTrade, mergeWalletTrades } = require('../utils/walletTradeHistory');
 const router = express.Router();
 
 // Initialize services
@@ -833,7 +834,7 @@ router.get('/:owner/trades', async (req, res) => {
 router.get('/:owner/swaps', async (req, res) => {
   try {
     const { owner } = req.params;
-    const { limit = 50 } = req.query;
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 50));
     
     if (!owner) {
       return res.status(400).json({
@@ -844,11 +845,44 @@ router.get('/:owner/swaps', async (req, res) => {
 
     console.log(`🔍 Fetching swap transactions for: ${owner.slice(0, 4)}...${owner.slice(-4)}`);
 
-    const result = await heliusService.getSwapTransactions(owner, parseInt(limit));
-    
-    console.log(`✅ Successfully fetched ${result.transactions?.length || 0} swap transactions`);
-
-    res.json(result);
+    // A SWAP-only enhanced index can omit newer Jupiter trades despite HTTP 200.
+    // Merge the independent recent-trades index, including cloud-executed exits.
+    const [helius, tracker] = await Promise.allSettled([
+      heliusService.getSwapTransactions(owner, limit),
+      callSolanaTrackerAPI(`/wallet/${owner}/trades`, `wallet-trades-${owner}`),
+    ]);
+    const warnings = [];
+    const sources = [];
+    let heliusTrades = [];
+    let indexedTrades = [];
+    if (helius.status === 'fulfilled' && helius.value.success) {
+      heliusTrades = helius.value.transactions || [];
+      sources.push('helius');
+    } else {
+      warnings.push('Enhanced swap history is unavailable.');
+      console.warn('[wallet-history] Helius unavailable:', helius.status === 'rejected' ? helius.reason.message : helius.value.error);
+    }
+    const rows = tracker.status === 'fulfilled' ? (tracker.value.data?.trades || tracker.value.trades) : null;
+    if (Array.isArray(rows)) {
+      sources.push('solana-tracker');
+      for (const row of rows) {
+        try {
+          const trade = normalizeIndexedTrade(row, owner);
+          if (trade) indexedTrades.push(trade);
+        } catch (error) {
+          console.warn('[wallet-history] invalid indexed trade:', row?.tx, error.message);
+          warnings.push('An indexed trade could not be decoded.');
+        }
+      }
+    } else {
+      warnings.push('Recent trade index is unavailable.');
+      console.warn('[wallet-history] recent index unavailable:', tracker.status === 'rejected' ? tracker.reason.message : 'Invalid trade response');
+    }
+    if (!sources.length) {
+      return res.status(502).json({ success: false, error: 'Wallet trade history is unavailable', warnings });
+    }
+    const transactions = mergeWalletTrades(heliusTrades, indexedTrades).slice(0, limit);
+    res.json({ success: true, wallet: owner, transactions, count: transactions.length, sources, partial: warnings.length > 0, warnings });
 
   } catch (error) {
     console.error('❌ Error fetching swap transactions:', error.message);

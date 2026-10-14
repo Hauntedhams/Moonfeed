@@ -649,6 +649,7 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
         
         if (response.ok) {
           const result = await response.json();
+          if (result.partial) console.warn('[orders] trade history is partial:', result.warnings);
           
           if (result.success && result.transactions && result.transactions.length > 0) {
             console.log(`📡 Fetched ${result.transactions.length} swap transactions from blockchain`);
@@ -673,6 +674,7 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
                   inputMint: tx.inputMint,
                   outputMint: tx.outputMint,
                   pricePerToken: tx.pricePerToken,
+                  pricePerTokenUsd: tx.pricePerTokenUsd,
                   timestamp: tx.timestamp,
                 });
               } else {
@@ -704,7 +706,7 @@ const OrdersView = ({ onCoinClick, onTradeClick }) => {
                     inputMint: tx.inputMint,
                     outputMint: tx.outputMint,
                     pricePerToken: tx.pricePerToken || existing.pricePerToken,
-                    pricePerTokenUsd: existing.pricePerTokenUsd,
+                    pricePerTokenUsd: tx.pricePerTokenUsd || existing.pricePerTokenUsd,
                     timestamp: tx.timestamp || existing.timestamp,
                   });
                 }

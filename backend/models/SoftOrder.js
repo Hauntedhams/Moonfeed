@@ -7,6 +7,7 @@ const mongoose = require('mongoose');
 const softOrderSchema = new mongoose.Schema({
   walletAddress: { type: String, required: true, index: true },
   mint: { type: String, required: true },
+  clientOrderId: { type: String },
   tokenSymbol: { type: String, default: null },
   tokenName: { type: String, default: null },
   tokenImage: { type: String, default: null },
@@ -39,5 +40,9 @@ const softOrderSchema = new mongoose.Schema({
 
 softOrderSchema.index({ status: 1, mint: 1 });
 softOrderSchema.index({ walletAddress: 1, status: 1 });
+softOrderSchema.index(
+  { walletAddress: 1, clientOrderId: 1 },
+  { unique: true, partialFilterExpression: { clientOrderId: { $type: 'string' } } }
+);
 
 module.exports = mongoose.model('SoftOrder', softOrderSchema);

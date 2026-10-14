@@ -14,6 +14,10 @@ function sendError(res, error, fallback) {
   if (error instanceof SwapError) {
     const body = { success: false, error: error.message };
     if (error.code) body.code = error.code;
+    if (error.retryAfterMs != null) {
+      body.retryAfterMs = error.retryAfterMs;
+      res.set('Retry-After', String(Math.ceil(error.retryAfterMs / 1000)));
+    }
     if (error.maxBuyLamports != null) body.maxBuyLamports = error.maxBuyLamports;
     return res.status(error.status || 500).json(body);
   }
@@ -79,9 +83,18 @@ router.get('/status/:signature', async (req, res) => {
     if (!/^[1-9A-HJ-NP-Za-km-z]{64,90}$/.test(signature)) {
       return res.status(400).json({ success: false, error: 'Invalid signature' });
     }
-    const s = await swapService.getSignatureStatus(signature);
+    let s = await swapService.getSignatureStatus(signature);
+    const lastValidBlockHeight = Number(req.query.lastValidBlockHeight);
+    if (s.status === 'unknown' && Number.isSafeInteger(lastValidBlockHeight) && lastValidBlockHeight > 0) {
+      const height = await getConnection().getBlockHeight('confirmed');
+      if (height > lastValidBlockHeight) {
+        s = await swapService.getSignatureStatus(signature);
+        if (s.status === 'unknown') s = { status: 'expired', error: 'Transaction expired without confirmation.' };
+      }
+    }
     res.json({ success: true, status: s.status, confirmed: s.status === 'confirmed', error: s.error || null });
   } catch (error) {
+    console.error('[instant-trade] status error:', error.message);
     res.status(500).json({ success: false, error: 'Failed to fetch status' });
   }
 });

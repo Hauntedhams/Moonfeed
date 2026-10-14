@@ -19,11 +19,13 @@ import { useActiveAccount } from '../hooks/useWalletView';
 import { getExpiryTimestamp, EXPIRY_OPTIONS, fetchTokenDecimals } from '../utils/triggerOrders.js';
 import { createSoftOrder, fetchActiveSoftOrdersCached, bustActiveSoftOrdersCache } from '../utils/softOrders.js';
 import { calculateOpenPosition, getTransactions } from '../utils/transactionStorage';
+import { fetchWalletPositions, fetchWalletTokenBalances } from '../utils/walletPositions';
+import { confirmedEntryPrice, selectChartWallet } from '../utils/chartWalletEntry';
 import { getSolUsdPrice } from '../utils/orderFillTracking';
 import { WalletChip } from '../utils/walletIdentity';
 import { track, coinProps } from '../utils/analytics';
 import { useTrackedTrades } from '../contexts/TrackedTradesContext';
-import { savePresets, loadTradingWallet } from '../utils/instantTradeWallet';
+import { savePresets, loadTradingWallet, getPresets } from '../utils/instantTradeWallet';
 import { API_CONFIG } from '../config/api.js';
 import { 
   calculateGraduationPercentage, 
@@ -437,33 +439,48 @@ const CoinCard = memo(({
   useEffect(() => {
     if (!mintAddress) { setEntryPrice(null); return undefined; }
     let cancelled = false;
+    let revision = 0;
+    setEntryPrice(null);
 
     const compute = async () => {
-      const tradingWallet = await loadTradingWallet().catch(() => null);
-      const transactions = [
-        ...(walletAddress ? getTransactions(walletAddress) : []),
-        ...(tradingWallet && tradingWallet.publicKey !== walletAddress
-          ? getTransactions(tradingWallet.publicKey)
-          : []),
-      ];
-      const relevant = transactions.filter((tx) => tx.tokenMint === mintAddress);
-      if (!relevant.length) { if (!cancelled) setEntryPrice(null); return; }
-      // Older records only stored the SOL price; convert them with the current rate.
-      const solUsd = relevant.some((tx) => !(Number(tx.pricePerTokenUsd) > 0)) ? await getSolUsdPrice() : 0;
-      const position = calculateOpenPosition(transactions, mintAddress, solUsd);
-      if (!cancelled) setEntryPrice(position.averagePriceUsd > 0 ? position.averagePriceUsd : null);
+      const currentRevision = ++revision;
+      try {
+        const tradingWallet = await loadTradingWallet();
+        const selectedWallet = selectChartWallet(walletAddress, tradingWallet?.publicKey, getPresets().enabled);
+        if (!selectedWallet) { if (!cancelled && currentRevision === revision) setEntryPrice(null); return; }
+        const transactions = getTransactions(selectedWallet);
+        const relevant = transactions.filter((tx) => tx.tokenMint === mintAddress);
+        const solUsd = relevant.some((tx) => !(Number(tx.pricePerTokenUsd) > 0)) ? await getSolUsdPrice() : 0;
+        const localPosition = calculateOpenPosition(transactions, mintAddress, solUsd);
+        const balances = await fetchWalletTokenBalances(selectedWallet);
+        let indexedPosition = null;
+        if (Number(balances.get(mintAddress)?.amount) > 0 && !(localPosition.averagePriceUsd > 0)) {
+          indexedPosition = (await fetchWalletPositions(selectedWallet)).byMint.get(mintAddress);
+        }
+        if (!cancelled && currentRevision === revision) {
+          setEntryPrice(confirmedEntryPrice(balances.get(mintAddress), localPosition, indexedPosition));
+        }
+      } catch (error) {
+        console.warn('[coin-chart] could not restore wallet entry:', error.message);
+      }
     };
 
     compute();
     const onSwap = () => compute();
     window.addEventListener('moonfeed:swap-success', onSwap);
     window.addEventListener('moonfeed:instant-trade', onSwap);
+    window.addEventListener('moonfeed:instant-wallet-changed', onSwap);
+    window.addEventListener('moonfeed:instant-presets-changed', onSwap);
+    window.addEventListener('focus', onSwap);
     return () => {
       cancelled = true;
       window.removeEventListener('moonfeed:swap-success', onSwap);
       window.removeEventListener('moonfeed:instant-trade', onSwap);
+      window.removeEventListener('moonfeed:instant-wallet-changed', onSwap);
+      window.removeEventListener('moonfeed:instant-presets-changed', onSwap);
+      window.removeEventListener('focus', onSwap);
     };
-  }, [walletAddress, mintAddress, displayPrice]);
+  }, [walletAddress, mintAddress]);
 
   // Active soft-order targets for this coin (take-profit / stop-loss / buy-at),
   // across both the connected and trading wallets, drawn on the chart next to
@@ -477,7 +494,7 @@ const CoinCard = memo(({
     const compute = async () => {
       const currentRevision = ++revision;
       const tradingWallet = await loadTradingWallet().catch(() => null);
-      const wallets = [walletAddress, tradingWallet?.publicKey].filter(Boolean);
+      const wallets = [selectChartWallet(walletAddress, tradingWallet?.publicKey, getPresets().enabled)].filter(Boolean);
       if (!wallets.length) { if (!cancelled && currentRevision === revision) setOrderLines([]); return; }
       const orders = await fetchActiveSoftOrdersCached(wallets).catch(() => []);
       const lines = orders
@@ -500,6 +517,7 @@ const CoinCard = memo(({
     window.addEventListener('moonfeed:swap-success', onOrdersChanged);
     window.addEventListener('moonfeed:soft-orders-changed', onOrdersChanged);
     window.addEventListener('moonfeed:instant-wallet-changed', onOrdersChanged);
+    window.addEventListener('moonfeed:instant-presets-changed', onOrdersChanged);
     return () => {
       cancelled = true;
       window.removeEventListener('moonfeed:instant-trade', onOrdersChanged);
@@ -507,6 +525,7 @@ const CoinCard = memo(({
       window.removeEventListener('moonfeed:swap-success', onOrdersChanged);
       window.removeEventListener('moonfeed:soft-orders-changed', onOrdersChanged);
       window.removeEventListener('moonfeed:instant-wallet-changed', onOrdersChanged);
+      window.removeEventListener('moonfeed:instant-presets-changed', onOrdersChanged);
     };
   }, [walletAddress, mintAddress]);
 

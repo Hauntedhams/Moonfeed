@@ -172,7 +172,7 @@ const InstantTradePanel = ({ coin, onClose, connectedWallet, embedded = false })
     setResult(null);
     try {
       const out = await fn();
-      setResult({ ok: true, text: okText(out), signature: out?.signature });
+      setResult({ ok: !out?.warning, text: out?.warning || okText(out), signature: out?.signature });
       refreshBalances();
     } catch (err) {
       setResult({ ok: false, text: err?.message || 'Something went wrong' });

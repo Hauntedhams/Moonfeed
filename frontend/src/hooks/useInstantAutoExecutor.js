@@ -9,7 +9,7 @@
 import { useEffect, useRef } from 'react';
 import { loadTradingWallet, getPresets } from '../utils/instantTradeWallet';
 import { fetchSoftOrders, cancelSoftOrder } from '../utils/softOrders';
-import { executeInstantBuy, executeInstantSell } from '../utils/instantTrade';
+import { executeInstantBuy, executeInstantSell, recoverPendingInstantTrades, isInstantTradeBusy } from '../utils/instantTrade';
 import { isCloudExecEnrolled } from '../utils/cloudExecution';
 import { initTradeNotifications, notifyAutoTradeExecuted } from '../utils/tradeNotifications';
 import { addNotification } from '../utils/alertStorage';
@@ -28,13 +28,13 @@ function readHandled() {
     const cutoff = Date.now() - HANDLED_MAX_AGE_MS;
     for (const id of Object.keys(map)) if (map[id] < cutoff) delete map[id];
     return map;
-  } catch (_) {
+  } catch {
     return {};
   }
 }
 
 function writeHandled(map) {
-  try { localStorage.setItem(HANDLED_KEY, JSON.stringify(map)); } catch (_) { /* quota */ }
+  try { localStorage.setItem(HANDLED_KEY, JSON.stringify(map)); } catch { /* quota */ }
 }
 
 function orderCoin(o) {
@@ -72,6 +72,8 @@ export default function useInstantAutoExecutor() {
       try {
         const wallet = await loadTradingWallet();
         if (!wallet) return;
+        if (isInstantTradeBusy(wallet.publicKey)) return;
+        await recoverPendingInstantTrades();
         if (getPresets().autoExecute === false) return;
         // Cloud execution enrolled → the server owns execution (and already
         // claims orders atomically); the device must not race it.
@@ -124,14 +126,23 @@ export default function useInstantAutoExecutor() {
           } catch (err) {
             error = err?.message || 'Swap failed';
           }
+          if (result && !result.confirmed) {
+            addNotification({
+              id: `auto-exec-pending-${order.orderId}`, target: 'coins', mint: order.tokenMint,
+              coin: { symbol: coin.symbol, name: coin.name, image: coin.image },
+              message: `${coin.symbol} auto-${order.type} is awaiting confirmation. Do not retry until its signature is checked.`,
+              timestamp: Date.now(),
+            });
+            continue;
+          }
 
           // Housekeeping: clear the executed order if it was still active, and on
           // a successful full sell, cancel every other active sell for this mint
           // (OCO — the position is gone, the sibling trigger is now meaningless).
-          const toCancel = actives.filter((a) =>
+          const toCancel = !error && result?.confirmed ? actives.filter((a) =>
             a.orderId === order.orderId ||
-            (!error && order.type === 'sell' && a.type === 'sell' && a.tokenMint === order.tokenMint)
-          );
+            (order.type === 'sell' && a.type === 'sell' && a.tokenMint === order.tokenMint)
+          ) : [];
           for (const stale of toCancel) {
             handled[stale.orderId] = now;
             await cancelSoftOrder(stale.orderId, wallet.publicKey).catch(() => {});
@@ -197,12 +208,14 @@ export default function useInstantAutoExecutor() {
     window.addEventListener('moonfeed:push-action', onPushAction);
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('focus', onVisible);
+    window.addEventListener('moonfeed:instant-wallet-changed', runOnce);
 
     return () => {
       clearInterval(timer);
       window.removeEventListener('moonfeed:push-action', onPushAction);
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('focus', onVisible);
+      window.removeEventListener('moonfeed:instant-wallet-changed', runOnce);
     };
   }, []);
 }

@@ -4,12 +4,15 @@
 // backend broadcasts through Helius and polls confirmation. One tap, no
 // wallet-app round trip.
 import { VersionedTransaction, Transaction, PublicKey } from '@solana/web3.js';
+import bs58 from 'bs58';
 import { getFullApiUrl } from '../config/api';
 import { loadTradingWallet, getTradingKeypair, getPresets } from './instantTradeWallet';
-import { storeTransaction } from './transactionStorage';
+import { storeTransaction, getTransactions } from './transactionStorage';
+import { readPendingTrades, savePendingTrade, removePendingTrade, reconcilePendingTrades } from './pendingTrades';
+import { invalidateWalletPositions } from './walletPositions';
 import { getSolUsdPrice } from './orderFillTracking';
 import { fetchTokenDecimals } from './triggerOrders';
-import { createSoftOrder } from './softOrders';
+import { createSoftOrder, fetchSoftOrders, cancelSoftOrder } from './softOrders';
 import ReferralTracker from './ReferralTracker';
 import { track } from './analytics';
 
@@ -79,21 +82,31 @@ async function broadcastSigned(signedBytes, lastValidBlockHeight) {
       const s = await api(`/api/instant-trade/status/${signature}`).catch(() => null);
       if (!s) continue;
       if (s.status === 'confirmed') status = 'confirmed';
-      else if (s.status === 'failed') throw new Error(`Transaction failed on-chain: ${s.error || 'unknown error'}`);
+      else if (s.status === 'failed' || s.status === 'expired') {
+        const error = new Error(s.error || 'Transaction did not confirm');
+        error.txStatus = s.status;
+        throw error;
+      }
     }
   }
   if (status === 'failed' || status === 'expired' || status === 'rejected') {
-    throw new Error(sent.error || 'Transaction did not go through');
+    const error = new Error(sent.error || 'Transaction did not go through');
+    error.txStatus = status;
+    throw error;
   }
   if (sent.error && status !== 'confirmed') throw new Error(sent.error);
   return { signature, confirmed: status === 'confirmed', status: status || (sent.confirmed ? 'confirmed' : 'pending') };
 }
 
-async function signAndSend(swapTransactionB64, lastValidBlockHeight = null) {
+async function signAndSend(swapTransactionB64, lastValidBlockHeight = null, beforeSend = null, expectedWallet = null) {
   const keypair = await getTradingKeypair();
   if (!keypair) throw new Error('No trading wallet set up');
+  if (expectedWallet && keypair.publicKey.toBase58() !== expectedWallet) {
+    throw new Error('Trading wallet changed. Nothing was submitted; select your wallet and try again.');
+  }
   const tx = VersionedTransaction.deserialize(b64ToBytes(swapTransactionB64));
   tx.sign([keypair]);
+  if (beforeSend) beforeSend(bs58.encode(tx.signatures[0]));
   return broadcastSigned(tx.serialize(), lastValidBlockHeight);
 }
 
@@ -119,8 +132,8 @@ async function buildSwap({ inputMint, outputMint, amountRaw, slippageBps, wallet
  * Falls back to the conservative constant if the endpoint is unreachable.
  * Returns { sol, rentMinSol, buyOverheadSol, sellOverheadSol, maxBuySol, exact }.
  */
-export async function getTradingLimits(mint = null) {
-  const wallet = await loadTradingWallet();
+export async function getTradingLimits(mint = null, selectedWallet = null) {
+  const wallet = selectedWallet || await loadTradingWallet();
   if (!wallet) return { sol: 0, rentMinSol: 0, buyOverheadSol: SWAP_FEE_OVERHEAD_SOL, sellOverheadSol: SWAP_FEE_OVERHEAD_SOL, maxBuySol: 0, exact: false };
   try {
     const q = mint ? `?mint=${encodeURIComponent(mint)}` : '';
@@ -134,7 +147,7 @@ export async function getTradingLimits(mint = null) {
       exact: true,
     };
   } catch {
-    const { sol } = await getTradingWalletBalances();
+    const { sol } = await getTradingWalletBalances(null, wallet);
     return {
       sol,
       rentMinSol: 0.001,
@@ -159,15 +172,15 @@ function reportAffiliateTrade({ signature, wallet, solAmount, side, coin }) {
   }).catch((err) => console.warn('[instant-trade] affiliate tracking failed:', err?.message));
 }
 
-export async function getTradingWalletBalances(mint = null) {
-  const wallet = await loadTradingWallet();
+export async function getTradingWalletBalances(mint = null, selectedWallet = null) {
+  const wallet = selectedWallet || await loadTradingWallet();
   if (!wallet) return { sol: 0, tokens: 0, tokensRaw: 0n, decimals: null };
   const [solRes, tokenRes] = await Promise.all([
-    api(`/api/wallet/${wallet.publicKey}/balance`).catch(() => ({ sol: 0 })),
-    mint ? api(`/api/wallet/${wallet.publicKey}/balance?mint=${mint}`).catch(() => ({ amount: 0 })) : Promise.resolve({ amount: 0 }),
+    api(`/api/wallet/${wallet.publicKey}/balance`),
+    mint ? api(`/api/wallet/${wallet.publicKey}/balance?mint=${mint}`) : Promise.resolve({ amount: 0 }),
   ]);
   let tokensRaw = 0n;
-  try { tokensRaw = BigInt(tokenRes.amountRaw ?? 0); } catch (_) { /* older backend */ }
+  try { tokensRaw = BigInt(tokenRes.amountRaw ?? 0); } catch { /* older backend */ }
   return {
     sol: Number(solRes.sol) || 0,
     tokens: Number(tokenRes.amount) || 0,
@@ -176,21 +189,188 @@ export async function getTradingWalletBalances(mint = null) {
   };
 }
 
+function assertNoPendingTrade(wallet, mint, allowConfirmed = false) {
+  const record = readPendingTrades().find((item) => item.walletAddress === wallet && item.tokenMint === mint && (!allowConfirmed || item.status !== 'confirmed'));
+  if (record) {
+    throw new Error(record.status === 'confirmed'
+      ? 'This coin has a confirmed trade whose history/exit setup is still being recovered. Wait before buying again; you can still sell.'
+      : 'A trade for this coin is still awaiting confirmation. Check its status before trading again.');
+  }
+}
+
+function tradeEvent(record, extra = {}) {
+  window.dispatchEvent(new CustomEvent('moonfeed:instant-trade', {
+    detail: {
+      walletAddress: record.walletAddress, side: record.type, mint: record.tokenMint,
+      symbol: record.tokenSymbol, signature: record.signature, ...extra,
+    },
+  }));
+}
+
+async function finalizeTrade(record) {
+  const alreadyStored = getTransactions(record.walletAddress).some((tx) => tx.signature === record.signature);
+  if (!alreadyStored && !storeTransaction(record)) {
+    throw new Error('Trade confirmed, but history could not be saved. Its signature is retained for recovery.');
+  }
+  invalidateWalletPositions(record.walletAddress);
+  tradeEvent(record, { confirmed: true, solAmount: record.type === 'buy' ? record.inputAmount : record.outputAmount });
+  const orders = { autoSellOrder: null, stopLossOrder: null };
+  if (record.type === 'buy') {
+    const price = Number(record.pricePerTokenUsd);
+    const targets = [
+      ['autoSellOrder', 'tp', Number(record.presets?.autoSellPct) || 0],
+      ['stopLossOrder', 'sl', -(Number(record.presets?.stopLossPct) || 0)],
+    ].filter(([, , pct]) => pct !== 0);
+    if (targets.length) {
+      const holdings = await api(`/api/instant-trade/tokens/${record.walletAddress}`);
+      if (!Array.isArray(holdings.tokens)) throw new Error('Buy confirmed, but holdings could not be verified for exit orders.');
+      if (!holdings.tokens.some((token) => token.mint === record.tokenMint && Number(token.amount) > 0)) {
+        console.warn('[instant-trade] confirmed buy is no longer held; skipping exit-order recovery:', record.signature);
+        return orders;
+      }
+    }
+    if (targets.length && !(price > 0)) {
+      throw new Error('Buy confirmed, but exit orders could not be set because the entry price is unavailable.');
+    }
+    for (const [key, kind, pct] of targets) {
+      orders[key] = await createSoftOrder({
+        walletAddress: record.walletAddress,
+        mint: record.tokenMint,
+        tokenSymbol: record.tokenSymbol,
+        tokenName: record.tokenName,
+        tokenImage: record.tokenImage,
+        side: 'sell',
+        triggerPriceUsd: price * (1 + pct / 100),
+        currentPriceUsd: price,
+        amountTokens: record.outputAmount,
+        clientOrderId: `${record.signature}:${kind}`,
+      });
+    }
+  } else if (record.fullSell) {
+    const orders = await fetchSoftOrders(record.walletAddress, 'active');
+    for (const order of orders.filter((item) => item.type === 'sell' && item.tokenMint === record.tokenMint && Date.parse(item.createdAt) <= record.timestamp)) {
+      await cancelSoftOrder(order.orderId, record.walletAddress);
+    }
+  }
+  return orders;
+}
+
+async function submitTrackedTrade(built, record) {
+  let signature = null;
+  let sent;
+  try {
+    sent = await signAndSend(built.swapTransaction, built.lastValidBlockHeight, (signedSignature) => {
+      // No signed bytes or private keys are stored. Persistence must succeed before broadcast.
+      savePendingTrade({ ...record, signature: signedSignature, lastValidBlockHeight: built.lastValidBlockHeight, status: 'pending' });
+      signature = signedSignature;
+      tradeEvent({ ...record, signature }, { confirmed: false });
+    }, record.walletAddress);
+  } catch (error) {
+    if (!signature) throw friendlySwapError(error);
+    if (error.txStatus === 'failed' || error.txStatus === 'expired') {
+      removePendingTrade(signature);
+      throw friendlySwapError(error);
+    }
+    console.warn('[instant-trade] broadcast outcome uncertain:', error.message);
+    tradeEvent({ ...record, signature }, { confirmed: false });
+    return { signature, confirmed: false, status: 'pending', warning: 'Submission could not be verified. Do not buy again; its signature will be checked automatically.' };
+  }
+  if (!sent.confirmed) {
+    tradeEvent({ ...record, signature }, { confirmed: false });
+    return sent;
+  }
+  const confirmedRecord = { ...record, signature, lastValidBlockHeight: built.lastValidBlockHeight, status: 'confirmed' };
+  let orders;
+  try {
+    savePendingTrade(confirmedRecord);
+    orders = await finalizeTrade(confirmedRecord);
+    removePendingTrade(signature);
+    tradeEvent(confirmedRecord, { confirmed: true });
+  } catch (error) {
+    console.error('[instant-trade] confirmed trade bookkeeping failed:', error.message);
+    return { ...sent, warning: `${record.type === 'buy' ? 'Buy' : 'Sell'} confirmed, but history/exit-order setup is incomplete: ${error.message} Recovery will retry automatically.` };
+  }
+  reportAffiliateTrade({
+    signature, wallet: record.walletAddress,
+    solAmount: record.type === 'buy' ? record.inputAmount : record.outputAmount,
+    side: record.type, coin: { mintAddress: record.tokenMint, symbol: record.tokenSymbol, name: record.tokenName },
+  });
+  track('swap_success', { mint: record.tokenMint, symbol: record.tokenSymbol, label: `instant_${record.type}` });
+  return { ...sent, ...orders };
+}
+
+let recoveryRunning = false;
+let recoveringWallet = null;
+export async function recoverPendingInstantTrades() {
+  if (recoveryRunning) return;
+  recoveryRunning = true;
+  try {
+    const wallet = await loadTradingWallet();
+    if (!wallet || tradingWalletsBusy.has(wallet.publicKey)) return;
+    recoveringWallet = wallet.publicKey;
+    await reconcilePendingTrades({
+      wallet: wallet.publicKey,
+      getStatus: (signature, lastValidBlockHeight) => api(
+        `/api/instant-trade/status/${signature}${lastValidBlockHeight ? `?lastValidBlockHeight=${lastValidBlockHeight}` : ''}`
+      ),
+      onConfirmed: finalizeTrade,
+      onSettled: (record) => tradeEvent(record, { confirmed: true }),
+      onFailed: (record, result) => {
+        console.warn('[instant-trade] submitted trade did not settle:', record.signature, result.status);
+        removePendingTrade(record.signature);
+        tradeEvent(record, { confirmed: false, error: result.error || 'Transaction did not confirm.' });
+      },
+      onError: (record, error) => {
+        console.error('[instant-trade] trade recovery deferred:', record.signature, error.message);
+        window.dispatchEvent(new CustomEvent('moonfeed:trade-recovery-error', { detail: { mint: record.tokenMint, error: error.message } }));
+      },
+    });
+  } catch (error) {
+    console.error('[instant-trade] recovery failed:', error.message);
+    window.dispatchEvent(new CustomEvent('moonfeed:trade-recovery-error', { detail: { error: error.message } }));
+  } finally {
+    recoveringWallet = null;
+    recoveryRunning = false;
+  }
+}
+
 /**
  * One-tap buy at the saved presets (or explicit overrides).
  * Returns { signature, confirmed, solSpent, tokensReceived, autoSellOrder }.
  */
-export async function executeInstantBuy(coin, overrides = {}) {
-  const mint = coin?.mintAddress || coin?.address;
-  if (!mint) throw new Error('Invalid coin');
+const tradingWalletsBusy = new Set();
+export function isInstantTradeBusy(walletAddress) {
+  return tradingWalletsBusy.has(walletAddress) || recoveringWallet === walletAddress;
+}
+
+async function withTradingWallet(action) {
   const wallet = await loadTradingWallet();
   if (!wallet) throw new Error('No trading wallet set up');
+  if (isInstantTradeBusy(wallet.publicKey)) {
+    throw new Error('A trade is already in progress or being reconciled for this wallet.');
+  }
+  tradingWalletsBusy.add(wallet.publicKey);
+  try {
+    return await action(wallet);
+  } finally {
+    tradingWalletsBusy.delete(wallet.publicKey);
+  }
+}
+
+export function executeInstantBuy(coin, overrides = {}) {
+  return withTradingWallet((wallet) => buyWithWallet(coin, overrides, wallet));
+}
+
+async function buyWithWallet(coin, overrides, wallet) {
+  const mint = coin?.mintAddress || coin?.address;
+  if (!mint) throw new Error('Invalid coin');
+  assertNoPendingTrade(wallet.publicKey, mint);
 
   const presets = { ...getPresets(), ...overrides };
   const solSpent = Number(presets.buySol);
   if (!(solSpent > 0)) throw new Error('Set a buy amount first');
 
-  const limits = await getTradingLimits(mint);
+  const limits = await getTradingLimits(mint, wallet);
   if (limits.sol < solSpent + limits.buyOverheadSol) {
     throw new Error(limits.maxBuySol >= 0.001
       ? `Not enough SOL for a ${solSpent} SOL buy — fees/rent need ~${limits.buyOverheadSol.toFixed(4)} SOL on top. Max right now: ${limits.maxBuySol} SOL.`
@@ -201,23 +381,22 @@ export async function executeInstantBuy(coin, overrides = {}) {
   const slippageBps = Math.round(Math.max(0.1, Number(presets.slippagePct) || 3) * 100);
 
   let built;
-  let sent;
   try {
     built = await buildSwap({ inputMint: SOL_MINT, outputMint: mint, amountRaw: lamports, slippageBps, wallet: wallet.publicKey });
-    sent = await signAndSend(built.swapTransaction, built.lastValidBlockHeight);
   } catch (err) {
     throw friendlySwapError(err);
   }
 
-  const decimals = await fetchTokenDecimals(mint).catch(() => 6);
+  const decimals = built.outputDecimals;
+  if (!Number.isInteger(decimals) || decimals < 0) throw new Error('Token decimals could not be verified. Nothing was submitted.');
   const tokensReceived = Number(built.quote?.outAmount || 0) / 10 ** decimals;
-  const solUsd = await getSolUsdPrice().catch(() => 0);
+  if (!(tokensReceived > 0)) throw new Error('Trading provider returned an invalid token amount. Nothing was submitted.');
+  const solUsd = await getSolUsdPrice({ requireLivePrice: true });
   const pricePerToken = tokensReceived > 0 ? solSpent / tokensReceived : 0;
   const priceUsd = pricePerToken * solUsd;
 
-  storeTransaction({
+  const sent = await submitTrackedTrade(built, {
     walletAddress: wallet.publicKey,
-    signature: sent.signature,
     type: 'buy',
     tokenMint: mint,
     tokenSymbol: coin.symbol,
@@ -229,54 +408,26 @@ export async function executeInstantBuy(coin, overrides = {}) {
     outputMint: mint,
     pricePerToken,
     pricePerTokenUsd: priceUsd,
+    presets,
+    timestamp: Date.now(),
   });
-  reportAffiliateTrade({ signature: sent.signature, wallet: wallet.publicKey, solAmount: solSpent, side: 'buy', coin });
-  track('swap_success', { mint, symbol: coin.symbol, label: 'instant_buy', value: solSpent });
-
-  // Take-profit / stop-loss bracket: server-monitored soft orders that alert
-  // (and deep-link back) when either side hits.
-  const sellAlert = (pctMove) => createSoftOrder({
-    walletAddress: wallet.publicKey,
-    mint,
-    tokenSymbol: coin.symbol,
-    tokenName: coin.name,
-    tokenImage: coin.image || null,
-    side: 'sell',
-    triggerPriceUsd: priceUsd * (1 + pctMove / 100),
-    currentPriceUsd: priceUsd,
-    amountTokens: tokensReceived,
-  }).catch((err) => {
-    console.warn('[instant-trade] sell alert failed:', err?.message);
-    return null;
-  });
-
-  let autoSellOrder = null;
-  let stopLossOrder = null;
-  const autoSellPct = Number(presets.autoSellPct) || 0;
-  const stopLossPct = Number(presets.stopLossPct) || 0;
-  // Only bracket a buy we know landed — a still-pending tx might never fill.
-  if (sent.confirmed && priceUsd > 0 && tokensReceived > 0) {
-    if (autoSellPct > 0) autoSellOrder = await sellAlert(autoSellPct);
-    if (stopLossPct > 0) stopLossOrder = await sellAlert(-stopLossPct);
-  }
-
-  window.dispatchEvent(new CustomEvent('moonfeed:instant-trade', {
-    detail: { side: 'buy', mint, symbol: coin.symbol, signature: sent.signature, solAmount: solSpent, tokens: tokensReceived },
-  }));
-  return { ...sent, solSpent, tokensReceived, autoSellOrder, stopLossOrder };
+  return { ...sent, solSpent, tokensReceived };
 }
 
 /**
  * Sell a percentage (1-100) of the trading wallet's holdings of this coin.
  * Returns { signature, confirmed, tokensSold, solReceived }.
  */
-export async function executeInstantSell(coin, pct) {
+export function executeInstantSell(coin, pct) {
+  return withTradingWallet((wallet) => sellWithWallet(coin, pct, wallet));
+}
+
+async function sellWithWallet(coin, pct, wallet) {
   const mint = coin?.mintAddress || coin?.address;
   if (!mint) throw new Error('Invalid coin');
-  const wallet = await loadTradingWallet();
-  if (!wallet) throw new Error('No trading wallet set up');
+  assertNoPendingTrade(wallet.publicKey, mint, true);
 
-  const { tokens, tokensRaw, decimals: chainDecimals } = await getTradingWalletBalances(mint);
+  const { tokens, tokensRaw, decimals: chainDecimals } = await getTradingWalletBalances(mint, wallet);
   if (!(tokens > 0)) throw new Error(`No ${coin.symbol || 'token'} in the trading wallet`);
   const share = Math.min(100, Math.max(1, Number(pct) || 100)) / 100;
   const decimals = typeof chainDecimals === 'number'
@@ -295,28 +446,28 @@ export async function executeInstantSell(coin, pct) {
 
   // A sell still fronts WSOL rent + priority fee from the SOL balance (the
   // rent comes back when the WSOL account closes, but it must exist first).
-  const limits = await getTradingLimits(mint);
+  const limits = await getTradingLimits(mint, wallet);
   if (limits.sol < limits.sellOverheadSol) {
     throw new Error(`Selling needs ~${limits.sellOverheadSol.toFixed(4)} SOL in the trading wallet for fees — you have ${limits.sol.toFixed(4)}. Deposit a little SOL first.`);
   }
 
   let built;
-  let sent;
   try {
     built = await buildSwap({ inputMint: mint, outputMint: SOL_MINT, amountRaw, slippageBps, wallet: wallet.publicKey });
-    sent = await signAndSend(built.swapTransaction, built.lastValidBlockHeight);
   } catch (err) {
     throw friendlySwapError(err);
   }
 
   const tokensSold = Number(amountRaw) / 10 ** decimals;
   const solReceived = Number(built.quote?.outAmount || 0) / 1e9;
-  const solUsd = await getSolUsdPrice().catch(() => 0);
+  const solUsd = await getSolUsdPrice({ requireLivePrice: true }).catch((error) => {
+    console.warn('[instant-trade] USD sell value unavailable; preserving SOL-denominated execution:', error.message);
+    return 0;
+  });
   const pricePerToken = tokensSold > 0 ? solReceived / tokensSold : 0;
 
-  storeTransaction({
+  const sent = await submitTrackedTrade(built, {
     walletAddress: wallet.publicKey,
-    signature: sent.signature,
     type: 'sell',
     tokenMint: mint,
     tokenSymbol: coin.symbol,
@@ -328,13 +479,9 @@ export async function executeInstantSell(coin, pct) {
     outputMint: SOL_MINT,
     pricePerToken,
     pricePerTokenUsd: pricePerToken * solUsd,
+    fullSell: share >= 1,
+    timestamp: Date.now(),
   });
-  reportAffiliateTrade({ signature: sent.signature, wallet: wallet.publicKey, solAmount: solReceived, side: 'sell', coin });
-  track('swap_success', { mint, symbol: coin.symbol, label: 'instant_sell', value: solReceived });
-
-  window.dispatchEvent(new CustomEvent('moonfeed:instant-trade', {
-    detail: { side: 'sell', mint, symbol: coin.symbol, signature: sent.signature, solAmount: solReceived, tokens: tokensSold },
-  }));
   return { ...sent, tokensSold, solReceived };
 }
 

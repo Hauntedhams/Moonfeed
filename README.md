@@ -60,7 +60,31 @@ Create `.env` files in both frontend and backend directories:
 PORT=3001
 HELIUS_API_KEY=your_helius_key
 BIRDEYE_API_KEY=your_birdeye_key
+JUPITER_API_KEY=your_jupiter_portal_key
 ```
+
+`JUPITER_API_KEY` is a server-only key from the [Jupiter developer portal](https://portal.jup.ag).
+Set it in Render using this exact uppercase name; never add it to a `VITE_` variable.
+Instant swaps use the authenticated API when configured. Without it they use the
+keyless endpoint, whose shared quota can cause HTTP 429 errors. Quote/build
+requests have bounded backoff; signed transactions are never rebuilt on an
+ambiguous submission response. Higher traffic may require a higher-quota plan.
+
+Instant trades persist their signature and recovery metadata **before** broadcast
+(not private keys or signed transaction bytes). On startup and foreground return,
+the app checks outstanding signatures. Only confirmed trades enter local history
+or create TP/SL orders. Bracket creation is idempotent per buy signature; verify
+the `SoftOrder` wallet/client-order unique index is installed in production.
+An unresolved signature blocks another trade for that wallet/coin to avoid
+duplicate buys. Failed exit-order setup is shown as a warning and retried by
+recovery; another buy is blocked until setup completes, but a confirmed holding
+can still be sold manually. These client recovery checks require reopening the app; execution while
+closed still requires separately enrolled cloud execution.
+
+Wallet swap history merges the enhanced Helius swap index with Solana Tracker's
+recent-trade index, deduplicated by signature. This includes newer Jupiter trades
+and cloud-executed exits that a SWAP-only index can omit. If one provider fails,
+the response explicitly marks history as partial rather than implying it is complete.
 
 **Frontend `.env`:**
 ```env
@@ -188,4 +212,3 @@ Additional documentation is available in the `docs/` folder:
 - Helius RPC
 - Birdeye API
 - Solana Foundation
-
