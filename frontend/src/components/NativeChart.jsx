@@ -1114,6 +1114,64 @@ const NativeChart = ({
     if (desired !== tfIndex) setTfIndex(desired);
   }, [focusTimelineFrom, tfIndex]);
 
+  // Area-line chart built from the coin's own on-chain swaps (/api/chart-data).
+  // Source-agnostic, so it works for pool-less coins AND for coins whose DEX pool
+  // the candle provider can't price. Sets status itself; resolves when done.
+  const loadSwapHistoryLine = useCallback(async (tf) => {
+    const RETRY_DELAYS_MS = [0, 1200, 2500];
+    let points = null;
+    let hadError = false;
+    for (const delay of RETRY_DELAYS_MS) {
+      if (delay) await new Promise((r) => setTimeout(r, delay));
+      try {
+        const res = await fetchWithTimeout(`${API_CONFIG.BASE_URL}/api/chart-data/${mint}?timeframe=${tf.label}`);
+        if (res.ok) {
+          const json = await res.json();
+          points = json?.data || [];
+          hadError = false;
+          if (points.length > 0) break; // got data — done
+        } else if (res.status === 404) {
+          points = []; hadError = false; // endpoint says no data
+        } else if (res.status === 503) {
+          hadError = true; break; // upstream rate-limited — retrying won't help
+        } else {
+          hadError = true;
+        }
+      } catch (e) {
+        hadError = true;
+      }
+    }
+    if (!chartRef.current) return;
+    if (hadError) { setStatus('error'); return; }
+    const cleaned = (points || [])
+      .map((d) => ({ time: d.time, value: +d.value }))
+      .filter((d) => Number.isFinite(d.time) && Number.isFinite(d.value))
+      .sort((a, b) => a.time - b.time);
+    const deduped = [];
+    for (const d of cleaned) {
+      if (deduped.length && deduped[deduped.length - 1].time === d.time) deduped[deduped.length - 1] = d;
+      else deduped.push(d);
+    }
+    const series = ensureSeries('area');
+    if (!series) return;
+    try {
+      series.setData(deduped);
+      dataLengthRef.current = deduped.length;
+      if (deduped.length === 0) { setStatus('empty'); return; }
+      const lastPoint = deduped[deduped.length - 1];
+      setLiveTick((prev) => ({ price: lastPoint.value, dir: null, n: prev.n }));
+      const fitKey = `${mint}-${tf.label}-${pool}-line`;
+      if (fittedMintTfRef.current !== fitKey) {
+        fittedMintTfRef.current = fitKey;
+        if (chartRef.current) frameDefault();
+      }
+    } catch (e) {
+      // Chart/series disposed mid-fetch — nothing to draw into anymore.
+      return;
+    }
+    setStatus('ready');
+  }, [mint, pool, ensureSeries, frameDefault]);
+
   const load = useCallback(async () => {
     if (!chartRef.current || !poolResolved) return;
     const tf = TIMEFRAMES[tfIndex];
@@ -1156,6 +1214,9 @@ const NativeChart = ({
       }
       if (!Array.isArray(list) || list.length === 0) {
         if (!soft) {
+          // The provider has nothing for this pool (and the backend already tried the
+          // coin's other liquid pools). Chart the coin's own swaps instead of giving up.
+          if (mint) { await loadSwapHistoryLine(tf); return; }
           try { ensureSeries('candles')?.setData([]); } catch (e) { /* chart disposed mid-fetch */ }
           setStatus('empty');
         }
@@ -1182,7 +1243,12 @@ const NativeChart = ({
         const vols = recent.map((c) => (c.high - c.low) / (c.close || 1)).filter(Number.isFinite);
         recentVolRef.current = vols.length ? vols.reduce((a, b) => a + b, 0) / vols.length : 0;
         // Seed the price badge immediately so it never shows blank/stale before the first live tick.
-        if (lastCandleRef.current) setLiveTick((prev) => ({ price: lastCandleRef.current.close, dir: null, n: prev.n }));
+        // Capture the value NOW: React may run this updater later, after the next load()
+        // has already reset lastCandleRef to null (e.g. the auto-drop to a shorter
+        // timeframe below) — reading the ref inside the updater crashed with
+        // "null is not an object (evaluating 'lastCandleRef.current.close')".
+        const seededClose = lastCandleRef.current ? lastCandleRef.current.close : null;
+        if (seededClose != null) setLiveTick((prev) => ({ price: seededClose, dir: null, n: prev.n }));
         const fitKey = `${mint}-${tf.label}-${pool}`;
         if (fittedMintTfRef.current !== fitKey) {
           fittedMintTfRef.current = fitKey;
@@ -1218,68 +1284,19 @@ const NativeChart = ({
       return;
     }
 
-    // No DEX pool (e.g. Moonfeed-native $MOO): fall back to on-chain swap history from
+    // No DEX pool (e.g. Moonfeed-native $MOO), OR the pool exists but the chart
+    // provider has no candles for it (e.g. a PumpSwap pool quoted in an exotic token
+    // that GeckoTerminal doesn't price): fall back to on-chain swap history from
     // /api/chart-data (returns {time, value}), rendered as an area line. The endpoint
     // builds candles from Helius on a cold call, which can transiently return empty —
     // retry a couple of times before treating it as genuinely empty.
     if (mint) {
-      const RETRY_DELAYS_MS = [0, 1200, 2500];
-      let points = null;
-      let hadError = false;
-      for (const delay of RETRY_DELAYS_MS) {
-        if (delay) await new Promise((r) => setTimeout(r, delay));
-        try {
-          const res = await fetchWithTimeout(`${API_CONFIG.BASE_URL}/api/chart-data/${mint}?timeframe=${tf.label}`);
-          if (res.ok) {
-            const json = await res.json();
-            points = json?.data || [];
-            hadError = false;
-            if (points.length > 0) break; // got data — done
-          } else if (res.status === 404) {
-            points = []; hadError = false; // endpoint says no data
-          } else if (res.status === 503) {
-            hadError = true; break; // upstream rate-limited — retrying won't help
-          } else {
-            hadError = true;
-          }
-        } catch (e) {
-          hadError = true;
-        }
-      }
-      if (!chartRef.current) return;
-      if (hadError) { setStatus('error'); return; }
-      const cleaned = (points || [])
-        .map((d) => ({ time: d.time, value: +d.value }))
-        .filter((d) => Number.isFinite(d.time) && Number.isFinite(d.value))
-        .sort((a, b) => a.time - b.time);
-      const deduped = [];
-      for (const d of cleaned) {
-        if (deduped.length && deduped[deduped.length - 1].time === d.time) deduped[deduped.length - 1] = d;
-        else deduped.push(d);
-      }
-      const series = ensureSeries('area');
-      if (!series) return;
-      try {
-        series.setData(deduped);
-        dataLengthRef.current = deduped.length;
-        if (deduped.length === 0) { setStatus('empty'); return; }
-        const lastPoint = deduped[deduped.length - 1];
-        setLiveTick((prev) => ({ price: lastPoint.value, dir: null, n: prev.n }));
-        const fitKey = `${mint}-${tf.label}-${pool}`;
-        if (fittedMintTfRef.current !== fitKey) {
-          fittedMintTfRef.current = fitKey;
-          if (chartRef.current) frameDefault();
-        }
-      } catch (e) {
-        // Chart/series disposed mid-fetch — nothing to draw into anymore.
-        return;
-      }
-      setStatus('ready');
+      await loadSwapHistoryLine(tf);
       return;
     }
 
     setStatus('empty');
-  }, [pool, poolResolved, tfIndex, mint, ensureSeries, clearUserNav]);
+  }, [pool, poolResolved, tfIndex, mint, ensureSeries, clearUserNav, loadSwapHistoryLine]);
 
   useEffect(() => {
     if (isActive) load();

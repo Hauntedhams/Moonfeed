@@ -1,4 +1,4 @@
-import React, { memo, useState, useRef, useEffect, useMemo } from 'react';
+import React, { memo, useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { UnifiedWalletButton } from '@jup-ag/wallet-adapter';
 import { getArtworkCandidates } from '../utils/coinArtwork';
@@ -263,8 +263,13 @@ const CoinCard = memo(({
   
   // Track desktop mode for responsive chart positioning
   const [isDesktopMode, setIsDesktopMode] = useState(() => window.innerWidth >= 1200);
-  // Track when mobile chart portal target ref is available (refs are null on first render)
-  const [mobileTargetMounted, setMobileTargetMounted] = useState(false);
+  // Chart portal targets as STATE (set via callback refs). Reading `ref.current` during
+  // render is null on the first pass and doesn't re-render when the node attaches, which
+  // left `createPortal` returning null → a blank chart area with no way to recover.
+  const [mobileChartTargetEl, setMobileChartTargetEl] = useState(null);
+  const [rightPanelEl, setRightPanelEl] = useState(null);
+  const attachMobileChartTarget = useCallback((el) => { mobileChartTargetRef.current = el; setMobileChartTargetEl(el); }, []);
+  const attachRightPanel = useCallback((el) => { rightPanelRef.current = el; setRightPanelEl(el); }, []);
   const actionButtonsRef = useRef(null); // Ref for wheel-forwarding on action buttons
   const actionWheelDebounceRef = useRef(null); // Debounce — one card advance per gesture
   const _btnSwipeStartY = useRef(0); // track swipe start Y for portaled buttons column
@@ -636,11 +641,6 @@ const CoinCard = memo(({
       enrichCoin();
     }
   }, [isVisible, isEnriched, enrichmentRequested, mintAddress, coin, onEnrichmentComplete, enrichmentManaged]);
-
-  // Signal that the mobile chart portal target div is mounted and ref is available
-  useEffect(() => {
-    setMobileTargetMounted(true);
-  }, []);
 
   // 📱 RESPONSIVE CHART FIX: Track window size for single responsive chart
   useEffect(() => {
@@ -3226,7 +3226,7 @@ const CoinCard = memo(({
           {/* Price Charts - Mobile chart portal target */}
           <div className="charts-section">
             {/* Mobile chart renders here via portal */}
-            <div className="twelve-chart-section mobile-chart-target" ref={mobileChartTargetRef}>
+            <div className="twelve-chart-section mobile-chart-target" ref={attachMobileChartTarget}>
               {/* Chart portals here on mobile */}
             </div>
           </div> {/* Close charts-section */}
@@ -4376,7 +4376,7 @@ const CoinCard = memo(({
       }())}
 
       {/* Right Panel - Desktop chart container (chart portals here on desktop) */}
-      <div className="coin-card-right-panel" ref={rightPanelRef} />
+      <div className="coin-card-right-panel" ref={attachRightPanel} />
 
       {/* Single chart instance — portaled to desktop right-panel or mobile target.
           React 18 preserves component state when the portal container changes, so
@@ -4388,12 +4388,12 @@ const CoinCard = memo(({
           iframe only ever loads for the current/preload card anyway (isActive).
           Uses the settled-index gate (mountChart) so charts never mount/unmount
           mid-swipe, which would interrupt CSS scroll-snap. */}
-      {(mountChart ?? isVisible) && mobileTargetMounted && (() => {
+      {(mountChart ?? isVisible) && (() => {
         // Native chart (Phase 1): renders in-flow into the right panel on desktop,
         // or the mobile chart slot on mobile. No body-portal / iframe touch-trap.
         if (USE_NATIVE_CHART && !useAdvancedGeckoChart) {
-          const target = isDesktopMode ? rightPanelRef.current : mobileChartTargetRef.current;
-          if (!target) return null;
+          const target = isDesktopMode ? rightPanelEl : mobileChartTargetEl;
+          if (!target) return null; // re-rendered automatically once the node attaches
           return createPortal(
             <NativeChart
               key={`nchart-${mintAddress}`}
@@ -4433,7 +4433,7 @@ const CoinCard = memo(({
             target
           );
         }
-        if (!mobileChartTargetRef.current) return null;
+        if (!mobileChartTargetEl) return null;
         return createPortal(
         <TwelveDataChart 
           key={`chart-${mintAddress}`}
@@ -4462,7 +4462,7 @@ const CoinCard = memo(({
           onBackToNativeChart={USE_NATIVE_CHART && useAdvancedGeckoChart ? () => setUseAdvancedGeckoChart(false) : null}
           fullscreenRequestSignal={advancedChartFullscreenSignal}
         />,
-        mobileChartTargetRef.current
+        mobileChartTargetEl
         );
       })()}
 

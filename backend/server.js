@@ -550,22 +550,22 @@ function drainGeckoQueue() {
 // pairAddress / poolAddress.  The chart needs a pool address to fetch OHLCV
 // data from GeckoTerminal.  This resolver looks up the top pool for a mint
 // via DexScreener's token endpoint and caches the result for 2 hours.
-const poolAddressCache = new Map(); // mintAddress -> { poolAddress, timestamp }
+const poolAddressCache = new Map(); // mintAddress -> { poolAddress, pairs, timestamp }
 const POOL_CACHE_TTL = 2 * 60 * 60 * 1000; // 2 hours
 const pendingPoolLookups = new Map(); // dedup concurrent lookups
+const { rankAlternatePools, isUsableOhlcv, intervalSeconds } = require('./utils/chartPoolFallback');
 
 /**
- * Resolve the best pool/pair address for a given mint address.
- * Uses DexScreener token endpoint (already proven in fetchDexscreenerTrendingBatch).
- * Returns the pairAddress of the highest-liquidity Solana pool, or null.
+ * Fetch + cache the Solana pairs DexScreener knows for a mint, sorted by liquidity
+ * (highest first). Shared by the pool resolver and the OHLCV fallback so a chart
+ * never costs a second DexScreener call. Resolves to [] on failure.
  */
-async function resolvePoolAddress(mintAddress) {
-  if (!mintAddress) return null;
+async function fetchSolanaPairs(mintAddress) {
+  if (!mintAddress) return [];
 
-  // Check cache
   const cached = poolAddressCache.get(mintAddress);
   if (cached && Date.now() - cached.timestamp < POOL_CACHE_TTL) {
-    return cached.poolAddress;
+    return cached.pairs || [];
   }
 
   // Dedup concurrent lookups for the same mint
@@ -580,23 +580,27 @@ async function resolvePoolAddress(mintAddress) {
         `https://api.dexscreener.com/latest/dex/tokens/${mintAddress}`,
         { headers: { 'User-Agent': 'Moonfeed/1.0' }, timeout: 8000 }
       );
-      if (!resp.ok) return null;
+      if (!resp.ok) return [];
 
       const data = await resp.json();
-      if (!data.pairs || data.pairs.length === 0) return null;
+      const solanaPairs = (data.pairs || [])
+        .filter(p => p.chainId === 'solana' && p.pairAddress)
+        .map(p => ({
+          chainId: p.chainId,
+          pairAddress: p.pairAddress,
+          dexId: p.dexId,
+          quoteSymbol: p.quoteToken?.symbol || null,
+          liquidity: { usd: parseFloat(p.liquidity?.usd) || 0 },
+          volumeH24: parseFloat(p.volume?.h24) || 0,
+        }))
+        .sort((a, b) => b.liquidity.usd - a.liquidity.usd);
 
-      // Pick the Solana pair with the highest liquidity
-      const solanaPairs = data.pairs.filter(p => p.chainId === 'solana');
-      if (solanaPairs.length === 0) return null;
-
-      solanaPairs.sort((a, b) =>
-        (parseFloat(b.liquidity?.usd) || 0) - (parseFloat(a.liquidity?.usd) || 0)
-      );
-
-      const bestPool = solanaPairs[0].pairAddress || null;
-
-      // Cache result (even null to avoid re-fetching)
-      poolAddressCache.set(mintAddress, { poolAddress: bestPool, timestamp: Date.now() });
+      // Cache result (even an empty list to avoid re-fetching)
+      poolAddressCache.set(mintAddress, {
+        poolAddress: solanaPairs[0]?.pairAddress || null,
+        pairs: solanaPairs,
+        timestamp: Date.now(),
+      });
 
       // Evict oldest entries if cache grows too large
       if (poolAddressCache.size > 6000) {
@@ -604,10 +608,10 @@ async function resolvePoolAddress(mintAddress) {
         poolAddressCache.delete(oldest);
       }
 
-      return bestPool;
+      return solanaPairs;
     } catch (err) {
       console.warn(`[PoolResolver] Failed for ${mintAddress.substring(0, 8)}:`, err.message);
-      return null;
+      return [];
     } finally {
       pendingPoolLookups.delete(mintAddress);
     }
@@ -616,6 +620,22 @@ async function resolvePoolAddress(mintAddress) {
   pendingPoolLookups.set(mintAddress, lookupPromise);
   return lookupPromise;
 }
+
+/**
+ * Resolve the best pool/pair address for a given mint address.
+ * Returns the pairAddress of the highest-liquidity Solana pool, or null.
+ */
+async function resolvePoolAddress(mintAddress) {
+  const pairs = await fetchSolanaPairs(mintAddress);
+  return pairs[0]?.pairAddress || null;
+}
+
+// Token → pool that the chart provider actually has candles for, learned when the
+// top-liquidity pool came back empty. Lets every later timeframe request for that
+// coin skip straight to the working pool instead of re-discovering it.
+const chartPoolOverride = new Map(); // mintAddress -> { poolAddress, timestamp }
+const CHART_POOL_OVERRIDE_TTL = 60 * 60 * 1000;
+const EMPTY_OHLCV_CACHE_MS = 20 * 1000; // a just-created pool gets indexed within seconds — never pin "no data" for long
 
 /**
  * Batch-resolve pool addresses for an array of coins that are missing pairAddress.
@@ -768,107 +788,134 @@ async function preloadChartData(coins, options = {}) {
   return coins;
 }
 
+// Fetch (or serve from cache) one pool's OHLCV. Dedupes concurrent callers for the
+// same key and runs the upstream call through the provider throttle. Resolves to
+// { data, cached } or throws an error carrying .status/.body from upstream.
+async function fetchPoolOhlcv({ network, poolAddress, timeframe, aggregate, limit, token }) {
+  const cacheKey = `ohlcv_${network}_${poolAddress}_${timeframe}_${aggregate}_${limit}${token ? `_${token}` : ''}`;
+
+  const cached = geckoCache.get(cacheKey);
+  // An empty list is only ever cached briefly: a pool created seconds ago gets
+  // indexed by the provider within moments, and a long-lived "no data" entry is
+  // exactly what pins "No chart data yet" on a coin that is actively trading.
+  const freshTtl = cached?.empty ? EMPTY_OHLCV_CACHE_MS : geckoFreshTtl(timeframe);
+  if (cached && Date.now() - cached.timestamp < freshTtl) {
+    return { data: cached.data, cached: true };
+  }
+
+  if (pendingGeckoRequests.has(cacheKey)) {
+    try {
+      return { data: await pendingGeckoRequests.get(cacheKey), cached: false };
+    } catch (error) {
+      // The in-flight request failed — fall through and try again below.
+    }
+  }
+
+  const params = new URLSearchParams({
+    aggregate: aggregate.toString(),
+    limit: limit.toString(),
+    currency: 'usd'
+  });
+  if (token) params.set('token', token);
+  const { url, headers } = geckoOhlcvRequest(network, poolAddress, timeframe, params);
+
+  const fetchPromise = (async () => {
+    const fetch = require('node-fetch');
+    const doFetch = () => fetch(url, { method: 'GET', headers, timeout: 15000 });
+    let response = await runThrottledGecko(doFetch);
+    if (response.status === 429) {
+      console.log(`⏳ [Proxy] 429 for ${poolAddress}/${timeframe}, retrying once after backoff...`);
+      await new Promise((r) => setTimeout(r, 800));
+      response = await runThrottledGecko(doFetch);
+    }
+    if (!response.ok) {
+      const errorText = await response.text();
+      const err = new Error(`GeckoTerminal API error: ${response.status} ${response.statusText}`);
+      err.status = response.status;
+      err.body = errorText.substring(0, 200);
+      throw err;
+    }
+    const data = await response.json();
+    if (!data?.data?.attributes?.ohlcv_list) {
+      throw new Error('Invalid OHLCV data format from GeckoTerminal');
+    }
+    geckoCache.set(cacheKey, { data, timestamp: Date.now(), empty: data.data.attributes.ohlcv_list.length === 0 });
+    if (geckoCache.size > 2000) {
+      geckoCache.delete(geckoCache.keys().next().value);
+    }
+    return data;
+  })();
+
+  pendingGeckoRequests.set(cacheKey, fetchPromise);
+  // Cleanup must not create a second unhandled rejection path (Node exits on those).
+  fetchPromise.catch(() => {}).finally(() => pendingGeckoRequests.delete(cacheKey));
+
+  try {
+    return { data: await fetchPromise, cached: false };
+  } catch (error) {
+    // On any upstream error, serve ANY cached data we have (even old) rather than failing.
+    if (cached) {
+      console.log(`⚠️ [Proxy] Error, serving stale cache for ${poolAddress}/${timeframe} (age: ${Math.round((Date.now() - cached.timestamp) / 60000)}min)`);
+      return { data: cached.data, cached: true, stale: true };
+    }
+    throw error;
+  }
+}
+
 // 📊 GeckoTerminal OHLCV Proxy endpoint (for chart data)
 app.get('/api/geckoterminal/ohlcv/:network/:poolAddress/:timeframe', async (req, res) => {
+  const { network, poolAddress, timeframe } = req.params;
+  const { aggregate = 1, limit = 100 } = req.query;
+  // Which side of the pool to price; GeckoTerminal defaults to the pool's base token,
+  // which for pairs like ZEC/MASK is NOT the coin being charted.
+  const token = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(String(req.query.token || '')) ? String(req.query.token) : '';
+  const intervalSec = intervalSeconds(timeframe, aggregate);
+  const usable = (data) => isUsableOhlcv(data?.data?.attributes?.ohlcv_list, intervalSec);
+
   try {
-    const { network, poolAddress, timeframe } = req.params;
-    const { aggregate = 1, limit = 100 } = req.query;
-    // Which side of the pool to price; GeckoTerminal defaults to the pool's base token,
-    // which for pairs like ZEC/MASK is NOT the coin being charted.
-    const token = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(String(req.query.token || '')) ? String(req.query.token) : '';
+    // A pool we already learned the provider can chart for this coin wins over the
+    // requested one (the requested one is the top-liquidity pool, which may be unpriced).
+    const override = token ? chartPoolOverride.get(token) : null;
+    const overridePool = override && Date.now() - override.timestamp < CHART_POOL_OVERRIDE_TTL ? override.poolAddress : null;
+    const primaryPool = overridePool || poolAddress;
 
-    const cacheKey = `ohlcv_${network}_${poolAddress}_${timeframe}_${aggregate}_${limit}${token ? `_${token}` : ''}`;
-    
-    // Check cache first
-    const cached = geckoCache.get(cacheKey);
-    const freshTtl = geckoFreshTtl(timeframe);
-    if (cached && Date.now() - cached.timestamp < freshTtl) {
-      console.log(`📊 [Proxy] ✅ Cache hit for OHLCV: ${poolAddress}/${timeframe} (age: ${Math.round((Date.now() - cached.timestamp) / 1000)}s)`);
-      return res.json(cached.data);
+    const primary = await fetchPoolOhlcv({ network, poolAddress: primaryPool, timeframe, aggregate, limit, token });
+    if (usable(primary.data) || !token) {
+      if (!primary.cached) console.log(`✅ [Proxy] Returning ${primary.data.data.attributes.ohlcv_list.length} OHLCV data points for ${primaryPool}`);
+      return res.json(overridePool
+        ? { ...primary.data, meta: { requestedPool: poolAddress, poolUsed: primaryPool, fallback: true } }
+        : primary.data);
     }
 
-    // Request deduplication: if same request is already in flight, wait for it
-    if (pendingGeckoRequests.has(cacheKey)) {
-      console.log(`⏳ [Proxy] Waiting for pending request: ${poolAddress}/${timeframe}`);
+    // No (recent) candles on this pool. DexScreener ranks pools by liquidity, but the
+    // chart provider may have nothing for that pool (exotic quote token, not indexed).
+    // Try the coin's other liquid pools before telling the client there is no data.
+    const alternates = rankAlternatePools(await fetchSolanaPairs(token), primaryPool);
+    for (const altPool of alternates) {
       try {
-        const result = await pendingGeckoRequests.get(cacheKey);
-        return res.json(result);
+        const alt = await fetchPoolOhlcv({ network, poolAddress: altPool, timeframe, aggregate, limit, token });
+        if (!usable(alt.data)) continue;
+        chartPoolOverride.set(token, { poolAddress: altPool, timestamp: Date.now() });
+        if (chartPoolOverride.size > 3000) chartPoolOverride.delete(chartPoolOverride.keys().next().value);
+        console.log(`🔀 [Proxy] ${token.slice(0, 8)}: pool ${poolAddress.slice(0, 8)} had no candles — using ${altPool.slice(0, 8)} (${alt.data.data.attributes.ohlcv_list.length} points)`);
+        return res.json({ ...alt.data, meta: { requestedPool: poolAddress, poolUsed: altPool, fallback: true } });
       } catch (error) {
-        // If the pending request failed, continue to try again
-        console.log(`⚠️ [Proxy] Pending request failed, retrying: ${poolAddress}/${timeframe}`);
+        console.warn(`⚠️ [Proxy] alternate pool ${altPool.slice(0, 8)} failed: ${error.status || ''} ${error.message}`);
       }
     }
 
-    console.log(`📊 [Proxy] OHLCV data requested: ${network}/${poolAddress}/${timeframe} (aggregate: ${aggregate}, limit: ${limit})`);
-
-    const params = new URLSearchParams({
-      aggregate: aggregate.toString(),
-      limit: limit.toString(),
-      currency: 'usd'
-    });
-    if (token) params.set('token', token);
-    const { url, headers } = geckoOhlcvRequest(network, poolAddress, timeframe, params);
-
-    // Share one upstream fetch across all concurrent callers for this exact key.
-    // Runs through the concurrency-limited throttle so we stay under the provider's
-    // rate limit; retries a transient 429 once. On success caches + resolves the data.
-    const fetchPromise = (async () => {
-      const fetch = require('node-fetch');
-      const doFetch = () => fetch(url, { method: 'GET', headers, timeout: 15000 });
-      let response = await runThrottledGecko(doFetch);
-      if (response.status === 429) {
-        console.log(`⏳ [Proxy] 429 for ${poolAddress}/${timeframe}, retrying once after backoff...`);
-        await new Promise((r) => setTimeout(r, 800));
-        response = await runThrottledGecko(doFetch);
-      }
-      if (!response.ok) {
-        const errorText = await response.text();
-        const err = new Error(`GeckoTerminal API error: ${response.status} ${response.statusText}`);
-        err.status = response.status;
-        err.body = errorText.substring(0, 200);
-        throw err;
-      }
-      const data = await response.json();
-      if (!data?.data?.attributes?.ohlcv_list) {
-        throw new Error('Invalid OHLCV data format from GeckoTerminal');
-      }
-      geckoCache.set(cacheKey, { data, timestamp: Date.now() });
-      if (geckoCache.size > 2000) {
-        geckoCache.delete(geckoCache.keys().next().value);
-      }
-      return data;
-    })();
-
-    pendingGeckoRequests.set(cacheKey, fetchPromise);
-    // Cleanup must not create a second unhandled rejection path (Node exits on those).
-    fetchPromise.catch(() => {}).finally(() => pendingGeckoRequests.delete(cacheKey));
-
-    let data;
-    try {
-      data = await fetchPromise;
-    } catch (error) {
-      const status = error.status;
-      console.error(`❌ [Proxy] GeckoTerminal API error: ${status || ''} - ${error.body || error.message}`);
-      // On any upstream error, serve ANY cached data we have (even old) rather than failing.
-      if (cached) {
-        console.log(`⚠️ [Proxy] Error, serving stale cache (age: ${Math.round((Date.now() - cached.timestamp) / 60000)}min)`);
-        return res.json(cached.data);
-      }
-      if (status === 429 || status === 403) {
-        return res.status(503).json({
-          error: 'Chart data temporarily unavailable due to rate limiting. Please try again in a moment.',
-          status,
-          retryAfter: status === 403 ? 120 : 30
-        });
-      }
-      throw error;
-    }
-
-    console.log(`✅ [Proxy] Returning ${data.data.attributes.ohlcv_list.length} OHLCV data points for ${poolAddress}`);
-    res.json(data);
-
+    // Genuinely nothing chartable on any liquid pool; the client falls back to swap history.
+    return res.json({ ...primary.data, meta: { requestedPool: poolAddress, poolUsed: primaryPool, fallback: false, alternatesTried: alternates.length } });
   } catch (error) {
-    console.error(`❌ [Proxy] Error fetching OHLCV data:`, error.message);
+    const status = error.status;
+    console.error(`❌ [Proxy] GeckoTerminal API error for ${poolAddress}/${timeframe}: ${status || ''} - ${error.body || error.message}`);
+    if (status === 429 || status === 403) {
+      return res.status(503).json({
+        error: 'Chart data temporarily unavailable due to rate limiting. Please try again in a moment.',
+        status,
+        retryAfter: status === 403 ? 120 : 30
+      });
+    }
     res.status(500).json({
       success: false,
       error: error.message,
